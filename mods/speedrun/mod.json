@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "speedrun",
+  "version": "0.1.0",
+  "description": "Double game speed, written in bleck script",
+  "author": "",
+  "base": "eu0",
+  "created": "",
+  "dependencies": [],
+  "exclusive": [],
+  "remove": [],
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2
+  }
+}

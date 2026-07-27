@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "coin-tick",
+  "version": "0.1.0",
+  "description": "Gives the player one coin every ten seconds",
+  "author": "",
+  "base": "eu0",
+  "created": "",
+  "dependencies": [],
+  "exclusive": [],
+  "remove": [],
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2
+  }
+}

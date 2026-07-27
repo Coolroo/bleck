@@ -1,0 +1,13 @@
+-- Doubles the game speed a moment after boot.
+--
+-- `main` is the script bleck starts. It runs on the game's own scheduler, so
+-- `wait` yields the frame rather than blocking it -- the game keeps running
+-- while this script is paused.
+
+script main {
+    -- Give the game a moment to finish setting itself up before touching it.
+    wait(120)
+
+    var speed = 2.0
+    evt_sub_set_game_speed(speed)
+}
