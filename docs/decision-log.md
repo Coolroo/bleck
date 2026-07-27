@@ -2733,3 +2733,68 @@ lesson stands: *the test suite asserted the broken behaviour*. A test read
 "the declaration must be weak and the call guarded" and passed for as long as
 the bug existed. A test that encodes an assumption protects the assumption, not
 the user.
+
+---
+
+## D50 — Build intermediates were being deleted by the build (2026-07-27)
+
+✅ **`bleck mod check` is fixed too**, by D49's change and not by a second one.
+The `Missing 1 required symbol(s): mod_prolog` failure came from `elf2rel`,
+which both `check` and `build` run, so making `mod_prolog` a weak *definition*
+cleared both paths at once. Confirmed on every script-only mod in the repo:
+
+```
+coin-tick    coin-tick: compiled main.evt [main] -> 1676 byte module (devkitPPC)
+speedrun     speedrun: compiled main.evt [main] -> 1676 byte module (devkitPPC)
+scripttest   scripttest: compiled main.evt [main] -> 1660 byte module (devkitPPC)
+```
+
+### The intermediates bug
+
+⛔ **`build_rel` documented a promise it could not keep on a real build.** Its
+docstring says the work directory "keeps its intermediates rather than cleaning
+them up: when generated code fails to compile, the only way to understand the
+compiler's line numbers is to read the file it was complaining about."
+
+It wrote them to `<build root>/<mod>/code/` — *inside* the mod's staged disc
+directory. `builder.stage` then does this on its way to mirroring the base:
+
+```python
+if dest.exists():
+    remove_tree(dest)
+```
+
+So `mod.c`, `mod.elf` and every object file were deleted partway through every
+build. Found by looking for them after a build and finding an empty tree.
+
+**The failure is exactly backwards.** The promise held for `bleck mod check`,
+which never stages, and broke for `bleck mod build` — and a full build is
+precisely when a compile error is most likely and the generated C most needed.
+Nothing surfaced it because the build had already succeeded by the time the
+files vanished; a *failed* build stops before staging, so the intermediates
+survive in the one case anyone had looked.
+
+Fixed by moving them to `<build root>/.code/<mod>/`, outside anything `stage`
+touches. Dotted because mod names are otherwise unrestricted — there is no
+validation preventing a mod called `code` — so an undotted directory could
+collide with a staged mod.
+
+✅ Verified by running a full build and listing the directory afterwards:
+`00-mod.o`, `01-main.o`, `mod.c`, `mod.elf` all present.
+
+Rejected alternatives:
+
+- ⛔ **Make `stage` preserve the subdirectory.** `stage` has one job — produce a
+  clean mirror of the base — and teaching it about compile artifacts would put
+  knowledge of the code pipeline inside the asset pipeline.
+- ⛔ **Compile after staging.** The overlay plan is derived from a walk of
+  `overlay/`, so `mod.rel` has to exist before planning (see `compile_code`'s
+  docstring). The ordering is load-bearing.
+
+### The lesson
+
+A docstring is not a test. This one asserted a behaviour confidently, was
+correct when written, and became false when an unrelated ordering decision put
+the directory under something that gets deleted. `tests/test_script.py` now
+pins it: the code work directory must not be a descendant of the staged mod
+directory.

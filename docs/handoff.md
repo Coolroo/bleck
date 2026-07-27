@@ -2,13 +2,14 @@
 
 Last updated 2026-07-27. The scripting language landed (D37) and now **runs**
 (D43), after three failed entry points and an unattended memory-readback rig
-that finally settled it. Also: an ecosystem survey (D39) and the setup file
-format (D42).
+that finally settled it. Native C runs too (D46, D47), and every built disc now
+**names itself on screen** (D49). Also: an ecosystem survey (D39) and the setup
+file format (D42).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D48)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D49)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -34,6 +35,31 @@ the running game's memory, not by looking at the screen (D43).
 
 There is no longer a single blocking question. Pick from
 [next steps](#next-steps) below.
+
+### The first thing to check on any build
+
+✅ **Every disc `bleck` builds says which mod it carries** (D49): the title
+screen shows `mod_loaded: <name>` in the bottom right, generated from the
+manifest. No mod opts in.
+
+This exists because "nothing happened" used to be ambiguous, and that ambiguity
+cost two wrong conclusions (D38, D40). It now separates cleanly:
+
+| What you see | What it means |
+|---|---|
+| Label present, change missing | The module loaded and ran. The bug is in what it does |
+| **No label at all** | The module never loaded. Look at the build and the loader, not your code |
+
+⚠️ **One thing here still needs a human.** Nothing in this repo can see the
+screen, and the title screen is unreachable unattended (D47, D48) — so *where*
+the text lands is 🔶 unverified. The arithmetic checks out and the draw call is
+proven safe, but "bottom right, not clipped, not behind the logo" wants eyes on
+it once. `mods/banner-probe` puts the banner on gameplay too, so it is visible
+about 45 seconds after boot without touching a controller:
+
+```
+uv run python scripts/ingame.py banner-probe --seconds 150 --words 12
+```
 
 ### You can test without a human
 
@@ -243,6 +269,12 @@ Then invert pixel data from `0x40` to the end of each — script in
 
 ## Next steps after the open question closes
 
+⚠️ **Read this first: the testing constraint is narrower than it sounds.** Only
+things behind a *button press* are blocked (D48). Anything reached by a plain
+boot is fully automatable — `mod_prolog` at load time, `SEQ_GAME` sustained, two
+real map loads (`aa4_01` then `ls4_12`), and any script or memory access. That
+covers most of the list below.
+
 In rough order of value:
 
 0. ✅ ~~Bake the Gecko loader into the DOL.~~ **Done** (D44).
@@ -260,9 +292,10 @@ In rough order of value:
    can be validated rather than just resolved. One regex parses it.
 4. **`switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten,
    not blocked.
-5. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++
-   alongside `code.script`. Design in [`code-mods.md`](./code-mods.md);
-   D38 proves the technique works.
+5. ✅ ~~**Native hooks in `bleck mod build`**~~ — **Done** (D46, D47). A
+   `code.sources` block compiles C alongside `code.script` into one module, and
+   it runs in-game. `mods/menu-watch` and `mods/hook-demo` are worked examples.
+   ⚠️ C++ is still unavailable: `g++-powerpc-linux-gnu` is not installed.
 6. **Multiple code mods — an unclaimed problem** (D39). Nobody in this scene
    has solved it: `chainrel` is a three-commit stub with its loader body wrapped
    in `#if 0`, and both major mod distributions tell users to enable one REL mod
@@ -303,6 +336,16 @@ In rough order of value:
   runs*, not at `_prolog` — otherwise it proves only that the module loaded.
 - **`chainrel` is a stub, not a solution** (D39). Its loader body is wrapped in
   `#if 0`. Nobody has solved multi-mod loading.
+- ⚠️ **Compile intermediates live in `work/build/.code/<mod>/`, not under the
+  mod's staged directory** (D50). `builder.stage` deletes
+  `work/build/<mod>/` wholesale before mirroring the base into it, so anything
+  written there does not survive a build. `mod.c` and `mod.elf` are kept
+  deliberately — when generated C fails to compile, reading the file the
+  compiler complained about is the only way to make sense of its line numbers.
+- **A weak *declaration* is not a weak definition** (D49). `elf2rel` resolves
+  every undefined symbol against the game's list, so a weakly *declared* hook
+  that no mod defines fails the build rather than resolving to zero. Anything
+  the generated scaffolding calls optionally must be weakly **defined**.
 - **Never copy from Flipside-Mod-Manager** (D39). It has no LICENSE at all, but
   its loader is plainly derivative of GPLv3 `spm-rel-loader`. Take the loader
   from upstream under GPLv3, or rebuild from published addresses — addresses are

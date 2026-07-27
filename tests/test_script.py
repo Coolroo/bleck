@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from bleck.backends import toolchain
 from bleck.mods import code, registry, resolver
 from bleck.mods import manifest as mod_manifest
 from bleck.script import compile_source, emit, evt
@@ -801,6 +802,46 @@ class TestBannerFromManifest:
             sources=["src"], banner=mod_manifest.BannerSpec(enabled=False)
         )
         assert spec.to_json()["banner"] is False
+
+
+class TestCodeIntermediates:
+    """Where compile intermediates land, and why it is not obvious."""
+
+    def test_they_are_not_inside_the_staged_disc(self, tmp_path, monkeypatch):
+        """`build_rel` promises to keep its intermediates. It has to be able to.
+
+        `builder.stage` deletes the mod's build directory wholesale before
+        mirroring the base into it, so intermediates written underneath it were
+        gone by the time a build finished. The promise held for
+        `bleck mod check`, which never stages, and broke for every real build --
+        exactly backwards, since a full build is when a compile error is most
+        likely and reading the generated `mod.c` is the only way to make sense
+        of the compiler's line numbers.
+        """
+        root = tmp_path / "mods" / "demo"
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "a.c").write_text("void nothing(void) {}\n")
+        (root / "mod.json").write_text(
+            json.dumps({"schema": 1, "name": "demo", "code": {"sources": ["src"]}})
+        )
+        mod = registry.load(tmp_path / "mods").require("demo")
+
+        seen: dict[str, Path] = {}
+
+        def fake_build_rel(request):
+            seen["workdir"] = request.workdir
+            return toolchain.BuildResult(
+                rel=b"\0", toolchain="fake", module_id=2, symbols_file=Path()
+            )
+
+        monkeypatch.setattr(code.toolchain, "build_rel", fake_build_rel)
+
+        workroot = tmp_path / "build"
+        code.build_mod(mod, workroot)
+
+        staged = workroot / mod.name
+        assert staged not in seen["workdir"].parents
+        assert seen["workdir"] == workroot / code.CODE_WORKDIR / mod.name
 
 
 class TestGeneratedHandoff:

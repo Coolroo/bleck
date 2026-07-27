@@ -21,6 +21,19 @@ from bleck.mods.registry import Mod
 from bleck.mods.resolver import Chain
 from bleck.script import ScriptError, compile_source, emit
 
+#: Where compile intermediates live, under the build root.
+#:
+#: ⚠️ Deliberately *not* inside the mod's staged disc directory. These used to
+#: go to `<build root>/<mod>/code`, which `builder.stage` then deleted wholesale
+#: on its way to mirroring the base — so `mod.c` and `mod.elf` were gone by the
+#: time anyone wanted to read them, and `build_rel`'s promise to keep its
+#: intermediates held only for `bleck mod check`, never for a real build. That
+#: is exactly backwards: a full build is when a compile error is most likely.
+#:
+#: Dotted so it cannot collide with a mod named after it; mod names are
+#: otherwise unrestricted.
+CODE_WORKDIR = ".code"
+
 
 class CodeError(BleckError):
     """A mod's script could not be turned into a module."""
@@ -157,7 +170,7 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     result = toolchain.build_rel(
         toolchain.BuildRequest(
             source=scaffolding,
-            workdir=workroot / mod.name / "code",
+            workdir=workroot / CODE_WORKDIR / mod.name,
             target=spec.target,
             module_id=spec.module_id,
             extra_sources=sources,
