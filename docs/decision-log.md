@@ -471,6 +471,51 @@ still the modified-disc test.
 
 ---
 
+### D20 — Package restructured; test suite added ✅
+
+**Structure.** `cli.py` was a single 300-line module mixing parsing, dispatch,
+and every command. Split by responsibility, with commands grouped by the layer
+they act on:
+
+```
+bleck/
+  formats/    lz77, u8, detect          — file formats
+  common/     errors, fsio, manifest    — shared, no format or CLI knowledge
+  backends/   disc                      — external tool wrappers (wit, dolphin-tool)
+  cli/
+    app.py                              — parser assembly + dispatch only
+    commands/  inspect, archive, disc, stream
+```
+
+Each command module exposes `CATEGORY` and `register(add)`; `app.py` iterates
+`commands.MODULES` and knows nothing about individual commands. Adding one means
+adding a module and listing it — no core changes.
+
+Also deleted the standalone `main()` functions left in `lz77.py` and `u8.py` from
+before the CLI existed. Two ways to invoke the same logic is exactly the drift
+this restructure exists to prevent.
+
+**Tests.** 73 tests, **1.85 s** on the Pi. Two constraints shaped them:
+
+- The compressor runs ~12 s/MB, so tests compress only small synthetic inputs.
+  Real-data compression is marked `slow` and deselected by default
+  (`addopts = "-m 'not slow'"`).
+- Game data is not in the repo, so tests needing it skip cleanly. A fresh clone
+  runs green.
+
+**The suite immediately earned its place** by catching a real bug: `pack --store`
+produced byte-identical output to `--raw`, i.e. it wasn't compressing at all.
+Cause was conflated semantics — `--store` was treated as "don't compress", then
+the manifest's `compressed: False` overrode it entirely. Now `--raw` decides
+*whether* to compress and `--store` decides *which encoder*, either overriding
+the source.
+
+**Hardware note.** Raspberry Pi 4B, Cortex-A72 4×1.8 GHz, 8 GB RAM. RAM is not
+the constraint (5.4 GB free); single-thread CPU is. Anything designed for this
+repo should assume a slow core and plan around it rather than around memory.
+
+---
+
 ## Standing principles
 
 These emerged from the above and should guide later choices:
