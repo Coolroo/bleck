@@ -104,7 +104,7 @@ Both cycles were resolved the same way, and it is worth naming as a technique:
 **when a symptom cannot distinguish its causes, build one disc carrying several
 independent signals, ordered so each depends on strictly more than the last.**
 
-The current diagnostic (`scratchpad/diag2/mod.c`) carries three:
+The current diagnostic — [`diagnostics/entry-point-probe.c`](./diagnostics/entry-point-probe.c), kept in the repo because the first one was lost with a scratch directory — carries three:
 
 | Signal | Mechanism | Depends on |
 |---|---|---|
