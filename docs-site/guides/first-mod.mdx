@@ -1,0 +1,158 @@
+---
+title: Your first mod
+description: Change the title screen, end to end
+---
+
+This produces a bootable disc with a visibly modified title screen. It is the
+exact mod used to validate `bleck`'s pipeline.
+
+<Note>
+Assumes you have [installed](/install) `bleck` and have a disc image.
+</Note>
+
+## 1. Extract a base
+
+```bash
+uv run bleck extract "Super Paper Mario.rvz" extracted/eu0
+```
+
+Takes about 10 seconds from an ISO, or ~80 from RVZ (which converts first).
+
+Confirm you got what you expected:
+
+```bash
+uv run bleck info extracted/eu0
+```
+
+## 2. Find something to change
+
+The title screen lives in `lyt/title.bin.uk`:
+
+```bash
+uv run bleck info extracted/eu0/files/lyt/title.bin.uk
+```
+
+```
+title.bin.uk  238,808 bytes
+  LZ77  type 0x10 -> 700,896 bytes
+    U8  35 entries (31 files)
+      arc/blyt/title.brlyt  7,008
+      arc/timg/mario.tpl  18,880  TPL
+      arc/timg/koopa.tpl  19,264  TPL
+```
+
+`mario.tpl` is Mario on the title screen — visible the moment the game boots,
+which makes it ideal for verifying a change landed.
+
+## 3. Create the mod
+
+```bash
+uv run bleck mod new title-invert --description "Invert the title screen"
+```
+
+```
+created mods/title-invert/
+  edit mods/title-invert/mod.json
+  then `bleck mod vendor title-invert <disc-path>`
+```
+
+## 4. Vendor the texture
+
+```bash
+uv run bleck mod vendor title-invert lyt/title.bin.uk/arc/timg/mario.tpl
+```
+
+```
+vendored -> mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl  (18,880 bytes)
+```
+
+<Tip>
+Note the path goes *through* the archive. `bleck` unpacked `title.bin.uk`,
+extracted that one member, and placed it where the overlay expects it.
+</Tip>
+
+## 5. Edit it
+
+`mario.tpl` is a CMPR-format texture. Inverting its pixel data gives an
+unmistakable result, and cannot corrupt the file — CMPR has no invalid byte
+values.
+
+```python invert.py
+import struct
+from pathlib import Path
+
+path = Path("mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl")
+data = bytearray(path.read_bytes())
+
+# TPL header: magic, image count, then a table pointing at each image header.
+_, _, table = struct.unpack_from(">3I", data, 0)
+header = struct.unpack_from(">I", data, table)[0]
+height, width, fmt, pixels_at = struct.unpack_from(">HHII", data, header)
+
+for i in range(pixels_at, len(data)):
+    data[i] ^= 0xFF
+
+path.write_bytes(bytes(data))
+print(f"inverted {width}x{height} texture, format {fmt}")
+```
+
+```bash
+uv run python invert.py
+```
+
+## 6. Check before building
+
+```bash
+uv run bleck mod status title-invert
+uv run bleck mod check title-invert
+```
+
+`check` resolves the mod and detects conflicts **without writing anything** —
+worth running before every build.
+
+## 7. Build
+
+```bash
+uv run bleck mod build title-invert out.wbfs
+```
+
+```
+chain OK: title-invert
+staged build/title-invert  (0 file(s), 1 archive(s) merged)
+built out.wbfs  (444,596,224 bytes, wbfs)
+```
+
+<Check>
+`1 archive(s) merged` means the archive was unpacked, your texture swapped in,
+and the other 34 members repacked untouched.
+</Check>
+
+## 8. Run it
+
+Open `out.wbfs` in Dolphin. Mario should appear in inverted colours on the title
+screen.
+
+See [Testing](/guides/testing) for per-platform emulation notes.
+
+## Confirming you changed only what you meant
+
+The base is untouched, so you can diff against it:
+
+```bash
+diff -r --brief extracted/eu0 build/title-invert
+```
+
+```
+Files extracted/eu0/files/lyt/title.bin.uk and build/title-invert/files/lyt/title.bin.uk differ
+```
+
+One file. That is the whole point of keeping the base immutable.
+
+<CardGroup cols={2}>
+  <Card title="Add a dependency" icon="diagram-project" href="/concepts/dependencies">
+    Build a second mod that layers on this one.
+  </Card>
+  <Card title="CLI reference" icon="terminal" href="/reference/cli">
+    Every command and flag.
+  </Card>
+</CardGroup>

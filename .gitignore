@@ -7,6 +7,10 @@ extracted/
 mods/*/overlay/
 build/
 
+# Mintlify
+docs-site/node_modules/
+docs-site/.mint/
+
 # Python
 # Note: uv.lock IS committed — reproducible installs are the point.
 .uv-cache/

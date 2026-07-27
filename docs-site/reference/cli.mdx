@@ -1,0 +1,171 @@
+---
+title: CLI reference
+description: Every bleck command
+---
+
+```
+bleck <command> [options]
+```
+
+All commands accept `--force` to overwrite existing output.
+
+## Inspection
+
+### `bleck info`
+
+```bash
+bleck info <file>
+```
+
+Identify a file and unwrap its nested formats. Works on disc images, archives,
+compressed streams, textures and REL modules.
+
+```bash
+bleck info extracted/eu0/files/map/aa1_01.bin
+```
+
+### `bleck verify`
+
+```bash
+bleck verify <path>
+```
+
+Round-trip check: unpack and repack each archive, confirming the result is
+byte-identical. Writes nothing. Accepts a file or a directory of `.bin` files.
+
+Exits non-zero on mismatch, so it works in CI.
+
+## Archives
+
+### `bleck ls`
+
+```bash
+bleck ls <archive>
+```
+
+List an archive's contents. Handles LZ77-wrapped archives transparently.
+
+### `bleck unpack`
+
+```bash
+bleck unpack <archive> [dest]
+```
+
+Unpack to files on disk. Writes a `.bleck.json` manifest recording node order.
+
+<Warning>
+Do not delete `.bleck.json`. U8 node order cannot be recovered from a directory
+listing, and byte-exact repacking depends on it. `pack` warns if it is missing.
+</Warning>
+
+### `bleck pack`
+
+```bash
+bleck pack <dir> [archive] [--store] [--raw]
+```
+
+| Flag | Effect |
+|---|---|
+| `--store` | Instant all-literals encoding, ~1.125× size |
+| `--raw` | Write uncompressed U8, no LZ77 layer |
+
+## Discs
+
+### `bleck extract`
+
+```bash
+bleck extract <disc> [dest] [--keep-iso]
+```
+
+Extract a disc image's data partition. Accepts ISO, WBFS and RVZ; RVZ is
+converted first, and `--keep-iso` retains that intermediate.
+
+Defaults to `extracted/<name>`.
+
+### `bleck build`
+
+```bash
+bleck build <dir> <out> [--format {iso,rvz,wbfs}] [--keep-iso]
+```
+
+Rebuild an extracted filesystem into a disc image. Format is inferred from the
+output extension. `--align-files` is always passed to `wit`.
+
+## Streams
+
+### `bleck lz`
+
+```bash
+bleck lz {compress,decompress} <input> [output] [--store]
+```
+
+Raw LZ77, one layer only. Prints sizes if no output is given.
+
+## Mods
+
+### `bleck mod new`
+
+```bash
+bleck mod new <name> [--description ...] [--author ...]
+```
+
+### `bleck mod list`
+
+Every registered mod, what it overrides, and its dependencies.
+
+### `bleck mod vendor`
+
+```bash
+bleck mod vendor <name> <disc-path>
+```
+
+Copy a file from the base into the mod's overlay, resolving through archive
+boundaries.
+
+```bash
+bleck mod vendor my-mod lyt/title.bin.uk/arc/timg/mario.tpl
+```
+
+<Tip>
+The leading `files/` is optional — `lyt/title.bin.uk` and
+`files/lyt/title.bin.uk` both work.
+</Tip>
+
+### `bleck mod status`
+
+What a mod overrides, marked by kind — whole file, archive member, exclusive
+claim or removal.
+
+### `bleck mod chain`
+
+The resolved install order, dependencies first.
+
+### `bleck mod check`
+
+```bash
+bleck mod check <name> [--merge-binary]
+```
+
+Resolve and detect conflicts. **Writes nothing** — the fast inner-loop command.
+
+### `bleck mod build`
+
+```bash
+bleck mod build <name> [out] [--no-image] [--format {iso,rvz,wbfs}] [--merge-binary]
+```
+
+Stage the base, apply the chain, and write a disc image.
+
+| Flag | Effect |
+|---|---|
+| `--no-image` | Stage only, skip writing a disc image |
+| `--format` | Override the inferred output format |
+| `--merge-binary` | Auto-merge disjoint edits to the same binary file |
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | User-fixable error, or verification failure |
+| `130` | Interrupted |

@@ -1,0 +1,74 @@
+---
+title: macOS
+description: Installing bleck on macOS
+---
+
+<Warning>
+**Not yet verified on macOS.** The platform support is implemented and covered
+by tests that run on Linux, but nobody has run it on a Mac. If you do, please
+report back.
+</Warning>
+
+<Steps>
+  <Step title="Install uv">
+    ```bash
+    brew install uv
+    ```
+  </Step>
+
+  <Step title="Install Dolphin">
+    ```bash
+    brew install --cask dolphin
+    ```
+
+    `DolphinTool` lives **inside the application bundle** at
+    `/Applications/Dolphin.app/Contents/MacOS/DolphinTool`, not on your PATH.
+    `bleck` looks inside the bundle automatically.
+  </Step>
+
+  <Step title="Install Wiimms ISO Tools">
+    There is no Homebrew formula. Download the macOS build from
+    [wit.wiimm.de](https://wit.wiimm.de/) and put `wit` on your PATH, or:
+
+    ```bash
+    export BLECK_WIT="/path/to/wit"
+    ```
+  </Step>
+
+  <Step title="Clone and sync">
+    ```bash
+    git clone git@github.com:Coolroo/bleck.git
+    cd bleck
+    uv sync --extra dev
+    ```
+  </Step>
+
+  <Step title="Verify">
+    ```bash
+    uv run pytest          # expect 145 passed
+    uv run bleck --help
+    ```
+  </Step>
+</Steps>
+
+## Apple Silicon and Intel
+
+Homebrew installs to a different prefix on each. `bleck` searches both, so
+either works without configuration.
+
+| CPU | Homebrew prefix |
+|---|---|
+| Apple Silicon | `/opt/homebrew` |
+| Intel | `/usr/local` |
+
+## Finder clutter is filtered automatically
+
+Browsing an extracted disc in Finder creates `.DS_Store` files, and non-native
+volumes collect `._` AppleDouble sidecars.
+
+<Info>
+Left alone, that clutter would be staged into a rebuilt disc — files the real
+game never shipped, with no error to warn you. `bleck` excludes `.DS_Store`,
+`.localized` and `._*` from staging and overlays **on macOS only**. Filtering
+them elsewhere would hide genuine mistakes.
+</Info>

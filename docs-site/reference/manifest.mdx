@@ -1,0 +1,91 @@
+---
+title: mod.json
+description: The mod manifest format
+---
+
+Every mod has a `mod.json` at its root.
+
+```json
+{
+  "schema": 1,
+  "name": "hard-mode-plus",
+  "version": "0.1.0",
+  "description": "Rebalanced enemy damage",
+  "author": "coolroo",
+  "base": "eu0",
+  "created": "2026-07-26",
+  "dependencies": [
+    { "name": "hard-mode", "version": ">=2.0.0" }
+  ],
+  "exclusive": ["files/rel/rel.bin"],
+  "remove": ["files/some/unwanted.bin"]
+}
+```
+
+## Fields
+
+<ParamField path="name" type="string" required>
+  The mod's identifier. Dependencies resolve against it.
+</ParamField>
+
+<ParamField path="version" type="string" default="0.0.0">
+  Semantic version, `MAJOR.MINOR.PATCH`.
+</ParamField>
+
+<ParamField path="base" type="string">
+  Which base build this targets, e.g. `eu0`. Building against a different base
+  is an error.
+
+  This matters: `eu0` contains files `us0` does not, so a mod referencing them
+  cannot apply to a US disc at all.
+</ParamField>
+
+<ParamField path="dependencies" type="array">
+  Mods that must apply before this one. Each entry is `{ "name": "..." }` with
+  an optional `"version"` constraint using `>=`, `<=` or `==`.
+
+  A bare string is also accepted as shorthand for an unconstrained dependency.
+</ParamField>
+
+<ParamField path="exclusive" type="array">
+  Paths this mod claims outright. Any other mod touching one is an error, with
+  no merge attempted.
+
+  Intended for files where concurrent edits cannot be sound — compiled code, or
+  formats with internal offsets.
+</ParamField>
+
+<ParamField path="remove" type="array">
+  Base files to delete. An overlay can express "replace" and "add" but not
+  "absent", so deletions live here.
+</ParamField>
+
+<ParamField path="schema" type="integer" default="1">
+  Manifest format version. An unknown value is rejected rather than guessed at.
+</ParamField>
+
+## Layout
+
+```
+mods/my-mod/
+  mod.json
+  overlay/                    mirrors the extracted disc root
+    files/...                 the data partition
+    sys/...                   also addressable
+```
+
+<Note>
+The overlay mirrors the **extract root**, not the data partition, so `sys/`
+files are reachable. It is called `overlay/` rather than `files/` because the
+disc's own data partition is `files/` — `overlay/files/...` reads correctly
+where `files/files/...` would not.
+</Note>
+
+## Version constraints
+
+| Constraint | Matches |
+|---|---|
+| *(omitted)* | Any version |
+| `>=1.2.0` | 1.2.0 and above |
+| `<=2.0.0` | 2.0.0 and below |
+| `==1.0.0` | Exactly 1.0.0 |

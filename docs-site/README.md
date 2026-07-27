@@ -1,0 +1,44 @@
+# Documentation site
+
+Mintlify docs for `bleck`. Source of truth for **how to use** the toolkit.
+
+The `docs/` directory at the repo root is different and stays put: it holds the
+living design record — decision log, disc findings, roadmap — written for
+maintainers rather than users.
+
+| | Audience | Contents |
+|---|---|---|
+| `docs-site/` | Users | Install, usage, guides, reference |
+| `docs/` | Maintainers | Why things are the way they are |
+
+## Preview locally
+
+Requires Node.
+
+```bash
+npm i -g mint
+cd docs-site
+mint dev
+```
+
+Opens on http://localhost:3000.
+
+## Structure
+
+```
+docs.json          navigation and theme
+index.mdx          landing
+quickstart.mdx     clone -> modified disc
+install/           per-OS setup
+concepts/          formats, mods, dependencies, disc formats
+guides/            first mod, testing, code mods
+reference/         CLI, mod.json, environment
+contributing/      dev setup, coding standards
+```
+
+## Keeping it honest
+
+Pages carry explicit status where something is unverified — macOS and Windows
+support are implemented but never run on those platforms, and code mods are not
+integrated. **Do not quietly drop those callouts**; update them when the status
+actually changes.

@@ -1,0 +1,57 @@
+---
+title: Overview
+description: What bleck needs, on any platform
+---
+
+`bleck` is a Python package with **no runtime dependencies**. It shells out to
+two external tools for disc I/O.
+
+## Requirements
+
+| | Needed for |
+|---|---|
+| **Python 3.10+** | `bleck` itself |
+| **`wit`** (Wiimms ISO Tools) | `extract`, `build` |
+| **`dolphin-tool`** | Reading and writing RVZ |
+| A Super Paper Mario disc image | Everything. Not distributed with `bleck`. |
+
+<Note>
+`dolphin-tool` is only required for RVZ. If you work in ISO or WBFS, `wit`
+alone is enough.
+</Note>
+
+## Pick your platform
+
+<CardGroup cols={3}>
+  <Card title="Linux" icon="linux" href="/install/linux" />
+  <Card title="macOS" icon="apple" href="/install/macos" />
+  <Card title="Windows" icon="windows" href="/install/windows" />
+</CardGroup>
+
+## If a tool cannot be found
+
+`bleck` searches your PATH, then platform-specific locations. When it fails it
+tells you what it looked for:
+
+```
+bleck: dolphin-tool not found (looked for: dolphin-tool, DolphinTool)
+  DolphinTool ships inside Dolphin.app
+  (/Applications/Dolphin.app/Contents/MacOS/DolphinTool).
+  Install with `brew install --cask dolphin`, or set BLECK_DOLPHIN_TOOL to its full path
+```
+
+Point at it directly with an environment variable:
+
+<CodeGroup>
+```bash Linux / macOS
+export BLECK_WIT="/path/to/wit"
+export BLECK_DOLPHIN_TOOL="/path/to/dolphin-tool"
+```
+
+```powershell Windows
+$env:BLECK_WIT = "C:\path\to\wit.exe"
+$env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
+```
+</CodeGroup>
+
+Every configurable path is listed in [Environment](/reference/environment).

@@ -1,0 +1,78 @@
+---
+title: Windows
+description: Installing bleck on Windows 11
+---
+
+<Warning>
+**Not yet verified on Windows.** The platform support is implemented and covered
+by tests that run on Linux, but nobody has run it on Windows. If you do, please
+report back.
+</Warning>
+
+<Steps>
+  <Step title="Install uv">
+    ```powershell
+    winget install --id=astral-sh.uv -e
+    ```
+
+    Or: `irm https://astral.sh/uv/install.ps1 | iex`
+  </Step>
+
+  <Step title="Install the external tools">
+    - [Wiimms ISO Tools](https://wit.wiimm.de/) — provides `wit.exe`
+    - [Dolphin](https://dolphin-emu.org/) — provides `DolphinTool.exe`
+
+    Add both to your PATH, or point at them with environment variables below.
+  </Step>
+
+  <Step title="Clone and sync">
+    ```powershell
+    git clone git@github.com:Coolroo/bleck.git
+    cd bleck
+    uv sync --extra dev
+    ```
+  </Step>
+
+  <Step title="Verify">
+    ```powershell
+    uv run pytest          # expect 145 passed
+    uv run bleck --help
+    ```
+  </Step>
+</Steps>
+
+## Where bleck looks for tools
+
+Beyond your PATH:
+
+| Tool | Locations |
+|---|---|
+| `wit.exe` | `C:\Program Files\Wiimm\wit\bin`, `C:\Program Files (x86)\Wiimm\wit\bin`, `C:\wit\bin` |
+| `DolphinTool.exe` | `C:\Program Files\Dolphin`, `C:\Program Files (x86)\Dolphin`, `C:\Program Files\Dolphin-x64` |
+
+Anywhere else:
+
+```powershell
+$env:BLECK_WIT = "C:\path\to\wit.exe"
+$env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
+```
+
+Use `setx` instead of `$env:` to persist across sessions.
+
+## Without uv
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
+
+<Note>
+If activation fails with a script-execution error:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+`uv run` avoids this entirely, which is why it is recommended here.
+</Note>

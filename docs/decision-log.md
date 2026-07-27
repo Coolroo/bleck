@@ -952,3 +952,43 @@ is still pristine (0 differences), and a simulated macOS staging run excludes
 tests that exercise the paths from Linux.
 
 145 tests.
+
+---
+
+### D31 — User documentation on Mintlify, in `docs-site/` ✅
+
+Added an 18-page Mintlify site. **Two doc trees now exist, with different
+audiences, and conflating them would ruin both:**
+
+| | Audience | Contents |
+|---|---|---|
+| `docs/` | Maintainers | Why choices were made, what is true about the disc |
+| `docs-site/` | Users | Install, usage, guides, CLI reference |
+
+The decision log is a research record — full of rejected alternatives, byte
+magics and self-corrections. That is exactly what a *maintainer* needs and
+exactly what a *user* does not. Keeping them separate lets each stay honest
+rather than becoming a compromise.
+
+**Structure:** Get started → Installation (per-OS) → Concepts → Guides →
+Reference → Contributing.
+
+**Per-OS coverage is the point.** Installation has a page each for Linux, macOS
+and Windows, and `<Tabs>` are used wherever instructions genuinely diverge —
+quickstart, dev setup, and testing. The testing page has a fourth tab for
+Raspberry Pi, including the headless `dolphin-emu-nogui` invocation with
+`FILEMON` logging and the `timeout -k` wrapper Dolphin needs because it ignores
+plain SIGTERM.
+
+**Validated what could be validated here.** A script checks that every
+navigation entry exists on disk, every page has frontmatter, nothing is orphaned
+from the nav, and every internal link resolves — 18/18 clean.
+
+⚠️ **Never rendered.** Node is not installed on this host, so `mint dev` has not
+run. Structure and links are verified; visual output is not.
+
+**Status callouts are deliberate and load-bearing.** macOS and Windows pages
+lead with "not yet verified on this platform", and the code-mods guide opens
+with "not integrated into the CLI". `docs-site/README.md` explicitly says not to
+quietly drop them — documentation that overstates readiness is worse than none,
+because it costs someone an afternoon before they discover the truth.

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "bleck",
+  "description": "A modding toolkit for Super Paper Mario (Wii)",
+  "colors": {
+    "primary": "#7C3AED",
+    "light": "#A78BFA",
+    "dark": "#5B21B6"
+  },
+  "favicon": "/favicon.svg",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Installation",
+            "pages": [
+              "install/index",
+              "install/linux",
+              "install/macos",
+              "install/windows"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/pipeline",
+              "concepts/mods",
+              "concepts/dependencies",
+              "concepts/disc-formats"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/first-mod",
+              "guides/testing",
+              "guides/code-mods"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/cli",
+              "reference/manifest",
+              "reference/environment"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": ["contributing/dev-setup", "contributing/standards"]
+          }
+        ]
+      }
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/Coolroo/bleck"
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Coolroo/bleck"
+    }
+  }
+}

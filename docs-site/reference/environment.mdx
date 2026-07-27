@@ -1,0 +1,63 @@
+---
+title: Environment variables
+description: Everything bleck can be configured with
+---
+
+Every variable `bleck` understands is declared in one module,
+`bleck/common/env.py`. This list is complete.
+
+## Paths
+
+<ParamField path="BLECK_BASE_DIR" default="extracted/eu0">
+  The pristine extracted base game. Never written to.
+</ParamField>
+
+<ParamField path="BLECK_MODS_DIR" default="mods">
+  Where mods live. Dependencies resolve against this directory.
+</ParamField>
+
+<ParamField path="BLECK_BUILD_DIR" default="build">
+  Where mod staging and output images go.
+</ParamField>
+
+<ParamField path="BLECK_EXTRACT_ROOT" default="extracted">
+  Where `bleck extract` writes when no destination is given.
+</ParamField>
+
+## External tools
+
+<ParamField path="BLECK_WIT">
+  Full path to the `wit` binary, if it is not on PATH.
+</ParamField>
+
+<ParamField path="BLECK_DOLPHIN_TOOL">
+  Full path to `dolphin-tool` / `DolphinTool.exe`, if it is not on PATH.
+</ParamField>
+
+## Output
+
+<ParamField path="NO_COLOR">
+  Set to any value to disable coloured output. Follows
+  [no-color.org](https://no-color.org).
+</ParamField>
+
+## Setting them
+
+<CodeGroup>
+```bash Linux / macOS
+export BLECK_BASE_DIR="/mnt/games/spm/eu0"
+export BLECK_DOLPHIN_TOOL="/Applications/Dolphin.app/Contents/MacOS/DolphinTool"
+```
+
+```powershell Windows
+$env:BLECK_BASE_DIR = "D:\games\spm\eu0"
+$env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
+```
+</CodeGroup>
+
+On Windows, use `setx` instead of `$env:` to persist across sessions.
+
+<Tip>
+Tool overrides take priority over PATH, so you can point at a specific build
+without changing your system configuration.
+</Tip>
