@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "banner-probe",
+  "version": "0.1.0",
+  "description": "Checks the mod_loaded banner draws without disturbing the game",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": { "sequences": ["title", "game"] }
+  }
+}
