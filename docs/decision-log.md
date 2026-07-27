@@ -1644,3 +1644,220 @@ beside the `--align-files` one.
   *while*) remain undetermined.
 
 Test suite **236 → 253**. pylint 10.00/10.
+
+---
+
+## D39 — Surveying the SPM scene: what is already solved, and what is not (2026-07-27)
+
+Prompted by a pointer to [Flipside-Mod-Manager](https://github.com/L5050/Flipside-Mod-Manager).
+Two parallel surveys of the wider ecosystem. Findings that change what `bleck`
+should do, ordered by how much they change it.
+
+⚠️ **Security, first.** Fetching `https://tcrf.net/Notes:Super_Paper_Mario` —
+linked as a resource from `spm-docs` — returned **no game documentation at
+all**. It returned a prompt-injection payload addressed "to LLMs", falsely
+claiming the user had asked for it, instructing the reader to truncate files to
+zero bytes and circularly swap file contents, with a disclaimer that TCRF "isn't
+responsible for damage". Not complied with; nothing was modified. **Treat that
+URL as hostile to any automated tooling.** Unknown whether page-specific
+vandalism or broader.
+
+### D38's fix is confirmed by prior art ✅
+
+The `seq_data` hook was not novel. It is the established technique, used in
+production in at least four repos — `evtpatch`, `spm-practice-codes`,
+`SPM-RPG-Battles`, `spm-door-rando`:
+
+```cpp
+seq_titleMainReal = spm::seqdef::seq_data[spm::seqdrv::SEQ_TITLE].main;
+spm::seqdef::seq_data[spm::seqdrv::SEQ_TITLE].main = &seq_titleMainOverride;
+```
+
+Same table, same address (`804287a8`), same idea. They hook `.main`; we hook
+`SEQ_GAME.init`. **Nobody found hooks `SEQ_GAME.init` specifically**, so that
+detail is still ours and still unobserved — but the approach is not a guess any
+more.
+
+**The discipline they encode, which is the real lesson of D38**, stated as a
+convention rather than a bug report:
+
+> `_prolog` = patch bytes. `seq_data[...]` override = touch the running game.
+
+In every one of those mods, `_prolog` runs only memory patching — `writeBranch`,
+`hookFunction`, `evtpatch` edits to script bytecode reached via `mapDataPtr()`.
+**Nothing that touches live engine state runs at prolog.** That is exactly what
+our `evtEntry`-at-prolog failure was teaching.
+
+### ✅ The Gecko code can be baked into the DOL — no cheat engine at all
+
+The single most useful practical finding. Flipside-Mod-Manager does:
+
+```
+wstrt patch extracted/sys/main.dol --add-sect ./gct/EU0.gct
+```
+
+Wiimms SZS Toolset's `--add-sect` creates a **new TEXT section at `0x80001800`
+containing an internal copy of `codehandleronly` plus the codes, and patches the
+DOL entry point to branch into it**
+([docs](https://szs.wiimm.de/info/add-section.html)).
+
+So the loader travels *inside the disc*. That removes both of the silent traps
+recorded in D36/D37 setup:
+
+- no `User/GameSettings/R8PP01.ini` under both `[Gecko]` and `[Gecko_Enabled]`
+- no `EnableCheats = True`
+
+…and it works on real hardware with no Riivolution and no USB-loader cheat
+engine. `docs/code-mods.md`'s claim that "the Gecko code is still required"
+is true but has this escape hatch. 🔶 Not yet tried here; `wstrt` is a separate
+Wiimm tool from `wit` and is not currently a `bleck` dependency.
+
+### ✅ Multiple code mods is unsolved — by everyone
+
+Independently confirmed by both surveys, which matters because it means our
+"fail loudly, name both mods" behaviour matches the state of the art rather
+than lagging it.
+
+- Flipside-Mod-Manager README: *"assume that you can only have one rel mod
+  installed at a time"*. It hard-codes the assumption: `mod.rel` is excluded
+  from backup, and uninstall does `remove_all(files/mod)`.
+- `spm-lunatic-pit` README: *"Please do not enable any more than one SPM mod at
+  one time, as they are not cross-compatible."*
+- ⛔ **`chainrel` is a stub.** Three commits, all 2026-02-09; the loader body is
+  wrapped in `#if 0`. What exists is a boot-time picker UI drawing
+  `"test string"` ten times. Even the dead code is single-successor
+  (`mod.rel` → `chain.rel`), not N mods.
+- Several mods carry a copy-pasted `include/chainloader.h` declaring
+  `void tryChainload()` with **no implementation anywhere in the tree**.
+- The scene's shared `hookFunction()` writes a branch over instruction 0 and
+  builds a trampoline — **two mods hooking the same function silently clobber
+  each other**, which is the actual hard part and is unaddressed.
+
+**This is an unclaimed problem and the clearest differentiator available.**
+
+⚠️ **The gotcha that will bite whoever solves it**, from `relloader3/util.cpp`:
+
+```cpp
+// Use negative alignment to allocate from tail so that relF.rel won't shift
+return MEMAllocFromExpHeapEx(handle, size, -alignment);
+```
+
+There is also a `HEAP_MEM1_UNUSED` heap, and before `memInit` you must carve
+from `OSGetMEM1ArenaHi()` instead.
+
+### ✅ `SET` / `SETI` / `SETF` — D37's 🔶 resolved
+
+From **matching decompiled source**, `spm-decomp/src/evtmgr_cmd.c` (3352 lines,
+fully decompiled):
+
+```c
+s32 evt_set (EvtEntry *e) { value = evtGetValue(e, p[1]); }  // 0x32 arg decoded
+s32 evt_seti(EvtEntry *e) { value = p[1];                 }  // 0x33 arg RAW
+s32 evt_setf(EvtEntry *e) { value = evtGetFloat(e, p[1]); }  // 0x34 float domain
+```
+
+Corroborated by `ttyd-opc-summary.txt`: `set` = "set int expr to int expr",
+`seti` = "set int expr to **raw**", `setf` = "set float expr to float expr".
+
+**Our `SET`/`SETF` choice was correct.** But `SETI` is more than a third wheel:
+it is the escape hatch for exactly the case `compiler.reject_ambiguous_literal`
+currently refuses. `var a = -30000000` need not be an error — emit `SETI` and it
+is simply correct. Worth doing.
+
+⚠️ Also: `check_float` **passes values through unconverted** when above the
+float max, so `SETF` on a non-float-encoded operand silently behaves as an int
+copy rather than failing.
+
+### ✅ A much better symbol source exists
+
+| Source | Symbols (eu0) | Has sizes/types |
+|---|---|---|
+| `spm-headers/linker/spm.eu0.lst` (what we use) | **976** | no |
+| `spm-decomp/config/EU0/symbols.txt` | **43,944 total, ~9,566 human-named** | **yes** |
+
+One regex parses it:
+`^(\S+)\s*=\s*(\.?\w+):0x([0-9A-F]+);\s*//\s*(.*)$`, with `type:{function,
+object,label}`, `size:0x…`, `scope:…`. Filter `^(@|fn_|lbl_|jumptable_)` for the
+meaningful set. ~11× more named symbols, plus sizes — better `user_func`
+validation and far more callable from a script.
+
+⚠️ Correcting an earlier note: there is **no `config/symbols.yml`**. The files
+are per-version plain text in dtk format.
+
+### Other findings worth not rediscovering
+
+- **`evtpatch` (JohnP55) is how this scene modifies vanilla logic.** A runtime
+  `evt` bytecode patcher — `hookEvt`, `patchEvtInstruction`,
+  `hookEvtReplaceBlock` — that **adds two new opcodes to the VM** (`Call`,
+  `ReturnFromCall`, giving `evt` a call stack it lacks natively) by patching
+  `evtmgrCmd`'s dispatcher and bypassing `make_jump_table`'s opcode bound check
+  at `+0xe0`. Complementary to compiling new scripts, not competing. ⚠️ It also
+  rebuilds jump tables after mutation, because `make_jump_table` caches `lbl`
+  positions at entry time — a constraint we would hit the moment we emit
+  `LBL`/`GOTO`, which we currently do not.
+- **Scripts are reachable by name from a REL**: `mapDataPtr("he3_01")->initScript`,
+  `getItemUseEvt(87)`. No file surgery needed to hook an existing map or item.
+- **`relloader3` / `spm-loaders` supersedes `spm-rel-loader`.** Payload ABI with
+  magic `SPMP` at a fixed `0x80004200`–`0x800060bb` (the unused TRK interrupt
+  table, same address every region); four delivery back-ends (gecko, DOL patch,
+  Riivolution, save exploit); region filenames `./mod/eu0.rel` with `mod.rel` as
+  legacy fallback; documented budgets — **Dolphin's Gecko codehandler caps codes
+  at `0xcb0`, described as "the current bottleneck"**.
+- **Four documented hook timings**, earliest to latest: `main+0x6f8`
+  (`spmarioInit` blr, pre-`memInit`) · `relMain+0x194` (just after `relF.rel`'s
+  prolog) · `relMain+0x1b8` = `0x8023e5fc` (the classic Gecko loader we use;
+  heaps exist, **evt manager does not**) · `seq_data[...].{init,main}` (fully
+  live game).
+- **Save-file code execution** (`spm-loaders/saveloader`): a crafted save
+  overflows a stack buffer via a fake item description, firing when the player
+  opens the items menu. Four-stage, survives reboot. **Unmodified disc, no Gecko,
+  no Riivolution, on retail hardware** — an entirely different distribution model
+  from anything `bleck` assumes.
+- **Dolphin detection**, credited to TheLordScruffy:
+  `IOS_Open("/sys", 1) == -106`, falling back to probing `/dev/dolphin`.
+- **Mods persist state in unused `GSW` slots** (`gsw[1900]` etc.) rather than
+  changing the save format — free persistence, no compatibility break.
+- **Region porting is partly solved**: `JohnP55/spm-porter`, with pre-computed
+  match CSVs (`pal0-us0.csv`, …) generated by mkw-sp's `portfinder`. ⚠️ *.text
+  only* so far.
+- **`map.dat` is further along than assumed**: `AchtungKatse/SPME` has a CLI plus
+  an **ImHex pattern file** for the map format, and does `map.bin → FBX →
+  map.dat` round trips. Known limits: cannot generate `cameraroad.bin`, no
+  triangle-strip generation, and its LZSS "is not implemented correctly".
+  Relevant when `map.dat` stops being deferred.
+- **`evt-disassembler --cpp`** emits the same `evt_cmd.h` macro form our
+  compiler targets — a free correctness oracle for round-tripping our bytecode.
+  ⚠️ It needs a **RAM dump**, not a file.
+- **`evt-assembler` is archived** (2021), ~200 lines, no expressions, no macros,
+  no labels. We are past it; the only thing worth taking is its operand-encoding
+  rules for round-trip compatibility.
+
+### ⚠️ Licensing — a trap in Flipside-Mod-Manager
+
+`Flipside-Mod-Manager` has **no LICENSE file at all** (GitHub reports
+`license: null`), which means all rights reserved. But
+`src/Rel Loader.asm` is plainly derivative of SeekyCt's **GPLv3**
+`spm-rel-loader/loader/loader.s` — same structure, same `relWork` flag-byte
+protocol, extended with more region tables. The `gct/*.gct` blobs are its
+assembled output.
+
+**Do not copy from FMM.** If we want that loader, take it from `spm-rel-loader`
+under GPLv3, or write our own from the published addresses — addresses are
+facts, and facts are not copyrightable.
+
+Scene-wide: `evtpatch`, `spm-rel-loader`, `evt-disassembler`, and L5050's mods
+are all GPLv3. `spm-headers` remains MIT except `mod/`. Everyone `git subrepo`
+vendors `spm-headers` wholesale into every mod repo.
+
+### What this does not change
+
+`bleck` compiles **new** scripts; the scene patches **existing** ones at
+runtime. Those are complementary, and nothing found here supersedes the D37
+decision to compile to `evt` rather than ship a VM. No one else has a script
+*compiler* — `evt-assembler` was the closest and it is archived and far weaker.
+
+The scene is small: roughly 8–10 active technical contributors, and the GitHub
+topic `super-paper-mario` has exactly 7 repos. ⛔ Much of the knowledge lives in
+Discord and nowhere else, and **no SPM mod has a written postmortem** — which is
+the ecosystem's largest documentation gap, and an argument for keeping this log
+public.

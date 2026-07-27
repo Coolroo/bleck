@@ -5,7 +5,7 @@ Last updated 2026-07-27, after the scripting language landed (D37, D38).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D38)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D39)
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
 - [`roadmap.md`](./roadmap.md) — what to build next and what blocks it
 - [`disc-layout.md`](./disc-layout.md) — observed facts about the disc
@@ -30,6 +30,14 @@ Load a save, get into a level, watch the coin counter. `+1` every ten seconds.
 
 **If coins appear:** the scripting track is proven end to end. Mark D38's 🔶
 resolved, update `scripting.md`'s "Unproven" section and the roadmap.
+
+✅ **The approach is now validated by prior art** (D39). Hooking `seq_data` is
+the established technique in this scene — `evtpatch`, `spm-practice-codes` and
+`SPM-RPG-Battles` all do it. They hook `.main`; we hook `SEQ_GAME.init`, which
+nobody else does, so that detail is still unproven. But the shape is not a
+guess, and the convention it encodes is worth internalising:
+
+> `_prolog` = patch bytes. `seq_data[...]` override = touch the running game.
 
 **If they do not:** two causes remain and the symptom does not distinguish them —
 the sequence hook never fired, or `evtEntry` fails even at `SEQ_GAME`.
@@ -166,8 +174,12 @@ Then invert pixel data from `0x40` to the end of each — script in
    (MIT), never from `spm-rel-loader`.
 
 2. **One code mod per disc.** The Gecko loader opens exactly one `/mod/mod.rel`.
-   `bleck` now fails loudly, naming both mods, rather than silently dropping
-   one. [`chainrel`](https://github.com/SeekyCt/chainrel) is the real answer.
+   `bleck` fails loudly, naming both mods, rather than silently dropping one.
+
+   ⚠️ **Corrected by D39: `chainrel` is not the answer.** It is a three-commit
+   stub whose loader body is wrapped in `#if 0`, and nobody in this scene has
+   solved multi-mod loading. Our behaviour matches the state of the art. See
+   the "unclaimed problem" item under next steps.
 
 3. **Rust rewrite** — deferred. The case rests on distribution and compressor
    speed. Revisit after the code track lands; a PyO3 port of just the compressor
@@ -184,18 +196,35 @@ Then invert pixel data from `0x40` to the end of each — script in
 
 In rough order of value:
 
-1. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The language reaches 39 of the
+0. **Bake the Gecko loader into the DOL** (D39) — the highest value-per-effort
+   item on this list. `wstrt patch main.dol --add-sect X.gct` embeds the code
+   handler *and* the codes into a new TEXT section at `0x80001800`. That deletes
+   both silent setup traps at once: no `R8PP01.ini` under two sections, no
+   `EnableCheats`. And it works on real hardware. `wstrt` is Wiimms SZS Toolset,
+   a separate tool from `wit`, so it would be a new dependency.
+1. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
+   takes its argument raw, bypassing the zone decoder — confirmed from
+   decompiled source. `var a = -30000000` is currently a compile error and need
+   not be. Small, and removes a papercut the language shipped with.
+2. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The language reaches 39 of the
    VM's 120 opcodes. Raw memory access is the biggest single gap — it is what
    lets a script write an `EvtScriptCode *` into an NPC, door or item, which is
    how event mods are actually built. Roughly 30 lines.
-2. **`switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten,
+3. **Switch to the decomp's symbol table** (D39).
+   `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
+   the lst's 976 — **11×** — and carries sizes and types, so `user_func` targets
+   can be validated rather than just resolved. One regex parses it.
+4. **`switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten,
    not blocked.
-3. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++
+5. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++
    alongside `code.script`. Design in [`code-mods.md`](./code-mods.md);
    D38 proves the technique works.
-4. **Emit `R8PP01.ini` from `bleck`** so users do not hand-assemble Dolphin
-   config. Blocked only by the licensing decision, since the loader is GPLv3.
-5. **`chainrel`** for multiple code mods.
+6. **Multiple code mods — an unclaimed problem** (D39). Nobody in this scene
+   has solved it: `chainrel` is a three-commit stub with its loader body wrapped
+   in `#if 0`, and both major mod distributions tell users to enable one REL mod
+   at a time. This is the clearest differentiator available to `bleck`.
+   ⚠️ The known gotcha, from `relloader3/util.cpp`: allocate a second REL from
+   the *tail* of `HEAP_MAIN` (negative alignment) so `relF.rel` does not shift.
 
 ---
 
