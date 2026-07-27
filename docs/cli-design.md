@@ -47,6 +47,7 @@ bleck pack    <dir> [archive]        files on disk -> LZ77+U8
 bleck ls      <archive>              list archive contents
 bleck verify  <path>                 round-trip check, no writes
 bleck launch  <image>                boot a built image in Dolphin
+bleck maps    [--chapter N]          list the game's maps, with chapters
 ```
 
 Lower-level escape hatches, for when someone needs one layer only:
@@ -66,6 +67,23 @@ Flags added during implementation, beyond the original design:
 - `--launch` on `mod build` — boot the result immediately. The design goal above
   is "the common path is one command", and while the last step of testing lived
   outside `bleck` that was not true of the loop people actually run.
+
+### `maps` exists so `code.maps` is usable (D51)
+
+Attaching a script to a map needs the map's exact internal name, and there are
+383 of them. Without a listing, writing `code.maps` means guessing or running
+`ls` on an extracted disc — a poor answer immediately after shipping the feature
+that needs it.
+
+It reads the extracted base rather than shipping a name table, because **a map's
+name is its archive's filename**: `files/map/aa4_01.bin` *is* `aa4_01`. The disc
+cannot go stale and covers whichever region is extracted.
+
+Map **ids** are the exception: nothing on the disc records them, so they were
+dumped once from the game's `mapData[]` and committed as `mapcatalog.json`.
+
+Following `info`'s reasoning below — the tool should answer questions about the
+game, not just transform files.
 
 ### `launch` was added late, and belongs here (D36)
 

@@ -145,6 +145,57 @@ progression uses. Writing one can corrupt a playthrough. They are exposed
 because reading them is how a script observes story state, but there is no
 guard on writing.
 
+## Attaching a script to a map
+
+✅ **A script can run on arrival at a named map**, declared in the manifest
+(D51):
+
+```json
+"code": {
+  "script": "scripts/main.evt",
+  "maps": { "aa4_01": "on_arrive" }
+}
+```
+
+This is the difference between a mod that *loops* and a mod that *reacts*, and
+it needs no C. `main` is not required either — `main` is what the sequence hook
+free-runs, and a script with its own way to start should not have to invent one.
+
+Map names are the disc's own; `bleck maps --chapter 5` lists them with the
+chapter each belongs to, so nothing has to be memorised.
+
+### ⛔ It does not patch `MapData.initScript`
+
+That was the obvious design and it does not work. A map's init script is an
+ordinary bytecode pointer, so swapping in a wrapper that ran the map's own
+script and then ours *looked* ideal — and every mechanical check passed:
+
+| Checked | Result |
+|---|---|
+| `mapDataPtr("aa4_01")` at `_prolog` | ✅ valid, the table is populated that early |
+| The 0x18 offset | ✅ correct |
+| Original pointer preserved | ✅ read back intact |
+| The attached script | ⛔ **never ran** |
+| The map | ⛔ **froze mid-load, permanently** |
+
+Blocking (`RUN_CHILD_EVT`) and detached (`RUN_EVT`) spawns of the original both
+deadlocked. 🔶 The untested explanation is that the loader waits on the specific
+`EvtEntry` it created from `initScript`, which a wrapper never satisfies.
+
+**What works instead touches no game data at all.** The game announces its
+destination in `seqWork.p0` during a map change, so the sequence hook notes the
+name and calls `evtEntry` once gameplay resumes. Both halves were already proven
+— that `evtEntry` call site is how every `bleck` script starts (D43), and
+reading `seqWork.p0` is how D47 identified the attract demo's maps.
+
+⚠️ **The start is deferred to `SEQ_GAME` on purpose.** evt state is torn down and
+rebuilt across a map change, so a script started mid-change is destroyed on the
+way out.
+
+⚠️ **A map hook stops when the map is left**, for the same reason. It restarts on
+the next arrival. Nothing survives a map change; plan for it rather than around
+it.
+
 ## What this is not
 
 Honest scope, because the ceiling is real:
@@ -155,9 +206,10 @@ Honest scope, because the ceiling is real:
 - **It cannot replace a native hook.** `USER_FUNC` only reaches declared evt
   builtins, all of which take `(EvtEntry *, bool)`, so an ordinary game
   function like `mapDataPtr` is unreachable from a script whatever syntax we
-  add. ✅ **A mod can now ship C alongside its script** via `code.sources`
-  (D46) — that is what reaches those functions, and what lets a mod attach
-  behaviour to a map, door, item or NPC by name.
+  add. ✅ **A mod can ship C alongside its script** via `code.sources` (D46) —
+  that is what reaches those functions.
+  ✅ Attaching to a **map** no longer needs C at all: `code.maps` does it
+  (D51). Doors, items and NPCs still do.
 - **`USER_FUNC` is the only escape hatch today.** Whatever the game's builtins
   can do, a script can do; nothing else. ⚠️ The VM *also* has `SET_RAM`/`GET_RAM`
   for arbitrary memory, but **the language exposes no syntax for them** — an

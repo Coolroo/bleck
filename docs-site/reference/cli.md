@@ -35,6 +35,37 @@ byte-identical. Writes nothing. Accepts a file or a directory of `.bin` files.
 
 Exits non-zero on mismatch, so it works in CI.
 
+### `bleck maps`
+
+```bash
+bleck maps [--chapter N] [--search TEXT] [--areas]
+```
+
+Lists the game's maps by their internal names — the exact strings `code.maps`
+takes.
+
+```
+$ bleck maps --chapter 5
+  186  sp1_01     Ch 5-1  Land of the Cragnons
+  187  sp1_02     Ch 5-1  Land of the Cragnons
+```
+
+The leading number is the game's own map id. `--areas` summarises every area in
+playthrough order:
+
+```
+$ bleck maps --areas
+  mac          19 maps  Flipside / Flopside
+  he    Ch 1   35 maps  Lineland
+  mi    Ch 2   43 maps  Gloam Valley
+```
+
+!!! note
+
+    Reads the extracted base, so it needs `bleck extract` to have been run. Map
+    names come from the disc itself — `files/map/sp1_01.bin` *is* the map
+    `sp1_01`.
+
 ## Archives
 
 ### `bleck ls`

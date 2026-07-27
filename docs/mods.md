@@ -81,6 +81,40 @@ the `files/` prefix when that resolves.
 and `rel/relD.bin`, which `us0` lacks). Building against a mismatched base is an
 error unless explicitly forced.
 
+A mod that ships **behaviour** rather than only assets adds a `code` block:
+
+```json
+{
+  "schema": 1,
+  "name": "welcome-mat",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "sources": ["src"],
+    "maps": { "mac_01": "on_arrive" }
+  }
+}
+```
+
+| Key | What |
+|---|---|
+| `script` | evt source, compiled to the game's own VM |
+| `sources` | native C, compiled into the same module. Files or directories |
+| `maps` | map name → script name; runs on arrival there (D51) |
+| `target` | which version's symbol list resolves game functions. Default `eu0` |
+| `module_id` | REL module id. The game's own REL is 1, so mods start at 2 |
+
+All of it compiles into a single `overlay/files/mod/mod.rel`, which the ordinary
+overlay machinery then carries — **a code mod is still just a mod**, and nothing
+downstream knows it was generated.
+
+⚠️ **Only one code mod per build.** The Gecko loader opens exactly that one path,
+so a chain containing two fails loudly rather than silently dropping one. See
+*Known hazards*.
+
+Map names are the disc's own; `bleck maps --chapter 5` lists them with the
+chapter each belongs to.
+
 ---
 
 ## Overlay resolution

@@ -22,15 +22,20 @@ For anything else:
 
 ## Start here
 
-**The scripting track works.** ✅ A script compiled by `bleck` runs inside the
-game at one iteration per frame and survives a map change — verified by reading
-the running game's memory, not by looking at the screen (D43).
+**The scripting track works, and mods can now react to the world.** ✅ A script
+compiled by `bleck` runs inside the game, and ✅ can be attached to a named map
+so it starts on arrival (D51) — both verified by reading the running game's
+memory, not by looking at the screen.
 
 ```
-[t+45s] seq=GAME    gw[30] 126 -> 425 over 5s = 60/sec   *** RUNNING ***
-[t+95s] seq=MAPCHG
-[t+98s] seq=GAME    gw[30] 3262 -> 3741                  *** SURVIVED ***
+[t+45s] seq=GAME   gw[31]=4660 gw[30]=126     *** on_arrive RAN at aa4_01 ***
+[t+93s] seq=GAME   gw[31]=4660 gw[30]=3004    *** 60/sec, still alive ***
+[t+99s] seq=GAME   gw[31]=4660 gw[30]=3156    *** froze: next map is not hooked ***
 ```
+
+That last line is the point. The counter *stopping* is what proves the hook is
+map-specific rather than firing on any gameplay — evidence from a stopped
+counter, not from nothing happening.
 
 There is no longer a single blocking question. Pick from
 [next steps](#next-steps) below.
@@ -92,7 +97,13 @@ it so a map change does not silently kill it.
 `evt`, the game's own bytecode VM — 120 opcodes, cooperative scheduling, ~444
 native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md).
 
-300 tests, pylint 10.00/10.
+✅ **Event mods work** (D51). `code.maps` runs a script on arrival at a named
+map — the difference between a mod that loops and a mod that *reacts*. It
+needs no C, and `bleck maps` lists every map with the chapter it belongs to.
+⛔ Patching `MapData.initScript` deadlocks the map loader; read D51 before
+trying it.
+
+326 tests, pylint 10.00/10.
 
 ### What is verified, and what is not
 
@@ -127,17 +138,20 @@ shell. Only `BLECK_*` names are read from it, and the real environment still
 wins — a one-off `BLECK_DOLPHIN=... uv run bleck ...` overrides the file.
 It is gitignored; `.env.example` documents every setting.
 
-#### What they are
-
-`$env:` does not persist between shells. Two sessions were lost to this; both
-`wit` and `Dolphin` had to be found by searching the filesystem.
-
-```powershell
-setx BLECK_WIT         "C:\Users\Wyatt\tools\wit\bin\wit.exe"
-setx BLECK_DOLPHIN     "C:\Users\Wyatt\tools\dolphin\Dolphin.exe"
-setx BLECK_SYMBOLS_DIR "W:\Repos\bleck\symbols"
-setx BLECK_WSTRT       "C:\Users\Wyatt\tools\szs\szs-v2.42a-r8989-cygwin64\bin\wstrt.exe"
+```ini
+# .env
+BLECK_WIT=C:\Users\Wyatt\tools\wit\bin\wit.exe
+BLECK_DOLPHIN=C:\Users\Wyatt\tools\dolphin\Dolphin.exe
+BLECK_WSTRT=C:\Users\Wyatt\tools\szs\szs-v2.42a-r8989-cygwin64\bin\wstrt.exe
 ```
+
+Backslashes are taken literally, so Windows paths need no escaping.
+
+⚠️ **This exists because `$env:` does not persist between shells.** Two sessions
+were lost to that, and both `wit` and `Dolphin` had to be found by searching the
+filesystem afterwards. `setx` also works and survives reboots, but it is
+per-machine rather than per-checkout, and it will not tell the next person which
+variables matter — `.env.example` will.
 
 ### Symbol lists — required for code mods, not shipped
 
@@ -254,15 +268,19 @@ In rough order of value:
    decompiled source. `var a = -30000000` is currently a compile error and need
    not be. Small, and removes a papercut the language shipped with.
 2. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The language reaches 39 of the
-   VM's 120 opcodes. Raw memory access is the biggest single gap — it is what
-   lets a script write an `EvtScriptCode *` into an NPC, door or item, which is
-   how event mods are actually built. Roughly 30 lines.
+   VM's 120 opcodes. Raw memory access is the biggest remaining gap — it is what
+   would let a script write an `EvtScriptCode *` into an **NPC, door or item**.
+   ⚠️ **Maps are already done and did *not* need it** (D51): `code.maps` watches
+   `seqWork.p0` instead, because patching the pointer the game owns deadlocked
+   it. Expect the same trap for doors and NPCs — read D51 first.
 3. **Switch to the decomp's symbol table** (D39).
    `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
    the lst's 976 — **11×** — and carries sizes and types, so `user_func` targets
    can be validated rather than just resolved. One regex parses it.
 4. **`switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten,
    not blocked.
+   ⚠️ `RUN_EVT`/`RUN_CHILD_EVT` are *emitted* nowhere now — the map-hook design
+   that used them was ruled out (D51) — so `spawn` starts from scratch.
 5. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++
    alongside `code.script`. Design in [`code-mods.md`](./code-mods.md);
    D38 proves the technique works.

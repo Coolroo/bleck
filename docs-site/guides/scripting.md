@@ -250,6 +250,41 @@ not ship it. Put it in `work/symbols/`, or set `BLECK_SYMBOLS_DIR`.
 | `bleck script build <file>` | Compile all the way to a `.rel` module |
 | `bleck mod build <mod>` | Compile the mod's script and build a disc |
 
+## Running a script when a map loads
+
+A `script main` runs continuously during gameplay. To run something *when the
+player arrives somewhere*, attach it to a map in `mod.json`:
+
+```json
+"code": {
+  "script": "scripts/main.evt",
+  "maps": { "mac_01": "on_arrive" }
+}
+```
+
+```
+script on_arrive {
+    evt_pouch_add_coins(10)
+}
+```
+
+Now `on_arrive` runs each time that map is reached. A mod using only map hooks
+does **not** need a `script main` — that is just the script that free-runs, and
+this one has its own way to start.
+
+Find map names with [`bleck maps`](../reference/cli.md#bleck-maps):
+
+```bash
+uv run bleck maps --chapter 5
+uv run bleck maps --search mac
+```
+
+!!! warning "Nothing survives a map change"
+
+    A map hook stops when the player leaves, and starts again on the next
+    arrival. The game rebuilds its script state on every map change, so a script
+    cannot hold anything across one. Keep state in `gw[]`, which does survive.
+
 ## Limits worth knowing
 
 - **One code mod per build.** The loader opens exactly one `/mod/mod.rel`. A
