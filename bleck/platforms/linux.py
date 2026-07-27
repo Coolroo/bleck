@@ -44,13 +44,21 @@ PROFILE = PlatformProfile(
             ),
         ),
         WSTRT: ToolLocation(
+            # The toolset's own install.sh puts binaries in /usr/local/bin;
+            # the tarball can also just be unpacked and used in place.
             names=["wstrt"],
-            directories=["/usr/bin", "/usr/local/bin", "~/tools/szs/bin"],
+            directories=[
+                "/usr/local/bin",
+                "/usr/bin",
+                "~/tools/szs/bin",
+                "~/szs/bin",
+            ],
             hint=(
-                "wstrt ships with Wiimms SZS Toolset, a separate download from "
-                "wit: https://szs.wiimm.de/download.html\n"
-                "  Its folder is version-stamped, so setting BLECK_WSTRT to the "
-                "wstrt binary is usually easier than adding it to PATH"
+                "wstrt ships with Wiimms SZS Toolset — a separate package from "
+                "wit, with no distro package:\n"
+                "  wget https://szs.wiimm.de/download/szs-v2.42a-r8989-x86_64.tar.gz\n"
+                "  tar xf szs-*.tar.gz && cd szs-* && sudo ./install.sh\n"
+                "  or unpack it anywhere and set BLECK_WSTRT to the wstrt binary"
             ),
         ),
         PPC_GCC: ToolLocation(

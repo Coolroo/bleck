@@ -23,7 +23,10 @@ ALL_PROFILES = [
 ]
 
 
-ALL_TOOLS = [platforms.WIT, platforms.DOLPHIN_TOOL, platforms.DOLPHIN]
+#: Taken from the platform package rather than restated here. A hardcoded list
+#: silently stopped covering `powerpc-gcc` and `wstrt` when those were added,
+#: which is exactly the regression this test exists to catch.
+ALL_TOOLS = platforms.ALL_TOOLS
 
 
 class TestProfiles:
@@ -249,3 +252,49 @@ class TestManifestPortability:
         original = manifest.Manifest(name="demo", base="eu0")
         crlf = original.to_json().replace("\n", "\r\n")
         assert manifest.Manifest.from_json(crlf) == original
+
+
+class TestWstrtIsNotWit:
+    """Wiimms ships several tools; picking the wrong one fails confusingly."""
+
+    def test_no_platform_shares_a_name_between_wit_and_wstrt(self):
+        for profile in ALL_PROFILES:
+            wit = set(profile.tool(platforms.WIT).names)
+            wstrt = set(profile.tool(platforms.WSTRT).names)
+            assert not wit & wstrt, f"{profile.name} confuses wit with wstrt"
+
+    def test_every_platform_names_the_wstrt_binary(self):
+        for profile in ALL_PROFILES:
+            assert any("wstrt" in name for name in profile.tool(platforms.WSTRT).names), (
+                profile.name
+            )
+
+    def test_hints_say_it_is_a_separate_package(self):
+        """It ships in the SZS toolset, not with wit — the usual confusion."""
+        for profile in ALL_PROFILES:
+            hint = profile.tool(platforms.WSTRT).hint
+            assert "SZS" in hint, profile.name
+            assert "separate" in hint, profile.name
+
+    def test_only_windows_expects_an_exe_suffix(self):
+        assert "wstrt.exe" in platforms.windows.PROFILE.tool(platforms.WSTRT).names
+        for profile in (platforms.linux.PROFILE, platforms.macos.PROFILE):
+            names = profile.tool(platforms.WSTRT).names
+            assert not any(name.endswith(".exe") for name in names), profile.name
+
+
+class TestToolchainNamesPerPlatform:
+    def test_windows_expects_devkitppc_only(self):
+        # There is no distro cross-compiler to fall back on there.
+        names = platforms.windows.PROFILE.tool(platforms.PPC_GCC).names
+        assert all("eabi" in name for name in names)
+
+    def test_linux_prefers_devkitppc_over_the_distro_compiler(self):
+        """devkitPPC targets the ABI the game was built with; Debian's does not.
+
+        Order matters: the distro compiler works but needs -fno-pic -fno-PIE
+        and rejects -mgcn, so finding it first would silently pick the fussier
+        toolchain on a machine that has both.
+        """
+        names = platforms.linux.PROFILE.tool(platforms.PPC_GCC).names
+        assert names.index("powerpc-eabi-gcc") < names.index("powerpc-linux-gnu-gcc")

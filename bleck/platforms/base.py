@@ -38,6 +38,15 @@ the other, which fails in ways that look like source bugs.
 """
 
 
+ALL_TOOLS = [WIT, DOLPHIN_TOOL, DOLPHIN, WSTRT, PPC_GCC]
+"""Every external tool `bleck` knows how to find.
+
+Declared here rather than rebuilt by each caller so that adding a tool is one
+edit. The completeness test walks this list, so a new key that some platform
+forgot to describe fails immediately instead of only on that platform.
+"""
+
+
 @dataclass(frozen=True)
 class ToolLocation:
     """How to find one external tool on one platform."""

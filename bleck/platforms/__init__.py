@@ -10,6 +10,7 @@ import platform as _platform
 
 from . import linux, macos, windows
 from .base import (
+    ALL_TOOLS,
     DOLPHIN,
     DOLPHIN_TOOL,
     PPC_GCC,
@@ -35,6 +36,7 @@ def current() -> PlatformProfile:
 
 
 __all__ = [
+    "ALL_TOOLS",
     "CURRENT",
     "DOLPHIN",
     "DOLPHIN_TOOL",

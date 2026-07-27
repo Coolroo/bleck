@@ -178,6 +178,43 @@ builds. All three are expected and none prevent booting:
 
 ---
 
+## For code and script mods
+
+Only needed if you write behaviour rather than swap assets.
+
+**devkitPPC** supplies the cross-compiler:
+
+```powershell
+winget install devkitPro.devkitProUpdater
+```
+
+⚠️ If winget reports "No package found", grab the installer from
+[the devkitPro releases](https://github.com/devkitPro/installer/releases)
+directly — that happened here.
+
+**Wiimms SZS Toolset** supplies `wstrt`, which embeds the Gecko loader into the
+disc so a code mod runs with **no Dolphin cheat configuration at all**. It is a
+different download from `wit`:
+
+```powershell
+$zip = "$env:TEMP\szs.zip"
+Invoke-WebRequest "https://szs.wiimm.de/download/szs-v2.42a-r8989-cygwin64.zip" -OutFile $zip
+Expand-Archive $zip "$env:USERPROFILE\tools\szs" -Force
+```
+
+⚠️ The extracted folder is **version-stamped** (`szs-v2.42a-r8989-cygwin64`), so
+pointing `BLECK_WSTRT` at the binary is easier than adding it to PATH — a PATH
+entry goes stale on every update:
+
+```powershell
+setx BLECK_WSTRT "$env:USERPROFILE\tools\szs\szs-v2.42a-r8989-cygwin64\bin\wstrt.exe"
+setx BLECK_SYMBOLS_DIR "W:\Repos\bleck\symbols"
+setx BLECK_GECKO_DIR   "W:\Repos\bleck\gecko"
+```
+
+The symbol list and the loader codelist are third-party and do not ship with
+`bleck`; see [`scripting.md`](./scripting.md).
+
 ## Working on the docs site
 
 `docs-site/` is a [Mintlify](https://mintlify.com/) site built with

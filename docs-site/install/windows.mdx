@@ -77,6 +77,26 @@ Dolphin with modified textures.
   </Step>
 </Steps>
 
+## For code and script mods
+
+Only needed if you write behaviour rather than swap assets. Two extra tools:
+
+| Tool | Why |
+|---|---|
+| **devkitPPC** | compiles scripts and code mods |
+| **`wstrt`** (Wiimms SZS Toolset) | embeds the Gecko loader into the disc, so a code mod needs no emulator configuration |
+
+```powershell
+winget install devkitPro.devkitProUpdater
+```
+
+<Warning>
+`wstrt` ships in **Wiimms SZS Toolset**, a different download from `wit`. Get
+the Cygwin build from [szs.wiimm.de](https://szs.wiimm.de/download.html), unpack
+it, and set `BLECK_WSTRT` to `wstrt.exe` — the folder name is version-stamped,
+so a PATH entry goes stale on every update.
+</Warning>
+
 ## Where bleck looks for tools
 
 Beyond your PATH:

@@ -161,7 +161,11 @@ def build_rel(
     csource = workdir / "mod.c"
     obj = workdir / "mod.o"
     elf = workdir / "mod.elf"
-    csource.write_text(source, encoding="ascii")
+    # newline="" suppresses translation, so the generated C is byte-identical on
+    # every platform. Without it Windows writes CRLF and Linux writes LF, and two
+    # machines building the same script produce different intermediates — which
+    # makes "is this REL the same one?" needlessly hard to answer.
+    csource.write_text(source, encoding="ascii", newline="")
 
     _run(
         [chain.compiler, *chain.compile_flags(), "-c", str(csource), "-o", str(obj)],

@@ -75,13 +75,22 @@ PROFILE = PlatformProfile(
             ),
         ),
         WSTRT: ToolLocation(
+            # No Homebrew formula exists; the prefixes are listed anyway because
+            # that is where a hand-installed binary usually lands.
             names=["wstrt"],
-            directories=[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
+            directories=[
+                "/usr/local/bin",
+                *[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
+                "~/tools/szs/bin",
+            ],
             hint=(
-                "wstrt ships with Wiimms SZS Toolset, a separate download from "
-                "wit: https://szs.wiimm.de/download.html\n"
-                "  Its folder is version-stamped, so setting BLECK_WSTRT to the "
-                "wstrt binary is usually easier than adding it to PATH"
+                "wstrt ships with Wiimms SZS Toolset — a separate package from "
+                "wit, with no Homebrew formula:\n"
+                "  curl -LO https://szs.wiimm.de/download/szs-v2.42a-r8989-mac64.tar.gz\n"
+                "  tar xf szs-*.tar.gz && cd szs-* && sudo ./install.sh\n"
+                "  or unpack it anywhere and set BLECK_WSTRT to the wstrt binary\n"
+                "  Note: the macOS build is x86_64, so Apple Silicon runs it "
+                "under Rosetta 2"
             ),
         ),
         PPC_GCC: ToolLocation(

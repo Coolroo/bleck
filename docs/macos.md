@@ -32,6 +32,9 @@ uv run bleck --help
 |---|---|---|
 | `wit` | https://wit.wiimm.de/ | `extract`, `build` |
 | `DolphinTool` | inside `Dolphin.app` | RVZ read/write |
+| `Dolphin` | inside `Dolphin.app` | `bleck launch` |
+| **`wstrt`** | **Wiimms SZS Toolset** — a *separate* package from `wit` | embedding the loader into a code mod's disc |
+| **`powerpc-eabi-gcc`** | **devkitPPC** | compiling scripts and code mods |
 
 **Dolphin is an application bundle**, so its tools are not on PATH. `bleck`
 looks inside it automatically:
@@ -48,6 +51,40 @@ looks inside it automatically:
 ```bash
 export BLECK_WIT="/path/to/wit"
 export BLECK_DOLPHIN_TOOL="/Applications/Dolphin.app/Contents/MacOS/DolphinTool"
+```
+
+## For code and script mods
+
+Only needed if you write behaviour rather than swap assets.
+
+**devkitPPC** supplies the cross-compiler. It installs to `/opt/devkitpro`,
+which `bleck` searches:
+
+```bash
+curl -L https://apt.devkitpro.org/install-devkitpro-pacman -o install.sh
+sudo ./install.sh && sudo dkp-pacman -S gamecube-dev
+```
+
+**Wiimms SZS Toolset** supplies `wstrt`, which embeds the Gecko loader into the
+disc so a code mod runs with no emulator configuration. It is a **different
+download from `wit`**, with no Homebrew formula:
+
+```bash
+curl -LO https://szs.wiimm.de/download/szs-v2.42a-r8989-mac64.tar.gz
+tar xf szs-*.tar.gz && cd szs-* && sudo ./install.sh
+```
+
+⚠️ **The macOS build is x86_64 only**, so Apple Silicon runs it under Rosetta 2.
+Install Rosetta with `softwareupdate --install-rosetta` if it is missing.
+
+You also need a symbol list and a loader codelist, neither of which ships with
+`bleck` — both are third-party and one is GPLv3. See
+[`scripting.md`](./scripting.md).
+
+```bash
+export BLECK_WSTRT="/usr/local/bin/wstrt"
+export BLECK_SYMBOLS_DIR="$HOME/spm/symbols"   # spm.eu0.lst
+export BLECK_GECKO_DIR="$HOME/spm/gecko"       # loader.eu0.txt
 ```
 
 Every configurable path is declared in

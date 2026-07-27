@@ -45,6 +45,19 @@ ship in the same folder. `DolphinTool` converts and inspects images; `Dolphin`
 boots them. Pointing either at the other's binary fails confusingly.
 </Warning>
 
+<ParamField path="BLECK_WSTRT">
+  Full path to `wstrt`, from **Wiimms SZS Toolset** — a separate package from
+  `wit`. Used to embed the Gecko loader into a code mod's disc, so the mod runs
+  with no emulator configuration.
+</ParamField>
+
+<ParamField path="BLECK_GECKO_DIR" default="gecko">
+  Directory holding per-version loader codelists (`loader.eu0.txt`, …). **Not
+  shipped with `bleck`** — the SPM loader code is GPLv3. Pre-assembled loaders
+  come from
+  [spm-rel-loader](https://github.com/SeekyCt/spm-rel-loader) (`loader/`).
+</ParamField>
+
 <ParamField path="BLECK_PPC_GCC">
   Full path to the PowerPC cross-compiler used to build code and script mods,
   normally devkitPPC's `powerpc-eabi-gcc`. Only needed when it is not in a
