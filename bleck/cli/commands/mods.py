@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bleck.backends import disc
+from bleck.backends import disc, emulator
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
@@ -150,6 +150,8 @@ def cmd_build(args: argparse.Namespace) -> int:
     )
 
     if args.no_image:
+        if args.launch:
+            raise UserError("--launch needs an image to boot; drop --no-image")
         return 0
 
     default_suffix = disc.ImageFormat(args.format).suffix if args.format else ".iso"
@@ -162,6 +164,10 @@ def cmd_build(args: argparse.Namespace) -> int:
     image_format = resolve_format(out, args.format)
     builder.emit(staged, out, image_format, keep_iso=args.keep_iso)
     print(f"built {out}  ({out.stat().st_size:,} bytes, {image_format.value})")
+
+    if args.launch:
+        started = emulator.launch(out)
+        print(f"launched {out.name} in Dolphin  (pid {started.pid})")
     return 0
 
 
@@ -213,6 +219,11 @@ def register(add) -> None:
     child.add_argument("out", nargs="?")
     child.add_argument(
         "--no-image", action="store_true", help="stage only, skip writing a disc image"
+    )
+    child.add_argument(
+        "--launch",
+        action="store_true",
+        help="boot the result in Dolphin once it is built",
     )
     add_format_flags(child)
     _add_merge_flag(child)

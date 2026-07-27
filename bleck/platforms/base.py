@@ -12,6 +12,13 @@ from pathlib import Path
 
 WIT = "wit"
 DOLPHIN_TOOL = "dolphin-tool"
+DOLPHIN = "dolphin"
+"""The emulator itself, which is a different binary from `dolphin-tool`.
+
+They ship together and sit in the same directory, which makes them easy to
+conflate — but only one of them boots a game, and only the other one converts
+an image. Finding the wrong one fails confusingly, so they are separate keys.
+"""
 
 
 @dataclass(frozen=True)

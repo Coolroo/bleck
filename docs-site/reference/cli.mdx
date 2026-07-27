@@ -91,6 +91,31 @@ bleck build <dir> <out> [--format {iso,rvz,wbfs}] [--keep-iso]
 Rebuild an extracted filesystem into a disc image. Format is inferred from the
 output extension. `--align-files` is always passed to `wit`.
 
+## Emulation
+
+### `bleck launch`
+
+```bash
+bleck launch <image> [--batch] [--wait]
+```
+
+Boot a disc image in Dolphin. Returns as soon as the emulator starts, so it can
+be chained after a build without pinning your terminal.
+
+| Flag | Effect |
+|---|---|
+| `--batch` | Boot straight into the game, skipping Dolphin's game list |
+| `--wait` | Block until the emulator exits, and return its exit code |
+
+```bash
+bleck mod build my-mod out.wbfs && bleck launch --batch out.wbfs
+```
+
+<Note>
+This needs the Dolphin **emulator**, found via `BLECK_DOLPHIN` — a different
+executable from the `DolphinTool` used to convert images.
+</Note>
+
 ## Streams
 
 ### `bleck lz`
@@ -151,7 +176,7 @@ Resolve and detect conflicts. **Writes nothing** — the fast inner-loop command
 ### `bleck mod build`
 
 ```bash
-bleck mod build <name> [out] [--no-image] [--format {iso,rvz,wbfs}] [--merge-binary]
+bleck mod build <name> [out] [--no-image] [--launch] [--format {iso,rvz,wbfs}] [--merge-binary]
 ```
 
 Stage the base, apply the chain, and write a disc image.
@@ -159,8 +184,15 @@ Stage the base, apply the chain, and write a disc image.
 | Flag | Effect |
 |---|---|
 | `--no-image` | Stage only, skip writing a disc image |
+| `--launch` | Boot the result in Dolphin once it is built |
 | `--format` | Override the inferred output format |
 | `--merge-binary` | Auto-merge disjoint edits to the same binary file |
+
+`--launch` makes the whole edit-build-boot loop a single command:
+
+```bash
+bleck mod build my-mod out.wbfs --force --launch
+```
 
 ## Exit codes
 

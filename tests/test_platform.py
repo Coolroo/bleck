@@ -23,10 +23,13 @@ ALL_PROFILES = [
 ]
 
 
+ALL_TOOLS = [platforms.WIT, platforms.DOLPHIN_TOOL, platforms.DOLPHIN]
+
+
 class TestProfiles:
-    def test_every_profile_covers_both_tools(self):
+    def test_every_profile_covers_every_tool(self):
         for profile in ALL_PROFILES:
-            for key in (platforms.WIT, platforms.DOLPHIN_TOOL):
+            for key in ALL_TOOLS:
                 location = profile.tool(key)
                 assert location.names, f"{profile.name} has no names for {key}"
                 assert location.hint, f"{profile.name} has no hint for {key}"
@@ -60,9 +63,39 @@ class TestProfiles:
         for profile in ALL_PROFILES:
             assert "BLECK_WIT" in profile.tool(platforms.WIT).hint
             assert "BLECK_DOLPHIN_TOOL" in profile.tool(platforms.DOLPHIN_TOOL).hint
+            assert "BLECK_DOLPHIN" in profile.tool(platforms.DOLPHIN).hint
 
     def test_unknown_tool_falls_back_to_its_own_name(self):
         assert platforms.linux.PROFILE.tool("ghost").names == ["ghost"]
+
+
+class TestDolphinIsNotDolphinTool:
+    """The emulator and the disc utility ship together and are easy to confuse.
+
+    They are not interchangeable: DolphinTool cannot boot a game and Dolphin
+    cannot convert an image. Finding one where the other was meant produces a
+    baffling failure, so the two must never share an executable name.
+    """
+
+    def test_no_platform_shares_a_name_between_them(self):
+        for profile in ALL_PROFILES:
+            emulator_names = set(profile.tool(platforms.DOLPHIN).names)
+            tool_names = set(profile.tool(platforms.DOLPHIN_TOOL).names)
+            assert not emulator_names & tool_names, profile.name
+
+    def test_linux_never_searches_for_bare_dolphin(self):
+        """`dolphin` on Linux is KDE's file manager, and is often installed.
+
+        Searching for it by that name would launch a file browser instead of the
+        emulator — which looks like `bleck` doing something bizarre rather than
+        like a missing dependency.
+        """
+        assert "dolphin" not in platforms.linux.PROFILE.tool(platforms.DOLPHIN).names
+
+    def test_each_platform_names_its_emulator_binary(self):
+        assert "Dolphin.exe" in platforms.windows.PROFILE.tool(platforms.DOLPHIN).names
+        assert "dolphin-emu" in platforms.linux.PROFILE.tool(platforms.DOLPHIN).names
+        assert "Dolphin" in platforms.macos.PROFILE.tool(platforms.DOLPHIN).names
 
 
 class TestMacOS:

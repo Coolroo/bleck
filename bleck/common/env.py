@@ -51,6 +51,10 @@ DOLPHIN_TOOL = EnvVar(
     "BLECK_DOLPHIN_TOOL",
     description="Path to dolphin-tool, if it is not on PATH",
 )
+DOLPHIN = EnvVar(
+    "BLECK_DOLPHIN",
+    description="Path to the Dolphin emulator itself, used by `bleck launch`",
+)
 EXTRACT_ROOT = EnvVar(
     "BLECK_EXTRACT_ROOT",
     default="extracted",
@@ -79,6 +83,7 @@ BUILD_DIR = EnvVar(
 DECLARED: list[EnvVar] = [
     WIT,
     DOLPHIN_TOOL,
+    DOLPHIN,
     EXTRACT_ROOT,
     NO_COLOR,
     MODS_DIR,

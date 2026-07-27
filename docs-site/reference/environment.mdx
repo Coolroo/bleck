@@ -31,8 +31,19 @@ Every variable `bleck` understands is declared in one module,
 </ParamField>
 
 <ParamField path="BLECK_DOLPHIN_TOOL">
-  Full path to `dolphin-tool` / `DolphinTool.exe`, if it is not on PATH.
+  Full path to `dolphin-tool` / `DolphinTool.exe`, if it is not on PATH. Used to
+  read and write RVZ.
 </ParamField>
+
+<ParamField path="BLECK_DOLPHIN">
+  Full path to the Dolphin **emulator**, used by `bleck launch`.
+</ParamField>
+
+<Warning>
+`BLECK_DOLPHIN` and `BLECK_DOLPHIN_TOOL` point at **different executables** that
+ship in the same folder. `DolphinTool` converts and inspects images; `Dolphin`
+boots them. Pointing either at the other's binary fails confusingly.
+</Warning>
 
 ## Output
 
@@ -47,11 +58,13 @@ Every variable `bleck` understands is declared in one module,
 ```bash Linux / macOS
 export BLECK_BASE_DIR="/mnt/games/spm/eu0"
 export BLECK_DOLPHIN_TOOL="/Applications/Dolphin.app/Contents/MacOS/DolphinTool"
+export BLECK_DOLPHIN="/Applications/Dolphin.app/Contents/MacOS/Dolphin"
 ```
 
 ```powershell Windows
 $env:BLECK_BASE_DIR = "D:\games\spm\eu0"
 $env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
+$env:BLECK_DOLPHIN = "C:\Program Files\Dolphin\Dolphin.exe"
 ```
 </CodeGroup>
 

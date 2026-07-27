@@ -46,6 +46,7 @@ bleck unpack  <archive> [dest]       LZ77+U8 -> files on disk
 bleck pack    <dir> [archive]        files on disk -> LZ77+U8
 bleck ls      <archive>              list archive contents
 bleck verify  <path>                 round-trip check, no writes
+bleck launch  <image>                boot a built image in Dolphin
 ```
 
 Lower-level escape hatches, for when someone needs one layer only:
@@ -62,6 +63,20 @@ Flags added during implementation, beyond the original design:
   the fastest way to check a change (compression is ~12 s/MB).
 - `--keep-iso` on `extract` — retain the ISO converted from an RVZ instead of
   discarding it, since that conversion costs ~70 s.
+- `--launch` on `mod build` — boot the result immediately. The design goal above
+  is "the common path is one command", and while the last step of testing lived
+  outside `bleck` that was not true of the loop people actually run.
+
+### `launch` was added late, and belongs here (D36)
+
+It is not disc I/O, so it does not wrap `wit`; it wraps the emulator. The point
+is that every other step of edit → build → boot was a `bleck` command and the
+last one was "go find Dolphin yourself".
+
+⚠️ The emulator is a **different binary** from `dolphin-tool`, despite shipping
+beside it. They are separate entries in the platform profiles with separate
+overrides (`BLECK_DOLPHIN` vs `BLECK_DOLPHIN_TOOL`), because finding one where
+the other was meant fails in a way that is hard to read.
 
 ### `info` is the discoverability tool
 

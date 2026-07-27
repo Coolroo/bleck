@@ -18,9 +18,24 @@ See [Disc formats](/concepts/disc-formats) for why.
 
 ## Running it
 
+The quickest route is to let `bleck` do it, on any platform:
+
+```bash
+uv run bleck mod build my-mod out.wbfs --force --launch
+```
+
+That builds and boots in one step. For an image you already have:
+
+```bash
+uv run bleck launch --batch out.wbfs
+```
+
+`--batch` skips Dolphin's game list and goes straight into the game. Both need
+the emulator itself, found via `BLECK_DOLPHIN`.
+
 <Tabs>
   <Tab title="Windows">
-    Drag the `.wbfs` onto Dolphin, or **File → Open**.
+    `bleck launch` works here, or drag the `.wbfs` onto Dolphin.
 
     This is the best platform for visual testing — Dolphin runs Super Paper
     Mario at full speed on typical desktop hardware.
@@ -30,10 +45,17 @@ See [Disc formats](/concepts/disc-formats) for why.
     opening an **RVZ**, your Dolphin predates RVZ support (5.0-12188, 2020).
     Build to `.wbfs` instead, or update Dolphin.
     </Warning>
+
+    <Note>
+    `DolphinTool verify` reports three **Low** severity problems on any disc
+    `bleck` builds — a missing update partition, an unsigned DATA partition, and
+    a format that does not record the disc size. All three are expected and none
+    prevent booting.
+    </Note>
   </Tab>
 
   <Tab title="macOS">
-    Open the `.wbfs` with Dolphin.app.
+    Open the `.wbfs` with Dolphin.app, or use `bleck launch`.
 
     Performance is good on Apple Silicon. On Intel Macs expect it to depend
     heavily on the GPU.
@@ -43,6 +65,11 @@ See [Disc formats](/concepts/disc-formats) for why.
     ```bash
     dolphin-emu -e out.wbfs
     ```
+
+    <Warning>
+    The emulator is `dolphin-emu`. Plain `dolphin` is KDE's **file manager**,
+    which is installed on many desktops — running it will open a file browser.
+    </Warning>
 
     On a desktop this is fine. On ARM single-board computers, see below.
   </Tab>

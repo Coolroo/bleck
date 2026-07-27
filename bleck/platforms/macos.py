@@ -13,7 +13,7 @@ Three things differ from Linux in ways that matter:
 
 from __future__ import annotations
 
-from .base import DOLPHIN_TOOL, WIT, PlatformProfile, ToolLocation
+from .base import DOLPHIN, DOLPHIN_TOOL, WIT, PlatformProfile, ToolLocation
 
 # Apple Silicon first: /usr/local also exists on those machines but is not
 # where Homebrew installs.
@@ -49,6 +49,21 @@ PROFILE = PlatformProfile(
                 "(/Applications/Dolphin.app/Contents/MacOS/DolphinTool).\n"
                 "  Install with `brew install --cask dolphin`, or set "
                 "BLECK_DOLPHIN_TOOL to its full path"
+            ),
+        ),
+        DOLPHIN: ToolLocation(
+            # The bundle's executable is `Dolphin`; `dolphin-emu` is what a
+            # Homebrew-built binary is called.
+            names=["Dolphin", "dolphin-emu"],
+            directories=[
+                *DOLPHIN_BUNDLES,
+                *[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
+            ],
+            hint=(
+                "the Dolphin emulator lives inside Dolphin.app "
+                "(/Applications/Dolphin.app/Contents/MacOS/Dolphin).\n"
+                "  Install with `brew install --cask dolphin`, or set "
+                "BLECK_DOLPHIN to its full path"
             ),
         ),
     },

@@ -19,6 +19,7 @@ from bleck.common import env
 # Re-exported so callers keep using disc.WIT / disc.DOLPHIN_TOOL.
 WIT = platforms.WIT
 DOLPHIN_TOOL = platforms.DOLPHIN_TOOL
+DOLPHIN = platforms.DOLPHIN
 
 
 class DiscError(Exception):
@@ -26,7 +27,7 @@ class DiscError(Exception):
 
 
 # Declared overrides, checked before PATH.
-_OVERRIDES = {WIT: env.WIT, DOLPHIN_TOOL: env.DOLPHIN_TOOL}
+_OVERRIDES = {WIT: env.WIT, DOLPHIN_TOOL: env.DOLPHIN_TOOL, DOLPHIN: env.DOLPHIN}
 
 
 def find_tool(name: str) -> str:
