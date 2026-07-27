@@ -3,9 +3,14 @@
 Windows is a supported target for `bleck` (D27) and is where emulation testing
 happens, since Dolphin runs SPM at full speed there.
 
-⚠️ **Not yet verified on Windows.** The portability work is informed fixes plus
-tests that simulate the Windows paths on Linux. Running `python -m pytest` on a
-Windows machine is what turns "should work" into "does" — please report back.
+✅ **Verified on Windows 11** (D33, D35): the test suite, the linters, `extract`
+and `verify` all pass against real game data.
+
+⚠️ **Get Dolphin from [dolphin-emu.org](https://dolphin-emu.org/download/), not
+winget.** winget ships `DolphinEmulator.Dolphin` **5.0** — the 2016 stable
+release, which predates RVZ entirely and does not include `DolphinTool.exe`
+(D34). `https://dolphin-emu.org/update/latest/beta` returns JSON with current
+per-system download URLs if the download page blocks you.
 
 ---
 
@@ -43,7 +48,7 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ## Verify
 
 ```powershell
-uv run pytest             # expect 134 passed
+uv run pytest             # expect 142 passed, 3 skipped
 uv run python scripts\lint.py
 uv run bleck --help
 ```
@@ -73,9 +78,14 @@ $env:BLECK_WIT = "C:\path\to\wit.exe"
 $env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
 ```
 
-Use `setx` instead of `$env:` to persist across sessions. Every configurable
-path is declared in [`bleck/common/env.py`](../bleck/common/env.py) — that file
-is the complete list.
+Use `setx` to persist across sessions — but ⚠️ **`setx` does not affect shells
+that are already open.** It writes the user registry, and running processes keep
+the environment block they inherited at launch, so the variable can be "set" and
+still invisible to your current terminal. Set `$env:` inline as well, or open a
+new shell.
+
+Every configurable path is declared in
+[`bleck/common/env.py`](../bleck/common/env.py) — that file is the complete list.
 
 ## Use
 

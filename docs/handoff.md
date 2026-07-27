@@ -111,10 +111,17 @@ Then install **Wiimms ISO Tools** (`wit.exe`) and **Dolphin**
 (`DolphinTool.exe`), and put both on PATH or set `BLECK_WIT` /
 `BLECK_DOLPHIN_TOOL`. Full detail in [`windows.md`](./windows.md).
 
-⚠️ **`bleck` has never actually run on Windows.** The portability work is
-informed fixes plus tests that simulate the Windows paths from Linux (D27, D30).
-`uv run pytest` passing there is the first real confirmation — please check it
-before assuming anything else works.
+✅ **Done** (D33, D35). The suite, the linters, `extract` and `verify` all run on
+Windows against real game data — 150 tests, 0 skips, pylint 10.00/10, and
+`verify` reproduces D17's 383/383 corpus result.
+
+Finding one real bug in the process (D35): `bleck extract` failed on any machine
+where `extracted/` did not already exist, because the RVZ→ISO step wrote into a
+parent nobody had created. Not Windows-specific — it was masked on the Pi by the
+order commands happened to run in months earlier. Fixed, with tests.
+
+⚠️ **Still unproven on Windows:** `bleck mod build` end to end, and booting a
+built disc in Dolphin here.
 
 ### Docs site
 

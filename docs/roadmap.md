@@ -19,7 +19,7 @@ this file is forward-looking only.
 | **Asset pipeline end to end** | ✅ **A built disc boots and renders mods** (D25) |
 | PowerPC toolchain | ✅ Proven — builds a valid REL (D26) |
 | **Code injection** | ⬅ **the active track, not yet integrated** |
-| Windows 11 | ✅ Supported, ⚠️ never actually run there |
+| Windows 11 | ✅ **Verified there** — tests, linters, `extract`, `verify` (D33, D35) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
 ---
@@ -164,8 +164,9 @@ code worth porting. After the code track lands.
 - **LZ77 lazy matching.** Our encoder is +0.25% vs Nintendo; lazy matching would
   likely close most of that. Zero urgency — D25 proved bit-exactness is not
   required.
-- **Run the test suite on Windows.** 134 tests and the linters pass here; the
-  Windows paths are simulated (D27), never executed there.
+- ~~**Run the test suite on Windows.**~~ ✅ Done (D33, D35) — 150 tests, linters,
+  `extract` and `verify` all pass there against real game data. **Still open:**
+  `bleck mod build` end to end on Windows, and booting the result in Dolphin.
 - **`bleck info` for `/a` container files** — the paired `name` / `name-` format
   is still unidentified.
 - **`map/go1_03.bin`** — PAL-only map absent from US builds. Curiosity, but it

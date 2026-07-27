@@ -1023,3 +1023,240 @@ restore them.
 there, so the ABI risk flagged in D26 — Debian's SysV target versus devkitPPC's
 `powerpc-eabi` — largely disappears. Building code mods on Windows is the better
 path, not merely a fallback.
+
+---
+
+## 2026-07-27
+
+### D33 — `bleck` actually runs on Windows 11; the simulated tests held ✅
+
+**Supersedes the ⚠️ callouts in D27 and D30.** Windows portability was
+"informed fixes plus tests that simulate the Windows paths from Linux" through
+three decision entries. It has now been executed on the target.
+
+Host: Windows 11 Home 10.0.26200, aarch64→x64 irrelevant here, repo on `W:\`.
+
+```
+uv sync --extra dev        24 packages, CPython 3.13.14
+uv run pytest              142 passed, 3 skipped in 1.00s
+uv run python scripts\lint.py   ruff format ok · ruff check ok · pylint 10.00/10
+uv run bleck --help        all nine verbs listed
+```
+
+**Zero failures, zero fixes required.** 142+3 is the full 145 from D30 — the
+three skips are the game-data tests, correct on a clone with no `extracted/`.
+
+**Why this is worth recording rather than shrugging at.** The prediction being
+tested was not "Python is portable"; it was that four *specific* hazards had
+been correctly identified and handled from a machine that could not exercise
+them (D27): tool-name divergence, bash-only lint entry point, `st_nlink`
+unreliability, and read-only deletion. Simulating a platform you cannot run on
+is exactly the kind of work that quietly fails, and the honest prior was that
+something would break. Nothing did.
+
+**The generalisable point:** D27's `tests/test_platform.py` — patching
+`disc.IS_WINDOWS` to drive the Windows branches from Linux — was worth writing.
+It is tempting to dismiss simulated cross-platform tests as theatre. This is one
+data point that they are not, and it argues for extending the same treatment to
+macOS rather than waiting for a Mac.
+
+⚠️ **Scope of the claim, precisely.** This validates the *pure-Python* layers:
+formats, mods, manifests, path handling, the CLI surface. It does **not** touch
+the external-tool paths, because neither `wit.exe` nor `DolphinTool.exe` is
+installed on this host yet — so `extract` and `build` remain unexercised on
+Windows, and the `ToolSpec` search-directory work from D27 is still unproven
+there. That is the next thing to confirm, not an afterthought.
+
+**Also corrected:** `windows.md` said "expect 134 passed" and `roadmap.md` cited
+134 — both stale since D30 added the platform-profile tests. The count is 145.
+A setup doc that reports the wrong number trains readers to ignore it.
+
+**Fresh-clone state on this machine, for the record:** no `roms/`, no
+`extracted/`, no `build/`, and `mods/{title-invert,tex-koopa}` present as
+manifests with no overlay — all expected and documented in `handoff.md`. Absent
+from the host: `wit`, `DolphinTool`, `bun`/`node`, devkitPPC.
+
+---
+
+### D34 — eu0 re-confirmed on Windows, without any external tool ✅
+
+Six dumps supplied to `roms/` on the Windows box. The PAL one is a `.zip`
+containing **`.rvz`** — the same shape as the D7 download, so the same
+constraint: `wit` cannot read it and `dolphin-tool` must convert first.
+
+**Identified the disc with zero external tooling**, which D23 assumed required
+`dolphin-tool header`:
+
+```
+Game ID   R8PP01      Disc 0      Revision 0
+Wii magic 0x5D1C9EA3  Title "SUPER PAPER MARIO"
+ISO size  4,699,979,776 bytes
+```
+
+**This is `eu0`** — the same reference build as D8, from a different source and
+verified independently. The development base is in place on Windows.
+
+**The method is the finding, and it is reusable.** RVZ/WIA stores the disc's
+first 0x80 bytes **uncompressed** inside its container: a 0x48-byte
+`WIAFileHeader`, then `WIADisc` whose first four big-endian `u32`s are followed
+at **offset 0x58** by the verbatim disc header. So game ID, disc number,
+revision, magic and title are all readable with a 216-byte sequential read —
+straight out of the zip entry, no full extraction, no Dolphin.
+
+🔶 **Concrete improvement this enables:** `bleck info` currently shells out to
+`dolphin-tool header` for RVZ (D23). It could read offset 0x58 directly and work
+on a machine with **no Dolphin installed at all**. Pure Python, no new
+dependency, and it removes an external-tool requirement from the one command
+whose whole job is "tell me what this file is." Not yet implemented.
+
+### ⛔ Do not install Dolphin from winget
+
+`winget search --id Dolphin` offers `DolphinEmulator.Dolphin` at version
+**`5.0`** — the June 2016 stable release. That is precisely the build D24
+diagnosed: it **predates the RVZ format entirely** and rejects RVZ files as
+*"Is an invalid GCM/ISO file, or is not a GC/Wii ISO"*.
+
+🔶 Additionally, `DolphinTool.exe` is believed not to ship in 5.0 stable at all —
+it is a much later addition. Either way the winget package cannot serve this
+project's needs.
+
+**Get a beta or development build from `dolphin-emu.org/download` instead.**
+
+**This is D24's lesson recurring through a new door.** D24 was about what the
+*consumer's* Dolphin could open; this is about what the *developer's* package
+manager silently installs. Same root cause — the default-looking option is
+ten years stale — and it would have presented as "our RVZ is corrupt" rather
+than "your Dolphin is too old". Recorded so the next person does not spend an
+afternoon on it.
+
+**Also confirmed:** `.gitignore:2` covers `roms/`, so ~2.1 GB of dumps are
+correctly invisible to git. W: has 811 GB free, ample for the 4.7 GB
+intermediate ISO plus the ~400 MB extraction.
+
+⚠️ **Still blocked on tooling:** `wit.exe` (manual download from
+`wit.wiimm.de`, not on winget) and a recent `DolphinTool.exe`. The four USA
+dumps are `.7z` and need 7-Zip to open; low priority, since eu0 is the
+development base (D5, D8).
+
+---
+
+### D35 — Full pipeline runs on Windows; one real bug found doing it ✅
+
+**Closes the caveat D33 left open.** `extract`, `verify` and the external-tool
+paths now all work on Windows against real game data.
+
+**Toolchain installed**, both outside the repo under `C:\Users\Wyatt\tools\`:
+
+| Tool | Version | Notes |
+|---|---|---|
+| `wit.exe` | **3.05a r8638** (2022-08-27) | newer than the Pi's 3.01a; cygwin64 build, self-contained in `bin/` |
+| `DolphinTool.exe` | **Dolphin 2606** (2026-06-25) | from the update API, *not* winget — see D34 |
+| `7zr.exe` | 26.02 | standalone, no elevation; Dolphin ships as `.7z` |
+
+**Dolphin's download page 403s scrapers, but `dolphin-emu.org/update/latest/beta`
+returns JSON** listing artifacts per system. That is the reliable way to get a
+current build URL. **`DolphinTool.exe` is present in 2606**, which confirms
+D34's 🔶 suspicion that winget's 5.0 would not have shipped it at all.
+
+---
+
+#### ⚠️ The bug: `bleck extract` fails on any machine without `extracted/`
+
+The documented fresh-machine command from `windows.md` —
+
+```
+bleck extract "…(En,Fr,De,Es,It).rvz" extracted\eu0
+```
+
+— failed with:
+
+```
+bleck: DolphinTool.exe failed:
+Error: Conversion failed
+```
+
+**Cause:** `extract` computes its temporary ISO as `dest.parent / f"{stem}.iso"`
+and converts *before* anything creates `dest.parent`. On a fresh clone
+`extracted/` does not exist, DolphinTool will not create a missing parent, and
+it reports the failure as bare "Conversion failed" — **naming neither the path
+nor the reason**. Confirmed by `mkdir extracted` and re-running the identical
+command: exit 0 in 4 s.
+
+**This is not a Windows bug.** It reproduces identically on Linux. It survived
+this long because the Pi extracted us0 first (D3), which created `extracted/`
+before any RVZ was ever converted — so the failing path was never taken there.
+**A bug hidden by the order two commands happened to run in, months earlier.**
+
+**Fixed** by adding `_ensure_parent` and calling it from all three write paths —
+`convert_rvz`, `convert_to_rvz` and `build`. `build_image` and `extract` inherit
+the fix. `build` had the same latent gap: `bleck mod build … out/x.wbfs` into a
+non-existent `out/` would have failed the same opaque way.
+
+**Tests:** new `tests/test_disc.py` (5 tests). They assert the parent existed
+**at the moment the tool was invoked**, not afterwards — checking after the fact
+would pass even if the directory were created too late, and ordering is the
+whole bug. Verified non-vacuous by neutralising `_ensure_parent` and confirming
+they fail. Placed in a new file rather than `test_platform.py`, whose docstring
+scopes it to cross-platform behaviour; this is plain backend behaviour.
+
+⚠️ **Gotcha that cost a cycle:** `setx` writes the user registry, but already-running
+processes keep their inherited environment block. `BLECK_WIT` was set and still
+invisible to the very next shell. Set `$env:` inline for the current session;
+`setx` only helps new ones.
+
+---
+
+#### eu0 extracted and cross-checked against the recorded facts
+
+2,722 files, 0.39 GB. Every published figure matches:
+
+| Check | Found | Recorded |
+|---|---|---|
+| `map/*.bin` | 383 | 383 (D12) ✅ |
+| `setup/` files | 227 | 227 (D13) ✅ |
+| `rel/` | `rel.bin`, `relD.bin`, `relF.bin` | three, incl. PAL-only debug (D11) ✅ |
+| `map/go1_03.bin` | present | PAL-only (D8) ✅ |
+| `msg/JP/` | present | JP text on a EU disc (D8) ✅ |
+| `.tpl` with extension | **130** | **115 (D6)** — see below |
+
+**The `.tpl` discrepancy is not a discrepancy.** ✅ The extra files sit in
+European language directories — `eff/nl` (Dutch), `eff/it`, `eff/ge` — which a
+US disc would never ship. 🔶 **D6's 115 was almost certainly measured on us0**,
+inferred from chronology: D3 extracted US first and D6 predates the eu0
+extraction in D8. Not verified by re-counting us0, which would cost a 400 MB
+extraction for a footnote.
+
+📝 **D6 should have said which build it counted.** A bare number with no build
+attached reads as a contradiction on the next machine, and cost a detour here.
+Region-varying counts need their region stated.
+
+#### Round-trip verified on real data
+
+```
+bleck verify extracted/eu0/files/map
+383 files: 383 identical, 0 differing, 0 skipped        18.5 s
+```
+
+**D17's corpus result reproduced exactly, on Windows.** LZ77 decompress → U8
+unpack → U8 repack is byte-identical across all 383 archives on a second
+platform.
+
+#### Recorded timings — do not re-measure
+
+Windows 11 desktop vs the Pi 4 (D16, D17, D20). Same operations, same data.
+
+| Operation | Windows | Pi 4 |
+|---|---:|---:|
+| RVZ → ISO (4.38 GB out) | **4 s** | ~71 s |
+| `wit EXTRACT` data partition | **4.7 s** | — |
+| `verify` 383-file map corpus | **18.5 s** | ~4 min |
+| Full test suite | **1.0 s** | 1.85 s |
+
+**Roughly 13–18× on I/O-bound disc work.** This materially changes what is
+practical: the "rebuild a 400 MB disc, boot, squint" loop that made `map.dat`
+editing untenable (roadmap, *Deliberately deferred*) is far less painful here.
+Worth revisiting that deferral on this hardware — the reasoning was sound on a
+Pi and may simply not hold on a desktop.
+
+**Test suite is now 150, with zero skips** — the three game-data tests that skip
+on a bare clone now have `extracted/eu0` to run against. pylint 10.00/10.
