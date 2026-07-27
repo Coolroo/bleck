@@ -18,6 +18,7 @@ from bleck.backends import disc
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, u8
 
+from .code import CodeBuild, build_chain
 from .conflicts import Conflict, detect, effective_edits, merge_three_way
 from .overlay import Plan, build_plan
 from .resolver import Chain, check_bases
@@ -52,6 +53,7 @@ class BuildReport:
     files_removed: int = 0
     warnings: list[str] = field(default_factory=list)
     conflicts: list[Conflict] = field(default_factory=list)
+    code_builds: list[CodeBuild] = field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
@@ -225,10 +227,25 @@ def prepare(chain: Chain, base: Path) -> Plan:
     return build_plan(base, chain.mods)
 
 
+def compile_code(chain: Chain) -> list[CodeBuild]:
+    """Compile the chain's code mods into their overlays.
+
+    Must happen before `prepare`: the overlay plan comes from walking each mod's
+    `overlay/` directory, so a generated `mod.rel` that does not exist yet would
+    simply not be part of the build.
+    """
+    return build_chain(chain)
+
+
 def check(chain: Chain, base: Path, allow_binary: bool) -> BuildReport:
-    """Resolve and detect conflicts without writing anything."""
-    plan = prepare(chain, base)
+    """Resolve and detect conflicts without writing anything.
+
+    Scripts are still compiled: a mod whose code does not build is not a mod
+    that passes checking, and finding that out here is the whole point.
+    """
     report = BuildReport(staged=Path())
+    report.code_builds = compile_code(chain)
+    plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan)
     return report
@@ -236,8 +253,9 @@ def check(chain: Chain, base: Path, allow_binary: bool) -> BuildReport:
 
 def build(chain: Chain, base: Path, staged: Path, allow_binary: bool) -> BuildReport:
     """Stage the base, apply the chain, and report what happened."""
-    plan = prepare(chain, base)
     report = BuildReport(staged=staged)
+    report.code_builds = compile_code(chain)
+    plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan)
     if report.conflicts:

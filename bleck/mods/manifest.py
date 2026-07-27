@@ -81,6 +81,42 @@ class Requirement:
         return cls(name, match[1] or "==", Version.parse(match[2]))
 
 
+#: Where a compiled code mod lands on the disc. The Gecko loader opens exactly
+#: this path, so it is fixed rather than configurable — and it is why two code
+#: mods cannot currently coexist (see `conflicts.py`).
+REL_DISC_PATH = "files/mod/mod.rel"
+
+
+@dataclass(frozen=True)
+class CodeSpec:
+    """A mod's compiled-code half.
+
+    Present only for mods that ship behaviour rather than only assets. The
+    script named here is compiled to `evt` bytecode and packaged as the mod's
+    `mod.rel`.
+    """
+
+    script: str
+    """Path to the script source, relative to the mod directory."""
+
+    target: str = "eu0"
+    """Game version whose symbol list resolves the functions this script calls.
+
+    Addresses differ per version, so this is not cosmetic: building against the
+    wrong list produces a REL that jumps into unrelated code.
+    """
+
+    module_id: int = 2
+    """REL module id. The game's own REL is 1, so mods start at 2."""
+
+    def to_json(self) -> dict[str, object]:  # pylint: disable=container-return
+        return {
+            "script": self.script,
+            "target": self.target,
+            "module_id": self.module_id,
+        }
+
+
 @dataclass(frozen=True)
 class Manifest:
     """A mod's declared identity and relationships."""
@@ -94,6 +130,11 @@ class Manifest:
     dependencies: list[Requirement] = field(default_factory=list)
     exclusive: list[str] = field(default_factory=list)
     remove: list[str] = field(default_factory=list)
+    code: CodeSpec | None = None
+
+    @property
+    def has_code(self) -> bool:
+        return self.code is not None
 
     def to_json(self) -> str:
         body = {
@@ -113,6 +154,10 @@ class Manifest:
             "exclusive": self.exclusive,
             "remove": self.remove,
         }
+        # Omitted rather than written as null: most mods ship no code, and an
+        # always-present empty block invites people to fill it in.
+        if self.code is not None:
+            body["code"] = self.code.to_json()
         return json.dumps(body, indent=2) + "\n"
 
     @classmethod
@@ -145,7 +190,40 @@ class Manifest:
             dependencies=_parse_dependencies(raw.get("dependencies", []), source),
             exclusive=list(raw.get("exclusive", [])),
             remove=list(raw.get("remove", [])),
+            code=_parse_code(raw.get("code"), source),
         )
+
+
+def _parse_code(raw: object, source: str) -> CodeSpec | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{source}: 'code' must be an object")
+
+    script = raw.get("script", "")
+    if not script:
+        raise ManifestError(
+            f"{source}: 'code' needs a 'script' naming the source to compile"
+        )
+    if not isinstance(script, str):
+        raise ManifestError(f"{source}: 'code.script' must be a path")
+
+    module_id = raw.get("module_id", 2)
+    if not isinstance(module_id, int) or isinstance(module_id, bool):
+        raise ManifestError(f"{source}: 'code.module_id' must be a whole number")
+    # Module 0 is the DOL and 1 is the game's own REL; claiming either would
+    # collide with something already linked when the mod loads.
+    if module_id < 2:
+        raise ManifestError(
+            f"{source}: 'code.module_id' must be 2 or more "
+            f"(0 is the game binary, 1 is its own REL)"
+        )
+
+    return CodeSpec(
+        script=script,
+        target=str(raw.get("target", "eu0")),
+        module_id=module_id,
+    )
 
 
 def _parse_dependencies(raw: object, source: str) -> list[Requirement]:
