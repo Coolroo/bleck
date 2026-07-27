@@ -1,0 +1,68 @@
+name: Docs
+
+# Builds the user-facing site and publishes it to GitHub Pages.
+#
+# Pull requests build but do not deploy, so a broken link fails review rather
+# than reaching the published site. `--strict` is what makes that meaningful:
+# it turns MkDocs' broken-link warnings into a non-zero exit.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs-site/**"
+      - "mkdocs.yml"
+      - "pyproject.toml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs-site/**"
+      - "mkdocs.yml"
+  workflow_dispatch:
+
+# The default GITHUB_TOKEN has neither of the last two; without them
+# `deploy-pages` fails with a permissions error that does not name the cause.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Queue deploys rather than cancelling them: a half-published site is worse
+# than a slightly stale one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Build the site
+        # --strict fails on broken internal links. This replaces the manual
+        # link check the Mintlify setup relied on, and runs on every change.
+        run: uv run --extra docs mkdocs build --strict
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          # Matches `site_dir` in mkdocs.yml.
+          path: work/site
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

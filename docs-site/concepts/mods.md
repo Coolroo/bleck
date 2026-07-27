@@ -18,15 +18,19 @@ mods/my-mod/
 
 `bleck` never writes to your extracted disc. That is deliberate:
 
-<CardGroup cols={2}>
-  <Card title="You keep a reference" icon="scale-balanced">
+<div class="grid cards" markdown>
+
+-   **You keep a reference**
+
     Byte-comparing against a pristine base is how you confirm a change did
     exactly what you meant.
-  </Card>
-  <Card title="Mods are shareable" icon="share-nodes">
+
+-   **Mods are shareable**
+
     A mod is a handful of changed files, not a 400 MB directory.
-  </Card>
-</CardGroup>
+
+</div>
+
 
 Builds stage the base into a separate directory using hardlinks, so a build
 writes only what actually differs.
@@ -45,11 +49,11 @@ overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl
 means *"in `title.bin.uk`, replace `arc/timg/mario.tpl`; leave the other 34
 members alone."*
 
-<Info>
-Without this, changing one texture would mean shipping a whole repacked 240 KB
-archive as an opaque blob — and silently freezing every other file in it at
-whatever version you happened to extract.
-</Info>
+!!! info
+
+    Without this, changing one texture would mean shipping a whole repacked 240 KB
+    archive as an opaque blob — and silently freezing every other file in it at
+    whatever version you happened to extract.
 
 Node order is preserved, so unchanged members stay byte-identical and a rebuilt
 archive differs only where you intended.
@@ -82,10 +86,10 @@ file, list it in the manifest:
 
 ## A known hazard
 
-<Warning>
-**Setup files exist in two byte-identical copies** — standalone in `setup/` and
-embedded inside some map archives. Which copy the game reads is still
-unconfirmed, so editing one may silently do nothing.
+!!! warning
 
-`bleck` warns at build time when you touch a path with a known duplicate.
-</Warning>
+    **Setup files exist in two byte-identical copies** — standalone in `setup/` and
+    embedded inside some map archives. Which copy the game reads is still
+    unconfirmed, so editing one may silently do nothing.
+
+    `bleck` warns at build time when you touch a path with a known duplicate.

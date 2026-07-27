@@ -30,19 +30,19 @@ Dependencies form a graph, and the same mod can be reached by several paths.
 Post-order guarantees the property that matters — a mod applies only *after*
 everything it depends on, so later layers can override earlier ones.
 
-<Accordion title="Worked example: the diamond" icon="diamond">
-`M` depends on `[A, B]`; both `A` and `B` depend on `C`.
+??? note "Worked example: the diamond"
 
-```
-    M
-   / \
-  A   B
-   \ /
-    C
-```
+    `M` depends on `[A, B]`; both `A` and `B` depend on `C`.
 
-Resolves to **`C, A, B, M`** — `C` once, before both dependents.
-</Accordion>
+    ```
+        M
+       / \
+      A   B
+       \ /
+        C
+    ```
+
+    Resolves to **`C, A, B, M`** — `C` once, before both dependents.
 
 See the resolved order any time:
 
@@ -63,43 +63,45 @@ required what.
 
 Conflicts arise only between mods where **neither depends on the other**.
 
-<Check>
-If B depends on A, B overriding A's files is not a conflict — that is what
-depending on something means.
-</Check>
+!!! success
+
+    If B depends on A, B overriding A's files is not a conflict — that is what
+    depending on something means.
 
 Checks run finest-granularity-first, so most collisions turn out not to be real.
 
-<Steps>
-  <Step title="Archive members">
+1.  **Archive members**
+
     Two mods editing `title.bin.uk` only conflict if they edit the **same
     member**. Different textures merge cleanly.
-  </Step>
-  <Step title="Three-way merge">
+
+1.  **Three-way merge**
+
     Same file, two independent mods: `bleck` merges using the base game as the
     common ancestor — which always exists, because the base is immutable.
     Non-overlapping changes combine; overlapping ones conflict.
-  </Step>
-  <Step title="Exclusive claims">
+
+1.  **Exclusive claims**
+
     A mod can claim a path outright. Any other mod touching it is an error, no
     merge attempted.
 
     ```json
     "exclusive": ["files/rel/rel.bin"]
     ```
-  </Step>
-</Steps>
+{ .steps }
+
 
 ## Binary merging is opt-in
 
-<Warning>
-Two mods can edit **different bytes** of the same binary file and still produce
-something broken — two mods each appending to a table merge cleanly byte-wise
-and corrupt the result. Byte ranges cannot tell that apart from a safe edit.
+!!! warning
 
-So independent edits to the same binary file are reported as a conflict by
-default. `--merge-binary` opts in.
-</Warning>
+    Two mods can edit **different bytes** of the same binary file and still produce
+    something broken — two mods each appending to a table merge cleanly byte-wise
+    and corrupt the result. Byte ranges cannot tell that apart from a safe edit.
+
+    So independent edits to the same binary file are reported as a conflict by
+    default. `--merge-binary` opts in.
 
 Check without building anything:
 

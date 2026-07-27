@@ -15,18 +15,18 @@ two external tools for disc I/O.
 | **`dolphin-tool`** | Reading and writing RVZ |
 | A Super Paper Mario disc image | Everything. Not distributed with `bleck`. |
 
-<Note>
-`dolphin-tool` is only required for RVZ. If you work in ISO or WBFS, `wit`
-alone is enough.
-</Note>
+!!! note
+
+    `dolphin-tool` is only required for RVZ. If you work in ISO or WBFS, `wit`
+    alone is enough.
 
 ## Pick your platform
 
-<CardGroup cols={3}>
-  <Card title="Linux" icon="linux" href="/install/linux" />
-  <Card title="macOS" icon="apple" href="/install/macos" />
-  <Card title="Windows" icon="windows" href="/install/windows" />
-</CardGroup>
+<div class="grid cards" markdown>
+
+
+</div>
+
 
 ## If a tool cannot be found
 
@@ -42,16 +42,19 @@ bleck: dolphin-tool not found (looked for: dolphin-tool, DolphinTool)
 
 Point at it directly with an environment variable:
 
-<CodeGroup>
-```bash Linux / macOS
-export BLECK_WIT="/path/to/wit"
-export BLECK_DOLPHIN_TOOL="/path/to/dolphin-tool"
-```
+=== "Linux / macOS"
 
-```powershell Windows
-$env:BLECK_WIT = "C:\path\to\wit.exe"
-$env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
-```
-</CodeGroup>
+    ```bash
+    export BLECK_WIT="/path/to/wit"
+    export BLECK_DOLPHIN_TOOL="/path/to/dolphin-tool"
+    ```
 
-Every configurable path is listed in [Environment](/reference/environment).
+=== "Windows"
+
+    ```powershell
+    $env:BLECK_WIT = "C:\path\to\wit.exe"
+    $env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
+    ```
+
+
+Every configurable path is listed in [Environment](../reference/environment.md).

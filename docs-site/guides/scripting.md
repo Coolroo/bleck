@@ -11,12 +11,12 @@ That means your script runs on an interpreter Nintendo shipped and tested,
 scheduled cooperatively alongside the game's own scripts. There is no runtime to
 install and nothing extra loaded into memory.
 
-<Note>
-**Scripting handles event logic, not engine internals.** It is excellent at
-"wait, move, speak, branch on a flag, spawn a child script". Changing how an
-existing function *behaves* still needs a native hook — see
-[Code mods](/guides/code-mods).
-</Note>
+!!! note
+
+    **Scripting handles event logic, not engine internals.** It is excellent at
+    "wait, move, speak, branch on a flag, spawn a child script". Changing how an
+    existing function *behaves* still needs a native hook — see
+    [Code mods](../guides/code-mods.md).
 
 ## Your first script
 
@@ -26,7 +26,7 @@ Create a mod and give it a script:
 bleck mod new speedrun
 ```
 
-```text scripts/main.evt
+```text title="scripts/main.evt"
 -- Doubles the game speed a moment after boot.
 
 script main {
@@ -39,7 +39,7 @@ script main {
 
 Point `mod.json` at it:
 
-```json mod.json
+```json title="mod.json"
 {
   "schema": 1,
   "name": "speedrun",
@@ -111,11 +111,11 @@ var speed = 1.5      -- float
 var total = count + 1
 ```
 
-<Warning>
-**Integers and floats are separate.** `speed + count` is a compile error. The VM
-has different instructions for each and no conversion between them, so mixing
-them would reinterpret the value's bits rather than convert it.
-</Warning>
+!!! warning
+
+    **Integers and floats are separate.** `speed + count` is a compile error. The VM
+    has different instructions for each and no conversion between them, so mixing
+    them would reinterpret the value's bits rather than convert it.
 
 Each script gets **16 local slots**. Declared variables use them from one end
 and intermediate results from the other; running out is a clear compile error.
@@ -188,17 +188,17 @@ main.evt:3:5: evt_mario_set_pos takes 3 argument(s), but 2 were given
   evt_mario_set_pos(f32 x, f32 y, f32 z)
 ```
 
-<Note>
-Argument counts are only checked where upstream documents them — about two
-thirds of builtins. The rest are variadic or simply undocumented, and `bleck`
-skips them rather than guessing, since a wrong guess would reject working code.
-</Note>
+!!! note
 
-<Note>
-**Calls are statements, not expressions.** `var x = evt_sub_random(5)` will not
-compile. These builtins return results by writing into a slot you pass them,
-not with a return value.
-</Note>
+    Argument counts are only checked where upstream documents them — about two
+    thirds of builtins. The rest are variadic or simply undocumented, and `bleck`
+    skips them rather than guessing, since a wrong guess would reject working code.
+
+!!! note
+
+    **Calls are statements, not expressions.** `var x = evt_sub_random(5)` will not
+    compile. These builtins return results by writing into a slot you pass them,
+    not with a return value.
 
 ### Game variables
 
@@ -209,11 +209,11 @@ gw[3] = 1        -- global work slot, shared between scripts
 var flag = gf[2] -- global flag
 ```
 
-<Warning>
-**`gsw[]` and `gswf[]` are saved to the memory card** and are what the game's
-own story progression uses. Writing one can corrupt a playthrough. Reading them
-is safe and is how a script checks story state.
-</Warning>
+!!! warning
+
+    **`gsw[]` and `gswf[]` are saved to the memory card** and are what the game's
+    own story progression uses. Writing one can corrupt a playthrough. Reading them
+    is safe and is how a script checks story state.
 
 ## What you need installed
 
@@ -234,11 +234,11 @@ Turning `evt_mario_set_pos` into an address needs `spm.eu0.lst` from
 [spm-headers](https://github.com/SeekyCt/spm-headers) (`linker/`). `bleck` does
 not ship it. Put it in `work/symbols/`, or set `BLECK_SYMBOLS_DIR`.
 
-<Note>
-**Use `eu0` unless you have a reason not to.** Symbol coverage varies a lot by
-game version — eu0 documents about 1111 symbols, `kr0` only 456. A function that
-exists in one list may simply be absent from another.
-</Note>
+!!! note
+
+    **Use `eu0` unless you have a reason not to.** Symbol coverage varies a lot by
+    game version — eu0 documents about 1111 symbols, `kr0` only 456. A function that
+    exists in one list may simply be absent from another.
 
 ## Commands
 

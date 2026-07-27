@@ -1,0 +1,97 @@
+site_name: bleck
+site_description: A modding toolkit for Super Paper Mario (Wii)
+site_url: https://coolroo.github.io/bleck/
+repo_url: https://github.com/Coolroo/bleck
+repo_name: Coolroo/bleck
+edit_uri: edit/main/docs-site/
+copyright: Super Paper Mario is a trademark of Nintendo. This project is unaffiliated.
+
+# ⚠️ MUST be explicit. MkDocs defaults `docs_dir` to `docs/`, which in this
+# repository is the internal design record — decision log, handoff notes,
+# unreleased research. Publishing that to the public web would be a mistake
+# nobody would notice until it was indexed.
+docs_dir: docs-site
+site_dir: work/site
+
+theme:
+  name: material
+  favicon: favicon.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: deep purple
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.indexes
+    - navigation.top
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    # Picking "Windows" in one tab set selects it in every other set on the
+    # page, which matters here because most pages show all three platforms.
+    - content.tabs.link
+    - content.action.edit
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - attr_list
+  - md_in_html
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+
+extra_css:
+  - stylesheets/extra.css
+
+nav:
+  - Get started:
+      - index.md
+      - Quickstart: quickstart.md
+  - Installation:
+      - install/index.md
+      - Linux: install/linux.md
+      - macOS: install/macos.md
+      - Windows: install/windows.md
+  - Concepts:
+      - Pipeline: concepts/pipeline.md
+      - Mods: concepts/mods.md
+      - Dependencies: concepts/dependencies.md
+      - Disc formats: concepts/disc-formats.md
+  - Guides:
+      - Your first mod: guides/first-mod.md
+      - Scripting: guides/scripting.md
+      - Testing: guides/testing.md
+      - Code mods: guides/code-mods.md
+  - Reference:
+      - CLI: reference/cli.md
+      - Manifest: reference/manifest.md
+      - Environment: reference/environment.md
+  - Contributing:
+      - Dev setup: contributing/dev-setup.md
+      - Standards: contributing/standards.md

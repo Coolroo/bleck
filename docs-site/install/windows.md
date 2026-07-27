@@ -3,48 +3,48 @@ title: Windows
 description: Installing bleck on Windows 11
 ---
 
-<Note>
-**Verified end to end on Windows 11.** Install, the test suite, the linters,
-`extract`, `mod build` and `launch` all pass — and a disc built there boots in
-Dolphin with modified textures.
-</Note>
+!!! note
 
-<Steps>
-  <Step title="Install uv">
+    **Verified end to end on Windows 11.** Install, the test suite, the linters,
+    `extract`, `mod build` and `launch` all pass — and a disc built there boots in
+    Dolphin with modified textures.
+
+1.  **Install uv**
+
     ```powershell
     winget install --id=astral-sh.uv -e
     ```
 
     Or: `irm https://astral.sh/uv/install.ps1 | iex`
-  </Step>
 
-  <Step title="Clone and sync">
+1.  **Clone and sync**
+
     ```powershell
     git clone git@github.com:Coolroo/bleck.git
     cd bleck
     uv sync --extra dev
     ```
-  </Step>
 
-  <Step title="Install Wiimms ISO Tools">
+1.  **Install Wiimms ISO Tools**
+
     Download the Windows build from [wit.wiimm.de](https://wit.wiimm.de/) and
     unpack it.
 
-    <Warning>
-    The Windows build is a **Cygwin** build: `wit.exe` needs the 31 `cyg*.dll`
-    files that sit beside it in `bin\`. Add that whole directory to your PATH —
-    copying `wit.exe` out on its own will not run.
-    </Warning>
-  </Step>
+    !!! warning
 
-  <Step title="Install Dolphin">
+        The Windows build is a **Cygwin** build: `wit.exe` needs the 31 `cyg*.dll`
+        files that sit beside it in `bin\`. Add that whole directory to your PATH —
+        copying `wit.exe` out on its own will not run.
+
+1.  **Install Dolphin**
+
     You need two executables from it: `DolphinTool.exe` to read and write RVZ,
     and `Dolphin.exe` to boot what you build.
 
-    <Warning>
-    **Do not use winget.** `DolphinEmulator.Dolphin` is version **5.0** — the
-    2016 stable release. It predates RVZ and ships no `DolphinTool.exe` at all.
-    </Warning>
+    !!! warning
+
+        **Do not use winget.** `DolphinEmulator.Dolphin` is version **5.0** — the
+        2016 stable release. It predates RVZ and ships no `DolphinTool.exe` at all.
 
     Get a development build from
     [dolphin-emu.org/download](https://dolphin-emu.org/download/). It arrives as
@@ -57,9 +57,9 @@ Dolphin with modified textures.
     ```
 
     Dolphin is portable — the extracted folder can live anywhere.
-  </Step>
 
-  <Step title="Point bleck at the tools">
+1.  **Point bleck at the tools**
+
     ```powershell
     $env:BLECK_WIT          = "$env:USERPROFILE\tools\wit\bin\wit.exe"
     $env:BLECK_DOLPHIN_TOOL = "$env:USERPROFILE\tools\dolphin\DolphinTool.exe"
@@ -67,15 +67,15 @@ Dolphin with modified textures.
     ```
 
     Skip this if both are already on your PATH.
-  </Step>
 
-  <Step title="Verify">
+1.  **Verify**
+
     ```powershell
     uv run pytest          # expect 164 passed
     uv run bleck --help
     ```
-  </Step>
-</Steps>
+{ .steps }
+
 
 ## For code and script mods
 
@@ -90,12 +90,12 @@ Only needed if you write behaviour rather than swap assets. Two extra tools:
 winget install devkitPro.devkitProUpdater
 ```
 
-<Warning>
-`wstrt` ships in **Wiimms SZS Toolset**, a different download from `wit`. Get
-the Cygwin build from [szs.wiimm.de](https://szs.wiimm.de/download.html), unpack
-it, and set `BLECK_WSTRT` to `wstrt.exe` — the folder name is version-stamped,
-so a PATH entry goes stale on every update.
-</Warning>
+!!! warning
+
+    `wstrt` ships in **Wiimms SZS Toolset**, a different download from `wit`. Get
+    the Cygwin build from [szs.wiimm.de](https://szs.wiimm.de/download.html), unpack
+    it, and set `BLECK_WSTRT` to `wstrt.exe` — the folder name is version-stamped,
+    so a PATH entry goes stale on every update.
 
 ## Where bleck looks for tools
 
@@ -108,17 +108,17 @@ Beyond your PATH:
 
 Anywhere else, set the variables above.
 
-<Warning>
-**`setx` does not affect shells that are already open.** It writes the user
-registry, but running processes keep the environment they inherited at launch —
-so a variable can be "set" and still invisible to your current terminal. Set
-`$env:` inline as well, or open a new shell.
-</Warning>
+!!! warning
 
-<Tip>
-`BLECK_DOLPHIN` and `BLECK_DOLPHIN_TOOL` are **different executables** that ship
-in the same folder. `DolphinTool` converts images; `Dolphin` boots them.
-</Tip>
+    **`setx` does not affect shells that are already open.** It writes the user
+    registry, but running processes keep the environment they inherited at launch —
+    so a variable can be "set" and still invisible to your current terminal. Set
+    `$env:` inline as well, or open a new shell.
+
+!!! tip
+
+    `BLECK_DOLPHIN` and `BLECK_DOLPHIN_TOOL` are **different executables** that ship
+    in the same folder. `DolphinTool` converts images; `Dolphin` boots them.
 
 ## Without uv
 
@@ -128,12 +128,12 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-<Note>
-If activation fails with a script-execution error:
+!!! note
 
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-```
+    If activation fails with a script-execution error:
 
-`uv run` avoids this entirely, which is why it is recommended here.
-</Note>
+    ```powershell
+    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+    ```
+
+    `uv run` avoids this entirely, which is why it is recommended here.

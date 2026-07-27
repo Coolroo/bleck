@@ -53,10 +53,10 @@ bleck unpack <archive> [dest]
 
 Unpack to files on disk. Writes a `.bleck.json` manifest recording node order.
 
-<Warning>
-Do not delete `.bleck.json`. U8 node order cannot be recovered from a directory
-listing, and byte-exact repacking depends on it. `pack` warns if it is missing.
-</Warning>
+!!! warning
+
+    Do not delete `.bleck.json`. U8 node order cannot be recovered from a directory
+    listing, and byte-exact repacking depends on it. `pack` warns if it is missing.
 
 ### `bleck pack`
 
@@ -111,10 +111,10 @@ be chained after a build without pinning your terminal.
 bleck mod build my-mod work/out/my-mod.wbfs && bleck launch --batch work/out/my-mod.wbfs
 ```
 
-<Note>
-This needs the Dolphin **emulator**, found via `BLECK_DOLPHIN` — a different
-executable from the `DolphinTool` used to convert images.
-</Note>
+!!! note
+
+    This needs the Dolphin **emulator**, found via `BLECK_DOLPHIN` — a different
+    executable from the `DolphinTool` used to convert images.
 
 ## Streams
 
@@ -151,10 +151,10 @@ boundaries.
 bleck mod vendor my-mod lyt/title.bin.uk/arc/timg/mario.tpl
 ```
 
-<Tip>
-The leading `files/` is optional — `lyt/title.bin.uk` and
-`files/lyt/title.bin.uk` both work.
-</Tip>
+!!! tip
+
+    The leading `files/` is optional — `lyt/title.bin.uk` and
+    `files/lyt/title.bin.uk` both work.
 
 ### `bleck mod status`
 
@@ -200,7 +200,7 @@ resulting module is packaged automatically.
 ## Scripts
 
 Scripts compile to the game's own `evt` bytecode VM. See
-[Scripting](/guides/scripting).
+[Scripting](../guides/scripting.md).
 
 ### `bleck script builtins`
 

@@ -18,39 +18,37 @@ disc image  (ISO / RVZ / WBFS)
 
 ## The formats
 
-<AccordionGroup>
-  <Accordion title="LZ77 — compression" icon="file-zipper">
+??? note "LZ77 — compression"
+
     Nintendo's LZ77 (type `0x10`). A four-byte header, then blocks of literal
     bytes and back-references.
 
     Every map file and every REL module on the disc is compressed this way.
     `bleck` both decompresses and compresses it.
-  </Accordion>
 
-  <Accordion title="U8 — archives" icon="box-archive">
+??? note "U8 — archives"
+
     A standard Nintendo archive holding a flat file tree. Map files and layout
     files are U8 archives once decompressed.
 
     Repacking is **byte-exact**: all 383 map archives on the PAL disc survive
     unpack and repack unchanged.
-  </Accordion>
 
-  <Accordion title="TPL — textures" icon="image">
+??? note "TPL — textures"
+
     Standard Nintendo texture format. `bleck` identifies TPL files; editing
     their pixel data is done with external tools.
-  </Accordion>
 
-  <Accordion title="REL — code modules" icon="microchip">
+??? note "REL — code modules"
+
     Nintendo's relocatable module format. The game's own code ships as RELs, and
-    custom code mods are built as one. See [Code mods](/guides/code-mods).
-  </Accordion>
-</AccordionGroup>
+    custom code mods are built as one. See [Code mods](../guides/code-mods.md).
 
-<Tip>
-None of these are bespoke. Every format on the disc is a stock Nintendo one,
-which is why `bleck` is mostly about composing layers rather than reverse
-engineering them.
-</Tip>
+!!! tip
+
+    None of these are bespoke. Every format on the disc is a stock Nintendo one,
+    which is why `bleck` is mostly about composing layers rather than reverse
+    engineering them.
 
 ## Seeing it yourself
 
@@ -78,10 +76,10 @@ retail disc.
 `bleck`'s compressor produces output about **0.25% larger** than Nintendo's,
 with different internal token boundaries.
 
-<Check>
-A disc built this way **boots and renders correctly** — verified in Dolphin.
-Matching Nintendo's exact output would be satisfying but is not required.
-</Check>
+!!! success
+
+    A disc built this way **boots and renders correctly** — verified in Dolphin.
+    Matching Nintendo's exact output would be satisfying but is not required.
 
 For fast iteration, `--store` skips the search entirely and encodes everything
 as literals. It is instant, at roughly 1.125× size. On an 89%-empty disc that

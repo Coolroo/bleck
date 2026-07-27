@@ -7,38 +7,44 @@ description: A modding toolkit for Super Paper Mario (Wii)
 game's nested container formats so you can change one texture without thinking
 about compression, archives, or disc layout.
 
-<Note>
-Named for Count Bleck. The toolkit is command-line only.
-</Note>
+!!! note
+
+    Named for Count Bleck. The toolkit is command-line only.
 
 ## What it does today
 
-<CardGroup cols={2}>
-  <Card title="Read any disc file" icon="magnifying-glass">
+<div class="grid cards" markdown>
+
+-   **Read any disc file**
+
     Unwraps nested formats automatically — LZ77 compression, U8 archives, TPL
     textures and REL modules.
-  </Card>
-  <Card title="Build bootable discs" icon="compact-disc">
+
+-   **Build bootable discs**
+
     Extract, modify and rebuild to ISO, RVZ or WBFS. Verified: a disc built by
     `bleck` boots and renders modified textures.
-  </Card>
-  <Card title="Mods as overlays" icon="layer-group">
+
+-   **Mods as overlays**
+
     A mod contains only what changed. The extracted base game is never
     modified, so you always have a clean reference.
-  </Card>
-  <Card title="Dependency chains" icon="diagram-project">
+
+-   **Dependency chains**
+
     Mods can depend on other mods, resolved into one install order with
     conflict detection between independent edits.
-  </Card>
-</CardGroup>
+
+</div>
+
 
 ## What it does not do yet
 
-<Warning>
-**Code injection is in progress.** The PowerPC toolchain is proven — `bleck`
-can build a valid REL module — but compiling code into a mod is not yet wired
-into the CLI. See [Code mods](/guides/code-mods).
-</Warning>
+!!! warning
+
+    **Code injection is in progress.** The PowerPC toolchain is proven — `bleck`
+    can build a valid REL module — but compiling code into a mod is not yet wired
+    into the CLI. See [Code mods](guides/code-mods.md).
 
 **Level editing** is deliberately deferred. The map data format is partly
 understood, but editing it without a visualiser means changing bytes and hoping.
@@ -47,17 +53,21 @@ understood, but editing it without a visualiser means changing bytes and hoping.
 
 You supply your own disc image. `bleck` does not distribute game data.
 
-<Info>
-Development targets **PAL rev 0** (`R8PP01`), the build every upstream research
-project documents. It is a strict superset of the US build — no content is
-lost by working from it.
-</Info>
+!!! info
 
-<CardGroup cols={2}>
-  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Development targets **PAL rev 0** (`R8PP01`), the build every upstream research
+    project documents. It is a strict superset of the US build — no content is
+    lost by working from it.
+
+<div class="grid cards" markdown>
+
+-   **[Quickstart](quickstart.md)**
+
     From clone to a modified title screen.
-  </Card>
-  <Card title="Install" icon="download" href="/install">
+
+-   **[Install](install/index.md)**
+
     Linux, macOS and Windows.
-  </Card>
-</CardGroup>
+
+</div>
+

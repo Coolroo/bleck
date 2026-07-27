@@ -8,10 +8,10 @@ build; they are not suggestions.
 
 ## Return named types
 
-<Warning>
-**Never return `dict` or `tuple`** — including nested, like
-`list[tuple[str, int]]`. Enforced as pylint `C9001`.
-</Warning>
+!!! warning
+
+    **Never return `dict` or `tuple`** — including nested, like
+    `list[tuple[str, int]]`. Enforced as pylint `C9001`.
 
 A signature should say what comes back. `tuple[int, int]` tells a reader
 nothing about which value is which, and `dict[str, str]` hides the key set from
@@ -40,19 +40,19 @@ For genuine library boundaries there is an escape hatch, worth a comment:
 def as_kwargs(self) -> dict[str, str]:  # pylint: disable=container-return
 ```
 
-<Tip>
-This rule has repeatedly improved the code rather than obstructing it.
-`match.is_usable` reads better than comparing an anonymous tuple element, and
-grouping six positional parameters into a `BuildContext` made the call sites
-clearer.
-</Tip>
+!!! tip
+
+    This rule has repeatedly improved the code rather than obstructing it.
+    `match.is_usable` reads better than comparing an anonymous tuple element, and
+    grouping six positional parameters into a `BuildContext` made the call sites
+    clearer.
 
 ## Environment access in one place
 
-<Warning>
-`os.environ` and `os.getenv` are rejected outside `bleck/common/env.py`.
-Enforced as pylint `C9002`.
-</Warning>
+!!! warning
+
+    `os.environ` and `os.getenv` are rejected outside `bleck/common/env.py`.
+    Enforced as pylint `C9002`.
 
 Scattered environment reads are invisible — there is no list of what can be
 configured, and a typo'd name fails silently as an empty default.
@@ -85,22 +85,22 @@ Ruff handles formatting plus pycodestyle, pyflakes, import sorting, pyupgrade,
 bugbear, simplify, comprehensions, return clarity, pathlib preference and
 unused arguments. Line length 90.
 
-<Accordion title="Why pylint runs with jobs = 1" icon="triangle-exclamation">
-With `jobs > 1`, pylint loads custom plugins once per worker and reports every
-plugin message **twice**. Verified on pylint 4.0.6. The parallelism is not worth
-duplicated output.
+??? note "Why pylint runs with jobs = 1"
 
-This is also why `uv.lock` is committed — silent version drift would resurface
-issues like this one.
-</Accordion>
+    With `jobs > 1`, pylint loads custom plugins once per worker and reports every
+    plugin message **twice**. Verified on pylint 4.0.6. The parallelism is not worth
+    duplicated output.
+
+    This is also why `uv.lock` is committed — silent version drift would resurface
+    issues like this one.
 
 ## Recording expensive results
 
-<Info>
-Some operations are slow: the compressor runs ~12 s/MB, and reference encoders
-take minutes per file. **Measure once, write the number into `docs/`, and cite
-the recorded value.**
+!!! info
 
-Re-run a benchmark only when the code under test changed — never just to restate
-a number.
-</Info>
+    Some operations are slow: the compressor runs ~12 s/MB, and reference encoders
+    take minutes per file. **Measure once, write the number into `docs/`, and cite
+    the recorded value.**
+
+    Re-run a benchmark only when the code under test changed — never just to restate
+    a number.

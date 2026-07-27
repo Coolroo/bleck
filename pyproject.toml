@@ -22,6 +22,12 @@ dev = [
     "pyelf2rel>=1.0.9",
 ]
 
+# Separate from `dev` so that editing prose does not pull in a test and lint
+# toolchain, and so CI can install only what a docs build needs.
+docs = [
+    "mkdocs-material>=9.7",
+]
+
 [tool.ruff]
 line-length = 90
 target-version = "py310"

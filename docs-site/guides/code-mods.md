@@ -3,21 +3,21 @@ title: Code mods
 description: Running custom PowerPC code — work in progress
 ---
 
-<Note>
-**Looking to add behaviour to the game? Start with
-[Scripting](/guides/scripting).** It is integrated into `bleck mod build`,
-needs far less setup, and covers event logic — cutscenes, NPCs, items, doors,
-map triggers.
+!!! note
 
-This page is about **native hooks**: changing how an existing game function
-behaves. Scripting cannot do that, and the two work together in one mod.
-</Note>
+    **Looking to add behaviour to the game? Start with
+    [Scripting](../guides/scripting.md).** It is integrated into `bleck mod build`,
+    needs far less setup, and covers event logic — cutscenes, NPCs, items, doors,
+    map triggers.
 
-<Warning>
-**Hand-written native hooks are not yet integrated into the CLI.** The toolchain
-is proven — `bleck` builds valid REL modules, and `bleck mod build` compiles
-*scripts* — but there is no `code.sources` block for C/C++ yet.
-</Warning>
+    This page is about **native hooks**: changing how an existing game function
+    behaves. Scripting cannot do that, and the two work together in one mod.
+
+!!! warning
+
+    **Hand-written native hooks are not yet integrated into the CLI.** The toolchain
+    is proven — `bleck` builds valid REL modules, and `bleck mod build` compiles
+    *scripts* — but there is no `code.sources` block for C/C++ yet.
 
 ## What a code mod is
 
@@ -35,11 +35,11 @@ freestanding PowerPC C/C++
 
 The game itself is never modified.
 
-<Info>
-This is why the community decompilation being ~2.3% complete does not matter.
-Code mods link against **symbol addresses**, not source, so an incomplete decomp
-is a documentation source rather than a blocker.
-</Info>
+!!! info
+
+    This is why the community decompilation being ~2.3% complete does not matter.
+    Code mods link against **symbol addresses**, not source, so an incomplete decomp
+    is a documentation source rather than a blocker.
 
 ## Prerequisites
 
@@ -80,17 +80,17 @@ mod.rel  264 bytes
   REL v3 (13 sections)
 ```
 
-<Warning>
-**`-fno-pic -fno-PIE` is mandatory** with a distro compiler. Debian's GCC
-defaults to PIE and devkitPPC does not; without these flags you get
-`R_PPC_REL16_HA` relocations and `pyelf2rel` fails with:
+!!! warning
 
-```
-UnsupportedRelocationError: Unsupported relocation type 252
-```
+    **`-fno-pic -fno-PIE` is mandatory** with a distro compiler. Debian's GCC
+    defaults to PIE and devkitPPC does not; without these flags you get
+    `R_PPC_REL16_HA` relocations and `pyelf2rel` fails with:
 
-The error gives no hint about the cause, so it is worth knowing up front.
-</Warning>
+    ```
+    UnsupportedRelocationError: Unsupported relocation type 252
+    ```
+
+    The error gives no hint about the cause, so it is worth knowing up front.
 
 Only `-mgcn` from the upstream flag set is rejected — it is devkitPPC-specific
 and safe to drop.
@@ -105,17 +105,17 @@ For Dolphin, Gecko codes go in `User/GameSettings/R8PP01.ini`.
 
 ## Known limitations
 
-<AccordionGroup>
-  <Accordion title="One code mod per disc" icon="triangle-exclamation">
+??? note "One code mod per disc"
+
     The loader loads exactly one file, `/mod/mod.rel`. Two mods in a chain both
     wanting code would collide, and unlike an asset conflict the second simply
     would not exist.
 
     [`chainrel`](https://github.com/SeekyCt/chainrel) solves this properly and
     is planned once single code mods work.
-  </Accordion>
 
-  <Accordion title="ABI risk with a distro compiler" icon="triangle-exclamation">
+??? note "ABI risk with a distro compiler"
+
     devkitPPC targets `powerpc-eabi`; Debian's targets `powerpc-linux-gnu`
     (SysV). `-meabi` asks for EABI conventions, but differences around
     small-data registers and struct passing could produce code that builds
@@ -124,11 +124,9 @@ For Dolphin, Gecko codes go in `User/GameSettings/R8PP01.ini`.
     **This has not been proven by running it yet.** If it fails, the fallback is
     building on Windows with real devkitPPC and packaging with `bleck` — the
     REL is just a file the overlay places.
-  </Accordion>
 
-  <Accordion title="Licensing" icon="scale-balanced">
+??? note "Licensing"
+
     `spm-rel-loader` is **GPLv3**, including the loader code. `spm-headers` is
     MIT except its `mod/` folder. `bleck` is currently unlicensed, so nothing
     upstream has been vendored into it.
-  </Accordion>
-</AccordionGroup>

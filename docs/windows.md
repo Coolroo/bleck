@@ -217,29 +217,22 @@ The symbol list and the loader codelist are third-party and do not ship with
 
 ## Working on the docs site
 
-`docs-site/` is a [Mintlify](https://mintlify.com/) site built with
-[bun](https://bun.sh/). Install it per bun's own instructions —
-<https://bun.sh/docs/installation> — which on Windows is either:
+`docs-site/` is a [Material for MkDocs](https://squidfunk.github.io/mkdocs-material/)
+site published to GitHub Pages. **No Node toolchain is needed** — it installs
+with the same `uv` used for everything else:
 
 ```powershell
-powershell -c "irm bun.sh/install.ps1 | iex"    # bun's installer
-winget install --id Oven-sh.Bun -e              # or via winget
+uv sync --extra docs
+uv run mkdocs serve      # preview on http://127.0.0.1:8000
+uv run mkdocs build --strict
 ```
 
-Then:
+`--strict` turns broken internal links into a build failure, and CI runs the
+same command on every pull request.
 
-```powershell
-cd docs-site
-bun install
-bun run dev        # preview on http://localhost:3000
-bun run check      # Mintlify's broken-link validator, no server needed
-```
-
-`bun run check` is worth running before committing any doc change; it needs no
-server and catches links to pages that do not exist.
-
-⚠️ **The dev server has still never been started.** `bun run check` passes and
-structure was verified by script, but nothing has been rendered visually.
+⚠️ **`mkdocs.yml` sets `docs_dir: docs-site` deliberately.** MkDocs defaults to
+`docs/`, which here is the internal design record. Publishing that would be a
+mistake nobody would notice until it was indexed.
 
 ---
 

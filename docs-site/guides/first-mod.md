@@ -6,9 +6,9 @@ description: Change the title screen, end to end
 This produces a bootable disc with a visibly modified title screen. It is the
 exact mod used to validate `bleck`'s pipeline.
 
-<Note>
-Assumes you have [installed](/install) `bleck` and have a disc image.
-</Note>
+!!! note
+
+    Assumes you have [installed](../install/index.md) `bleck` and have a disc image.
 
 ## 1. Extract a base
 
@@ -66,10 +66,10 @@ uv run bleck mod vendor title-invert lyt/title.bin.uk/arc/timg/mario.tpl
 vendored -> mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl  (18,880 bytes)
 ```
 
-<Tip>
-Note the path goes *through* the archive. `bleck` unpacked `title.bin.uk`,
-extracted that one member, and placed it where the overlay expects it.
-</Tip>
+!!! tip
+
+    Note the path goes *through* the archive. `bleck` unpacked `title.bin.uk`,
+    extracted that one member, and placed it where the overlay expects it.
 
 ## 5. Edit it
 
@@ -77,7 +77,7 @@ extracted that one member, and placed it where the overlay expects it.
 unmistakable result, and cannot corrupt the file — CMPR has no invalid byte
 values.
 
-```python invert.py
+```python title="invert.py"
 import struct
 from pathlib import Path
 
@@ -122,17 +122,17 @@ staged build/title-invert  (0 file(s), 1 archive(s) merged)
 built work/out/my-mod.wbfs  (444,596,224 bytes, wbfs)
 ```
 
-<Check>
-`1 archive(s) merged` means the archive was unpacked, your texture swapped in,
-and the other 34 members repacked untouched.
-</Check>
+!!! success
+
+    `1 archive(s) merged` means the archive was unpacked, your texture swapped in,
+    and the other 34 members repacked untouched.
 
 ## 8. Run it
 
 Open `work/out/my-mod.wbfs` in Dolphin. Mario should appear in inverted colours on the title
 screen.
 
-See [Testing](/guides/testing) for per-platform emulation notes.
+See [Testing](../guides/testing.md) for per-platform emulation notes.
 
 ## Confirming you changed only what you meant
 
@@ -148,11 +148,15 @@ Files work/extracted/eu0/files/lyt/title.bin.uk and build/title-invert/files/lyt
 
 One file. That is the whole point of keeping the base immutable.
 
-<CardGroup cols={2}>
-  <Card title="Add a dependency" icon="diagram-project" href="/concepts/dependencies">
+<div class="grid cards" markdown>
+
+-   **[Add a dependency](../concepts/dependencies.md)**
+
     Build a second mod that layers on this one.
-  </Card>
-  <Card title="CLI reference" icon="terminal" href="/reference/cli">
+
+-   **[CLI reference](../reference/cli.md)**
+
     Every command and flag.
-  </Card>
-</CardGroup>
+
+</div>
+

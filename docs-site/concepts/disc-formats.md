@@ -24,17 +24,17 @@ Override with `--format {iso,rvz,wbfs}`.
 
 ## Why WBFS for sharing
 
-<Warning>
-RVZ requires **Dolphin 5.0-12188 (2020) or newer**. The last *stable* release —
-plain 5.0 from 2016 — predates the format and rejects it with:
+!!! warning
 
-```
-Is an invalid GCM/ISO file, or is not a GC/Wii ISO
-```
+    RVZ requires **Dolphin 5.0-12188 (2020) or newer**. The last *stable* release —
+    plain 5.0 from 2016 — predates the format and rejects it with:
 
-That error means "format not recognised", not "file corrupt". Many people still
-run 5.0 stable.
-</Warning>
+    ```
+    Is an invalid GCM/ISO file, or is not a GC/Wii ISO
+    ```
+
+    That error means "format not recognised", not "file corrupt". Many people still
+    run 5.0 stable.
 
 WBFS is only 175 MB larger and Dolphin has read it for years.
 
@@ -43,11 +43,11 @@ WBFS is only 175 MB larger and Dolphin has read it for years.
 A Super Paper Mario disc is 4.5 GB, of which about 492 MB is actual data. The
 rest is padding filled with deterministic junk.
 
-<Info>
-This is why WBFS and RVZ are so much smaller — they omit the padding. It is also
-why disc space is never a constraint when modding: you have roughly 4 GB of
-headroom.
-</Info>
+!!! info
+
+    This is why WBFS and RVZ are so much smaller — they omit the padding. It is also
+    why disc space is never a constraint when modding: you have roughly 4 GB of
+    headroom.
 
 ## Skipping the image entirely
 

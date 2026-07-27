@@ -317,5 +317,8 @@ In rough order of value:
   184 of 227 and false of the rest. Fifteen lines of Python against data already
   on disk corrected it and decoded the format. This project already had the rule;
   D42 is what it looks like when it pays off.
-- **The docs-site dev server has still never been started.** `bun run check`
-  passed before the scripting pages were added; nothing has rendered visually.
+- **The docs site is now Material for MkDocs**, not Mintlify, and publishes to
+  GitHub Pages via `.github/workflows/docs.yml`. `uv run mkdocs serve` previews
+  it; no Node toolchain is involved. ⚠️ Nothing has been checked visually in a
+  browser — `mkdocs build --strict` passes and every construct renders to the
+  expected HTML, but that is not the same as looking at it.
