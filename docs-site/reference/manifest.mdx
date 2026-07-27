@@ -64,6 +64,42 @@ Every mod has a `mod.json` at its root.
   Manifest format version. An unknown value is rejected rather than guessed at.
 </ParamField>
 
+<ParamField path="code" type="object">
+  Present only for mods that ship behaviour. See [Scripting](/guides/scripting).
+
+  <Expandable title="fields">
+    <ParamField path="code.script" type="string" required>
+      Path to the script source, relative to the mod directory.
+    </ParamField>
+    <ParamField path="code.target" type="string" default="eu0">
+      Game version whose symbol list resolves the functions the script calls.
+      Addresses differ per version, so building against the wrong list produces
+      a module that jumps into unrelated code.
+    </ParamField>
+    <ParamField path="code.module_id" type="integer" default="2">
+      REL module id. The game's own REL is 1, so mods start at 2.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+```json
+{
+  "schema": 1,
+  "name": "speedrun",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0"
+  }
+}
+```
+
+<Note>
+The compiled module is written to `overlay/files/mod/mod.rel` and then carried
+by the ordinary overlay machinery — a code mod is still just a mod. Only one
+code mod can be in a build, because the loader opens exactly that one path.
+</Note>
+
 ## Layout
 
 ```

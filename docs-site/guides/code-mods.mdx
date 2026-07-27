@@ -3,10 +3,20 @@ title: Code mods
 description: Running custom PowerPC code — work in progress
 ---
 
+<Note>
+**Looking to add behaviour to the game? Start with
+[Scripting](/guides/scripting).** It is integrated into `bleck mod build`,
+needs far less setup, and covers event logic — cutscenes, NPCs, items, doors,
+map triggers.
+
+This page is about **native hooks**: changing how an existing game function
+behaves. Scripting cannot do that, and the two work together in one mod.
+</Note>
+
 <Warning>
-**Not yet integrated into the CLI.** The toolchain is proven — `bleck` can build
-a valid REL module — but compiling code as part of a mod is not implemented.
-This page documents what works today and what is coming.
+**Hand-written native hooks are not yet integrated into the CLI.** The toolchain
+is proven — `bleck` builds valid REL modules, and `bleck mod build` compiles
+*scripts* — but there is no `code.sources` block for C/C++ yet.
 </Warning>
 
 ## What a code mod is

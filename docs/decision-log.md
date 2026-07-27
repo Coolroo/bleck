@@ -1358,3 +1358,289 @@ game-list window. Exposed as `--batch`.
 platform profiles). pylint 10.00/10, with one deliberate suppression —
 `consider-using-with` on the `Popen` call, verified as genuinely required, since
 the emulator must outlive the CLI process.
+
+---
+
+## D37 — A scripting language, by compiling to the game's own VM (2026-07-27)
+
+**The finding that decided this: Super Paper Mario already contains a bytecode
+interpreter, and it is thoroughly documented upstream.** ✅
+
+`evt` — `evtmgrMain()` runs it every frame. Verified from
+`spm-headers/include/spm/evtmgr_cmd.h` and `evtmgr.h`:
+
+- **120 opcodes**, `0x00`–`0x77`, every one named in `enum EvtOpcode`
+- **Cooperative scheduling** across up to 128 concurrent entries
+  (`EVT_ENTRY_MAX 0x80`), with documented yield semantics
+  (`EVT_RET_BLOCK_WEAK`, `EVT_RET_END_FRAME`, …)
+- **~444 native builtins** declared across 26 `evt_*.h` headers; 302 with known
+  arity, many with commented signatures
+- **Scripts are data.** `EvtScriptCode *` is a field on `MobjEntry`,
+  `ItemEntry`, `NPCEntry`, `map_data`, doors and cases. 71 existing in-game
+  scripts are named and addressed
+- **345 of `spm.eu0.lst`'s 1111 symbols are `evt_*`** — the best-covered part of
+  the symbol map
+
+The instruction encoding is fully specified: header word
+`(argc << 16) | opcode`, then arguments whose **numeric range encodes the
+storage class** (`EVTDAT_LW_BASE 30000000`, `EVTDAT_FLOAT_BASE 240000000`, …).
+Floats are fixed-point, `value * 1024`.
+
+### The decision
+
+**Compile a small language to `evt` bytecode. Do not ship a VM.**
+
+Implemented as `bleck/script/` plus `bleck script {check,dump,build}` and a
+`code` block in `mod.json`. A script becomes `overlay/files/mod/mod.rel` through
+the existing overlay machinery — a code mod is still just a mod.
+
+### Rejected: embedding Lua (or Wren, QuickJS, Duktape, wasm3, mruby, Pawn)
+
+Researched properly before rejecting. Lua was the strongest candidate and has
+real devkitPPC prior art (the WiiBrew `Lua for Wii` package, WiiLÖVE, LuaFWii).
+It still loses on every axis that matters here:
+
+- **No prior art for a VM inside a retail game's address space via a REL.** All
+  the Wii Lua work is homebrew ELF/DOL with libogc and newlib underneath. Our
+  build contract is `-nostdlib -ffreestanding`.
+- **A libc shim would have to be written**: `setjmp`/`longjmp` by hand in PPC
+  EABI assembly (C++ exceptions are off), plus `str*`/`mem*`/`ctype`, plus the
+  `sprintf`/`strtod` pair that is where freestanding ports actually break.
+- **~70–160 KB of REL** against the ~400 bytes a compiled script costs.
+- **GC against a 16.6 ms budget.** Lua 5.4's incremental collector has an atomic
+  step that "can run into the tens of milliseconds"; generational major
+  collections are stop-the-world. A permanent tuning burden, not a solved
+  problem.
+- **Bytecode is not portable.** `luac` emits native-endian only, so scripts
+  would have to ship as text and be parsed on-console.
+- ⛔ **LuaJIT is dead for this target** — its own status page lists PPC32 as
+  EOL, and a JIT needs W+X memory in someone else's address space anyway.
+
+⚠️ **NaN boxing is the big-endian hazard** across this whole category (Wren,
+QuickJS 32-bit, mruby, Janet). Lua avoids it with a tagged union; the others
+would need auditing. Recorded so nobody re-runs this survey.
+
+### Rejected: a friendlier AOT language (Nim, Zig, Rust)
+
+Genuinely viable and worth revisiting for the *native* track. Nim compiles to C
+(`--os:any -d:useMalloc --mm:arc`, no tracing GC) and has strong precedent on a
+comparable console — `natu` shipped a commercial GBA game via devkitARM. Zig's
+`@cImport` would eliminate binding generation entirely.
+
+Rejected **for scripting** because AOT gives no sandbox, no hot reload, and
+crashes that look exactly like C crashes. It is a better-C, not a scripting
+layer. Also: `powerpc-freestanding` is outside Zig's tier system, and Rust needs
+a custom JSON target plus nightly forever.
+
+### Corroboration: nobody in console modding ships a VM
+
+Surveyed ttyd-tools, spm-rel-loader, Kamek/Newer SMBW, Skyline, Starlight,
+HackerSM64, m-ex/Slippi, BrawlBox/PSA. **None ship a scripting VM.** The
+successful move has consistently been either *make the C/C++ path excellent*
+(Kamek declares hook sites inline in the source; LunaKit adds in-game ImGui) or
+*edit the game's own bytecode through better tools* (PSA, `ttydasm`,
+`evt-disassembler`, SM64's `script.c` macros). Skyline choosing Rust is the one
+counter-example, and it is still AOT.
+
+Compiling to `evt` is the second pattern, with a compiler instead of a GUI.
+
+### The design decision that keeps licensing open ✅
+
+**Scripts reference game functions by name; the generated C declares them
+`extern` and takes their address; `elf2rel` binds the name through the symbol
+list at REL-build time.**
+
+So `bleck` writes no addresses, reads no symbol list, and ships none. Verified
+by test: generated C contains no `0x80`. `BLECK_SYMBOLS_DIR` points at a
+user-supplied `spm.<version>.lst`.
+
+This means D26's licensing question **stays open and blocks nothing**, which is
+the opposite of the roadmap's assumption that it blocked everything.
+
+### Also decided
+
+- **Generate C rather than an object file.** Reuses the proven devkitPPC +
+  `pyelf2rel` path instead of learning ELF relocations.
+- **Compile in `builder.check` as well as `builder.build`.** A mod whose code
+  does not compile is not a mod that passes checking.
+- **Compiler flags are a property of the compiler, not the OS.** devkitPPC's
+  `powerpc-eabi-gcc` takes `-mgcn`; Debian's needs `-fno-pic -fno-PIE` (D26).
+  Modelled as a `Toolchain` value chosen from the executable's name, not an `if`.
+- **Two code mods in one chain is a hard error**, naming both. The loader opens
+  exactly one `/mod/mod.rel`, so the alternative is silently dropping one.
+- **Negative literals are constant-folded**, which also makes the
+  ambiguous-literal guard reachable: the parser only ever produces unary minus
+  applied to a positive literal, so without folding the guard was dead code.
+
+### Verified this session ✅
+
+- devkitPPC 16.1.0 on Windows: `--enable-languages=c,c++,objc,lto`,
+  `--with-cpu=750`, newlib. **`powerpc-eabi-g++` and `powerpc-eabi-gdb` are both
+  present** — C++ works here where it did not on the Pi (D26).
+- A two-script sample compiles to **73 bytecode words**, hand-verified against
+  the opcode table: `65545` = `(1<<16)|WAIT_FRM`; `-239997952` =
+  `2.0*1024 - 240000000`; `327772` = `USER_FUNC` with 5 args.
+- Full path to a **764-byte REL v3**, which `bleck info` parses.
+- `bleck mod build speedrun --no-image` → **436-byte module** staged at
+  `build/speedrun/files/mod/mod.rel`.
+- Test suite **164 → 236**. pylint 10.00/10. Non-vacuity checked by mutating
+  `EVTDAT_LW_BASE` and confirming a failure.
+
+### Unproven 🔶
+
+- **Nothing has been booted.** Structural validity is not runtime correctness —
+  the same gap D26 flagged and D25/D36 closed for assets.
+- **`SET` (0x32) vs `SETI` (0x33).** We assume `SET`/`SETF` are the int/float
+  assignment pair, following the `ADD`/`ADDF` convention. `SETI` exists and its
+  role is not documented upstream. First suspect if integer assignment misbehaves.
+- **Starting the script from `_prolog`** runs it before any map loads. Which
+  builtins are safe that early is untested; the sample's `wait(120)` is a guess.
+- **`evtEntry(script, 0, 0)`** — priority and flags taken from TTYD convention.
+
+### Hot reload: deferred, but the architecture was chosen to allow it
+
+The general rule from the live-patching literature: reload is cheap when the
+unit of replacement is **a value in a dispatch table the runtime owns**, and
+expensive when it is **machine code** — restoring patched bytes undoes the
+branch but not the allocations, callbacks or globals the code already touched.
+Everest removed late-loading for exactly this reason, on PC, with a managed
+runtime. No console toolkit ships code hot reload.
+
+Compiled bytecode is data, so this design sits on the cheap side. Supporting
+facts, verified from Dolphin source rather than assumed:
+
+- ✅ Riivolution redirection re-opens the host file on **every** disc read
+  (`DiscContent::Read`, `DirectoryBlob.cpp`); no sector cache in front of it;
+  `FILE_SHARE_WRITE` on Windows. Requires Dolphin 5.0-15407+.
+- ✅ SPM links `DVDMgrOpen`/`DVDMgrRead`/`DVDMgrClose`, so re-reading a file
+  from the running game is ~30 lines.
+- ⛔ **Reloading a rebuilt REL is ruled out**: `spm.eu0.lst` has `OSLink` at
+  `80274c0c` but **no `OSUnlink`**, and `relmgr` has no unload path.
+
+Estimated 1–3 days if wanted later. Not built; not needed for the language.
+
+### Upstream boilerplate we did not need
+
+`spm-rel-loader/rel/include/patch.h` already implements `writeBranch`,
+`writeWord`, `clear_DC_IC_Cache` and a `hookFunction` trampoline — so the D36
+hand-written detour duplicated it. Worth knowing, but it is **GPLv3**
+(repo-wide `LICENSE`), and its `hookFunction` blindly copies instruction[0], so
+it breaks on any function starting with a PC-relative instruction and leaks its
+trampoline. Not a drop-in.
+
+⚠️ Also corrected: **`spm-rel-loader` re-bundles the MIT headers under its
+repo-wide GPLv3 `LICENSE`.** Take headers and lsts from `spm-headers`, never
+from `spm-rel-loader`.
+
+Design detail in [`scripting.md`](scripting.md).
+
+---
+
+## D38 — Custom code runs in-game; `_prolog` is too early for `evtEntry` (2026-07-27)
+
+The first script mod (`coin-tick`, one coin per ten seconds) did nothing. Three
+causes were possible and the symptom did not distinguish them, so rather than
+guess, one disc was built carrying **two independent signals**.
+
+### The diagnostic
+
+`scratchpad/diag/mod.c` — a REL doing two unrelated things in one `_prolog`:
+
+| Signal | Mechanism | Depends on |
+|---|---|---|
+| **A** — Mario at double speed | direct instruction patch of `marioGetGameSpeedScale` (D36 technique) | only the Gecko loader running the module |
+| **B** — a coin per second | `evtEntry(script, 0, 0)` | the evt manager being alive at `_prolog` time |
+
+Signal A was applied first, so a hang or crash in `evtEntry` would still leave
+A observable.
+
+**Result: A fired, B did not.** ✅ Observed on Windows, Dolphin 2606, eu0.
+
+### What that settles
+
+- ✅ **The Gecko loader works, and a `bleck`-built REL executes correctly
+  in-game.** This had been *unverified since D26* — D36's `codetest` was booted
+  but the session ended before anyone looked at it, and the roadmap has carried
+  "no custom code has ever run" ever since. It has now run.
+- ✅ **The D36 detour technique is correct in practice**, not just structurally:
+  the branch encoding, the 26-bit range check and the `dcbst`/`sync`/`icbi`/
+  `isync` flush all behave. Observable as jump distance more than foot speed,
+  since `marioGetGameSpeedScale` scales physics timing.
+- ✅ **`evtEntry` called from `_prolog` does nothing.** Measured, not inferred.
+  The loader links the module immediately after the game's own REL, long before
+  the evt manager is initialised, so there is no entry table to allocate from.
+  D37 flagged this as 🔶 "which builtins are safe that early is untested" —
+  that understated it. The problem is not the builtins; it is `evtEntry` itself.
+
+⚠️ Note `evtmgrInit` is declared in `spm/evtmgr.h` but is **not** in
+`spm.eu0.lst` (only `evtmgrReInit` at `800d8b2c` and `evtEntry` at `800d8b88`),
+so initialisation state cannot be queried directly. This was diagnosed purely
+from the two-signal split.
+
+### The fix: hook the sequence table, do not patch code
+
+`_prolog` no longer starts anything. It swaps a function pointer in the game's
+own dispatch table:
+
+```c
+extern SeqDef seq_data[];          /* {init, main, exit} per sequence */
+#define BLECK_SEQ_GAME 2
+
+void _prolog(void) {
+    bleck_real_game_init = seq_data[BLECK_SEQ_GAME].init;
+    seq_data[BLECK_SEQ_GAME].init = &bleck_start_scripts;
+}
+```
+
+`seq_data` is at `804287a8` and **is** in the symbol list, so it resolves by
+name — the zero-hardcoded-addresses property from D37 still holds.
+
+Why this shape:
+
+- **No code patching and no cache flush.** It is a data write, so none of the
+  instruction-cache hazards apply.
+- **It runs late enough.** By `SEQ_GAME`, the game is running its own evt
+  scripts, so the manager is unambiguously up.
+- **It is upstream's own recommended technique.** `spm-rel-loader`'s example mod
+  swaps `seq_data[SEQ_TITLE].main` to draw text. We reached it independently
+  from the diagnostic, but it is the established pattern rather than a novelty.
+- **The hook unhooks itself before running.** Gameplay is re-entered after every
+  map change; without this, each transition would start another copy of the
+  script, and coin income would double at every door. Silent and compounding.
+- ⚠️ **The saved pointer is initialised to `(SeqFunc *) 1`** so it lands in
+  `.data`, not `.bss`. The loader allocates the module's bss but nothing
+  documents whether it *zeroes* it, and depending on that would be a hazard that
+  only shows up sometimes.
+
+### Also fixed: `--force` did not reach `wit`
+
+Rebuilding over an existing image failed with:
+
+```
+wit: ERROR #64 [FILE ALREADY EXISTS] in CopyImage() @ src/lib-sf.c#3278
+```
+
+`guard_overwrite` (`common/fsio.py`) only satisfied `bleck`'s own check and
+never told `wit`. So `--force` staged the entire build and then failed at the
+final step — the worst place to fail, since everything expensive had already
+happened. `disc.build` now passes `--overwrite` unconditionally, which is safe
+because every path to it goes through `guard_overwrite` first: reaching `wit`
+means clobbering was already authorised. Regression test in `test_disc.py`
+beside the `--align-files` one.
+
+### Unproven 🔶
+
+- **Whether the sequence hook actually starts the script has not been
+  observed.** The fixed `coin-tick` was built (708 bytes) and booted, but the
+  session ended before anyone reported whether coins appeared. This is the one
+  open question, and it is the last one between here and a working scripting
+  track.
+- If it still fails, the remaining ambiguity is "the hook never fired" versus
+  "`evtEntry` fails even at `SEQ_GAME`". Resolve it the same way: fold the
+  Signal A speed patch back into the generated module as a control, so a boot
+  distinguishes the two.
+- **`evt_seq_wait(2)` was removed** from `coin-tick` rather than fixed — the
+  sequence hook makes it unnecessary. Its semantics (wait *until* versus wait
+  *while*) remain undetermined.
+
+Test suite **236 → 253**. pylint 10.00/10.

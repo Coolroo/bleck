@@ -40,6 +40,7 @@
             "group": "Guides",
             "pages": [
               "guides/first-mod",
+              "guides/scripting",
               "guides/testing",
               "guides/code-mods"
             ]

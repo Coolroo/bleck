@@ -1,6 +1,13 @@
 # Code Mods — Design
 
-**Status: toolchain proven (D26); integration not yet built.**
+**Status: toolchain proven (D26); the *scripting* path is now built (D37).**
+
+> **Read [`scripting.md`](./scripting.md) first.** Most of what this document
+> anticipated — compiling into `overlay/files/mod/mod.rel`, the `code` block in
+> `mod.json`, the single-slot problem — is implemented, but via a route this
+> document did not consider: compiling to the game's own `evt` bytecode VM
+> rather than writing C by hand. This document remains the reference for
+> **native hooks**, which scripting does not replace.
 
 How `bleck` should build and package compiled PowerPC code, as opposed to the
 asset overlays covered in [`mods.md`](./mods.md).

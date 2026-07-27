@@ -194,6 +194,48 @@ Stage the base, apply the chain, and write a disc image.
 bleck mod build my-mod out.wbfs --force --launch
 ```
 
+If the mod declares a `code` block, its script is compiled first and the
+resulting module is packaged automatically.
+
+## Scripts
+
+Scripts compile to the game's own `evt` bytecode VM. See
+[Scripting](/guides/scripting).
+
+### `bleck script check`
+
+```bash
+bleck script check <file.evt>
+```
+
+Parse and compile a script, reporting the scripts it declares and the game
+functions it calls. **Needs no compiler and no symbol list**, which makes it the
+fast inner loop — most iterations are a syntax error or a mistyped name, and
+neither needs a disc to find.
+
+### `bleck script dump`
+
+```bash
+bleck script dump <file.evt>
+```
+
+Print the C that the script compiles to. Useful for understanding how a
+construct lowers, and for reporting bugs.
+
+### `bleck script build`
+
+```bash
+bleck script build <file.evt> [-o out.rel] [--target eu0] [--module-id 2]
+```
+
+Compile a script all the way to a loadable `.rel` module.
+
+| Flag | Effect |
+|---|---|
+| `-o`, `--output` | Where to write the module (default: alongside the script) |
+| `--target` | Game version to resolve function names against (default `eu0`) |
+| `--module-id` | REL module id; the game's own REL is 1 (default `2`) |
+
 ## Exit codes
 
 | Code | Meaning |

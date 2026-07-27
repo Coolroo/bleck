@@ -45,6 +45,19 @@ ship in the same folder. `DolphinTool` converts and inspects images; `Dolphin`
 boots them. Pointing either at the other's binary fails confusingly.
 </Warning>
 
+<ParamField path="BLECK_PPC_GCC">
+  Full path to the PowerPC cross-compiler used to build code and script mods,
+  normally devkitPPC's `powerpc-eabi-gcc`. Only needed when it is not in a
+  standard install location.
+</ParamField>
+
+<ParamField path="BLECK_SYMBOLS_DIR" default="symbols">
+  Directory holding per-version symbol lists (`spm.eu0.lst`, …). These resolve
+  the game functions a script calls, and are **not shipped with `bleck`** —
+  get them from
+  [spm-headers](https://github.com/SeekyCt/spm-headers) (`linker/`).
+</ParamField>
+
 ## Output
 
 <ParamField path="NO_COLOR">

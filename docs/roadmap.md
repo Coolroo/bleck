@@ -18,7 +18,8 @@ this file is forward-looking only.
 | Mod overlays, dependency chains, conflicts | ✅ Working, validated on the real game |
 | **Asset pipeline end to end** | ✅ **A built disc boots and renders mods** — on Linux (D25) and Windows (D36) |
 | PowerPC toolchain | ✅ Proven — builds a valid REL (D26) |
-| **Code injection** | ⬅ **the active track, not yet integrated** |
+| **Scripting language** | ✅ **Implemented** — compiles to the game's own `evt` VM (D37). 🔶 Not yet booted |
+| **Code injection** | ⬅ Native hooks still hand-written; scripting covers event logic |
 | Windows 11 | ✅ **Fully verified** — tests, linters, `extract`, `verify`, `mod build`, boot (D33, D35, D36) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
@@ -32,7 +33,13 @@ this is running our own code inside the game.
 The design is written up in [`code-mods.md`](./code-mods.md); the toolchain is
 proven. What remains:
 
-### 1. 🟡 Decide the licensing question — *blocks everything else here*
+> ⚠️ **Superseded in part by D37.** The scripting track shipped without
+> resolving item 1: scripts name game functions and `elf2rel` binds them at
+> build time, so `bleck` vendors no upstream material at all. Licensing is still
+> worth settling, but it **no longer blocks this track**. See
+> [`scripting.md`](./scripting.md).
+
+### 1. 🟡 Decide the licensing question — *no longer blocks the scripting path*
 
 `spm-rel-loader` is **GPLv3**, including the Gecko loader code we need.
 `spm-headers` is MIT except its `mod/` folder, which is also GPLv3. `bleck` is
