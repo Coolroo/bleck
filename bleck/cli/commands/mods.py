@@ -172,6 +172,8 @@ def cmd_build(args: argparse.Namespace) -> int:
 
 
 def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
+    for built in report.code_builds:
+        print(built.describe())
     for warning in report.warnings:
         print(f"warning: {warning}")
     if report.conflicts:
