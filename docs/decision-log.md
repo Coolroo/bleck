@@ -674,3 +674,33 @@ cannot parse RVZ, so `identify` returned empty and the code fell through to
 byte-level format sniffing — reading 249 MB to guess at a format. Now disc
 images are identified by extension, RVZ headers come from `dolphin-tool header`,
 and unrecognised images say so instead of being read.
+
+---
+
+### D24 — WBFS output, because RVZ needs a recent Dolphin ✅
+
+Dragging our RVZ onto Dolphin on Windows produced *"Is an invalid GCM/ISO file,
+or is not a GC/Wii ISO"* — Dolphin's generic unrecognised-format message.
+
+**Cause: RVZ requires Dolphin 5.0-12188 (2020) or newer.** The last *stable*
+release, 5.0 from 2016, predates the format entirely and is still what many
+people have installed. Our file was fine — `dolphin-tool header` reads it, and
+the local `dolphin-emu-nogui` is a 2025 build, so the Pi never saw the problem.
+
+**Lesson worth generalising: "it works here" says nothing about the consumer's
+toolchain**, and picking the newest format by default optimised for size at the
+cost of the thing actually being openable.
+
+**Added `wbfs` as a third format.** ~424 MB — larger than RVZ's ~249 MB, much
+smaller than a 4.5 GB ISO — and supported by Dolphin for many years. `wit`
+writes it directly, so no intermediate ISO is needed.
+
+    bleck mod build title-invert out.wbfs     # 18s, 424 MB, universally readable
+
+Verified the mod survives the WBFS path, not just that the container parses:
+extracted the built WBFS and confirmed **both** modified members
+(`arc/timg/mario.tpl`, `arc/timg/koopa.tpl`) present, 35 members preserved, node
+order intact.
+
+**Format guidance:** wbfs to share, rvz when the target Dolphin is known-recent,
+iso only when something demands it.

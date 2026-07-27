@@ -52,7 +52,8 @@ def add_format_flags(parser: argparse.ArgumentParser) -> None:
         choices=[f.value for f in disc.ImageFormat],
         default="",
         help="output format; inferred from the output extension by default. "
-        "rvz is ~14x smaller and Dolphin reads it natively",
+        "wbfs (~424 MB) works on every Dolphin build; rvz (~249 MB) is smaller "
+        "but needs Dolphin 5.0-12188 or newer",
     )
     parser.add_argument(
         "--keep-iso",

@@ -90,10 +90,16 @@ def extract(image: Path, dest: Path, keep_iso: bool = False) -> None:
 
 
 class ImageFormat(Enum):
-    """Output disc image formats."""
+    """Output disc image formats.
+
+    WBFS is the safe default for sharing: scrubbed to ~424 MB and supported by
+    every Dolphin build. RVZ is smaller still (~249 MB) but needs Dolphin
+    5.0-12188 (2020) or newer — older builds reject it as "not a GC/Wii ISO".
+    """
 
     ISO = "iso"
     RVZ = "rvz"
+    WBFS = "wbfs"
 
     @property
     def suffix(self) -> str:
@@ -106,15 +112,15 @@ class ImageFormat(Enum):
         return next((f for f in cls if f.value == suffix), cls.ISO)
 
 
-def build(source: Path, out: Path) -> None:
-    """Rebuild an extracted filesystem into an ISO.
+def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
+    """Rebuild an extracted filesystem into an image wit can write.
 
     --align-files is mandatory: upstream requires it and omitting it fails
     subtly rather than loudly. It is passed unconditionally so callers cannot
     forget it.
     """
     wit = find_tool(WIT)
-    _run([wit, "COPY", str(source), str(out), "--iso", "--align-files"])
+    _run([wit, "COPY", str(source), str(out), wit_format, "--align-files"])
 
 
 # dolphin-tool requires these explicitly for RVZ; these are its suggested
@@ -158,6 +164,10 @@ def build_image(
     """
     if image_format is ImageFormat.ISO:
         build(source, out)
+        return
+
+    if image_format is ImageFormat.WBFS:
+        build(source, out, "--wbfs")
         return
 
     # A distinct hidden name, not `out.with_suffix('.iso')` — that would collide
