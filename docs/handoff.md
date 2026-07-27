@@ -1,13 +1,14 @@
 # Handoff — picking this up fresh
 
-Last updated 2026-07-27, after the scripting language landed (D37), two failed
-attempts to make a script actually run (D38, D40), an ecosystem survey (D39)
-and the setup file format falling out of a cross-check (D42).
+Last updated 2026-07-27. The scripting language landed (D37) and now **runs**
+(D43), after three failed entry points and an unattended memory-readback rig
+that finally settled it. Also: an ecosystem survey (D39) and the setup file
+format (D42).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D42)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D43)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -19,63 +20,43 @@ For anything else:
 
 ---
 
-## Start here: the one open question
+## Start here
 
-**Why will a compiled script not run?**
+**The scripting track works.** ✅ A script compiled by `bleck` runs inside the
+game at one iteration per frame and survives a map change — verified by reading
+the running game's memory, not by looking at the screen (D43).
 
-Two attempts have failed. This is the only unverified link left in the whole
-scripting track, and everything else is proven.
-
-| Attempt | Hook | Result |
-|---|---|---|
-| 1 | `evtEntry` directly in `_prolog` | ⛔ nothing (D38) |
-| 2 | `seq_data[SEQ_GAME].init` | ⛔ nothing (D40) |
-| 3 | `seq_data[SEQ_GAME].main` | 🔶 **built and waiting — `out/diag2.wbfs`** |
-
-### Do this first
-
-The third attempt is already built. No rebuild needed:
-
-```powershell
-bleck launch --batch out\diag2.wbfs
+```
+[t+45s] seq=GAME    gw[30] 126 -> 425 over 5s = 60/sec   *** RUNNING ***
+[t+95s] seq=MAPCHG
+[t+98s] seq=GAME    gw[30] 3262 -> 3741                  *** SURVIVED ***
 ```
 
-Get into a level. It carries **three independent signals**, each depending on
-strictly more than the last:
+There is no longer a single blocking question. Pick from
+[next steps](#next-steps) below.
 
-| Signal | Look for | Proves |
-|---|---|---|
-| **A** | Mario at 2x speed | the hook fired at all |
-| **B** | **+100 coins**, once, immediately | the game is live and writable |
-| **C** | +1 coin/sec afterwards | evt scheduling works |
+### You can test without a human
 
-Reading it:
+This is the most reusable thing to come out of the last session.
+`dolphin-memory-engine` (`pip install dolphin-memory-engine`) attaches to the
+running Dolphin **process** and reads the emulated address space from outside —
+no Dolphin config, no fork, stock builds. Three addresses give full visibility:
 
-- **A+B+C** — it works. Promote the `.main` hook into
-  `bleck/script/emit.py`'s `_FOOTER`, rebuild `coin-tick`, mark D40 resolved,
-  and update `scripting.md`'s Unproven section and the roadmap.
-- **A+B, no C** — evt scheduling is wrong even in a fully live `SEQ_GAME`. Next
-  suspect is `evtEntry(script, 0, 0)`: those priority/flags came from TTYD
-  convention and were never checked against SPM. `EVT_FLAG_START_IMMEDIATE`
-  exists in `evtmgr.h`.
-- **A only** — the hook fires but the game is not live yet.
-- **none** — the `seq_data` write is not taking effect at all.
+| Address | What |
+|---|---|
+| `0x80512360` | `seqWork` — current sequence at +0x00, stage at +0x04 |
+| `0x8050C990` | `evtGetWork()`'s return. `gw[]` at +0x04, so `gw[n]` at +4+4n |
+| `0x80005000` | Free scratch for a probe block (unused TRK interrupt table) |
 
-The probe source is [`diagnostics/entry-point-probe.c`](./diagnostics/entry-point-probe.c),
-kept in the repo because the first one was lost with a scratch directory.
+⚠️ **Gameplay is reached ~44 seconds after boot with no controller input** — the
+game runs `LOGO -> GAME` directly and never enters `SEQ_TITLE`. So a full
+boot-and-verify cycle is unattended and takes about two minutes.
 
-### Why attempt 2 failed, probably
-
-⚠️ **Every mod in the scene hooks `.main`. None hooks `.init`.** That was visible
-in the D39 survey and got treated as a curiosity instead of a warning.
-`evtmgrReInit` exists, which implies evt state is torn down and rebuilt across
-sequence transitions — so an entry created at `.init` would plausibly be wiped
-moments later. Untested; it is why attempt 3 hooks `.main`.
-
-The narrow lesson, recorded in D40: **when prior art consistently does X and we
-do X', the burden is on X'.**
-
-Full timing reference in [`hook-points.md`](./hook-points.md).
+Working harnesses were written in a scratch directory and are gone; the pattern
+is simple enough to rewrite, and `docs/diagnostics/entry-point-probe.c` shows
+the module side. **Rebuild this rig before debugging anything in-game** — three
+rounds of asking a human to watch a screen produced two wrong conclusions; the
+readback rig settled it in four unattended runs.
 
 ---
 
@@ -91,9 +72,9 @@ Gecko loader and executes correctly, verified by an unmistakable on-screen
 effect. The roadmap carried "no custom code has ever run" for a long time; that
 is no longer true.
 
-⛔ **But no compiled *script* has ever been observed running** (D40). The module
-executes; the thing it is supposed to start does not. That is the open
-question above, and it is the only one.
+✅ **And compiled scripts run** (D43). The last link closed: `_prolog` installs
+`seq_data` hooks, gameplay starts the script, and every other sequence re-arms
+it so a map change does not silently kill it.
 
 **A scripting language exists** (D37). `bleck` compiles a small language to
 `evt`, the game's own bytecode VM — 120 opcodes, cooperative scheduling, ~444
@@ -112,7 +93,8 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ Scripts link, resolving game functions by name | `elf2rel` + `spm.eu0.lst` |
 | ✅ Our REL is byte-identical once staged | hash-checked overlay vs `build/` |
 | ✅ `setup/*.dat` format fully decoded | all 227 files parsed, no exceptions (D42) |
-| ⛔ **A script actually runs in-game** | **never observed, two attempts failed** |
+| ✅ **A script runs in-game** | 60 iterations/sec, survives a map change (D43) |
+| 🔶 Only `eu0` has been booted | other versions compile, untested |
 
 ---
 
@@ -294,6 +276,13 @@ In rough order of value:
   for patching instructions and nothing else. Anything needing the game to be
   alive must hook `seq_data` and run later. Full timing table in
   [`hook-points.md`](./hook-points.md).
+- **A script does not survive a map change** (D43). evt state is rebuilt, so
+  anything long-lived must be re-armed rather than started once.
+- ⚠️ **The game shares `gw[]` with your scripts.** `gw[10]` is written by the
+  game; `gw[30]` was untouched across a full session. A contended slot produced
+  a nearly-false conclusion before it was caught.
+- **The game never enters `SEQ_TITLE`** on a normal boot — it runs
+  `LOGO -> GAME` directly, reaching gameplay in ~44 seconds with no input.
 - **When a symptom cannot distinguish its causes, build one disc carrying
   several independent signals**, ordered so each depends on strictly more than
   the last. This resolved D38 and is the only reason attempt 3 will be

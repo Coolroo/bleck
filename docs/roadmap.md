@@ -19,26 +19,24 @@ this file is forward-looking only.
 | **Asset pipeline end to end** | ✅ **A built disc boots and renders mods** — on Linux (D25) and Windows (D36) |
 | PowerPC toolchain | ✅ Proven — builds a valid REL (D26) |
 | **Custom code runs in-game** | ✅ **Confirmed** (D38) — a `bleck`-built REL loads and executes |
-| **Scripting language** | ✅ Compiles and links (D37) · ⛔ **no script has ever been observed running** — two attempts failed (D38, D40) |
+| **Scripting language** | ✅ **Working end to end** — compiles, links, and runs in-game at 60 iterations/sec, surviving map changes (D37, D43) |
 | **Code injection** | ⬅ Native hooks still hand-written; scripting covers event logic |
 | Windows 11 | ✅ **Fully verified** — tests, linters, `extract`, `verify`, `mod build`, boot (D33, D35, D36) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
 ---
 
-## The one thing blocking everything: make a script run
+## Nothing is blocking
 
-⛔ **This is the active track, and it is one question wide.** Attempt 3 is built
-and unbooted at `out/diag2.wbfs`; the reading guide is at the top of
-[`handoff.md`](./handoff.md), the timing reference in
-[`hook-points.md`](./hook-points.md).
+The scripting track is proven end to end (D43). Work can proceed on any of the
+items below in whatever order is most useful.
 
-Everything below is queued behind it, because a scripting language that cannot
-start a script is not a scripting language.
+⚠️ One caveat worth carrying: **only `eu0` has been booted.** Other versions
+compile but nothing has run on them.
 
 ---
 
-## Then, in order of value
+## In rough order of value
 
 1. 🟢 **Bake the Gecko loader into the DOL.** `wstrt patch main.dol --add-sect`
    removes both Dolphin setup traps and works on hardware (D39). Highest

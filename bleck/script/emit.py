@@ -39,9 +39,9 @@ _HEADER = """\
     Do not edit: rebuild the script instead.
 
     This is an evt script module. The arrays below are bytecode for Super Paper
-    Mario's own script VM. `_prolog` hooks the game's sequence table so the
-    entry script is handed to the scheduler once gameplay starts, and runs
-    cooperatively from that point on.
+    Mario's own script VM. `_prolog` hooks the game's sequence table; the entry
+    script is handed to the scheduler when gameplay starts, and re-started after
+    anything that resets evt state, such as a map change.
 
     Game functions are referenced by name and resolved by `elf2rel` against a
     symbol list, so no addresses appear here.
@@ -52,20 +52,26 @@ typedef unsigned int u32;
 typedef unsigned char u8;
 """
 
-_FOOTER = """\
-
+_FOOTER = """
 /*
-    Starting the script at the right moment.
+    Starting the script, and keeping it started.
 
-    `_prolog` runs the instant the loader links this module, which is far too
-    early to hand anything to the script scheduler: the evt manager has not been
-    initialised yet, so `evtEntry` there does nothing at all. That was measured,
-    not guessed -- see D38.
+    `_prolog` runs the instant the loader links this module, far too early to
+    hand anything to the script scheduler: the evt manager is not initialised
+    yet, so `evtEntry` there does nothing at all. Hooking
+    `seq_data[SEQ_GAME].init` does not work either. Both were measured, not
+    guessed -- D38 and D40.
 
-    So `_prolog` only arms a hook. `seq_data` is the game's table of
-    {{init, main, exit}} function pointers, one row per sequence; swapping a
-    pointer in it needs no code patching and no cache flush, and the replacement
-    runs at a point where the game is fully up and running its own scripts.
+    What does work is `seq_data[SEQ_GAME].main`, verified by reading the running
+    game's memory from outside the emulator: the script is created and then runs
+    once per frame (D43).
+
+    The second half is less obvious. **A script does not survive a map change** --
+    evt state is torn down and rebuilt, and a script started once simply stops,
+    which was measured the same way. So rather than starting once, every
+    sequence other than gameplay re-arms a flag and gameplay starts the script
+    whenever it is armed. That covers map changes, game overs and loads without
+    needing to know which of them resets evt.
 */
 
 typedef void(SeqFunc)(void *);
@@ -81,34 +87,61 @@ typedef struct
 extern SeqDef seq_data[];
 
 /* spm/seqdrv.h: LOGO 0, TITLE 1, GAME 2, MAPCHANGE 3, GAMEOVER 4, LOAD 5 */
+#define BLECK_SEQ_COUNT 6
 #define BLECK_SEQ_GAME 2
 
 /*
-    Deliberately initialised to a non-zero value so it lands in .data rather
+    Deliberately initialised to non-zero values so these land in .data rather
     than .bss. The loader allocates this module's bss but nothing documents
     whether it zeroes it, and depending on that would be a silent hazard.
 */
-static SeqFunc *bleck_real_game_init = (SeqFunc *) 1;
+static SeqFunc *bleck_real_main[BLECK_SEQ_COUNT] = {{
+    (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
+    (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
+}};
 
-static void bleck_start_scripts(void *work)
+static u32 bleck_needs_start = 1;
+
+static void bleck_after_seq(u32 seq, void *work)
 {{
-    /*
-        Unhook before doing anything else. Gameplay is re-entered every time a
-        map change finishes, and without this each one would start another copy
-        of the script -- coins would arrive twice as fast after the first door.
-    */
-    seq_data[BLECK_SEQ_GAME].init = bleck_real_game_init;
+    if (seq == BLECK_SEQ_GAME)
+    {{
+        if (bleck_needs_start)
+        {{
+            bleck_needs_start = 0;
+            evtEntry({entry}, 0, 0);
+        }}
+    }}
+    else
+    {{
+        bleck_needs_start = 1;
+    }}
 
-    if (bleck_real_game_init != 0)
-        bleck_real_game_init(work);
-
-    evtEntry({entry}, 0, 0);
+    if (bleck_real_main[seq] != 0)
+        bleck_real_main[seq](work);
 }}
+
+static void bleck_seq0(void *w) {{ bleck_after_seq(0, w); }}
+static void bleck_seq1(void *w) {{ bleck_after_seq(1, w); }}
+static void bleck_seq2(void *w) {{ bleck_after_seq(2, w); }}
+static void bleck_seq3(void *w) {{ bleck_after_seq(3, w); }}
+static void bleck_seq4(void *w) {{ bleck_after_seq(4, w); }}
+static void bleck_seq5(void *w) {{ bleck_after_seq(5, w); }}
+
+static SeqFunc *const bleck_hooks[BLECK_SEQ_COUNT] = {{
+    bleck_seq0, bleck_seq1, bleck_seq2,
+    bleck_seq3, bleck_seq4, bleck_seq5,
+}};
 
 void _prolog(void)
 {{
-    bleck_real_game_init = seq_data[BLECK_SEQ_GAME].init;
-    seq_data[BLECK_SEQ_GAME].init = &bleck_start_scripts;
+    u32 i;
+
+    for (i = 0; i < BLECK_SEQ_COUNT; i++)
+    {{
+        bleck_real_main[i] = seq_data[i].main;
+        seq_data[i].main = bleck_hooks[i];
+    }}
 }}
 
 void _epilog(void)

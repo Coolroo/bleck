@@ -1,11 +1,9 @@
 # Scripting
 
-**Status: compiles and links; does not yet run.** `bleck script build` and
-`bleck mod build` produce a loadable `mod.rel`, and D38 proved a `bleck`-built
-module executes in-game. But **no compiled script has ever been observed
-running**, after two attempts at the entry point. Read
-[Unproven](#unproven) and [`hook-points.md`](hook-points.md) before trusting
-anything here.
+**Status: working, verified end to end.** A script compiled by `bleck` runs
+inside the game at one iteration per frame and survives a map change — measured
+by reading the running game's memory from outside the emulator (D43), not by
+looking at the screen. [Unproven](#unproven) lists what is still not verified.
 
 ---
 
@@ -193,13 +191,12 @@ sharply by version: **eu0 has ~1111 symbols, kr0 only 456.** Anchor to eu0.
 Marked explicitly, because the rest of this document reads like settled fact and
 these parts are not.
 
-- ⛔ **No compiled script has ever been observed running, after two attempts.**
-  This is the one open link in the whole track. The bytecode is verified by hand
-  against the opcode table, the module links and loads, and D38 proved custom
-  code executes in-game — but nothing has yet made a script *run*. Attempt 1
-  (`evtEntry` in `_prolog`) and attempt 2 (`seq_data[SEQ_GAME].init`) both
-  produced nothing; attempt 3 (`.main`, which is what the scene actually uses)
-  is built and unbooted. See [`hook-points.md`](hook-points.md) and D40.
+- ✅ **Scripts run** (D43). Verified autonomously: 60 loop iterations per second
+  from a `wait(1)` loop, and the script keeps running across a map change.
+- ⚠️ **The game shares `gw[]` with your scripts.** `gw[10]` is written by the
+  game's own scripts; `gw[30]` was untouched across a full session. Low slots
+  are occupied — prefer high ones, and do not assume any slot is yours.
+- 🔶 **Only `eu0` has been booted.** Other versions compile but are untested.
 - ✅ **`SET` / `SETI` / `SETF` — resolved (D39).** From matching decompiled
   source (`spm-decomp/src/evtmgr_cmd.c`): `SET` runs its source through
   `evtGetValue` (zone-decoded), `SETI` takes it **raw**, `SETF` works in the
@@ -209,15 +206,13 @@ these parts are not.
   ⚠️ Also: `check_float` passes values through **unconverted** when above the
   float max, so `SETF` on a non-float operand silently acts as an int copy.
 - ⛔ **`_prolog` is far too early to start a script — measured, not guessed
-  (D38).** `evtEntry` there returns and schedules nothing, because the evt
-  manager is not initialised at that point. `_prolog` now only arms a
-  `seq_data` hook. The rule, and the four known hook timings, are in
+  (D38).** `evtEntry` there returns and schedules nothing. `_prolog` now only
+  installs `seq_data` hooks; the script is started from gameplay and re-started
+  after anything that resets evt state. The four known hook timings are in
   [`hook-points.md`](hook-points.md).
-- 🔶 **`evtEntry(script, 0, 0)`** — priority 0 and flags 0 are taken from TTYD
-  convention, not from observed SPM behaviour. **This is now a leading suspect**:
-  if the third hook attempt fires but still produces no script, a scheduler that
-  creates the entry and immediately filters it out would look exactly like this.
-  `EVT_FLAG_START_IMMEDIATE` exists in `evtmgr.h`.
+- ✅ **`evtEntry(script, 0, 0)` is fine** — it returns a valid `EvtEntry *` and
+  the script it creates executes (D43). The priority and flags were taken from
+  TTYD convention; that guess turned out correct.
 - 🔶 **Flag slots are read as integers.** `gf[2]` and `lf[2]` compile to an
   ordinary `IF_EQUAL` against the encoded operand, on the assumption that
   `evtGetValue` decodes the flag windows like any other. The VM has dedicated

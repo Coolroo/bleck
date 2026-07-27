@@ -83,26 +83,38 @@ whether it *zeroes* it.
 
 | Attempt | Hook | Result |
 |---|---|---|
-| 1 | `evtEntry` directly in `_prolog` | ⛔ No script ran. Established that #3 is too early |
-| 2 | `seq_data[SEQ_GAME].init` | ⛔ Still no script ran |
-| 3 | `seq_data[SEQ_GAME].main` | 🔶 under test |
+| 1 | `evtEntry` directly in `_prolog` | ⛔ nothing — #3 is too early (D38) |
+| 2 | `seq_data[SEQ_GAME].init` | ⛔ nothing (D40) |
+| 3 | `seq_data[SEQ_TITLE].main` | ⛔ never called — **the sequence is never entered** (D43) |
+| 4 | **`seq_data[SEQ_GAME].main`** | ✅ **works** (D43) |
 
-Attempt 2 is the interesting failure, because the approach is right — it is what
-the whole scene does — but **nobody in the scene hooks `.init`.** They all hook
-`.main`. That may be convention, or it may be that `.init` runs before the evt
-manager is re-initialised for the sequence; `evtmgrReInit` exists, which implies
-evt state is torn down and rebuilt across transitions. If our entry is created
-before that, it would be wiped.
+⚠️ **The game runs `LOGO -> GAME` directly.** `SEQ_TITLE` is never entered on
+that path, so attempt 3's hook sat correctly installed with a call count of zero
+for a whole run. Gameplay is reached about **44 seconds after boot with no
+controller input**, which is what makes unattended testing possible.
 
-⚠️ **This is a hypothesis, not a finding.** Attempt 3 tests it.
+⛔ **A script does not survive a map change** (D43). evt state is torn down and
+rebuilt, and a script started once stops permanently. So the generated module
+does not start-and-unhook: every sequence other than gameplay re-arms a flag,
+and gameplay starts the script whenever it is armed. All six `.main` entries are
+hooked; only gameplay starts anything.
 
 ---
 
 ## The diagnostic method
 
-Both cycles were resolved the same way, and it is worth naming as a technique:
-**when a symptom cannot distinguish its causes, build one disc carrying several
+Two techniques, and the second matters more.
+
+**When a symptom cannot distinguish its causes, build one disc carrying several
 independent signals, ordered so each depends on strictly more than the last.**
+
+**And better: make the game report on itself.** `dolphin-memory-engine`
+(`pip install dolphin-memory-engine`) attaches to the running Dolphin *process*
+and reads the emulated address space from outside — no Dolphin configuration, no
+fork, stock builds. A module that writes a stage bitmask and counters into a
+fixed block turns "nothing happened" into "reached stage 3 of 5", and removes
+the human from the loop entirely. That is what finally settled this (D43), after
+three rounds of asking someone to watch a screen. Addresses in the table below.
 
 The current diagnostic — [`diagnostics/entry-point-probe.c`](./diagnostics/entry-point-probe.c), kept in the repo because the first one was lost with a scratch directory — carries three:
 
@@ -142,6 +154,14 @@ works at a given moment. All resolve by name from the symbol list:
 | `seqMain` | `8017bf6c` | the sequence dispatcher |
 | `seq_data` | `804287a8` | `SeqDef[6]` |
 
+### Addresses for reading the game from outside
+
+| Address | What |
+|---|---|
+| `0x80512360` | `seqWork` — current sequence at +0x00, stage at +0x04 |
+| `0x8050C990` | `evtGetWork()`'s return, a fixed global. `gw[]` at +0x04, so `gw[n]` at +4+4n |
+| `0x80005000` | Free scratch for a probe block — unused TRK interrupt table, same address every region |
+
 `evtGetWork()` is worth remembering: it returns the evt manager's work struct,
 so a future diagnostic could check whether the manager is initialised *before*
 calling `evtEntry`, rather than inferring it from a missing effect.
@@ -150,15 +170,16 @@ calling `evtEntry`, rather than inferring it from a missing effect.
 
 ## Open questions
 
-- 🔶 **Does `seq_data[SEQ_GAME].main` work?** Under test.
-- 🔶 **Why does `.init` not?** The `evtmgrReInit` hypothesis above is untested.
-- ❓ **Is `evtEntry`'s `(priority, flags)` of `(0, 0)` correct?** Taken from TTYD
-  convention, never verified against SPM. If the script is being created but
-  immediately filtered out by the scheduler, this is where to look —
-  `EVT_FLAG_START_IMMEDIATE` exists in `evtmgr.h`.
-- ❓ **Does a script survive a map change?** `evtmgrReInit` suggests not. If it
-  does not, a script started once at `SEQ_GAME` would stop working after the
-  first door, and re-arming on each entry becomes correct rather than a bug.
+- ✅ ~~Does `seq_data[SEQ_GAME].main` work?~~ Yes (D43).
+- ✅ ~~Does a script survive a map change?~~ No — hence the re-arm design (D43).
+- ✅ ~~Is `evtEntry(script, 0, 0)` correct?~~ Yes; it returns a valid entry (D43).
+- 🔶 **Why does `.init` not work?** Still unexplained. The `evtmgrReInit`
+  hypothesis is plausible and untested. It no longer blocks anything.
+- 🔶 **Which sequences reset evt state?** `MAPCHANGE` certainly does. `GAMEOVER`
+  and `LOAD` are assumed to and are re-armed defensively, but neither was
+  observed.
+- ❓ **Is `_prolog` safe for anything other than patching instructions?** Only
+  instruction patching and `seq_data` writes have been exercised there.
 
 ## See also
 

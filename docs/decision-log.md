@@ -2067,3 +2067,121 @@ The Google Doc itself requires sign-in and could not be read directly; the
 pastebin mirror TCRF links beside it was readable and is the source of the
 claims above. Worth remembering that TCRF pages often carry a mirror next to a
 Drive link for exactly this reason.
+
+---
+
+## D43 — Scripts run. The track is proven end to end (2026-07-27)
+
+✅ **A script compiled by `bleck` runs inside the game, at exactly one iteration
+per frame, and keeps running across a map change.** Verified without a human
+looking at the screen.
+
+```
+[t+45s] seq=GAME    gw[30] 126 -> 425 over 5s = 60/sec   *** RUNNING ***
+[t+95s] seq=MAPCHG
+[t+98s] seq=GAME    gw[30] 3262 -> 3741                  *** SURVIVED ***
+verdict: ran=True survived_map_change=True
+```
+
+That run booted `out/scripttest.wbfs`, built by the ordinary
+`bleck mod build` path with the emitter's own generated scaffolding — not a
+hand-written probe. **60 increments per second from a script whose loop body is
+`wait(1)` is the whole proof**: the scheduler is running it once per frame,
+exactly as written.
+
+### The method: make the game report on itself
+
+The previous three attempts each cost a round trip to a human and returned one
+bit of ambiguous information. This one is autonomous, and that changed
+everything.
+
+`dolphin-memory-engine` (`pip install dolphin-memory-engine`) attaches to the
+running Dolphin **process** and reads the emulated address space from outside.
+No Dolphin configuration, no fork, works on stock builds. Combined with two
+addresses from the symbol list it gives complete visibility:
+
+| Address | What |
+|---|---|
+| `0x80005000` | Our probe block — unused TRK interrupt table, free in every region |
+| `0x80512360` | `seqWork`; `seq` at +0x00, `stage` at +0x04 |
+| `0x8050C990` | `evtGetWork()`'s return — a fixed global. `gw[]` at +0x04, so `gw[n]` at +4+4n |
+
+The probe writes a stage bitmask, counters and pointers into its block; the
+harness polls them. A failure now says *which* stage was reached instead of
+"nothing happened".
+
+### What that immediately explained
+
+⛔ **The game never enters `SEQ_TITLE`.** Watching `seqWork` showed
+`LOGO -> GAME` directly, with `SEQ_GAME` reached about **44 seconds after boot
+with no controller input at all**. An earlier version of this probe hooked
+`seq_data[SEQ_TITLE].main`, and the readout showed its pointer correctly
+installed and persisting for the whole run with a call count of zero. Not a
+broken hook — a sequence that is never used.
+
+✅ That also makes the whole loop unattended: gameplay is reachable without a
+save file or a controller.
+
+### Scripts do not survive a map change ⛔
+
+The second finding, and the one that made the shipped design wrong.
+
+A script started once at `SEQ_GAME` **stops permanently at the first map
+change**. Measured: `gw[30]` rose steadily to 3156, the sequence went
+`GAME -> MAPCHANGE -> GAME`, and then froze at 3156 for ten seconds while the
+hook kept firing. `evtmgrReInit` exists; this is consistent with evt state being
+torn down and rebuilt across transitions.
+
+D38's emitter started the script once and **unhooked itself**, which would have
+meant every script silently dying at the first door. The fix, verified above:
+
+> Every sequence *other* than gameplay re-arms a flag; gameplay starts the
+> script whenever it is armed.
+
+That covers map changes, game overs and loads without needing to know which of
+them resets evt. All six `seq_data[].main` entries are hooked; only index 2
+starts anything.
+
+### ⚠️ `gw[10]` is used by the game; `gw[30]` is not
+
+The first survival run used `gw[10]` and produced nonsense — the counter reset
+mid-run with no map change. Re-running on `gw[30]` gave a value tracking the
+hook's own call count exactly (68/69, 1027/1028, 2825/2826), i.e. perfectly
+monotonic.
+
+So **the game's own scripts share `gw[]`**, and low slots are occupied. This is
+a real hazard for mod authors and is now documented in `scripting.md`. It was
+also nearly a false conclusion: the first run's evidence for "scripts die at a
+map change" was partly an artefact of a contended slot, and only re-testing on a
+clean slot made the finding trustworthy.
+
+### The corrected timing picture
+
+| Point | Result |
+|---|---|
+| `_prolog` (`relMain+0x1b8`) | ⛔ `evtEntry` does nothing — evt manager not up (D38) |
+| `seq_data[SEQ_GAME].init` | ⛔ nothing (D40) |
+| `seq_data[SEQ_TITLE].main` | ⛔ never called — sequence unused on this path |
+| **`seq_data[SEQ_GAME].main`** | ✅ **works** |
+
+`_prolog` remains correct for patching instructions, which D38 proved
+independently. It is only unsafe for anything touching live engine state.
+
+### Also confirmed
+
+- `evtEntry(script, 0, 0)` returns a valid `EvtEntry *` (`0x807E7AA0` in one
+  run), so the priority and flags taken from TTYD convention are fine — that
+  🔶 from D37 can be closed.
+- `gw[]` reads and writes from compiled script code work, so `SlotRef` lowering
+  is correct.
+- `SET`/`ADD` on a global slot behave as D39's decomp reading predicted.
+- The generated `.data`-not-`.bss` trick holds: saved pointers survive.
+
+### Cost
+
+Four probe builds and about twenty minutes of emulator time, all unattended. The
+same question had previously consumed three round trips to a human and produced
+two wrong conclusions. **The lesson is not about SPM: when a system can be made
+to report on itself, do that before asking anyone to watch a screen.**
+
+Test suite 253 → 254. pylint 10.00/10.
