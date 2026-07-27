@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D43)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D48)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -48,15 +48,27 @@ no Dolphin config, no fork, stock builds. Three addresses give full visibility:
 | `0x8050C990` | `evtGetWork()`'s return. `gw[]` at +0x04, so `gw[n]` at +4+4n |
 | `0x80005000` | Free scratch for a probe block (unused TRK interrupt table) |
 
-⚠️ **Gameplay is reached ~44 seconds after boot with no controller input** — the
-game runs `LOGO -> GAME` directly and never enters `SEQ_TITLE`. So a full
-boot-and-verify cycle is unattended and takes about two minutes.
+⚠️ **Gameplay is reached ~45 seconds after boot with no controller input.** The
+game runs `LOGO -> MAPCHANGE -> GAME`, loading `aa4_01` then `ls4_12` — its
+attract demo — and never enters `SEQ_TITLE` (D47). So a full boot-and-verify
+cycle is unattended and takes about two minutes.
 
-Working harnesses were written in a scratch directory and are gone; the pattern
-is simple enough to rewrite, and `docs/diagnostics/entry-point-probe.c` shows
-the module side. **Rebuild this rig before debugging anything in-game** — three
-rounds of asking a human to watch a screen produced two wrong conclusions; the
-readback rig settled it in four unattended runs.
+✅ **The rig is now part of the repo**, after being rewritten from scratch three
+times in scratch directories:
+
+```
+uv run python scripts/ingame.py my-mod --words 10 --watch-gw 30
+```
+
+`scripts/ingame.py` builds, boots, reads and always shuts Dolphin down; the mod
+side is `docs/diagnostics/probe.h`. **Reach for it before debugging anything
+in-game** — three rounds of asking a human to watch a screen produced two wrong
+conclusions, and the rig has since settled five questions without one.
+
+⛔ **Input injection does not work** (D48). Dolphin reads a DirectInput
+keyboard, which ignores the message queue, and driver-level injection still
+needs an unlocked session with Dolphin focused. Anything behind a button press
+needs a human, or Dolphin's TAS movie playback, which is untried.
 
 ---
 
@@ -80,7 +92,7 @@ it so a map change does not silently kill it.
 `evt`, the game's own bytecode VM — 120 opcodes, cooperative scheduling, ~444
 native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md).
 
-253 tests, pylint 10.00/10.
+300 tests, pylint 10.00/10.
 
 ### What is verified, and what is not
 
@@ -95,6 +107,9 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ `setup/*.dat` format fully decoded | all 227 files parsed, no exceptions (D42) |
 | ✅ **A script runs in-game** | 60 iterations/sec, survives a map change (D43) |
 | ✅ **No Dolphin cheat setup needed** | loader embedded in the disc, verified with the INI removed (D44) |
+| ✅ **Native C runs in-game** | `code.sources` module executes, measured per frame (D46, D47) |
+| ⛔ `SEQ_TITLE` is never entered | zero frames unattended; there is no menu to hook (D47) |
+| ⛔ Input cannot be injected | DirectInput plus a locked session (D48) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
 
 ---
@@ -119,10 +134,8 @@ Compiling a script needs `spm.eu0.lst` from
 [spm-headers](https://github.com/SeekyCt/spm-headers) (`linker/`). `bleck` does
 not vendor it, deliberately — see "Licensing" below.
 
-⚠️ **It currently exists only in a session scratch directory, which is
-temporary.** Put a copy somewhere permanent — `work/symbols/` in the repo root is
-what `BLECK_SYMBOLS_DIR` defaults to — or the next code-mod build will fail with
-"no symbol list for 'eu0'".
+✅ It now lives at `work/symbols/spm.eu0.lst`, which is where
+`BLECK_SYMBOLS_DIR` defaults to, so no environment variable is needed for it.
 
 Anchor to **eu0**. Coverage varies sharply: eu0 documents ~976 symbols, `kr0`
 only 456.

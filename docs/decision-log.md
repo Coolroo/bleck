@@ -2543,3 +2543,83 @@ one.
   cannot be tested automatically.
 - **Whether the attract demo is what is running** is inferred from the map
   names and the absence of input, not established.
+
+---
+
+## D48 — Input injection is not available; the test rig moves into the repo (2026-07-27)
+
+⛔ **Controller input cannot be injected on this machine, and the reason is not
+fixable by trying harder.**
+
+D47 found there is no title screen on an unattended boot: the game plays its
+attract demo and `SEQ_TITLE` gets zero frames. The obvious next move was to
+press Wiimote 2 and see whether that reaches a menu. It does not work, for two
+reasons stacked on top of each other.
+
+**1. DirectInput does not read the message queue.** Dolphin's emulated Wiimote
+here is `Device = DInput/0/Keyboard Mouse` with `Buttons/2 = 2`. DirectInput
+polls device state, so `SendKeys` and `PostMessage` are both invisible to it.
+Input has to be injected at driver level, with a **scancode** rather than a
+virtual key — `keybd_event(0, 0x03, KEYEVENTF_SCANCODE, 0)` for `2`.
+
+**2. ⛔ The session was locked.** The harness reported what actually had focus
+after each attempt:
+
+```
+[t+  9s] pressed 2 (1/12), focus='Windows Default Lock Screen'
+[t+ 12s] pressed 2 (2/12), focus=''
+```
+
+`SetForegroundWindow` is refused when the caller does not already own the
+foreground window, and on a locked session there is no foreground window to
+give it to. Twelve presses produced a run byte-identical to the no-input one:
+`LOGO=2107`, same two maps, `TITLE=0`.
+
+Setting `BackgroundInput = True` in `WiimoteNew.ini` did not help either, and
+that change has been reverted — it was a temporary experiment on the user's own
+configuration, not something to leave behind.
+
+### What this means
+
+- **Anything needing a button press cannot be tested unattended**, at least not
+  this way. A title-screen mod needs a human, or a different route in.
+- 🔶 Untried alternatives, recorded so the next attempt does not start from
+  scratch: Dolphin's TAS input / movie recording (`.dtm` playback), which
+  bypasses the input device entirely; and writing directly to the game's pad
+  state in memory, which the readback rig could already do in reverse.
+- ✅ Everything **not** needing input remains fully automatable, which is most
+  of it — five findings so far were settled that way.
+
+### The rig is now part of the repo
+
+It had been living in a session scratch directory and was rewritten from
+scratch three times. Two pieces now ship:
+
+| Path | What |
+|---|---|
+| `scripts/ingame.py` | Build a mod, boot it, read its report block, shut Dolphin down. Always cleans up |
+| `docs/diagnostics/probe.h` | The mod side of the convention — a header a mod copies or includes |
+
+```
+uv run python scripts/ingame.py menu-watch --words 10
+uv run python scripts/ingame.py coin-tick --watch-gw 30
+```
+
+It finds Dolphin through `bleck`'s own platform profile rather than a hardcoded
+path, so it works on any machine the toolkit already works on. It also decodes
+`seqWork` on every read, so the sequence the game is in is always visible
+without the mod having to report it.
+
+⚠️ **`gw[10]` is written by the game; `gw[30]` is not** (D43). `--watch-gw`
+exists because that distinction cost a nearly-false conclusion once already.
+
+### Why this is worth having as a first-class tool
+
+Three rounds of asking a human to watch a screen produced **two wrong
+conclusions** (D38, D40). The readback rig has since settled five questions
+without one — including two that outside-in polling had got subtly wrong,
+because per-frame counting from inside the game caught a map change that
+two-second sampling missed entirely.
+
+It is the difference between "nothing happened" and "reached stage 3 of 5, hook
+fired 130 times, `evtEntry` returned `0x807E7AA0`".

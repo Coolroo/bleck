@@ -120,7 +120,14 @@ Two techniques, and the second matters more.
 **When a symptom cannot distinguish its causes, build one disc carrying several
 independent signals, ordered so each depends on strictly more than the last.**
 
-**And better: make the game report on itself.** `dolphin-memory-engine`
+**And better: make the game report on itself.** `scripts/ingame.py` does this
+for you — build a mod, boot it, read its report block, shut Dolphin down. The
+mod side is `diagnostics/probe.h`.
+
+```
+uv run python scripts/ingame.py my-mod --words 10 --watch-gw 30
+```
+ `dolphin-memory-engine`
 (`pip install dolphin-memory-engine`) attaches to the running Dolphin *process*
 and reads the emulated address space from outside — no Dolphin configuration, no
 fork, stock builds. A module that writes a stage bitmask and counters into a
