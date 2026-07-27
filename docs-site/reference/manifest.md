@@ -100,6 +100,22 @@ Every mod has a `mod.json` at its root.
 
         :   REL module id. The game's own REL is 1, so mods start at 2.
 
+        `code.maps` <span class="pf-type">object</span>
+
+        :   Scripts to run on arrival at a map, as map name → script name:
+
+            ```json
+            "maps": { "aa4_01": "on_arrive", "mac_01": "greet" }
+            ```
+
+            The script starts each time that map is reached, and stops when the
+            map is left — evt state is rebuilt on every map change, so nothing
+            survives one.
+
+            A mod using only map hooks does **not** need a `script main`;
+            `main` is what runs continuously during gameplay, and a map hook has
+            its own way to start.
+
 ```json
 {
   "schema": 1,

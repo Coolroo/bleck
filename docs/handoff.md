@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D48)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D51)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -108,6 +108,9 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ **A script runs in-game** | 60 iterations/sec, survives a map change (D43) |
 | ✅ **No Dolphin cheat setup needed** | loader embedded in the disc, verified with the INI removed (D44) |
 | ✅ **Native C runs in-game** | `code.sources` module executes, measured per frame (D46, D47) |
+| ✅ **A script runs on arrival at a named map** | map-specific, verified by a frozen counter elsewhere (D51) |
+| ⛔ **`MapData.initScript` cannot be patched** | installs fine, then deadlocks the map load (D51) |
+| ✅ **`.env` is loaded automatically** | tool paths survive between shells; real env still wins |
 | ⛔ `SEQ_TITLE` is never entered | zero frames unattended; there is no menu to hook (D47) |
 | ⛔ Input cannot be injected | DirectInput plus a locked session (D48) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
@@ -116,7 +119,15 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 
 ## Setup you will need
 
-### Environment variables — set these permanently
+### Environment variables — copy `.env.example` to `.env`
+
+`bleck` loads the nearest `.env` automatically, from anywhere inside the
+checkout, so there is nothing to source and no need to export anything per
+shell. Only `BLECK_*` names are read from it, and the real environment still
+wins — a one-off `BLECK_DOLPHIN=... uv run bleck ...` overrides the file.
+It is gitignored; `.env.example` documents every setting.
+
+#### What they are
 
 `$env:` does not persist between shells. Two sessions were lost to this; both
 `wit` and `Dolphin` had to be found by searching the filesystem.

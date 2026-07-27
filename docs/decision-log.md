@@ -2623,3 +2623,105 @@ two-second sampling missed entirely.
 
 It is the difference between "nothing happened" and "reached stage 3 of 5, hook
 fired 130 times, `evtEntry` returned `0x807E7AA0`".
+
+---
+
+## D51 — Scripts can be attached to maps; `initScript` cannot (2026-07-27)
+
+✅ **A script can now run when a named map is reached**, declared in the
+manifest and verified in-game:
+
+```json
+"code": { "script": "scripts/main.evt", "maps": { "aa4_01": "on_arrive" } }
+```
+
+This is the difference between a mod that loops and a mod that *reacts*, and it
+is the first time `bleck` has produced one.
+
+### ⛔ Patching `MapData.initScript` does not work
+
+The obvious design, and the one tried first. A map's init script is an ordinary
+pointer to evt bytecode (`spm/map_data.h`, `initScript` at +0x18 of a 0x1c
+struct), so the plan was to swap in a wrapper that runs the map's own script and
+then ours, preserving the map:
+
+```
+RUN_EVT <original, patched at _prolog>
+RUN_EVT <ours>
+END_SCRIPT
+```
+
+**Installation worked perfectly. The map never finished loading.**
+
+| Probe | Value | Meaning |
+|---|---|---|
+| `mapDataPtr("aa4_01")` at `_prolog` | `0x803FFF14` | ✅ the table *is* populated that early |
+| `initScript` after install | `0x80F661B4` | ✅ our wrapper, in the module |
+| wrapper word 1 | `0x80E5FA18` | ✅ the map's original script, preserved |
+| `gw[31]` (set by our script) | **0** | ⛔ our script never ran |
+| sequence | **frozen in `MAPCHANGE` stage 13** | ⛔ for 120 s, Dolphin still alive |
+
+So every *mechanical* assumption held — the offset, the timing, `mapDataPtr`
+at `_prolog`, the pointer preserved — and the thing still deadlocked. Swapping
+`RUN_EVT` for `RUN_CHILD_EVT`, on the theory that the loader waits for the init
+script to finish, changed nothing.
+
+Ruled out along the way, so nobody re-tests them:
+
+- 🔶→⛔ *"the operand is misencoded"*. It is not. `evt` recovers an operand's
+  meaning from its numeric range, and a pointer such as `0x80E5FA18` is
+  `-2132534760` signed, comfortably inside the literal window
+  (`is_literal`: `<= -290000000`). Pointers pass through as plain values.
+- ⛔ *"`_prolog` is too early for `mapData`"*. It is not — the pointer came back
+  valid, and the game's own REL prolog runs at `relMain + 0x194`, before ours at
+  `relMain + 0x1b8`.
+
+🔶 The remaining hypothesis, untested: the map loader waits on the *specific*
+`EvtEntry` it created from `initScript`, and a wrapper that spawns the real
+script as a separate entry never satisfies that wait. Not worth chasing, given a
+working alternative.
+
+### ✅ What works instead: watch, then start
+
+The game says where it is going. During a map change `seqWork.p0` holds the
+destination name, which is how the attract demo's maps were identified in the
+first place (D47). So the sequence hook notes the name on the way in and calls
+`evtEntry` once gameplay resumes — **no game data is modified at all**.
+
+Both halves were already proven, which is the point: `evtEntry` from
+`seq_data[SEQ_GAME].main` is how every `bleck` script starts (D43), and reading
+`seqWork.p0` is how D47 named the maps.
+
+⚠️ The start is deliberately deferred to `SEQ_GAME` rather than done during the
+change. evt state is torn down and rebuilt across a map change (D43), so a
+script started mid-change would be destroyed on the way out.
+
+Measured with `mods/map-hook`:
+
+| Observation | Value |
+|---|---|
+| `gw[31]`, set by the attached script | **4660** = `0x1234`, on arrival at `aa4_01` |
+| `gw[30]`, its loop counter | 126 → 3004, **+180 per 3 s = 60/sec** |
+| Map progression | `aa4_01` **then a second map** — the map still works |
+| `gw[30]` after the next map change | **frozen at 3156** |
+
+That last row is the strongest evidence and the easiest to overlook: the counter
+freezing on arrival at `ls4_12` proves the hook is **map-specific**. It fired for
+the map it was attached to and stayed silent for the one it was not — shown by a
+stopped counter rather than by nothing happening, which is exactly the
+distinction this project keeps having to buy the hard way.
+
+### Consequences for the language
+
+`main` is no longer required. It is what the sequence hook free-runs; a mod whose
+scripts all start some other way should not have to invent one. `mods/map-hook`
+has no `main` at all.
+
+### The general lesson
+
+**Every mechanical check passed and the feature still did not work.** Pointer
+valid, offset right, timing right, original preserved — and a hard freeze. Had
+the probe only reported "installed: yes", this would have looked like success.
+It was `gw[31] == 0` — evidence about the *effect* rather than the *setup* — that
+showed our script never ran, and the heartbeat in `scripts/ingame.py`
+(added for this) that distinguished a freeze from a quiet success.
