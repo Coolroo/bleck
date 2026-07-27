@@ -336,3 +336,39 @@ and `go1_02` are byte-identical in size across regions (12,864 / 14,322), so
 - [ ] Investigate `map/go1_03.bin` — PAL-only content, possibly cut from US
 - [ ] Explain the PAL disc's `msg/JP/` Japanese text set
 - [x] ~~Re-run census against PAL rev 0 and diff~~ — done; eu0 ⊃ us0
+
+---
+
+## Map names (`files/map/`) — ✅ verified
+
+**A map's name is its archive's filename.** `files/map/aa4_01.bin` *is* the map
+`aa4_01`, and that exact string is what `mapDataPtr()` takes, what `seqWork.p0`
+holds during a map change, and what a manifest puts in `code.maps`.
+
+There is therefore no map-name table to vendor, and `bleck maps` reads the
+extracted base rather than shipping one — it cannot go stale, needs no licence,
+and covers whichever region is extracted.
+
+```bash
+uv run bleck maps --areas        # summarise
+uv run bleck maps --search mac   # look one up
+```
+
+✅ **eu0 has 383 maps across 45 areas.** Names are `<area>_<room>`, where the
+room is always a two-digit number.
+
+| Area | Maps | What it is |
+|---|---|---|
+| `dan` | 22 | ✅ the Pit of 100 Trials |
+| `mac` | 19 | ✅ Flipside / Flopside, the hub |
+| `ls2` | 18 | 🔶 a chapter area |
+| `gn4`, `sp4` | 17 each | 🔶 chapter areas |
+
+🔶 **Which prefix is which chapter is not recorded here, because it has not been
+checked.** The counts and names are observed; the mapping from prefix to
+in-game chapter would be inference. `an`, `aa`, `gn`, `he`, `ls`, `mi`, `sp` and
+`ta` are the remaining prefixes.
+
+⚠️ `MAP_ID_MAX` in `spm/map_data.h` is `0x1d4` (468), comfortably more than the
+383 archives present. So the id space is sparse, or several ids share an
+archive — not yet established which.

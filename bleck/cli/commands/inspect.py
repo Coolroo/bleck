@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bleck.backends import disc
+from bleck.backends import disc, maps
 from bleck.common.errors import UserError
 from bleck.common.fsio import read_bytes
 from bleck.formats import detect, u8
+from bleck.mods import registry
 
 from .archive import unwrap
 
@@ -61,6 +62,32 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+def cmd_maps(args) -> int:
+    """List the maps on the disc, which is where map names come from.
+
+    `code.maps` in a manifest needs these exact strings, and there are 383 of
+    them -- without a way to look them up, attaching a script to a map means
+    guessing or running `ls`.
+    """
+    index = maps.load(registry.base_root())
+
+    if args.areas:
+        print(f"{len(index.entries)} maps in {len(index.areas())} areas")
+        for area in index.areas():
+            print(f"  {area.area:<8} {area.maps:>3} map(s)")
+        return 0
+
+    found = index.search(args.search) if args.search else index.entries
+    if not found:
+        print(f"nothing matching {args.search!r} in {len(index.entries)} maps")
+        return 1
+
+    for entry in found:
+        print(f"  {entry.name:<12} {entry.area:<8} {entry.size:>8,} bytes")
+    print(f"{len(found)} of {len(index.entries)} maps  ({index.source})")
+    return 0
+
+
 def register(add) -> None:
     p = add("info", help="identify a file and its nested formats")
     p.add_argument("file")
@@ -69,3 +96,8 @@ def register(add) -> None:
     p = add("verify", help="round-trip check; writes nothing")
     p.add_argument("path")
     p.set_defaults(func=cmd_verify)
+
+    p = add("maps", help="list the game's map names, for code.maps")
+    p.add_argument("--search", help="only show maps whose name contains this")
+    p.add_argument("--areas", action="store_true", help="summarise by area instead")
+    p.set_defaults(func=cmd_maps)
