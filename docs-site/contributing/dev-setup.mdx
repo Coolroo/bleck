@@ -43,7 +43,7 @@ resolves the same versions.
 ## The loop
 
 ```bash
-uv run pytest                          # 145 tests, ~3s
+uv run pytest                          # 164 tests, ~3s
 uv run python scripts/lint.py --fix    # ruff + pylint
 ```
 
@@ -91,11 +91,12 @@ bleck/
   formats/      lz77, u8, detect          file formats
   common/       errors, fsio, env, manifest
   backends/     disc                      wraps wit / dolphin-tool
+                emulator                  wraps the Dolphin emulator
   platforms/    linux, macos, windows     per-OS differences as data
   mods/         manifest, registry, resolver, overlay, conflicts, builder
   cli/
     app.py                                parser assembly and dispatch
-    commands/   inspect, archive, mods, disc, stream
+    commands/   inspect, archive, mods, disc, emulate, stream
 lint_plugins/   custom pylint rules
 docs/           living design docs and decision log
 docs-site/      this documentation
@@ -106,7 +107,8 @@ in `MODULES` — nothing in the CLI core changes.
 
 ## Working on these docs
 
-The site is Mintlify, built with [bun](https://bun.sh/).
+The site is Mintlify, built with [bun](https://bun.sh/). Full install options are
+in [bun's documentation](https://bun.sh/docs/installation).
 
 <Tabs>
   <Tab title="Linux / macOS">
@@ -118,6 +120,8 @@ The site is Mintlify, built with [bun](https://bun.sh/).
     ```powershell
     powershell -c "irm bun.sh/install.ps1 | iex"
     ```
+
+    Or `winget install --id Oven-sh.Bun -e`.
   </Tab>
 </Tabs>
 

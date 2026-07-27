@@ -4,15 +4,10 @@ description: Installing bleck on Windows 11
 ---
 
 <Note>
-**Verified on Windows 11.** Install, the full test suite and the linters all
-pass there.
+**Verified end to end on Windows 11.** Install, the test suite, the linters,
+`extract`, `mod build` and `launch` all pass — and a disc built there boots in
+Dolphin with modified textures.
 </Note>
-
-<Warning>
-**`extract` and `build` are still unverified on Windows.** They shell out to
-`wit.exe` and `DolphinTool.exe`, which were not installed on the machine used
-for verification. If you run them, please report back.
-</Warning>
 
 <Steps>
   <Step title="Install uv">
@@ -23,13 +18,6 @@ for verification. If you run them, please report back.
     Or: `irm https://astral.sh/uv/install.ps1 | iex`
   </Step>
 
-  <Step title="Install the external tools">
-    - [Wiimms ISO Tools](https://wit.wiimm.de/) — provides `wit.exe`
-    - [Dolphin](https://dolphin-emu.org/) — provides `DolphinTool.exe`
-
-    Add both to your PATH, or point at them with environment variables below.
-  </Step>
-
   <Step title="Clone and sync">
     ```powershell
     git clone git@github.com:Coolroo/bleck.git
@@ -38,9 +26,52 @@ for verification. If you run them, please report back.
     ```
   </Step>
 
+  <Step title="Install Wiimms ISO Tools">
+    Download the Windows build from [wit.wiimm.de](https://wit.wiimm.de/) and
+    unpack it.
+
+    <Warning>
+    The Windows build is a **Cygwin** build: `wit.exe` needs the 31 `cyg*.dll`
+    files that sit beside it in `bin\`. Add that whole directory to your PATH —
+    copying `wit.exe` out on its own will not run.
+    </Warning>
+  </Step>
+
+  <Step title="Install Dolphin">
+    You need two executables from it: `DolphinTool.exe` to read and write RVZ,
+    and `Dolphin.exe` to boot what you build.
+
+    <Warning>
+    **Do not use winget.** `DolphinEmulator.Dolphin` is version **5.0** — the
+    2016 stable release. It predates RVZ and ships no `DolphinTool.exe` at all.
+    </Warning>
+
+    Get a development build from
+    [dolphin-emu.org/download](https://dolphin-emu.org/download/). It arrives as
+    a `.7z`, which Windows cannot open natively. If you do not have 7-Zip, the
+    standalone extractor needs no install and no admin rights:
+
+    ```powershell
+    irm https://www.7-zip.org/a/7zr.exe -OutFile 7zr.exe
+    .\7zr.exe x dolphin.7z -o"$env:USERPROFILE\tools\dolphin"
+    ```
+
+    Dolphin is portable — the extracted folder can live anywhere.
+  </Step>
+
+  <Step title="Point bleck at the tools">
+    ```powershell
+    $env:BLECK_WIT          = "$env:USERPROFILE\tools\wit\bin\wit.exe"
+    $env:BLECK_DOLPHIN_TOOL = "$env:USERPROFILE\tools\dolphin\DolphinTool.exe"
+    $env:BLECK_DOLPHIN      = "$env:USERPROFILE\tools\dolphin\Dolphin.exe"
+    ```
+
+    Skip this if both are already on your PATH.
+  </Step>
+
   <Step title="Verify">
     ```powershell
-    uv run pytest          # expect 145 passed
+    uv run pytest          # expect 164 passed
     uv run bleck --help
     ```
   </Step>
@@ -53,16 +84,21 @@ Beyond your PATH:
 | Tool | Locations |
 |---|---|
 | `wit.exe` | `C:\Program Files\Wiimm\wit\bin`, `C:\Program Files (x86)\Wiimm\wit\bin`, `C:\wit\bin` |
-| `DolphinTool.exe` | `C:\Program Files\Dolphin`, `C:\Program Files (x86)\Dolphin`, `C:\Program Files\Dolphin-x64` |
+| `DolphinTool.exe`, `Dolphin.exe` | `C:\Program Files\Dolphin`, `C:\Program Files (x86)\Dolphin`, `C:\Program Files\Dolphin-x64` |
 
-Anywhere else:
+Anywhere else, set the variables above.
 
-```powershell
-$env:BLECK_WIT = "C:\path\to\wit.exe"
-$env:BLECK_DOLPHIN_TOOL = "C:\Program Files\Dolphin\DolphinTool.exe"
-```
+<Warning>
+**`setx` does not affect shells that are already open.** It writes the user
+registry, but running processes keep the environment they inherited at launch —
+so a variable can be "set" and still invisible to your current terminal. Set
+`$env:` inline as well, or open a new shell.
+</Warning>
 
-Use `setx` instead of `$env:` to persist across sessions.
+<Tip>
+`BLECK_DOLPHIN` and `BLECK_DOLPHIN_TOOL` are **different executables** that ship
+in the same folder. `DolphinTool` converts images; `Dolphin` boots them.
+</Tip>
 
 ## Without uv
 
