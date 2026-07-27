@@ -2460,3 +2460,86 @@ every ten seconds, and C that calls two ordinary functions a script cannot.
   here because `_prolog` calls it.
 
 Test suite 291 → 300. pylint 10.00/10.
+
+---
+
+## D47 — Native C runs in-game, and there is no title screen to hook (2026-07-27)
+
+✅ **A `code.sources` mod executes inside the game.** D46 shipped the build
+path but nothing had been booted; this closes that 🔶. Verified unattended, by
+reading the game's memory from outside — no human watched a screen.
+
+`mods/menu-watch` is native-only: no script, so `bleck` emits just the REL
+entry points and the `mod_prolog` hand-off, and the sequence table is entirely
+the mod's. It hooks all six `seq_data[].main`, counts frames per sequence, and
+records where each map change is going.
+
+```
+mod_prolog ran   : yes (magic 'MODC')
+hooks installed  : yes
+order            : LOGO -> MAPCHANGE -> GAME -> MAPCHANGE -> GAME
+maps loaded      : aa4_01 -> ls4_12
+  LOGO         2107
+  TITLE           0        <- never ran
+  GAME         9227
+  MAPCHANGE     196
+  GAMEOVER        0
+  LOAD            0
+```
+
+### ⛔ `SEQ_TITLE` never runs
+
+Asked for a mod that runs on the main menu, and the answer is that there is no
+main menu on this path. **Zero frames across 200 seconds** covering the logos,
+two map loads and sustained gameplay.
+
+D43 inferred this from outside by sampling `seqWork`; this measures it from
+inside, per frame, which is a stronger claim. It also corrects D43 in one
+detail: the order is not `LOGO -> GAME` but **`LOGO -> MAPCHANGE -> GAME`**.
+The polling missed a map change entirely because it sampled every two seconds
+and `MAPCHANGE` is short.
+
+🔶 **Why: the game is almost certainly running its attract demo.** With no
+controller input it plays the logos for ~2,100 frames (~35 s at 60 fps) and
+then loads gameplay maps in sequence. `aa4_01` and `ls4_12` are ordinary map
+names, not menus. The title screen presumably needs a button press, which an
+unattended boot never supplies. Not proven — no input was injected to test the
+alternative.
+
+### What this means for hooking
+
+- `seq_data[SEQ_TITLE]` is **not a usable hook point** on an unattended boot.
+  The code exists (`seq_titleMain` at `8017b250`) and the pointer installs
+  correctly; it is simply never called.
+- `SEQ_GAME` is reached in about 45 seconds with no input, which is what makes
+  the whole automated loop possible.
+- `GAMEOVER` and `LOAD` also never ran, so a mod re-arming on those (as the
+  generated scaffolding does) is untested rather than wrong.
+
+### Also confirmed
+
+- **A native mod can own the sequence table.** `menu-watch` hooks all six
+  entries itself and chains to whatever was there, with no script involved and
+  no conflict, because a script-less module installs no hooks of its own.
+- **`seqWork.p0` names the destination of a map change**, which is the only
+  place the game states where it is going. Useful for any mod that wants to act
+  on arriving somewhere specific.
+- **`-nostdlib` means no `strncpy`.** The map-name copy is written by hand;
+  pulling in a libc for eight lines would be a poor trade, and there is none
+  linked anyway.
+
+### Method note
+
+`dolphin-memory-engine` is now a declared dev dependency rather than something
+installed ad hoc — a `uv sync` had already silently removed it once, which cost
+a run. Three rounds of asking a human to watch a screen produced two wrong
+conclusions (D38, D40); the readback rig has now settled four questions without
+one.
+
+### Open 🔶
+
+- **Reaching the title screen needs input.** Dolphin can be driven with
+  scripted input, but nothing here does it. Until then, a "main menu mod"
+  cannot be tested automatically.
+- **Whether the attract demo is what is running** is inferred from the map
+  names and the absence of input, not established.

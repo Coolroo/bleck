@@ -20,6 +20,11 @@ dev = [
     # ELF -> REL conversion. Dev-only today; becomes a runtime dependency when
     # code mods land (see docs/code-mods.md).
     "pyelf2rel>=1.0.9",
+    # Reads Dolphin's emulated memory from outside the process, which is what
+    # makes in-game verification automatic. Three rounds of asking a human to
+    # watch a screen produced two wrong conclusions; this settled the same
+    # question in four unattended runs (D43).
+    "dolphin-memory-engine>=1.3",
 ]
 
 # Separate from `dev` so that editing prose does not pull in a test and lint

@@ -168,6 +168,18 @@ wheels = [
 ]
 
 [[package]]
+name = "dolphin-memory-engine"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/a7/70feadcc8c27b6a6c8db52f9d2dffd2858e75fbda0ea4bb38d5223f64d6d/dolphin_memory_engine-1.3.1.tar.gz", hash = "sha256:1c26e32cc4d5210fa5fc9190eef93c88d3e02620ca87a22bfbd87a6bc62e2bdb", size = 142300, upload-time = "2026-03-29T14:04:59.238Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/6d/d831141b48edfdc5f90e3d3b6b16646cae962646db168a93294795186b42/dolphin_memory_engine-1.3.1-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:fb960edc57869aac3c54ab93e789e29a6ab29f632c0839b5fef559cf2ed8dc05", size = 96898, upload-time = "2026-03-29T14:04:54.574Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/9b/6dc4c8cfb382bf33513ca30139e6b83e058fb2167784d9893828e71033e5/dolphin_memory_engine-1.3.1-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:bdc474055c66eb443dd57592a6d4e76a82d6a0ee4a45139219193c9deec9c96b", size = 95188, upload-time = "2026-03-29T14:04:55.902Z" },
+    { url = "https://files.pythonhosted.org/packages/21/cd/cb34d31111f43c49627c86ecf53d0cfa3cd5c54a52c9f9aea90fd8db9eee/dolphin_memory_engine-1.3.1-cp39-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:82501761df7f8c56064d84822b0179c0f198f5b5b15fdcae829443a05fd28a86", size = 365749, upload-time = "2026-03-29T14:04:56.923Z" },
+    { url = "https://files.pythonhosted.org/packages/e5/6f/1745eb9be1dd491c2adf8314ff0957ca38a73a35c72b28a360168ef539af/dolphin_memory_engine-1.3.1-cp39-abi3-win_amd64.whl", hash = "sha256:3fd134e252f13275579056cd39cffd36591758e325346fc0ef501fcd189355e7", size = 145850, upload-time = "2026-03-29T14:04:58.104Z" },
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -728,6 +740,7 @@ source = { editable = "." }
 
 [package.optional-dependencies]
 dev = [
+    { name = "dolphin-memory-engine" },
     { name = "libwiipy" },
     { name = "pyelf2rel" },
     { name = "pylint" },
@@ -740,6 +753,7 @@ docs = [
 
 [package.metadata]
 requires-dist = [
+    { name = "dolphin-memory-engine", marker = "extra == 'dev'", specifier = ">=1.3" },
     { name = "libwiipy", marker = "extra == 'dev'", specifier = ">=0.6.0" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.7" },
     { name = "pyelf2rel", marker = "extra == 'dev'", specifier = ">=1.0.9" },

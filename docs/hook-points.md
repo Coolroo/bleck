@@ -88,10 +88,22 @@ whether it *zeroes* it.
 | 3 | `seq_data[SEQ_TITLE].main` | ⛔ never called — **the sequence is never entered** (D43) |
 | 4 | **`seq_data[SEQ_GAME].main`** | ✅ **works** (D43) |
 
-⚠️ **The game runs `LOGO -> GAME` directly.** `SEQ_TITLE` is never entered on
-that path, so attempt 3's hook sat correctly installed with a call count of zero
-for a whole run. Gameplay is reached about **44 seconds after boot with no
-controller input**, which is what makes unattended testing possible.
+⚠️ **`SEQ_TITLE` is never entered on an unattended boot.** Measured from inside
+the game, per frame (D47): zero frames across 200 seconds. The code exists
+(`seq_titleMain` at `8017b250`) and a hook installs correctly; it is simply
+never called, so it is not a usable hook point.
+
+The real order is **`LOGO -> MAPCHANGE -> GAME -> MAPCHANGE -> GAME`**, loading
+`aa4_01` then `ls4_12` — ordinary maps, not menus. 🔶 Almost certainly the
+attract demo: with no controller input the game plays the logos for ~2,100
+frames and then runs gameplay. Reaching the title screen would need input,
+which nothing here injects.
+
+`GAMEOVER` and `LOAD` never ran either, so the generated scaffolding's re-arm
+on those sequences is untested rather than wrong.
+
+Gameplay arrives about **45 seconds after boot with no input**, which is what
+makes unattended testing possible at all.
 
 ⛔ **A script does not survive a map change** (D43). evt state is torn down and
 rebuilt, and a script started once stops permanently. So the generated module
