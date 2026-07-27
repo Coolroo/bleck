@@ -18,20 +18,52 @@ this file is forward-looking only.
 | Mod overlays, dependency chains, conflicts | ✅ Working, validated on the real game |
 | **Asset pipeline end to end** | ✅ **A built disc boots and renders mods** — on Linux (D25) and Windows (D36) |
 | PowerPC toolchain | ✅ Proven — builds a valid REL (D26) |
-| **Scripting language** | ✅ **Implemented** — compiles to the game's own `evt` VM (D37). 🔶 Not yet booted |
+| **Custom code runs in-game** | ✅ **Confirmed** (D38) — a `bleck`-built REL loads and executes |
+| **Scripting language** | ✅ Compiles and links (D37) · ⛔ **no script has ever been observed running** — two attempts failed (D38, D40) |
 | **Code injection** | ⬅ Native hooks still hand-written; scripting covers event logic |
 | Windows 11 | ✅ **Fully verified** — tests, linters, `extract`, `verify`, `mod build`, boot (D33, D35, D36) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
 ---
 
-## Active track: code injection
+## The one thing blocking everything: make a script run
 
-This is where the interesting mods live. Everything below is asset-swapping;
-this is running our own code inside the game.
+⛔ **This is the active track, and it is one question wide.** Attempt 3 is built
+and unbooted at `out/diag2.wbfs`; the reading guide is at the top of
+[`handoff.md`](./handoff.md), the timing reference in
+[`hook-points.md`](./hook-points.md).
+
+Everything below is queued behind it, because a scripting language that cannot
+start a script is not a scripting language.
+
+---
+
+## Then, in order of value
+
+1. 🟢 **Bake the Gecko loader into the DOL.** `wstrt patch main.dol --add-sect`
+   removes both Dolphin setup traps and works on hardware (D39). Highest
+   value-per-effort item on the list. Needs `wstrt` as a new dependency.
+2. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; removes a papercut
+   the language shipped with.
+3. 🟢 **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest capability gap —
+   it is what lets a script attach itself to an NPC, door or item.
+4. 🟢 **Switch to the decomp symbol table** — 11× more named symbols, with
+   sizes and types (D39).
+5. 🟢 **Multiple code mods.** ⚠️ **Unclaimed across the entire scene** (D39):
+   `chainrel` is a stub, and both major distributions tell users to run one REL
+   mod at a time. The clearest differentiator available.
+6. 🟢 **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++.
+   D38 proves the technique works.
+
+---
+
+## Historical: the original code-injection plan
+
+⚠️ **Largely superseded.** Kept because the reasoning is still useful and
+because item 1's premise turned out to be wrong.
 
 The design is written up in [`code-mods.md`](./code-mods.md); the toolchain is
-proven. What remains:
+proven. What remained:
 
 > ⚠️ **Superseded in part by D37.** The scripting track shipped without
 > resolving item 1: scripts name game functions and `elf2rel` binds them at

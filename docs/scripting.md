@@ -1,8 +1,11 @@
 # Scripting
 
-**Status: implemented.** `bleck script build` and `bleck mod build` compile
-scripts into a loadable `mod.rel`. Not yet booted in-game — see
-[Unproven](#unproven) before trusting any of this.
+**Status: compiles and links; does not yet run.** `bleck script build` and
+`bleck mod build` produce a loadable `mod.rel`, and D38 proved a `bleck`-built
+module executes in-game. But **no compiled script has ever been observed
+running**, after two attempts at the entry point. Read
+[Unproven](#unproven) and [`hook-points.md`](hook-points.md) before trusting
+anything here.
 
 ---
 
@@ -126,7 +129,9 @@ bits.
 storage class from its *numeric range*: a value near -30000000 **is** `lw[0]`,
 as far as the VM is concerned. There is no encoding that distinguishes the two.
 So `var a = -30000000` is rejected — the alternative is emitting something that
-silently reads a variable. Floats are fixed-point (`value * 1024` biased by
+silently reads a variable. ⚠️ This is stricter than it needs to be: `SETI`
+(0x33) takes its operand raw and would encode such literals correctly (D39).
+Not yet implemented. Floats are fixed-point (`value * 1024` biased by
 -240000000), giving ~3 decimal places and a magnitude ceiling near 48000; over
 that is rejected rather than wrapped into the address window.
 
@@ -166,7 +171,10 @@ Honest scope, because the ceiling is real:
   with an explanation.
 - **One code mod per build.** The Gecko loader opens exactly one
   `/mod/mod.rel`. A chain containing two code mods fails loudly rather than
-  silently dropping one. `chainrel` is the eventual answer.
+  silently dropping one.
+  ⚠️ **`chainrel` is not the answer** — D39 found it to be a three-commit stub
+  with its loader body wrapped in `#if 0`. Nobody in this scene has solved
+  multi-mod loading, which makes it the clearest unclaimed problem available.
 
 ## Symbol lists are not shipped
 
@@ -185,20 +193,31 @@ sharply by version: **eu0 has ~1111 symbols, kr0 only 456.** Anchor to eu0.
 Marked explicitly, because the rest of this document reads like settled fact and
 these parts are not.
 
-- 🔶 **No compiled script has been run in-game.** The bytecode is verified by
-  hand against the opcode table and the REL is structurally valid
-  (`bleck info` parses it), but structural validity is not runtime correctness —
-  the same caveat D26 raised, and D25/D36 are what settled it for assets.
-- 🔶 **`SET` (0x32) is assumed to be the integer assignment opcode and `SETF`
-  (0x34) the float one.** This follows the `ADD`/`ADDF` pairing and TTYD's macro
-  conventions, but `SETI` (0x33) exists and its exact role is not documented in
-  `spm-headers`. If integer assignment misbehaves in-game, this is the first
-  thing to check.
-- 🔶 **`_prolog` starts the script before any map is loaded.** Whether a given
-  builtin is safe to call that early is untested; `wait(120)` in the sample mod
-  is a guess, not a measurement.
+- ⛔ **No compiled script has ever been observed running, after two attempts.**
+  This is the one open link in the whole track. The bytecode is verified by hand
+  against the opcode table, the module links and loads, and D38 proved custom
+  code executes in-game — but nothing has yet made a script *run*. Attempt 1
+  (`evtEntry` in `_prolog`) and attempt 2 (`seq_data[SEQ_GAME].init`) both
+  produced nothing; attempt 3 (`.main`, which is what the scene actually uses)
+  is built and unbooted. See [`hook-points.md`](hook-points.md) and D40.
+- ✅ **`SET` / `SETI` / `SETF` — resolved (D39).** From matching decompiled
+  source (`spm-decomp/src/evtmgr_cmd.c`): `SET` runs its source through
+  `evtGetValue` (zone-decoded), `SETI` takes it **raw**, `SETF` works in the
+  float domain. Our `SET`/`SETF` pairing was correct. ⚠️ And `SETI` is the
+  escape hatch for the literals `reject_ambiguous_literal` currently refuses —
+  `var a = -30000000` need not be an error. Not yet implemented.
+  ⚠️ Also: `check_float` passes values through **unconverted** when above the
+  float max, so `SETF` on a non-float operand silently acts as an int copy.
+- ⛔ **`_prolog` is far too early to start a script — measured, not guessed
+  (D38).** `evtEntry` there returns and schedules nothing, because the evt
+  manager is not initialised at that point. `_prolog` now only arms a
+  `seq_data` hook. The rule, and the four known hook timings, are in
+  [`hook-points.md`](hook-points.md).
 - 🔶 **`evtEntry(script, 0, 0)`** — priority 0 and flags 0 are taken from TTYD
-  convention, not from observed SPM behaviour.
+  convention, not from observed SPM behaviour. **This is now a leading suspect**:
+  if the third hook attempt fires but still produces no script, a scheduler that
+  creates the entry and immediately filters it out would look exactly like this.
+  `EVT_FLAG_START_IMMEDIATE` exists in `evtmgr.h`.
 - 🔶 **Flag slots are read as integers.** `gf[2]` and `lf[2]` compile to an
   ordinary `IF_EQUAL` against the encoded operand, on the assumption that
   `evtGetValue` decodes the flag windows like any other. The VM has dedicated

@@ -1,11 +1,14 @@
 # Handoff — picking this up fresh
 
-Last updated 2026-07-27, after the scripting language landed (D37, D38).
+Last updated 2026-07-27, after the scripting language landed (D37) and two
+failed attempts to make a script actually run (D38, D40).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D39)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D40)
+- [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
+  **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
 - [`hook-points.md`](./hook-points.md) — **when custom code can safely run.**
   Two debugging cycles went into this; read it before writing a hook
@@ -17,38 +20,61 @@ For anything else:
 
 ## Start here: the one open question
 
-**Does a compiled script actually run?**
+**Why will a compiled script not run?**
 
-`mods/coin-tick` (one coin per ten seconds) was built and booted with the
-sequence-table fix from D38, but nobody reported the result before the session
-ended. Everything else on the scripting track is verified. This is not.
+Two attempts have failed. This is the only unverified link left in the whole
+scripting track, and everything else is proven.
+
+| Attempt | Hook | Result |
+|---|---|---|
+| 1 | `evtEntry` directly in `_prolog` | ⛔ nothing (D38) |
+| 2 | `seq_data[SEQ_GAME].init` | ⛔ nothing (D40) |
+| 3 | `seq_data[SEQ_GAME].main` | 🔶 **built and waiting — `out/diag2.wbfs`** |
+
+### Do this first
+
+The third attempt is already built. No rebuild needed:
 
 ```powershell
-bleck mod build coin-tick out\coin-tick.wbfs --force
-bleck launch --batch out\coin-tick.wbfs
+bleck launch --batch out\diag2.wbfs
 ```
 
-Load a save, get into a level, watch the coin counter. `+1` every ten seconds.
+Get into a level. It carries **three independent signals**, each depending on
+strictly more than the last:
 
-**If coins appear:** the scripting track is proven end to end. Mark D38's 🔶
-resolved, update `scripting.md`'s "Unproven" section and the roadmap.
+| Signal | Look for | Proves |
+|---|---|---|
+| **A** | Mario at 2x speed | the hook fired at all |
+| **B** | **+100 coins**, once, immediately | the game is live and writable |
+| **C** | +1 coin/sec afterwards | evt scheduling works |
 
-✅ **The approach is now validated by prior art** (D39). Hooking `seq_data` is
-the established technique in this scene — `evtpatch`, `spm-practice-codes` and
-`SPM-RPG-Battles` all do it. They hook `.main`; we hook `SEQ_GAME.init`, which
-nobody else does, so that detail is still unproven. But the shape is not a
-guess, and the convention it encodes is worth internalising:
+Reading it:
 
-> `_prolog` = patch bytes. `seq_data[...]` override = touch the running game.
+- **A+B+C** — it works. Promote the `.main` hook into
+  `bleck/script/emit.py`'s `_FOOTER`, rebuild `coin-tick`, mark D40 resolved,
+  and update `scripting.md`'s Unproven section and the roadmap.
+- **A+B, no C** — evt scheduling is wrong even in a fully live `SEQ_GAME`. Next
+  suspect is `evtEntry(script, 0, 0)`: those priority/flags came from TTYD
+  convention and were never checked against SPM. `EVT_FLAG_START_IMMEDIATE`
+  exists in `evtmgr.h`.
+- **A only** — the hook fires but the game is not live yet.
+- **none** — the `seq_data` write is not taking effect at all.
 
-**If they do not:** two causes remain and the symptom does not distinguish them —
-the sequence hook never fired, or `evtEntry` fails even at `SEQ_GAME`.
-Disambiguate the way D38 did: fold a **control signal** into the generated
-module. `scratchpad/diag/mod.c` is gone with the scratch directory, but it is
-twenty lines — patch `marioGetGameSpeedScale` (`0x80121e50`) to return `2.0f`
-alongside the script hook, and boot once. Double-speed-but-no-coins means the
-module runs and the evt path is still wrong; neither means the hook broke
-something upstream of both.
+The probe source is [`diagnostics/entry-point-probe.c`](./diagnostics/entry-point-probe.c),
+kept in the repo because the first one was lost with a scratch directory.
+
+### Why attempt 2 failed, probably
+
+⚠️ **Every mod in the scene hooks `.main`. None hooks `.init`.** That was visible
+in the D39 survey and got treated as a curiosity instead of a warning.
+`evtmgrReInit` exists, which implies evt state is torn down and rebuilt across
+sequence transitions — so an entry created at `.init` would plausibly be wiped
+moments later. Untested; it is why attempt 3 hooks `.main`.
+
+The narrow lesson, recorded in D40: **when prior art consistently does X and we
+do X', the burden is on X'.**
+
+Full timing reference in [`hook-points.md`](./hook-points.md).
 
 ---
 
@@ -59,10 +85,14 @@ something upstream of both.
 a two-mod dependency chain, on both Linux and Windows. Bit-exact LZ77 is not
 required.
 
-**Custom code runs in-game** (D38). This was the long-standing unknown and it is
-now closed: a REL built by this toolchain loads via the Gecko loader and
-executes correctly, verified by an unmistakable on-screen effect. The roadmap
-carried "no custom code has ever run" for a long time; that is no longer true.
+**Custom code runs in-game** (D38). A REL built by this toolchain loads via the
+Gecko loader and executes correctly, verified by an unmistakable on-screen
+effect. The roadmap carried "no custom code has ever run" for a long time; that
+is no longer true.
+
+⛔ **But no compiled *script* has ever been observed running** (D40). The module
+executes; the thing it is supposed to start does not. That is the open
+question above, and it is the only one.
 
 **A scripting language exists** (D37). `bleck` compiles a small language to
 `evt`, the game's own bytecode VM — 120 opcodes, cooperative scheduling, ~444
@@ -79,7 +109,8 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ A `bleck`-built REL loads and executes | D38 — the diagnostic's Signal A |
 | ✅ Scripts compile to correct bytecode | hand-verified against the opcode table |
 | ✅ Scripts link, resolving game functions by name | `elf2rel` + `spm.eu0.lst` |
-| 🔶 **A script actually runs in-game** | **never observed — see above** |
+| ✅ Our REL is byte-identical once staged | hash-checked overlay vs `build/` |
+| ⛔ **A script actually runs in-game** | **never observed, two attempts failed** |
 
 ---
 
@@ -107,10 +138,18 @@ temporary.** Put a copy somewhere permanent — `symbols/` in the repo root is
 what `BLECK_SYMBOLS_DIR` defaults to — or the next code-mod build will fail with
 "no symbol list for 'eu0'".
 
-Anchor to **eu0**. Coverage varies sharply: eu0 documents ~1111 symbols, `kr0`
+Anchor to **eu0**. Coverage varies sharply: eu0 documents ~976 symbols, `kr0`
 only 456.
 
+⚠️ **There is a much better source** (D39): `spm-decomp/config/EU0/symbols.txt`
+carries ~9,566 human-named symbols — **11x** the lst — with sizes and types, and
+parses with one regex. Switching to it is on the next-steps list.
+
 ### Dolphin — the two silent traps
+
+⚠️ **These may be avoidable entirely** (D39). `wstrt patch main.dol --add-sect
+X.gct` bakes the Gecko code handler *into the disc*, which removes both traps
+and works on real hardware. Untried here. Until then:
 
 Both are already configured on this machine, and both fail *invisibly* if not:
 
@@ -234,7 +273,26 @@ In rough order of value:
 
 - **`_prolog` runs far too early to touch game subsystems** (D38). It is fine
   for patching instructions and nothing else. Anything needing the game to be
-  alive must hook `seq_data` and run later.
+  alive must hook `seq_data` and run later. Full timing table in
+  [`hook-points.md`](./hook-points.md).
+- **When a symptom cannot distinguish its causes, build one disc carrying
+  several independent signals**, ordered so each depends on strictly more than
+  the last. This resolved D38 and is the only reason attempt 3 will be
+  informative. The subtlety: put the control signal *where the thing under test
+  runs*, not at `_prolog` — otherwise it proves only that the module loaded.
+- **`chainrel` is a stub, not a solution** (D39). Its loader body is wrapped in
+  `#if 0`. Nobody has solved multi-mod loading.
+- **Never copy from Flipside-Mod-Manager** (D39). It has no LICENSE at all, but
+  its loader is plainly derivative of GPLv3 `spm-rel-loader`. Take the loader
+  from upstream under GPLv3, or rebuild from published addresses — addresses are
+  facts, and facts are not copyrightable.
+- ⚠️ **`tcrf.net/Notes:Super_Paper_Mario` served a prompt-injection payload**
+  aimed at LLM tooling, instructing it to truncate files (D39). `spm-docs` links
+  it as a resource. Do not point automated tooling at it.
+- **`evtpatch` is how this scene modifies vanilla logic** — runtime patching of
+  existing scripts, complementary to compiling new ones. If we ever emit
+  `LBL`/`GOTO`, note that the VM caches label positions in a jump table at
+  script-entry time, so mutated scripts need it rebuilt.
 - **The base is immutable and must stay that way.** `_detach` unlinks
   unconditionally rather than checking `st_nlink`, because Windows does not
   report link counts reliably.

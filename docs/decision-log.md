@@ -1861,3 +1861,82 @@ topic `super-paper-mario` has exactly 7 repos. ⛔ Much of the knowledge lives i
 Discord and nowhere else, and **no SPM mod has a written postmortem** — which is
 the ecosystem's largest documentation gap, and an argument for keeping this log
 public.
+
+---
+
+## D40 — The `seq_data[SEQ_GAME].init` fix did not work either (2026-07-27)
+
+⛔ **Recording a failure.** D38's fix was built, booted and produced no coins.
+The scripting track therefore still has **no observed instance of a compiled
+script running**, after two attempts.
+
+| Attempt | Hook | Result |
+|---|---|---|
+| 1 | `evtEntry` directly in `_prolog` | ⛔ nothing (D38) |
+| 2 | `seq_data[SEQ_GAME].init` | ⛔ nothing (this entry) |
+| 3 | `seq_data[SEQ_GAME].main` | 🔶 built, not yet booted |
+
+### What went wrong in the reasoning, not just the code
+
+D38 diagnosed correctly that `_prolog` was too early, and D39 then confirmed
+that hooking `seq_data` is the established technique. Both were right. But the
+conclusion drawn — "therefore hook `seq_data[SEQ_GAME].init`" — quietly added a
+detail the evidence did not support.
+
+⚠️ **Every mod in the scene hooks `.main`. None hooks `.init`.** That was
+visible in the D39 survey and was noted there as "nobody found hooks
+`SEQ_GAME.init` specifically" — and then treated as a curiosity rather than a
+warning. It should have been read as the scene having already found out
+something we were about to rediscover.
+
+The lesson is narrow and worth stating: **when prior art consistently does X and
+we do X′, the burden is on X′.** A one-word divergence from a technique borrowed
+wholesale is still a divergence.
+
+### The leading hypothesis 🔶
+
+`evtmgrReInit` (`800d8b2c`) exists, which implies evt state is torn down and
+rebuilt across sequence transitions. If `SEQ_GAME.init` runs *before* that
+rebuild, an entry created there would be wiped moments later — which looks
+exactly like "nothing happened".
+
+Untested. It is a hypothesis, and the reason the third attempt hooks `.main`,
+which runs after any such rebuild.
+
+### Third attempt: three signals instead of one
+
+Preserved as `docs/diagnostics/entry-point-probe.c` — in the repo this time,
+because the first probe was lost with a scratch directory and had to be
+described in prose instead of read.
+
+| Signal | Mechanism | Depends on |
+|---|---|---|
+| **A** — double speed | instruction patch, applied **from inside the hook** | the hook firing at all |
+| **B** — +100 coins once | `pouchAddCoin()` (`8014d58c`), a direct game function, no evt | the game being live and writable |
+| **C** — +1 coin/sec | `evtEntry()` | evt scheduling |
+
+The sharpening over D38's probe: **signal A moved out of `_prolog` and into the
+hook**. In D38 it was applied at `_prolog`, which could prove only "the module
+ran" — it could not distinguish that from "the hook ran". That ambiguity is
+precisely what made attempt 2's failure uninformative, and it is now closed.
+
+Reading it: **A+B+C** promote `.main` into the emitter · **A+B, no C** evt
+scheduling is wrong even in a live `SEQ_GAME`, and the next suspect is
+`evtEntry(script, 0, 0)`'s priority/flags, taken from TTYD convention and never
+checked against SPM (`EVT_FLAG_START_IMMEDIATE` exists in `evtmgr.h`) ·
+**A only** the hook fires but the game is not live · **none** the `seq_data`
+write is not taking effect at all.
+
+Built as `out/diag2.wbfs` and not yet booted; the machine was unattended.
+
+### Standing state of the scripting track
+
+Everything except the last link is verified:
+
+- ✅ scripts compile to bytecode hand-checked against the opcode table
+- ✅ they link, resolving game functions by name through `elf2rel`
+- ✅ the module loads and executes in-game (D38's signal A)
+- ⛔ **no script has ever been observed running**
+
+Full timing reference and the diagnostic method in
+[`hook-points.md`](hook-points.md).

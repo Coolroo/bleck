@@ -3,6 +3,14 @@
 Research snapshot compiled to orient the `spm-modkit` project. All repo metadata
 (push dates, stars, percentages) was verified on 2026-07-26 and will drift.
 
+> ⚠️ **Substantially revised 2026-07-27.** A second, much deeper survey ran a day
+> later and corrected several conclusions below — most importantly that
+> `chainrel` is a non-working stub, and that the ecosystem is considerably
+> broader than "overwhelmingly one author". **Read
+> [the 2026-07-27 revision](#the-2026-07-27-revision) at the end before trusting
+> the ranked gap list or the community section.** Original text is left intact;
+> corrections are marked there.
+
 ---
 
 ## TL;DR
@@ -291,3 +299,244 @@ Relevant to licensing (MIT except `mod/`, which is GPLv3).
    spm-rel-loader + a no-op REL) on **eu0** before touching US builds.
 3. Only then decide whether `spm-modkit` targets the symbol-porting gap (highest
    leverage) or asset-format integration (most visible payoff).
+
+---
+
+# The 2026-07-27 revision
+
+A second survey, prompted by a pointer to
+[Flipside-Mod-Manager](https://github.com/L5050/Flipside-Mod-Manager), went
+considerably deeper than the original snapshot. Recorded in D39; this section is
+the reference form.
+
+⚠️ **Security warning first.** `https://tcrf.net/Notes:Super_Paper_Mario` —
+linked as a resource from `spm-docs` — served **no game documentation at all**.
+It served a prompt-injection payload addressed "to LLMs", falsely claiming the
+user had requested it, instructing the reader to truncate files to zero bytes
+and circularly swap file contents, with a disclaimer that TCRF "isn't
+responsible for damage". Not complied with. **Treat that URL as hostile to
+automated tooling.** Unknown whether page-specific vandalism or broader.
+
+## Corrections to the original snapshot
+
+| Original claim | Correction |
+|---|---|
+| "overwhelmingly centered on one author: SeekyCt" | ⚠️ **Overstated.** Seeky supplies the *foundations*, but **JohnP55** (`evtpatch`, `spm-porter`, `SPMNetMemoryAccess`), **L5050** (Flipside-Mod-Manager, several large mods), **shiken-yme**, **skawo**, **AchtungKatse** and others carry substantial independent work. ~8–10 active technical contributors. |
+| `chainrel` listed as live 2026 activity and the answer to multi-mod | ⛔ **It is a three-commit stub.** The loader body is wrapped in `#if 0`; what exists is a boot-time picker UI drawing `"test string"` ten times. Even the dead code is single-successor (`mod.rel` → `chain.rel`), not N mods. |
+| "`spm-rel-loader` … no commits since 2022-06-13" — flagged as a maintenance gap | ✅ True, but **it has been superseded**, not abandoned. `spm-loaders`/`relloader3` is the current loader. |
+| Gap #2: "The decomp's `symbols.yml` is the richer source" | ⚠️ **There is no `symbols.yml`.** The real files are per-version plain text: `config/EU0/symbols.txt`. The "richer source" conclusion holds, and is stronger than stated — see below. |
+| Gap #5: "No dedicated SPM texture/model tool surfaced" | ⚠️ **Superseded.** `SPME` does U8/TPL/LZSS and `map.bin ↔ FBX`; `Flint` is a message editor; `SpmViewer` and `spm-level-dumper` exist. See "Asset tooling" below. |
+| Gap #3: "a maintained evt round trip" | ✅ Confirmed a real gap. `evt-assembler` is archived (2021), ~200 lines, no expressions, macros or labels. `bleck`'s compiler is already well past it. |
+
+## The unclaimed problem: multiple code mods
+
+⛔ **Nobody has solved it.** This is the clearest differentiator available.
+
+- Flipside-Mod-Manager README: *"assume that you can only have one rel mod
+  installed at a time"*. It hard-codes the assumption — `mod.rel` is excluded
+  from backup, and uninstall does `remove_all(files/mod)`.
+- `spm-lunatic-pit` README: *"Please do not enable any more than one SPM mod at
+  one time, as they are not cross-compatible."*
+- `relloader3` loads exactly one file, `break`ing on first match.
+- Several mods carry a copy-pasted `include/chainloader.h` declaring
+  `void tryChainload()` with **no implementation anywhere in the tree**.
+- The scene's shared `hookFunction()` writes a branch over instruction 0 and
+  builds a trampoline, so **two mods hooking the same function silently clobber
+  each other** — the actual hard part, and unaddressed.
+
+⚠️ **The gotcha whoever solves it will hit**, from `relloader3/util.cpp`:
+
+```cpp
+// Use negative alignment to allocate from tail so that relF.rel won't shift
+return MEMAllocFromExpHeapEx(handle, size, -alignment);
+```
+
+There is also a `HEAP_MEM1_UNUSED` heap; before `memInit` you must carve from
+`OSGetMEM1ArenaHi()` instead.
+
+## The Gecko code can travel inside the disc
+
+The most directly useful practical finding. Flipside-Mod-Manager does:
+
+```
+wstrt patch extracted/sys/main.dol --add-sect ./gct/EU0.gct
+```
+
+Wiimms SZS Toolset's [`--add-sect`](https://szs.wiimm.de/info/add-section.html)
+creates a **new TEXT section at `0x80001800` holding an internal copy of
+`codehandleronly` plus the codes, and patches the DOL entry to branch into it.**
+
+Consequences: no `R8PP01.ini`, no `EnableCheats`, no Riivolution, no USB-loader
+cheat engine — on emulator *or* hardware. The claim in `code-mods.md` that "the
+Gecko code is still required" is true but has this escape hatch. 🔶 Not yet
+tried here; `wstrt` is a separate tool from `wit`.
+
+## Loaders: `spm-loaders` supersedes `spm-rel-loader`
+
+`relloader3` defines an actual platform ABI:
+
+- **Fixed reserved RAM `0x80004200`–`0x800060bb`** — the unused TRK interrupt
+  table, at the same address in every region and revision.
+- **Payload header, magic `SPMP`**: `{headerMagic, headerVersion, payloadMagic,
+  payloadVersion, context, loadAddress, entrypoint, hookAddress,
+  implementationType, implementationVersion}`. `implementationType` is
+  0 gecko / 1 DOL patch / 2 Riivolution / 3 save exploit — **so a mod can ask at
+  runtime how it was loaded.**
+- **Region filenames** `./mod/eu0.rel`, `us2.rel`, … with `mod.rel` as legacy
+  fallback. Also loads from NAND.
+- **Documented size budgets:** saveloader `0xf4c`; **Dolphin's Gecko codehandler
+  caps codes at `0xcb0`, described as "the current bottleneck"**; relloader3
+  itself `0x1ebc`.
+
+## `evt` at runtime: `evtpatch`
+
+[JohnP55/evtpatch](https://github.com/JohnP55/evtpatch) is how this scene
+actually modifies vanilla game logic, and it is complementary to compiling new
+scripts rather than competing with it.
+
+- API: `hookEvt`, `hookEvtByOffset`, `hookEvtReplace`, `hookEvtReplaceBlock`,
+  `patchEvtInstruction`.
+- **It adds two opcodes to the VM** — `Call` and `ReturnFromCall`, giving `evt`
+  a call stack it lacks natively — by patching `evtmgrCmd`'s dispatcher and
+  **bypassing `make_jump_table`'s opcode bound check at `+0xe0`**.
+- ⚠️ It rebuilds jump tables after mutation, because `make_jump_table` caches
+  `lbl` positions at script-entry time. **A constraint `bleck` will hit the
+  moment it emits `LBL`/`GOTO`, which it currently does not.**
+- Scripts are reachable by name from a REL — `mapDataPtr("he3_01")->initScript`,
+  `getItemUseEvt(87)` — so hooking an existing map or item needs no file
+  surgery at all.
+
+## Symbols: the decomp is 11× richer than the lst
+
+| Source | Symbols (eu0) | Sizes/types? |
+|---|---|---|
+| `spm-headers/linker/spm.eu0.lst` — what `bleck` uses | **976** | no |
+| `spm-decomp/config/EU0/symbols.txt` | **43,944 total, ~9,566 human-named** | **yes** |
+
+One regex parses it:
+`^(\S+)\s*=\s*(\.?\w+):0x([0-9A-F]+);\s*//\s*(.*)$`, attributes
+`type:{function,object,label}`, `size:0x…`, `scope:…`. Filter
+`^(@|fn_|lbl_|jumptable_)` for the meaningful set.
+
+Also: **`L5050/spm-headers` is ahead of upstream** — eu0 `34,330 B` vs
+`33,661 B`, with commits adding map, `itemMain` and `mario_pouch` symbols.
+
+⚠️ **`spm-decomp/src/evtmgr_cmd.c` (3352 lines) is fully decompiled** and is the
+ground truth for every opcode handler. It is what settled `SET`/`SETI`/`SETF`
+(D39). ⚠️ But `evtGetValue`/`evtSetValue`/`evtGetFloat`/`evtSetFloat` are **not**
+decompiled — zone-dispatch semantics are documented only by ttydasm's
+reimplementation.
+
+## `evt` semantics: the canonical references
+
+1. **[`ttyd-opc-summary.txt`](https://github.com/PistonMiner/ttyd-tools/blob/master/ttyd-tools/docs/ttyd-opc-summary.txt)**
+   — 257 lines, `Hex | Dec | Original Mnemonic | ttydasm Mnemonic | Summary` for
+   every opcode. **The best evt reference in either community.**
+2. `spm-decomp/src/evtmgr_cmd.c` — matching C for the handlers.
+3. `ttydasm.cpp`'s `categorizeExpr`/`exprToString` — the expression-zone
+   decoder, with SPM's bases already `#ifdef GAME_SPM`'d in.
+
+⚠️ **SPM vs TTYD differ in exactly one place:** SPM inserts `ClampInt` after the
+float mem-ops, so **every opcode from `0x4A` up is shifted by one** between the
+two games. Also `cAddrBase`/`cFloatBase` differ (SPM `-270000000`/`-240000000`;
+TTYD `-250000000`/`-230000000`). Everything else is shared.
+
+`evt-disassembler --cpp` emits the same `evt_cmd.h` macro form `bleck` targets —
+a free round-trip oracle. ⚠️ It needs a **RAM dump**, not a file.
+
+## Asset tooling — better than the original snapshot claimed
+
+- **[SPME](https://github.com/InconspicuousCactus/SPME)** (C++) — `u8
+  extract/compile`, `tpl dump`, `map to_fbx`, `map from_glb`, `lzss
+  decompress/compress`, plus an OpenGL preview. **Ships an ImHex pattern file**
+  for the map format. Known limits, from its own README: cannot generate
+  `cameraroad.bin`, `setup/*.bin` or `bg/*.tpl` (new maps must be
+  "frankensteined" from an existing one); textures >512×512 hang the game; no
+  triangle-strip generation; **"LZSS compression is not implemented correctly"**.
+- **[Flint](https://github.com/Luma48/Flint)** (PyQt5) — message/text editor with
+  in-editor rendering preview; outputs Riivolution patches.
+- **[skawo's editor](https://github.com/skawo/Super-Paper-Mario-Level-Editor-Randomizer)**
+  — setup/enemy-spawn editor plus randomizer, as the original snapshot said.
+- **[spm-level-dumper](https://github.com/BraidenPsiuk/spm-level-dumper)** — dumps
+  300+ levels' geometry and collision to `.obj`.
+- **PistonMiner's 010 Editor templates** — `MarioSt_CameraRoad.bt`,
+  `MarioSt_AnimGroupBase.bt`, `MarioSt_WorldData.bt`. `CameraRoad.bt` is likely
+  the head start SPME's TODO is missing.
+- **noclip.website** renders SPM maps; its TypeScript source is an independent,
+  readable implementation of the format.
+
+The scene's own approach is notable: **runtime patching rather than file
+editing.** `SPM-RPG-Battles` swaps TPL entries in RAM and `.incbin`s custom art
+into the REL rather than rebuilding archives.
+
+## Region porting
+
+[JohnP55/spm-porter](https://github.com/JohnP55/spm-porter) — Python, with
+pre-computed match CSVs (`pal0-us0.csv`, `pal0-jp0.csv`, …) generated by
+**stebler's `portfinder` from mkw-sp**. ⚠️ *"Currently only supports porting
+.text (code addresses)."*
+
+This is the answer to the original snapshot's gap #1, and it partly exists.
+
+## Community
+
+| Venue | Link |
+|---|---|
+| **SPM Speedrunning Discord** — the primary hub, where RE and modding discussion happens | https://discord.gg/dbd733H |
+| Star Haven — umbrella Paper Mario modding community (~5.1K) | https://discord.com/invite/WuKt67e |
+| L5050's server — Flipside-Mod-Manager support | https://discord.gg/CeXnez2Bj7 |
+| Paper Mario Technical Knowledge Base — ⚠️ SPM page explicitly under construction | https://papermariotkb.wiki.gg/ |
+
+⚠️ **`docs.starhaven.dev` is Paper Mario 64 only** — no SPM content.
+⛔ **No SPM mod has a written postmortem.** Knowledge transfer is Discord plus
+reading each other's source. That is the ecosystem's largest documentation gap,
+and an argument for keeping this project's decision log public.
+
+## Licensing map
+
+| Project | License |
+|---|---|
+| `spm-headers` `include/`, `decomp/`, `linker/` | **MIT** |
+| `spm-headers/mod/` | GPLv3 |
+| `spm-rel-loader`, `evtpatch`, `evt-disassembler`, `evt-assembler`, L5050's mods | **GPLv3** |
+| **`Flipside-Mod-Manager`** | ⚠️ **none — all rights reserved** |
+
+⚠️ **The trap:** FMM has no LICENSE file, but its `src/Rel Loader.asm` is plainly
+derivative of SeekyCt's **GPLv3** `spm-rel-loader/loader/loader.s` — same
+structure, same `relWork` flag-byte protocol, extended with more region tables.
+The `gct/*.gct` blobs are its assembled output. **Do not copy from FMM.** Take
+the loader from `spm-rel-loader` under GPLv3, or rebuild from published
+addresses — addresses are facts, and facts are not copyrightable.
+
+⚠️ Also: **`spm-rel-loader` re-bundles the MIT headers under its repo-wide GPLv3
+LICENSE.** Always take headers and lsts from `spm-headers`.
+
+## Odds and ends worth not rediscovering
+
+- **Save-file code execution** (`spm-loaders/saveloader`): a crafted save
+  overflows a stack buffer via a fake item description, firing when the player
+  opens the items menu. Four stages, survives reboot. **Unmodified disc, no
+  Gecko, no Riivolution, on retail hardware.**
+- **Dolphin detection**, credited to TheLordScruffy:
+  `IOS_Open("/sys", 1) == -106`, falling back to probing `/dev/dolphin`.
+- **Mods persist state in unused `GSW` slots** (`gsw[1900]` etc.) rather than
+  changing the save format — free persistence, no compatibility break. ⚠️ But
+  `spm-loaders`' save exploit also claims save space; writing there collides.
+- **Networking from inside the game**: `SPMNetMemoryAccess` runs an HTTP server
+  on the Wii exposing read/write/msgbox, with a Python client. A better RE
+  feedback loop than watching memory in Dolphin.
+- **`spm-docs/misc/`** is an under-mined trove: `mapscriptlocs.txt` (every map's
+  init-script address in both rel variants), `dolscriptlocs.csv` /
+  `relscriptlocs.csv` (likely evt script locations), `filemap.txt`,
+  `setupfiles.md`, `wiidungeon.md` (the Pit of 100 Trials is defined by an
+  LZ-compressed XML file), `utilcodes.txt`.
+- ⛔ **`SPM-RPG-Battles` has no usable README** despite being the largest mod
+  codebase in the scene (custom badge system, menus, NPC RPG driver, save
+  manager, sound and texture patching). **The single richest unmined source.**
+
+## What did not change
+
+Nothing found supersedes the D37 decision to compile to `evt` rather than ship a
+VM. **No one else has a script compiler** — `evt-assembler` was the closest and
+it is archived and far weaker. `bleck` compiles *new* scripts; the scene patches
+*existing* ones at runtime. Those are complementary.
