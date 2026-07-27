@@ -232,6 +232,54 @@ a name table or archive directory. Not investigated further.
 
 ---
 
+## `setup/*.dat` — enemy placement files ✅ **fully decoded**
+
+227 files in `files/setup/`, one per map, named after the map. **Every byte of
+every file is accounted for by the structure below** — validated by parsing all
+227 with no exceptions.
+
+```c
+struct SetupFile {
+    u16 version;          // 1..6
+    u16 padding;          // always 0
+    Enemy entries[100];   // ALWAYS exactly 100; stride depends on version
+    // v6 only, and only when the map places items:
+    u32 itemCount;
+    u32 itemFormat;       // always 20051201
+    Item items[itemCount];// 16 bytes each
+};
+```
+
+**The entry stride is a function of the version**, which is what makes file
+sizes look arbitrary until you look at the header:
+
+| version | entry stride | base size | files |
+|---:|---:|---:|---:|
+| 1 | 28 | 2,804 | 1 |
+| 2 | 96 | 9,604 | 2 |
+| 3 | 100 | 10,004 | 10 |
+| 4 | 104 | 10,404 | 9 |
+| 5 | 108 | 10,804 | 7 |
+| 6 | 112 | 11,204 | **198** |
+
+`base size = 4 + 100 * stride` holds exactly for every version.
+
+**Item sections appear on 14 files, all version 6.** Counts observed: 4, 5, 6,
+10 (×2), 15, 16, 18, 20, 24, 27, 48 (×3). `itemFormat` is `20051201` on every
+one — the same constant `spm-docs` records as `SETUPOBJ_FORMAT_VERSION`,
+confirmed here independently.
+
+⚠️ **Two widely-repeated claims are wrong.** TCRF's SPM notes link a Google Doc
+stating the files are *"consistently 11,204 bytes"* with a fixed 112-byte
+stride. That is true of 184 of 227 files and false of the other 43. TCRF itself
+flags the doc with *"entries aren't always 112 bytes, says Skawo"* — correct,
+and the table above is the quantification. `spm-docs` says items exist in v5 and
+v6; on this disc **no v5 file carries one**.
+
+The 100-entry array is fixed regardless of how many enemies a map actually
+uses — unused slots are zero-filled, which is why a nearly-empty map still
+produces an 11 KB file.
+
 ## us0 vs eu0 — tree comparison ✅
 
 Diffing the two extracted file lists: **82 differences, all additions in eu0.

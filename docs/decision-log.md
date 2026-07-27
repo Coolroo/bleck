@@ -2007,3 +2007,63 @@ above", so it is a second source rather than a copy.
 ⚠️ It currently sits at the repo root as a 121 KB browser-saved HTML file, and
 it is third-party content under TCRF's own licence. Both worth tidying before
 anything depends on it.
+
+
+---
+
+## D42 — The setup file format, decoded from the disc (2026-07-27)
+
+A Google Doc linked from TCRF's SPM notes documents the enemy placement files.
+Rather than record its claims, they were checked against all 227 files in
+`extracted/eu0/files/setup/`. ✅ **The format is now fully decoded** — every byte
+of every file is accounted for, with no exceptions.
+
+Structure and the per-version stride table are in
+[`disc-layout.md`](disc-layout.md). The short version:
+
+```
+u16 version (1..6) · u16 padding (always 0)
+Enemy entries[100]        // ALWAYS 100; stride = 28/96/100/104/108/112 by version
+u32 itemCount · u32 itemFormat (20051201) · Item items[n]   // v6 only, 16 B each
+```
+
+`base size = 4 + 100 * stride`, exact for all six versions.
+
+### What the sources got wrong, and how they reconcile
+
+- ⛔ The Google Doc says the files are **"consistently 11,204 bytes"** with a
+  fixed 112-byte stride. True of **184 of 227**; false of the other 43.
+- ✅ TCRF annotates that doc with *"entries aren't always 112 bytes, says
+  Skawo"* — correct, and the version→stride table is the quantification nobody
+  had written down.
+- ✅ `spm-docs/misc/setupfiles.md` says "100 enemy entries (size varies with
+  version)" — **confirmed**, and now quantified.
+- ⚠️ `spm-docs` says items exist in **v5 and v6**. On this disc, **no v5 file
+  carries an item section**; all 14 that do are v6.
+- ✅ `SETUPOBJ_FORMAT_VERSION == 20051201` independently confirmed — it appears
+  on every item section found.
+
+The two sources are consistent once the version field is read: the doc measured
+only v6 files, which really are 11,204 bytes, and generalised.
+
+### Why this was worth doing
+
+It is a small instance of the rule this project already has — *verify "no tool
+exists" and "the format is X" claims against the actual disc* — and it paid off
+in three ways: it corrected a widely-linked document, it quantified a caveat
+that existed only as a one-line aside, and it turned a 🔶 into a ✅ without
+writing any new tooling. The whole check was a fifteen-line script against data
+already on disk.
+
+⚠️ **It does not settle D13.** That question is which of the two byte-identical
+setup copies the game actually reads — the standalone `setup/*.dat` or the copy
+embedded in some map archives. Knowing the format does not answer it; that still
+needs the change-one-copy-and-boot experiment. But it does mean a future
+experiment can *generate* a valid setup file rather than hand-patching bytes.
+
+### Incidental
+
+The Google Doc itself requires sign-in and could not be read directly; the
+pastebin mirror TCRF links beside it was readable and is the source of the
+claims above. Worth remembering that TCRF pages often carry a mirror next to a
+Drive link for exactly this reason.
