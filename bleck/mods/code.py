@@ -102,6 +102,24 @@ def collect_sources(mod: Mod, spec) -> list[Path]:
     return found
 
 
+def banner_for(mod: Mod) -> emit.Banner | None:
+    """The on-screen label this mod should draw, if any.
+
+    The text comes from the mod's own name unless the manifest overrides it, so
+    the common case needs nothing declared: build a mod, and the disc says which
+    mod it is.
+    """
+    spec = mod.manifest.code
+    if spec is None or not spec.banner.enabled:
+        return None
+    return emit.Banner(
+        text=spec.banner.label(mod.name),
+        sequences=tuple(
+            emit.SEQUENCE_NAMES.index(name) for name in spec.banner.sequences
+        ),
+    )
+
+
 def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     """Compile one mod's script and native sources into its `mod.rel`."""
     spec = mod.manifest.code
@@ -110,6 +128,7 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
 
     sources = collect_sources(mod, spec)
     script_path = mod.root / spec.script if spec.has_script else None
+    banner = banner_for(mod)
     compiled = None
 
     if script_path is not None:
@@ -120,7 +139,9 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
             )
         try:
             compiled = compile_source(
-                script_path.read_text(encoding="utf-8"), origin=spec.script
+                script_path.read_text(encoding="utf-8"),
+                origin=spec.script,
+                banner=banner,
             )
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(str(script_path))}") from exc
@@ -128,7 +149,9 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     else:
         # Native-only: still needs the REL entry points and the `mod_prolog`
         # hand-off, just nothing to hand to the scheduler.
-        scaffolding = emit.generate_bare(origin=f"{mod.name} native sources").text
+        scaffolding = emit.generate_bare(
+            origin=f"{mod.name} native sources", banner=banner
+        ).text
 
     headers = env.path(env.HEADERS_DIR)
     result = toolchain.build_rel(

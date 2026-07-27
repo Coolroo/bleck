@@ -31,6 +31,14 @@ from bleck.script.errors import Position, ScriptError
 #: reordering a file cannot silently change which script runs.
 ENTRY_SCRIPT = "main"
 
+#: The game's sequences, in order (spm/seqdrv.h). A name's index is both the
+#: value the game puts in `seqWork.seq` and the row it uses in `seq_data[]`.
+SEQUENCE_NAMES = ("logo", "title", "game", "mapchange", "gameover", "load")
+
+#: Where the banner is drawn unless a mod says otherwise. The title screen is
+#: where someone checks which disc they are running.
+DEFAULT_BANNER_SEQUENCES = ("title",)
+
 _PREFIX = "bleck_"
 
 _HEADER = """\
@@ -78,36 +86,18 @@ __attribute__((weak)) void mod_prolog(void)
 """
 
 
-_FOOTER = """
-/*
-    Starting the script, and keeping it started.
-
-    `_prolog` runs the instant the loader links this module, far too early to
-    hand anything to the script scheduler: the evt manager is not initialised
-    yet, so `evtEntry` there does nothing at all. Hooking
-    `seq_data[SEQ_GAME].init` does not work either. Both were measured, not
-    guessed -- D38 and D40.
-
-    What does work is `seq_data[SEQ_GAME].main`, verified by reading the running
-    game's memory from outside the emulator: the script is created and then runs
-    once per frame (D43).
-
-    The second half is less obvious. **A script does not survive a map change** --
-    evt state is torn down and rebuilt, and a script started once simply stops,
-    which was measured the same way. So rather than starting once, every
-    sequence other than gameplay re-arms a flag and gameplay starts the script
-    whenever it is armed. That covers map changes, game overs and loads without
-    needing to know which of them resets evt.
-*/
-
+#: Everything that needs a per-frame hook on the game's sequence table. Shared
+#: by scripts (which need re-arming) and the banner (which needs drawing), so
+#: a mod using both installs one set of hooks, not two.
+_SEQ_TABLE = """
 typedef void(SeqFunc)(void *);
 
 typedef struct
-{{
+{
     SeqFunc *init;
     SeqFunc *main;
     SeqFunc *exit;
-}} SeqDef;
+} SeqDef;
 
 /* Resolved by name from the symbol list, like everything else here. */
 extern SeqDef seq_data[];
@@ -121,32 +111,13 @@ extern SeqDef seq_data[];
     than .bss. The loader allocates this module's bss but nothing documents
     whether it zeroes it, and depending on that would be a silent hazard.
 */
-static SeqFunc *bleck_real_main[BLECK_SEQ_COUNT] = {{
+static SeqFunc *bleck_real_main[BLECK_SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
-}};
+};
+"""
 
-static u32 bleck_needs_start = 1;
-
-static void bleck_after_seq(u32 seq, void *work)
-{{
-    if (seq == BLECK_SEQ_GAME)
-    {{
-        if (bleck_needs_start)
-        {{
-            bleck_needs_start = 0;
-            evtEntry({entry}, 0, 0);
-        }}
-    }}
-    else
-    {{
-        bleck_needs_start = 1;
-    }}
-
-    if (bleck_real_main[seq] != 0)
-        bleck_real_main[seq](work);
-}}
-
+_SEQ_INSTALL = """
 static void bleck_seq0(void *w) {{ bleck_after_seq(0, w); }}
 static void bleck_seq1(void *w) {{ bleck_after_seq(1, w); }}
 static void bleck_seq2(void *w) {{ bleck_after_seq(2, w); }}
@@ -171,25 +142,18 @@ void _prolog(void)
 
     mod_prolog();
 }}
-
-void _epilog(void)
-{{
-}}
-
-void _unresolved(void)
-{{
-}}
 """
 
-
-#: For a mod that ships only native sources. No script means no scheduler
-#: hand-off and nothing to hook, so `_prolog` does one thing.
-BARE_FOOTER = """
+#: For a mod with neither a script nor a banner: nothing to hook, so `_prolog`
+#: does one thing.
+_PLAIN_PROLOG = """
 void _prolog(void)
 {
     mod_prolog();
 }
+"""
 
+_ENTRY_POINTS = """
 void _epilog(void)
 {
 }
@@ -198,6 +162,128 @@ void _unresolved(void)
 {
 }
 """
+
+_SCRIPT_COMMENT = """
+/*
+    Starting the script, and keeping it started.
+
+    `_prolog` runs the instant the loader links this module, far too early to
+    hand anything to the script scheduler: the evt manager is not initialised
+    yet, so `evtEntry` there does nothing at all. Hooking
+    `seq_data[SEQ_GAME].init` does not work either. Both were measured, not
+    guessed -- D38 and D40.
+
+    What does work is `seq_data[SEQ_GAME].main`, verified by reading the running
+    game's memory from outside the emulator: the script is created and then runs
+    once per frame (D43).
+
+    The second half is less obvious. **A script does not survive a map change** --
+    evt state is torn down and rebuilt, and a script started once simply stops,
+    which was measured the same way. So rather than starting once, every
+    sequence other than gameplay re-arms a flag and gameplay starts the script
+    whenever it is armed. That covers map changes, game overs and loads without
+    needing to know which of them resets evt.
+*/
+
+static u32 bleck_needs_start = 1;
+"""
+
+_SCRIPT_BODY = """    if (seq == BLECK_SEQ_GAME)
+    {{
+        if (bleck_needs_start)
+        {{
+            bleck_needs_start = 0;
+            evtEntry({entry}, 0, 0);
+        }}
+    }}
+    else
+    {{
+        bleck_needs_start = 1;
+    }}
+"""
+
+#: The on-screen label naming the loaded mod.
+#:
+#: Every call here mirrors `spm-rel-loader`'s title-screen example, which is the
+#: only known-working use of this API: start, style, measure, draw -- and draw
+#: *before* delegating to the real sequence main.
+_BANNER_BLOCK = """
+/*
+    Naming the loaded mod on screen.
+
+    Text is drawn in screen space, which is centred with y increasing upward:
+    `spm-rel-loader` centres a string with `x = -(width / 2)` and places it near
+    the top of the title screen with `y = 200`. So the visible area is roughly
+    x -320..320 and y -240..240, and the bottom-right corner is (+320, -240).
+    The margins below back off from that corner far enough to survive overscan.
+
+    `FontGetMessageWidth` measures the string so it can be right-aligned rather
+    than positioned by guesswork, which also keeps a long mod name on screen.
+*/
+
+extern void FontDrawStart(void);
+extern void FontDrawEdge(void);
+extern void FontDrawColor(u8 *color);
+extern void FontDrawScale(float scale);
+extern void FontDrawNoiseOff(void);
+extern void FontDrawRainbowColorOff(void);
+extern void FontDrawString(float x, float y, const char *text);
+extern unsigned short FontGetMessageWidth(const char *text);
+
+#define BLECK_BANNER_RIGHT 296.0f
+#define BLECK_BANNER_BOTTOM (-200.0f)
+#define BLECK_BANNER_SCALE 0.6f
+
+static const char bleck_banner_text[] = {text};
+
+/* wii/gx.h GXColor, four bytes. Not const: FontDrawColor overwrites alpha. */
+static u8 bleck_banner_color[4] = {{255, 255, 255, 255}};
+
+/* Which sequences draw it. .rodata, so the loader's bss handling is moot. */
+static const u8 bleck_banner_on[BLECK_SEQ_COUNT] = {{{flags}}};
+
+static void bleck_draw_banner(void)
+{{
+    float width;
+
+    FontDrawStart();
+    FontDrawEdge();
+    FontDrawColor(bleck_banner_color);
+    FontDrawScale(BLECK_BANNER_SCALE);
+    FontDrawNoiseOff();
+    FontDrawRainbowColorOff();
+
+    width = (float) FontGetMessageWidth(bleck_banner_text) * BLECK_BANNER_SCALE;
+    FontDrawString(BLECK_BANNER_RIGHT - width, BLECK_BANNER_BOTTOM,
+                   bleck_banner_text);
+}}
+"""
+
+_BANNER_BODY = """    if (bleck_banner_on[seq])
+        bleck_draw_banner();
+"""
+
+
+@dataclass(frozen=True)
+class Banner:
+    """An on-screen label naming the mod that is loaded.
+
+    A disc looks identical to a stock one until something visibly differs, so a
+    player juggling several builds has no way to tell which is in the drive.
+    This draws the answer on the screen.
+    """
+
+    text: str
+    sequences: tuple[int, ...] = (1,)
+    """Sequence indices to draw on. Defaults to the title screen."""
+
+    @property
+    def flags(self) -> str:
+        """The `sequences` set rendered as a C initialiser, one flag per row."""
+        on = set(self.sequences)
+        return ", ".join(
+            "1" if index in on else "0" for index in range(len(SEQUENCE_NAMES))
+        )
 
 
 @dataclass(frozen=True)
@@ -275,18 +361,60 @@ def _script_array(script: CompiledScript) -> str:
     return "\n".join(lines)
 
 
-def generate_bare(origin: str = "native sources") -> GeneratedSource:
+def _footer(entry: str, banner: Banner | None) -> str:
+    """Assemble the scaffolding that runs the mod, from the pieces it needs.
+
+    A script needs a per-frame hook to start and re-start it; so does a banner,
+    to draw it. When both are present they share one set of hooks rather than
+    installing two layers of them.
+    """
+    if entry == "" and banner is None:
+        return _PLAIN_PROLOG + _ENTRY_POINTS
+
+    parts = [_SEQ_TABLE]
+    body = ""
+
+    if banner is not None:
+        parts.append(
+            _BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
+        )
+        body += _BANNER_BODY
+
+    if entry:
+        parts.append(_SCRIPT_COMMENT)
+        body += ("\n" if body else "") + _SCRIPT_BODY.format(entry=entry)
+
+    parts.append(
+        "\nstatic void bleck_after_seq(u32 seq, void *work)\n"
+        "{\n"
+        f"{body}\n"
+        "    if (bleck_real_main[seq] != 0)\n"
+        "        bleck_real_main[seq](work);\n"
+        "}\n"
+    )
+    parts.append(_SEQ_INSTALL.format())
+    parts.append(_ENTRY_POINTS)
+    return "".join(parts)
+
+
+def generate_bare(
+    origin: str = "native sources", banner: Banner | None = None
+) -> GeneratedSource:
     """Scaffolding for a mod that ships only native C.
 
     The REL format still needs its three entry points, and the mod still needs
     somewhere to be called from, but there is no script to schedule.
     """
-    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + BARE_FOOTER
+    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + _footer("", banner)
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
 
 
-def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSource:
+def generate(
+    program: CompiledProgram,
+    origin: str = "a script",
+    banner: Banner | None = None,
+) -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
     entry = _entry_script(program)
 
@@ -323,7 +451,7 @@ def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSou
         )
 
     parts.extend(_script_array(script) for script in program.scripts)
-    parts.append(_FOOTER.format(entry=f"{_PREFIX}script_{entry}"))
+    parts.append(_footer(f"{_PREFIX}script_{entry}", banner))
 
     text = "\n\n".join(parts)
     _require_ascii(text)
