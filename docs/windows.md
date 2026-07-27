@@ -11,6 +11,19 @@ Windows machine is what turns "should work" into "does" — please report back.
 
 ## Install
 
+**With [uv](https://docs.astral.sh/uv/) (recommended)** — no venv activation, no
+execution-policy dance, and the exact dependency versions from `uv.lock`:
+
+```powershell
+winget install --id=astral-sh.uv -e     # or: irm https://astral.sh/uv/install.ps1 | iex
+
+git clone git@github.com:Coolroo/bleck.git
+cd bleck
+uv sync --extra dev
+```
+
+**With pip**, if you would rather not add a tool:
+
 ```powershell
 git clone git@github.com:Coolroo/bleck.git
 cd bleck
@@ -30,13 +43,14 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 ## Verify
 
 ```powershell
-python -m pytest          # expect 134 passed
-python scripts\lint.py    # expect "all checks passed"
-bleck --help
+uv run pytest             # expect 134 passed
+uv run python scripts\lint.py
+uv run bleck --help
 ```
 
-`scripts\lint.ps1` is a wrapper around the same thing. The real logic lives in
-`scripts/lint.py` so no shell is required.
+Without uv, activate the venv first and drop the `uv run` prefix.
+`scripts\lint.ps1` wraps the same logic, which lives in `scripts/lint.py` so no
+shell is required.
 
 ## External tools
 
@@ -66,11 +80,11 @@ is the complete list.
 ## Use
 
 ```powershell
-bleck extract "path\to\Super Paper Mario.rvz" extracted\eu0
-bleck mod new my-mod
-bleck mod vendor my-mod lyt/title.bin.uk/arc/timg/mario.tpl
+uv run bleck extract "path\to\Super Paper Mario.rvz" extracted\eu0
+uv run bleck mod new my-mod
+uv run bleck mod vendor my-mod lyt/title.bin.uk/arc/timg/mario.tpl
 # edit mods\my-mod\overlay\files\lyt\title.bin.uk\arc\timg\mario.tpl
-bleck mod build my-mod out.wbfs
+uv run bleck mod build my-mod out.wbfs
 ```
 
 Disc paths use forward slashes on every platform — they address disc and archive

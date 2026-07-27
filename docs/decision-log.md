@@ -867,3 +867,39 @@ says "we don't know which copy the game reads" is a confession, not a feature.
 visualiser before editing is tractable (the feedback loop is otherwise "rebuild
 400 MB, boot, squint"), and cross-region symbol porting — the highest-leverage
 gap in the wider ecosystem — only matters once there is code worth porting.
+
+---
+
+### D29 — uv project, with a committed lockfile ✅
+
+Adopted [uv](https://docs.astral.sh/uv/) for dependency management. `pyproject.toml`
+was already PEP 621, so this was mostly additive: `uv.lock` is generated and
+**committed**, and `uv sync --extra dev` reproduces the environment exactly.
+
+**Why, concretely — not fashion:**
+
+- **We had no lockfile, and version drift has already bitten us.** pylint 4.0.6
+  duplicates plugin messages with `jobs > 1` (D21); our config works around it.
+  Without pinning, that resurfaces silently on someone else's machine.
+- **`uv run` removes venv activation**, which materially simplifies the Windows
+  instructions — no `Activate.ps1`, no execution-policy workaround (D27/windows.md).
+- Installs are fast, which matters on this hardware.
+
+**Fixed a real gap while migrating: `pyelf2rel` was installed but declared
+nowhere.** I pulled it in ad hoc during the D26 toolchain work and never added
+it to `pyproject.toml`, so a fresh clone would not have had it. Now in `dev`
+extras, with a note that it becomes a *runtime* dependency when code mods land.
+Exactly the class of mistake a lockfile prevents.
+
+⚠️ **`bleck` still has zero runtime dependencies** and should stay that way where
+practical — it is a toolkit people install to use, not a library.
+
+**Also surfaced a test fragility.** `tests/test_platform.py` imports helpers from
+`tests/test_mods.py`, which worked only because `python -m pytest` happens to put
+the CWD on `sys.path`. Under `uv run pytest` — or a bare `pytest` — collection
+failed with `ModuleNotFoundError: No module named 'tests'`. Fixed with
+`pythonpath = ["."]` in the pytest config rather than by mandating one runner.
+The suite now passes under `uv run pytest`, bare `pytest`, and `python -m pytest`.
+
+**Both workflows are supported.** uv is recommended; `pip install -e ".[dev]"`
+still works, and `scripts/lint.py` finds the venv either way.

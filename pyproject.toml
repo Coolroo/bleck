@@ -8,9 +8,19 @@ dependencies = []
 [project.scripts]
 bleck = "bleck.cli.app:main"
 
+# bleck itself has no runtime dependencies. Keep it that way where practical —
+# it is a toolkit people install to use, not a library.
 [project.optional-dependencies]
-# Dev-only. libWiiPy is a cross-check oracle, not a runtime dep — see D16.
-dev = ["libWiiPy>=0.6.0", "pytest>=8.0", "ruff>=0.6", "pylint>=3.2"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+    "pylint>=3.2",
+    # Cross-check oracle for LZ77/U8, not used at runtime — see D16.
+    "libWiiPy>=0.6.0",
+    # ELF -> REL conversion. Dev-only today; becomes a runtime dependency when
+    # code mods land (see docs/code-mods.md).
+    "pyelf2rel>=1.0.9",
+]
 
 [tool.ruff]
 line-length = 90
@@ -74,6 +84,10 @@ max-attributes = 12   # manifests and reports are wide by nature
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Make the repo root importable so tests can share helpers via `tests.*`.
+# Without this the suite only runs under `python -m pytest`, which happens to
+# put the CWD on sys.path; `uv run pytest` and a bare `pytest` would not.
+pythonpath = ["."]
 # `slow` compresses real game data and takes minutes on a Pi — opt in with
 # `-m slow`. Everything else must stay fast enough to run on every change.
 addopts = "-m 'not slow'"

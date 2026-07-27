@@ -8,6 +8,8 @@ mods/*/overlay/
 build/
 
 # Python
+# Note: uv.lock IS committed — reproducible installs are the point.
+.uv-cache/
 __pycache__/
 *.py[cod]
 .venv/

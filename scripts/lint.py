@@ -37,7 +37,12 @@ class Check:
 
 
 def _python() -> str:
-    """Prefer the project virtualenv, falling back to the running interpreter."""
+    """Locate the interpreter with the dev tools installed.
+
+    The project venv first — `uv sync` and `pip install -e` both populate it —
+    then whatever is running this script. Checked in both layouts so the same
+    code works on POSIX and Windows.
+    """
     candidates = [
         REPO / ".venv" / "bin" / "python",
         REPO / ".venv" / "Scripts" / "python.exe",

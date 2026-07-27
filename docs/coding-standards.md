@@ -11,7 +11,12 @@ The script runs all checks even when an early one fails, so one pass shows every
 problem instead of making you re-run after each fix. It prefers `.venv/bin/python`
 and falls back to `python3`.
 
-Install the toolchain with `pip install -e ".[dev]"`.
+Install the toolchain with `uv sync --extra dev` (or `pip install -e ".[dev]"`).
+
+Dependency versions are pinned in **`uv.lock`, which is committed** — the point
+is that everyone resolves the same versions. This matters here: pylint 4.0.6 has
+a behaviour our config works around (`jobs` must stay 1), and silent version
+drift would resurface it.
 
 ---
 
@@ -83,9 +88,9 @@ Currently declared: `BLECK_WIT`, `BLECK_DOLPHIN_TOOL`, `BLECK_EXTRACT_ROOT`,
 ## Running the linters
 
 ```bash
-./scripts/lint.sh --fix          # POSIX
-powershell scripts\lint.ps1 -fix  # Windows
-python scripts/lint.py --fix     # anywhere
+uv run python scripts/lint.py --fix   # anywhere, no activation needed
+./scripts/lint.sh --fix               # POSIX
+powershell scripts\lint.ps1 -fix       # Windows
 ```
 
 The shell wrappers are thin; the logic lives in `scripts/lint.py` so Windows is
