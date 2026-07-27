@@ -364,11 +364,92 @@ room is always a two-digit number.
 | `ls2` | 18 | 🔶 a chapter area |
 | `gn4`, `sp4` | 17 each | 🔶 chapter areas |
 
-🔶 **Which prefix is which chapter is not recorded here, because it has not been
-checked.** The counts and names are observed; the mapping from prefix to
-in-game chapter would be inference. `an`, `aa`, `gn`, `he`, `ls`, `mi`, `sp` and
-`ta` are the remaining prefixes.
+⚠️ **Superseded.** The paragraph below was written before the mapping was
+checked; it has since been established. See *Map ids and chapters* further down.
+
+> 🔶 Which prefix is which chapter is not recorded here, because it has not been
+> checked. The counts and names are observed; the mapping from prefix to
+> in-game chapter would be inference. `an`, `aa`, `gn`, `he`, `ls`, `mi`, `sp`
+> and `ta` are the remaining prefixes.
 
 ⚠️ `MAP_ID_MAX` in `spm/map_data.h` is `0x1d4` (468), comfortably more than the
 383 archives present. So the id space is sparse, or several ids share an
 archive — not yet established which.
+
+---
+
+## Map ids and chapters — ✅ established
+
+Supersedes the 🔶 note above, which said this had not been checked.
+
+### Where map ids come from
+
+✅ **The disc does not record map ids.** A map's *name* is its archive filename;
+its *id* is its index in the game's `mapData[]` array (`0x804031b8`, eu0), and
+that ordering exists only at runtime.
+
+So it was dumped from a running game with `scripts/dump_maps.py` and committed
+as `bleck/backends/mapcatalog.json` — **468 entries, read in six seconds**.
+Generated once, never recomputed: it needs an emulator to produce and cannot
+change for a given build.
+
+### ✅ `mapData[]` order is the game's progression order
+
+The array is contiguous by area, and reads as a playthrough:
+
+| ids | area | what |
+|---|---|---|
+| 0–5 | `aa` | 🔶 prologue / intro |
+| 6 | `bos` | 🔶 boss |
+| 7–25 | `mac` | ✅ Flipside / Flopside |
+| 26–60 | `he` | ✅ **Ch 1** Lineland |
+| 61–103 | `mi` | ✅ **Ch 2** Gloam Valley |
+| 104–141 | `ta` | ✅ **Ch 3** The Bitlands |
+| 142–185 | `gn` | ✅ **Ch 4** Outer Space |
+| 186–226 | `sp` | ✅ **Ch 5** Land of the Cragnons |
+| 227–329 | `wa` | ✅ **Ch 6** Sammer's Kingdom |
+| 330–378 | `an` | ✅ **Ch 7** The Underwhere |
+| 379–434 | `ls` | ✅ **Ch 8** Castle Bleck |
+| 435–452 | `dan` | ✅ Pit of 100 Trials |
+| 453–464 | `mg` | 🔶 minigames |
+| 465–467 | `tst`, `kaw` | 🔶 test |
+
+### How the chapter numbers were fixed
+
+Two **independent anchors**, both from `spm-headers`, pin the sequence:
+
+- `he1_01_tippi_tutorial_evt` — Tippi's tutorial is chapter **1-1**, so `he` is
+  chapter 1.
+- `sammerDefsCh6[30]` in `rel/wa1_02.h` — names chapter **6** outright, and `wa`
+  holds 103 ids, matching Sammer's 100 duel rooms.
+
+Those sit at positions 1 and 6 of the eight chapter runs, with **no gaps between
+them**, so everything in between is fixed by position rather than guessed. Only
+eight prefixes have the full 1–4 sub-levels a chapter needs (`he mi ta gn sp wa
+an ls`), which is exactly the number of chapters.
+
+Location names come from the game's own text: `msg/UK/stg<N>.txt` names them
+(*Yold*, *Merlee*, *Fort Francis*/*Tile Pool*, *Whoa Zone*, *Cragnon*/*Floro*,
+*Sammer*, *Overthere*, *Castle Bleck*), and `machi.txt` — Japanese *machi*,
+town — is Flipside/Flopside.
+
+⚠️ **`sp` is chapter 5, not "space".** The obvious reading of the prefix is
+wrong and was believed here until the anchors were checked; chapter 4 is `gn`.
+A prefix that looks like an abbreviation is not evidence.
+
+### ⚠️ There are more ids than archives
+
+**468 ids, 383 archives.** The gap is concentrated in Sammer's Kingdom: `wa` has
+103 ids but only 13 archives, and the ids run `wa1_04` = 230 then a gap to
+`wa2_01` = 254.
+
+🔶 The obvious reading is that the 100 duel rooms are separate ids reusing a
+handful of archives, which fits how they are generated in-game. Not confirmed.
+
+### Using it
+
+```bash
+uv run bleck maps --areas        # the table above
+uv run bleck maps --chapter 5    # one chapter, in the game's own order
+uv run bleck maps --search mac
+```

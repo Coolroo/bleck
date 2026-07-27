@@ -72,19 +72,29 @@ def cmd_maps(args) -> int:
     index = maps.load(registry.base_root())
 
     if args.areas:
-        print(f"{len(index.entries)} maps in {len(index.areas())} areas")
+        print(f"{len(index.entries)} maps, in the game's own order:\n")
         for area in index.areas():
-            print(f"  {area.area:<8} {area.maps:>3} map(s)")
+            print(f"  {area.describe()}")
         return 0
 
-    found = index.search(args.search) if args.search else index.entries
+    if args.chapter:
+        found = index.chapter(args.chapter)
+        if not found:
+            print(f"no chapter {args.chapter}; the game has 1-8")
+            return 1
+    elif args.search:
+        found = index.search(args.search)
+    else:
+        found = index.entries
+
     if not found:
         print(f"nothing matching {args.search!r} in {len(index.entries)} maps")
         return 1
 
     for entry in found:
-        print(f"  {entry.name:<12} {entry.area:<8} {entry.size:>8,} bytes")
-    print(f"{len(found)} of {len(index.entries)} maps  ({index.source})")
+        ident = f"{entry.map_id:>3}" if entry.map_id >= 0 else "  ?"
+        print(f"  {ident}  {entry.name:<10} {entry.where}")
+    print(f"\n{len(found)} of {len(index.entries)} maps")
     return 0
 
 
@@ -100,4 +110,5 @@ def register(add) -> None:
     p = add("maps", help="list the game's map names, for code.maps")
     p.add_argument("--search", help="only show maps whose name contains this")
     p.add_argument("--areas", action="store_true", help="summarise by area instead")
+    p.add_argument("--chapter", type=int, metavar="N", help="only chapter N (1-8)")
     p.set_defaults(func=cmd_maps)

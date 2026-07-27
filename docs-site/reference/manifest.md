@@ -112,12 +112,21 @@ Every mod has a `mod.json` at its root.
             map is left — evt state is rebuilt on every map change, so nothing
             survives one.
 
-            Map names come from the disc, and `bleck` will list them:
+            You do not have to know map names by heart — `bleck` lists them,
+            with the chapter each belongs to:
 
             ```bash
-            uv run bleck maps --areas          # 383 maps across 45 areas
-            uv run bleck maps --search mac     # mac_01 … mac_19 (Flipside)
+            uv run bleck maps --areas        # every area, in playthrough order
+            uv run bleck maps --chapter 5    # just chapter 5
+            uv run bleck maps --search mac   # Flipside / Flopside
             ```
+
+            ```
+              186  sp1_01     Ch 5-1  Land of the Cragnons
+              187  sp1_02     Ch 5-1  Land of the Cragnons
+            ```
+
+            The leading number is the game's own map id.
 
             A mod using only map hooks does **not** need a `script main`;
             `main` is what runs continuously during gameplay, and a map hook has
