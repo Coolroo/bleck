@@ -2725,3 +2725,68 @@ the probe only reported "installed: yes", this would have looked like success.
 It was `gw[31] == 0` — evidence about the *effect* rather than the *setup* — that
 showed our script never ran, and the heartbeat in `scripts/ingame.py`
 (added for this) that distinguished a freeze from a quiet success.
+
+---
+
+## D52 — The whole game is reachable unattended (2026-07-27)
+
+✅ **`evt_seq_mapchange` drives the game to any map, with no controller input.**
+
+This removes the constraint that has shaped every in-game test so far. D47 found
+an unattended boot reaches exactly two maps — `aa4_01` then `ls4_12`, the attract
+demo — and D48 ruled out injecting a button press. So the other 381 maps were
+untestable without a human.
+
+They are not. A script attached to `aa4_01` (D51) runs on arrival, waits for the
+map to settle, and asks the game to go somewhere else:
+
+```
+script on_arrive {
+    gw[31] = 1
+    wait(120)
+    gw[31] = 2
+    evt_seq_mapchange("he1_01", 0)
+    gw[31] = 3      -- never reached
+}
+```
+
+Measured:
+
+| Observation | Value |
+|---|---|
+| `gw[31]` | **2** — the call was issued and the script then died |
+| Second map recorded | `6865315F 30310000` = **`he1_01`** |
+| Maps seen by t+45 s | **2**, where an unmodified boot reaches 2 only at t+96 s |
+| Stability | held `SEQ_GAME` for 90+ s after arrival |
+
+`gw[31]` stopping at 2 is the confirmation, not a failure: the map change tears
+down evt state and the script with it (D43), so never reaching 3 is what a
+*working* call looks like.
+
+⚠️ The second argument is the destination **door**, passed as `0` to use the
+map's own fallback — `spm/map_data.h` documents `fallbackDoorName` as the
+behaviour when a map is entered with a null door name. It has not been tested
+with a real door name.
+
+### Why this matters more than it looks
+
+Everything in-game verified so far was verified on two maps, both of which the
+demo happened to visit. Anything keyed to a *particular* place — enemy
+placement, a door, an NPC, a chapter's own scripting — was out of reach.
+
+🔶 Not yet tried: chaining several changes to walk a route, or returning. Each
+change kills the script that issued it, so a multi-hop route needs the hook to
+re-arm per map, which the existing `code.maps` mechanism already does.
+
+### Two tooling fixes this run paid for
+
+⚠️ **`bleck script check` required a script named `main`.** A file whose scripts
+are all attached to maps is perfectly valid, and refusing to check it was a
+papercut introduced by D51. Requiring `main` is a rule about how a *mod* starts
+things, not about whether a file is valid, so `check` no longer applies it.
+
+⚠️ **`scripts/ingame.py` now always writes a full transcript** to
+`work/build/ingame.log`. This run was repeated in its entirety because the
+console output was read through `tail` with `--words 9`, and the answer — the
+destination map name — sat in words 9–12. A run costs two to three minutes; the
+log costs nothing. Do not truncate probe output.

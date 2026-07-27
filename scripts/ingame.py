@@ -170,6 +170,9 @@ def main() -> int:
     parser.add_argument(
         "--no-build", action="store_true", help="boot the existing image as-is"
     )
+    parser.add_argument(
+        "--log", help="where to write the full transcript (default: work/build/ingame.log)"
+    )
     args = parser.parse_args()
 
     image = registry.build_root() / f"{args.mod}.wbfs"
@@ -183,7 +186,20 @@ def main() -> int:
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 
-    print(f"booting {image.name} ...")
+    # Everything is written here as well as printed. A run costs two to three
+    # minutes, and reading the console output through `tail` has already thrown
+    # away a probe word that then needed the whole run repeating. The log is
+    # always complete, so re-reading is free.
+    log_path = Path(args.log) if args.log else registry.build_root() / "ingame.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = log_path.open("w", encoding="utf-8")
+
+    def say(line: str) -> None:
+        print(line)
+        log.write(line + "\n")
+        log.flush()
+
+    say(f"booting {image.name} ...   (full log: {log_path})")
     seen = ""
     quiet = 0
     with Session(image, dolphin) as session:
@@ -196,7 +212,7 @@ def main() -> int:
             # usually means the game crashed. Silently running out the clock
             # here once made a hard crash look like a mod that did nothing.
             if session.exited:
-                print(f"[t+{elapsed:>3}s] *** dolphin exited on its own ***")
+                say(f"[t+{elapsed:>3}s] *** dolphin exited on its own ***")
                 break
 
             snapshot = session.read(args.probe, args.words, args.watch_gw)
@@ -207,13 +223,16 @@ def main() -> int:
             # changed" and "the game froze" -- and telling those apart is
             # usually the whole question.
             if line != seen:
-                print(f"[t+{elapsed:>3}s] {line}")
+                say(f"[t+{elapsed:>3}s] {line}")
                 seen = line
                 quiet = elapsed
             elif elapsed - quiet >= 30:
-                print(f"[t+{elapsed:>3}s] ... unchanged for {elapsed - quiet}s")
+                say(f"[t+{elapsed:>3}s] ... unchanged for {elapsed - quiet}s")
                 quiet = elapsed
-    print("dolphin stopped")
+    say("dolphin stopped")
+    log.close()
+    print(f"
+full log: {log_path}")
     return 0
 
 

@@ -19,19 +19,29 @@ from bleck.script import catalog as builtin_catalog
 CATEGORY = "scripting"
 
 
-def _load(path: Path):
-    """Compile a script file, reporting errors against the file the user wrote."""
+def _load(path: Path, require_entry: bool = True):
+    """Compile a script file, reporting errors against the file the user wrote.
+
+    `require_entry` is off for `check`: needing a script called `main` is a rule
+    about how a *mod* starts things, not about whether the file is valid. A file
+    whose scripts are all attached to maps is perfectly good, and refusing to
+    check it was a papercut.
+    """
     if not path.exists():
         raise BleckError(f"no such script: {path}")
     try:
-        return compile_source(path.read_text(encoding="utf-8"), origin=path.name)
+        return compile_source(
+            path.read_text(encoding="utf-8"),
+            origin=path.name,
+            require_entry=require_entry,
+        )
     except ScriptError as exc:
         raise BleckError(exc.render(str(path))) from exc
 
 
 def cmd_check(args: argparse.Namespace) -> int:
     path = Path(args.script)
-    compiled = _load(path)
+    compiled = _load(path, require_entry=False)
     print(f"{path.name}: {compiled.summary()}")
     catalog = builtin_catalog.load()
     for name in compiled.program.called_symbols:

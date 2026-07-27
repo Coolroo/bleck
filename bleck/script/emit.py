@@ -439,13 +439,14 @@ def generate(
     program: CompiledProgram,
     origin: str = "a script",
     map_hooks: list[MapHook] | None = None,
+    require_entry: bool = True,
 ) -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
     hooks = list(map_hooks or [])
     _check_map_hooks(program, hooks)
     # A mod that only attaches to maps has nothing to free-run, so `main` stops
     # being required the moment there is another way for a script to start.
-    entry = _entry_script(program, required=not hooks)
+    entry = _entry_script(program, required=require_entry and not hooks)
 
     parts = [_HEADER.format(origin=origin)]
 

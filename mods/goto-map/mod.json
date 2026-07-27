@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "goto-map",
+  "version": "0.1.0",
+  "description": "Drives the game to an arbitrary map with no controller input",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "maps": { "aa4_01": "on_arrive" }
+  }
+}
