@@ -28,3 +28,6 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+
+# Machine-local tool paths
+.env

@@ -7,6 +7,11 @@ A lint rule (`lint_plugins/env_access.py`) enforces that `os.environ` and
 
 To add a variable: declare an `EnvVar`, add it to `DECLARED`, and expose a
 reader beside the others.
+
+A `.env` beside the project is loaded automatically on import, so tool paths
+survive between shells without being exported every time. Copy `.env.example`
+and fill it in. ⚠️ The real environment always wins over the file, so a
+one-off `BLECK_DOLPHIN=... bleck ...` still overrides it.
 """
 
 from __future__ import annotations
@@ -17,6 +22,75 @@ from pathlib import Path
 
 TRUTHY = frozenset({"1", "true", "yes", "on"})
 FALSEY = frozenset({"0", "false", "no", "off", ""})
+
+#: Machine-local settings, gitignored. Found by walking up from the working
+#: directory, so it works from anywhere inside a checkout.
+DOTENV_NAME = ".env"
+
+#: Only `BLECK_*` is honoured from the file. A `.env` is a convenience for this
+#: toolkit, not a general way to set arbitrary variables for whatever `bleck`
+#: happens to run -- silently injecting `PATH` or `LD_PRELOAD` into a
+#: subprocess is not a power this needs.
+_PREFIX = "BLECK_"
+
+_LOADED_FROM: Path | None = None
+
+
+def _parse_dotenv(text: str) -> list[tuple[str, str]]:  # pylint: disable=container-return
+    """Read `KEY=VALUE` lines. Blank lines, `#` comments and `export ` are fine.
+
+    Deliberately hand-rolled rather than taking a dependency: the format that
+    is actually used here is a dozen lines of `NAME=path`, and this stays
+    readable at that size.
+    """
+    pairs: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        if stripped.startswith("export "):
+            stripped = stripped[len("export ") :].lstrip()
+        name, _, value = stripped.partition("=")
+        name = name.strip()
+        value = value.strip()
+        # Quotes are stripped so a Windows path with spaces can be quoted, but
+        # backslashes are left exactly as written -- `C:\tools\wit` must not
+        # become `C:  ools\wit` through escape processing.
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if name:
+            pairs.append((name, value))
+    return pairs
+
+
+def load_dotenv(start: Path | None = None) -> Path | None:
+    """Apply the nearest `.env`, without overriding the real environment.
+
+    Returns the file used, or None. Idempotent: values already present are left
+    alone, so calling it twice changes nothing.
+    """
+    global _LOADED_FROM  # pylint: disable=global-statement
+
+    origin = start or Path.cwd()
+    for directory in (origin, *origin.parents):
+        candidate = directory / DOTENV_NAME
+        if not candidate.is_file():
+            continue
+        try:
+            text_content = candidate.read_text(encoding="utf-8")
+        except OSError:
+            return None
+        for name, value in _parse_dotenv(text_content):
+            if name.startswith(_PREFIX):
+                os.environ.setdefault(name, value)
+        _LOADED_FROM = candidate
+        return candidate
+    return None
+
+
+def dotenv_path() -> Path | None:
+    """Which `.env` was applied, if any. For diagnostics."""
+    return _LOADED_FROM
 
 
 @dataclass(frozen=True)
@@ -127,6 +201,11 @@ DECLARED: list[EnvVar] = [
     BASE_DIR,
     BUILD_DIR,
 ]
+
+
+# Applied at import so every entry point benefits -- the CLI, `scripts/*.py`,
+# and anything importing `bleck` -- without each having to remember to call it.
+load_dotenv()
 
 
 # --- readers --------------------------------------------------------------
