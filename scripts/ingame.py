@@ -108,6 +108,11 @@ class Session:
         except subprocess.TimeoutExpired:
             self.process.kill()
 
+    @property
+    def exited(self) -> bool:
+        """Whether Dolphin has quit without being asked to."""
+        return self.process is not None and self.process.poll() is not None
+
     def read(self, probe: int, words: int, watch_gw: list[int]) -> Snapshot | None:
         import dolphin_memory_engine as dme  # noqa: PLC0415
 
@@ -180,17 +185,34 @@ def main() -> int:
 
     print(f"booting {image.name} ...")
     seen = ""
+    quiet = 0
     with Session(image, dolphin) as session:
         start = time.time()
         while time.time() - start < args.seconds:
             time.sleep(3)
+            elapsed = int(time.time() - start)
+
+            # Dolphin exiting on its own is a result, not an inconvenience: it
+            # usually means the game crashed. Silently running out the clock
+            # here once made a hard crash look like a mod that did nothing.
+            if session.exited:
+                print(f"[t+{elapsed:>3}s] *** dolphin exited on its own ***")
+                break
+
             snapshot = session.read(args.probe, args.words, args.watch_gw)
             if snapshot is None:
                 continue
             line = snapshot.render()
+            # A heartbeat, because "no output" otherwise means both "nothing
+            # changed" and "the game froze" -- and telling those apart is
+            # usually the whole question.
             if line != seen:
-                print(f"[t+{int(time.time() - start):>3}s] {line}")
+                print(f"[t+{elapsed:>3}s] {line}")
                 seen = line
+                quiet = elapsed
+            elif elapsed - quiet >= 30:
+                print(f"[t+{elapsed:>3}s] ... unchanged for {elapsed - quiet}s")
+                quiet = elapsed
     print("dolphin stopped")
     return 0
 

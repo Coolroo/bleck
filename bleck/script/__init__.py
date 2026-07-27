@@ -68,12 +68,16 @@ class CompiledSource:
         )
 
 
-def compile_source(text: str, origin: str = "script") -> CompiledSource:
+def compile_source(
+    text: str,
+    origin: str = "script",
+    map_hooks: list[emit.MapHook] | None = None,
+) -> CompiledSource:
     """Compile script text to C.
 
     Raises `ScriptError` with a source position for anything the author can fix.
     """
     tree = parser.parse(text)
     program = compiler.compile_program(tree, text)
-    generated = emit.generate(program, origin=origin)
+    generated = emit.generate(program, origin=origin, map_hooks=map_hooks)
     return CompiledSource(origin=origin, generated=generated, program=program)

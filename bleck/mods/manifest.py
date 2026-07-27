@@ -88,6 +88,23 @@ REL_DISC_PATH = "files/mod/mod.rel"
 
 
 @dataclass(frozen=True)
+class MapHook:
+    """A script attached to a map, so it runs when that map loads.
+
+    This is how the game itself uses `evt`: a map's `MapData.initScript` is an
+    ordinary pointer to bytecode, and doors, NPCs and items work the same way.
+    Attaching to one is the difference between a mod that loops and a mod that
+    reacts.
+    """
+
+    map_name: str
+    """The map's internal name, e.g. `aa4_01`. Resolved by `mapDataPtr`."""
+
+    script: str
+    """Which script in the mod's source runs when the map loads."""
+
+
+@dataclass(frozen=True)
 class CodeSpec:
     """A mod's compiled-code half.
 
@@ -116,6 +133,13 @@ class CodeSpec:
     module_id: int = 2
     """REL module id. The game's own REL is 1, so mods start at 2."""
 
+    maps: list[MapHook] = field(default_factory=list)
+    """Scripts attached to maps, so they run on arrival rather than looping."""
+
+    @property
+    def has_maps(self) -> bool:
+        return bool(self.maps)
+
     @property
     def has_script(self) -> bool:
         return bool(self.script)
@@ -132,6 +156,8 @@ class CodeSpec:
             body["sources"] = list(self.sources)
         body["target"] = self.target
         body["module_id"] = self.module_id
+        if self.maps:
+            body["maps"] = {hook.map_name: hook.script for hook in self.maps}
         return body
 
 
@@ -248,7 +274,33 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         sources=list(sources),
         target=str(raw.get("target", "eu0")),
         module_id=module_id,
+        maps=_parse_maps(raw.get("maps"), source),
     )
+
+
+def _parse_maps(raw: object, source: str) -> list[MapHook]:
+    """Read `code.maps`, an object of map name -> script name.
+
+    Written as an object rather than a list because a map can only have one
+    init script: the shape should make a second entry for the same map
+    impossible to express, rather than something to validate.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise ManifestError(
+            f"{source}: 'code.maps' must be an object of "
+            f'map name -> script name, e.g. {{"aa4_01": "on_arrive"}}'
+        )
+
+    hooks: list[MapHook] = []
+    for map_name, script in raw.items():
+        if not isinstance(script, str) or not script:
+            raise ManifestError(
+                f"{source}: 'code.maps.{map_name}' must name a script in this mod"
+            )
+        hooks.append(MapHook(map_name=map_name, script=script))
+    return hooks
 
 
 def _parse_dependencies(raw: object, source: str) -> list[Requirement]:

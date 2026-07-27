@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "map-hook",
+  "version": "0.1.0",
+  "description": "A script attached to a map, so it runs on arrival",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "maps": { "aa4_01": "on_arrive" }
+  }
+}

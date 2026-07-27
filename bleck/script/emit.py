@@ -14,6 +14,7 @@ with it.
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass
 
 from bleck.script.compiler import (
@@ -78,9 +79,107 @@ __attribute__((weak)) void mod_prolog(void)
 """
 
 
-_FOOTER = """
+#: Running a script when a named map is reached.
+#:
+#: ⛔ This does *not* patch `MapData.initScript`, which was the obvious design
+#: and does not work: it deadlocks the map loader (D51). Instead the sequence
+#: hook watches where the game says it is going, and starts the script once
+#: gameplay resumes -- both mechanisms already verified in D43.
+_MAP_BLOCK = """
 /*
-    Starting the script, and keeping it started.
+    Map hooks.
+
+    The game announces where it is going: during a map change, `seqWork.p0`
+    holds the destination map's name. So arriving somewhere is observable
+    without touching the game's own data at all -- the sequence hook notes the
+    name on the way in, and starts the script once gameplay resumes.
+
+    RULED OUT: patching `MapData.initScript` to chain the map's own script.
+    It deadlocks -- the load freezes partway and never completes, whether the
+    original is spawned blocking or detached. Measured, not guessed; see D51.
+
+    Both halves of what is used instead are already proven: `evtEntry` from
+    `seq_data[SEQ_GAME].main` is exactly how every bleck script starts (D43),
+    and reading `seqWork.p0` during a map change is how the destination was
+    identified in the first place (D47).
+*/
+
+typedef struct
+{{
+    s32 seq;
+    s32 stage;
+    const char *p0;
+    const char *p1;
+}} SeqWork;
+
+extern SeqWork seqWork;
+
+#define BLECK_SEQ_MAPCHANGE 3
+#define BLECK_MAP_COUNT {count}
+{tables}
+static const char *const bleck_map_names[BLECK_MAP_COUNT] = {{
+{name_list}}};
+
+static const s32 *const bleck_map_scripts[BLECK_MAP_COUNT] = {{
+{script_list}}};
+
+/*
+    Which maps are waiting to start, one bit each. Set while the map change is
+    still in flight and consumed when gameplay resumes, because that is the
+    moment evt is alive again -- a script started during the change would be
+    torn down with the rest of evt state.
+*/
+static u32 bleck_map_pending = 0;
+
+/* By hand: the module links -nostdlib, so there is no strcmp to call. */
+static u32 bleck_same_name(const char *a, const char *b)
+{{
+    u32 i;
+
+    if (a == 0 || b == 0)
+        return 0;
+    for (i = 0; a[i] != 0; i++)
+        if (a[i] != b[i])
+            return 0;
+    return b[i] == 0;
+}}
+
+static void bleck_maps_on_seq(u32 seq)
+{{
+    u32 i;
+
+    if (seq == BLECK_SEQ_MAPCHANGE)
+    {{
+        for (i = 0; i < BLECK_MAP_COUNT; i++)
+            if (bleck_same_name(seqWork.p0, bleck_map_names[i]))
+                bleck_map_pending |= (1 << i);
+        return;
+    }}
+
+    if (seq != BLECK_SEQ_GAME || bleck_map_pending == 0)
+        return;
+
+    for (i = 0; i < BLECK_MAP_COUNT; i++)
+    {{
+        if (bleck_map_pending & (1 << i))
+        {{
+            bleck_map_pending &= ~(1 << i);
+            evtEntry(bleck_map_scripts[i], 0, 0);
+        }}
+    }}
+}}
+"""
+
+#: One map's name. The script it starts is referenced by the table below.
+_MAP_TABLE = """
+static const char {prefix}name_{index}[] = {name};
+"""
+
+#: Typedefs and the saved originals. Needed by anything wanting a per-frame
+#: hook -- a free-running script, a map watcher, or both.
+_SEQ_TABLE = """
+/*
+    Hooking the game's sequence table.
 
     `_prolog` runs the instant the loader links this module, far too early to
     hand anything to the script scheduler: the evt manager is not initialised
@@ -91,23 +190,16 @@ _FOOTER = """
     What does work is `seq_data[SEQ_GAME].main`, verified by reading the running
     game's memory from outside the emulator: the script is created and then runs
     once per frame (D43).
-
-    The second half is less obvious. **A script does not survive a map change** --
-    evt state is torn down and rebuilt, and a script started once simply stops,
-    which was measured the same way. So rather than starting once, every
-    sequence other than gameplay re-arms a flag and gameplay starts the script
-    whenever it is armed. That covers map changes, game overs and loads without
-    needing to know which of them resets evt.
 */
 
 typedef void(SeqFunc)(void *);
 
 typedef struct
-{{
+{
     SeqFunc *init;
     SeqFunc *main;
     SeqFunc *exit;
-}} SeqDef;
+} SeqDef;
 
 /* Resolved by name from the symbol list, like everything else here. */
 extern SeqDef seq_data[];
@@ -121,75 +213,74 @@ extern SeqDef seq_data[];
     than .bss. The loader allocates this module's bss but nothing documents
     whether it zeroes it, and depending on that would be a silent hazard.
 */
-static SeqFunc *bleck_real_main[BLECK_SEQ_COUNT] = {{
+static SeqFunc *bleck_real_main[BLECK_SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
-}};
+};
+"""
+
+#: Starting the entry script, and keeping it started.
+_SCRIPT_START = """
+/*
+    A script does not survive a map change (D43). evt state is torn down and
+    rebuilt, and a script started once simply stops. So rather than starting
+    once, every sequence other than gameplay re-arms a flag and gameplay starts
+    the script whenever it is armed. That covers map changes, game overs and
+    loads without needing to know which of them resets evt.
+*/
 
 static u32 bleck_needs_start = 1;
 
-static void bleck_after_seq(u32 seq, void *work)
-{{
-    if (seq == BLECK_SEQ_GAME)
-    {{
-        if (bleck_needs_start)
-        {{
-            bleck_needs_start = 0;
-            evtEntry({entry}, 0, 0);
-        }}
-    }}
-    else
-    {{
+static void bleck_start_entry(u32 seq)
+{
+    if (seq != BLECK_SEQ_GAME)
+    {
         bleck_needs_start = 1;
-    }}
+        return;
+    }
+    if (bleck_needs_start)
+    {
+        bleck_needs_start = 0;
+        evtEntry(%s, 0, 0);
+    }
+}
+"""
 
-    if (bleck_real_main[seq] != 0)
-        bleck_real_main[seq](work);
-}}
+#: One trampoline per sequence, because the game passes no index of its own.
+_SEQ_STUBS = """
+static void bleck_seq0(void *w) { bleck_after_seq(0, w); }
+static void bleck_seq1(void *w) { bleck_after_seq(1, w); }
+static void bleck_seq2(void *w) { bleck_after_seq(2, w); }
+static void bleck_seq3(void *w) { bleck_after_seq(3, w); }
+static void bleck_seq4(void *w) { bleck_after_seq(4, w); }
+static void bleck_seq5(void *w) { bleck_after_seq(5, w); }
 
-static void bleck_seq0(void *w) {{ bleck_after_seq(0, w); }}
-static void bleck_seq1(void *w) {{ bleck_after_seq(1, w); }}
-static void bleck_seq2(void *w) {{ bleck_after_seq(2, w); }}
-static void bleck_seq3(void *w) {{ bleck_after_seq(3, w); }}
-static void bleck_seq4(void *w) {{ bleck_after_seq(4, w); }}
-static void bleck_seq5(void *w) {{ bleck_after_seq(5, w); }}
-
-static SeqFunc *const bleck_hooks[BLECK_SEQ_COUNT] = {{
+static SeqFunc *const bleck_hooks[BLECK_SEQ_COUNT] = {
     bleck_seq0, bleck_seq1, bleck_seq2,
     bleck_seq3, bleck_seq4, bleck_seq5,
-}};
+};
+"""
 
-void _prolog(void)
-{{
-    u32 i;
+#: Installs the sequence hooks, as the body of `_prolog`.
+_SEQ_INSTALL = """    u32 i;
 
     for (i = 0; i < BLECK_SEQ_COUNT; i++)
-    {{
+    {
         bleck_real_main[i] = seq_data[i].main;
         seq_data[i].main = bleck_hooks[i];
-    }}
+    }
 
-    mod_prolog();
-}}
-
-void _epilog(void)
-{{
-}}
-
-void _unresolved(void)
-{{
-}}
 """
 
-
-#: For a mod that ships only native sources. No script means no scheduler
-#: hand-off and nothing to hook, so `_prolog` does one thing.
-BARE_FOOTER = """
+#: For a mod with nothing to schedule and no map to watch.
+_PLAIN_PROLOG = """
 void _prolog(void)
 {
     mod_prolog();
 }
+"""
 
+_ENTRY_POINTS = """
 void _epilog(void)
 {
 }
@@ -198,6 +289,15 @@ void _unresolved(void)
 {
 }
 """
+
+
+@dataclass(frozen=True)
+class MapHook:
+    """A compiled script attached to one map's init script."""
+
+    map_name: str
+    script: str
+    """Name of a script in the same program, not a C identifier."""
 
 
 @dataclass(frozen=True)
@@ -275,20 +375,77 @@ def _script_array(script: CompiledScript) -> str:
     return "\n".join(lines)
 
 
+def _map_block(hooks: list[MapHook]) -> str:
+    """Map names, the scripts they start, and the sequence watcher."""
+    prefix = f"{_PREFIX}map_"
+    tables = "".join(
+        _MAP_TABLE.format(prefix=prefix, index=index, name=_c_string(hook.map_name))
+        for index, hook in enumerate(hooks)
+    )
+    return _MAP_BLOCK.format(
+        count=len(hooks),
+        tables=tables,
+        name_list="".join(f"    {prefix}name_{i},\n" for i in range(len(hooks))),
+        script_list="".join(f"    {_PREFIX}script_{h.script},\n" for h in hooks),
+    )
+
+
+def _footer(entry: str, hooks: list[MapHook]) -> str:
+    """Assemble the scaffolding that runs the mod, from the pieces it needs.
+
+    A free-running script and a map hook want the same per-frame hook on the
+    sequence table -- one to start and re-start itself, the other to notice
+    where the game went. A mod using both installs one set of hooks, not two.
+    """
+    if not entry and not hooks:
+        return _PLAIN_PROLOG + _ENTRY_POINTS
+
+    parts = [_SEQ_TABLE]
+    body = ""
+
+    if hooks:
+        parts.append(_map_block(hooks))
+        body += "    bleck_maps_on_seq(seq);\n"
+    if entry:
+        parts.append(_SCRIPT_START % entry)
+        body += "    bleck_start_entry(seq);\n"
+
+    parts.append(
+        "\nstatic void bleck_after_seq(u32 seq, void *work)\n"
+        "{\n"
+        f"{body}"
+        "\n    if (bleck_real_main[seq] != 0)\n"
+        "        bleck_real_main[seq](work);\n"
+        "}\n"
+    )
+    parts.append(_SEQ_STUBS)
+    parts.append(f"\nvoid _prolog(void)\n{{\n{_SEQ_INSTALL}    mod_prolog();\n}}\n")
+    parts.append(_ENTRY_POINTS)
+    return "".join(parts)
+
+
 def generate_bare(origin: str = "native sources") -> GeneratedSource:
     """Scaffolding for a mod that ships only native C.
 
     The REL format still needs its three entry points, and the mod still needs
     somewhere to be called from, but there is no script to schedule.
     """
-    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + BARE_FOOTER
+    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + _footer("", [])
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
 
 
-def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSource:
+def generate(
+    program: CompiledProgram,
+    origin: str = "a script",
+    map_hooks: list[MapHook] | None = None,
+) -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
-    entry = _entry_script(program)
+    hooks = list(map_hooks or [])
+    _check_map_hooks(program, hooks)
+    # A mod that only attaches to maps has nothing to free-run, so `main` stops
+    # being required the moment there is another way for a script to start.
+    entry = _entry_script(program, required=not hooks)
 
     parts = [_HEADER.format(origin=origin)]
 
@@ -323,7 +480,7 @@ def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSou
         )
 
     parts.extend(_script_array(script) for script in program.scripts)
-    parts.append(_FOOTER.format(entry=f"{_PREFIX}script_{entry}"))
+    parts.append(_footer(f"{_PREFIX}script_{entry}" if entry else "", hooks))
 
     text = "\n\n".join(parts)
     _require_ascii(text)
@@ -353,10 +510,35 @@ def _require_ascii(text: str) -> None:
         ) from exc
 
 
-def _entry_script(program: CompiledProgram) -> str:
+def _check_map_hooks(program: CompiledProgram, hooks: list[MapHook]) -> None:
+    """Every attached script has to exist, and be named the same way twice.
+
+    The manifest names a script; the source declares one. Nothing links the two
+    until here, so a typo would otherwise reach the C compiler as an undefined
+    symbol -- a message about `bleck_script_on_arrve` that says nothing about
+    `mod.json`.
+    """
+    names = [script.name for script in program.scripts]
+    for hook in hooks:
+        if hook.script in names:
+            continue
+        listed = ", ".join(names) or "none"
+        suggestion = difflib.get_close_matches(hook.script, names, n=1, cutoff=0.6)
+        hint = f"\n  Did you mean {suggestion[0]!r}?" if suggestion else ""
+        raise ScriptError(
+            f"mod.json attaches {hook.script!r} to map {hook.map_name!r}, "
+            f"but this file declares no such script "
+            f"(it declares: {listed}).{hint}",
+            Position(),
+        )
+
+
+def _entry_script(program: CompiledProgram, required: bool = True) -> str:
     names = [script.name for script in program.scripts]
     if ENTRY_SCRIPT in names:
         return ENTRY_SCRIPT
+    if not required:
+        return ""
     listed = ", ".join(names)
     raise ScriptError(
         f"no script named {ENTRY_SCRIPT!r} to start "

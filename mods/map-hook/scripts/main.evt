@@ -1,0 +1,22 @@
+-- Attached to `aa4_01` by mod.json, rather than free-running.
+--
+-- There is deliberately no `script main` here. A map hook does not need one:
+-- the game runs a map's init script itself, on arrival, so there is nothing
+-- for bleck's sequence hook to start. That this file compiles at all is part
+-- of what the test checks.
+--
+-- `aa4_01` is the first map the attract demo loads, about 45 seconds into an
+-- unattended boot, which is what makes this observable without a human.
+
+script on_arrive {
+    -- A magic value, so a reader can tell "the script ran" from "the slot
+    -- happened to be non-zero". 0x1234 is not a plausible accident.
+    gw[31] = 4660
+
+    loop {
+        -- Counts while the map is loaded, so a frozen counter distinguishes
+        -- "ran once and died" from "ran and is still alive".
+        gw[30] = gw[30] + 1
+        wait(1)
+    }
+}

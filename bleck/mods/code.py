@@ -102,6 +102,20 @@ def collect_sources(mod: Mod, spec) -> list[Path]:
     return found
 
 
+def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
+    """The map attachments this mod declares, as the emitter wants them.
+
+    The manifest speaks in map and script *names*; the emitter needs the same
+    pairing but validates it against what the source actually declares.
+    """
+    spec = mod.manifest.code
+    if spec is None:
+        return []
+    return [
+        emit.MapHook(map_name=hook.map_name, script=hook.script) for hook in spec.maps
+    ]
+
+
 def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     """Compile one mod's script and native sources into its `mod.rel`."""
     spec = mod.manifest.code
@@ -120,7 +134,9 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
             )
         try:
             compiled = compile_source(
-                script_path.read_text(encoding="utf-8"), origin=spec.script
+                script_path.read_text(encoding="utf-8"),
+                origin=spec.script,
+                map_hooks=map_hooks_for(mod),
             )
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(str(script_path))}") from exc

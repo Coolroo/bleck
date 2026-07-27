@@ -391,11 +391,13 @@ class TestGeneratedC:
             assert f"bleck_seq{index}" in out.text
 
     def test_leaving_gameplay_re_arms_the_start(self):
+        # A script does not survive a map change (D43), so anything other than
+        # gameplay must re-arm rather than the start happening once.
         out = compile_source(SIMPLE).generated
-        body = out.text.split("static void bleck_after_seq")[1]
-        assert "bleck_needs_start = 0" in body
+        body = out.text.split("static void bleck_start_entry")[1]
         assert "bleck_needs_start = 1" in body
-        assert body.index("bleck_needs_start = 0") < body.index("bleck_needs_start = 1")
+        assert "bleck_needs_start = 0" in body
+        assert "evtEntry(" in body
 
     def test_the_original_sequence_function_is_still_called(self):
         assert "bleck_real_main[seq](work)" in compile_source(SIMPLE).generated.text
@@ -602,6 +604,95 @@ class TestNativeSources:
         mod = self._mod(tmp_path, sources=["src/absent.c"])
         with pytest.raises(code.CodeError, match=r"code.sources"):
             code.collect_sources(mod, mod.manifest.code)
+
+
+MAP_SOURCE = "script on_arrive {\n gw[31] = 1\n}"
+
+
+class TestMapHooks:
+    """Running a script when a named map is reached.
+
+    The mechanism is deliberately *not* the obvious one. Patching
+    `MapData.initScript` deadlocks the map loader (D51), so these assertions
+    guard the working design against someone reintroducing the broken one.
+    """
+
+    def _generated(self, source=MAP_SOURCE, hooks=(("aa4_01", "on_arrive"),)):
+        return compile_source(
+            source,
+            map_hooks=[emit.MapHook(map_name=m, script=s) for m, s in hooks],
+        ).generated.text
+
+    def test_it_does_not_touch_the_map_s_own_init_script(self):
+        # The comment explains why, so this checks for the *mechanism* --
+        # a lookup and a write into MapData -- rather than for the word.
+        out = self._generated()
+        assert "mapDataPtr" not in out
+        assert "BLECK_MAP_INIT_OFFSET" not in out
+        assert "->initScript" not in out
+
+    def test_it_watches_where_the_game_says_it_is_going(self):
+        out = self._generated()
+        assert "seqWork.p0" in out
+        assert 'bleck_map_name_0[] = "aa4_01"' in out
+
+    def test_the_script_starts_on_gameplay_not_during_the_change(self):
+        """evt state is rebuilt across a map change, so starting early is lost."""
+        out = self._generated()
+        watcher = out.split("static void bleck_maps_on_seq")[1]
+        # The pending bit is set during the change...
+        assert "bleck_map_pending |= (1 << i)" in watcher
+        # ...and only spent once gameplay is back.
+        assert "seq != BLECK_SEQ_GAME" in watcher
+        assert watcher.index("bleck_map_pending |=") < watcher.index("evtEntry(")
+
+    def test_a_map_hook_needs_no_main_script(self):
+        """`main` is what the sequence hook free-runs. A map hook has its own
+        way to start, so requiring `main` would be ceremony."""
+        out = self._generated()
+        assert "bleck_script_on_arrive" in out
+        assert "bleck_start_entry" not in out
+
+    def test_a_script_and_map_hooks_share_one_set_of_hooks(self):
+        out = self._generated(
+            source="script main {\n wait(1)\n}\nscript on_arrive {\n gw[31] = 1\n}",
+        )
+        assert out.count("seq_data[i].main = bleck_hooks[i]") == 1
+        assert "bleck_maps_on_seq(seq)" in out
+        assert "bleck_start_entry(seq)" in out
+
+    def test_several_maps_each_get_a_bit(self):
+        out = self._generated(
+            source="script a {\n gw[31] = 1\n}\nscript b {\n gw[31] = 2\n}",
+            hooks=(("aa4_01", "a"), ("ls4_12", "b")),
+        )
+        assert "BLECK_MAP_COUNT 2" in out
+        assert 'bleck_map_name_1[] = "ls4_12"' in out
+        assert "bleck_script_b," in out
+
+    def test_an_unknown_script_is_rejected_against_the_source(self):
+        # The manifest and the source are written separately; nothing links the
+        # two until generation, so a typo must be caught with both names in view.
+        with pytest.raises(ScriptError) as caught:
+            self._generated(hooks=(("aa4_01", "on_arrve"),))
+        assert "on_arrve" in str(caught.value)
+        assert "aa4_01" in str(caught.value)
+        assert "on_arrive" in str(caught.value)  # the suggestion
+
+    def test_map_names_survive_the_manifest_round_trip(self):
+        spec = mod_manifest.CodeSpec(
+            script="s.evt", maps=[mod_manifest.MapHook("aa4_01", "on_arrive")]
+        )
+        assert spec.to_json()["maps"] == {"aa4_01": "on_arrive"}
+
+    def test_a_malformed_maps_block_is_rejected(self):
+        with pytest.raises(mod_manifest.ManifestError, match=r"code\.maps"):
+            mod_manifest.Manifest.from_json(
+                json.dumps(
+                    {"schema": 1, "name": "x", "code": {"script": "s", "maps": []}}
+                ),
+                source="test",
+            )
 
 
 class TestGeneratedHandoff:
