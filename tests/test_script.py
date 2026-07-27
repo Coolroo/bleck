@@ -334,12 +334,14 @@ class TestCalls:
         assert any(isinstance(word, StringWord) for word in result)
 
     def test_identical_strings_are_interned_once(self):
-        program = compile_program(parse('script main {\n evt_x("a")\n evt_y("a")\n}'), "")
-        assert program.strings == ["a"]
+        source = (
+            'script main {\n evt_msg_print_add(0, "a")\n evt_msg_print_add(1, "a")\n}'
+        )
+        assert compile_program(parse(source), source).strings == ["a"]
 
     def test_called_symbols_are_reported(self):
-        program = compile_program(parse("script main {\n evt_thing(1)\n}"), "")
-        assert program.called_symbols == ["evt_thing"]
+        program = compile_program(parse("script main {\n evt_pouch_add_coins(1)\n}"), "")
+        assert program.called_symbols == ["evt_pouch_add_coins"]
 
     def test_spawn_references_another_script(self):
         source = "script main {\n spawn helper\n}\nscript helper {\n wait(1)\n}"
@@ -354,17 +356,17 @@ class TestCalls:
 
 class TestGeneratedC:
     def test_declares_called_functions_extern(self):
-        out = compile_source("script main {\n evt_thing(1)\n}").generated
-        assert "extern void evt_thing(void);" in out.text
+        out = compile_source("script main {\n evt_pouch_add_coins(1)\n}").generated
+        assert "extern void evt_pouch_add_coins(void);" in out.text
 
     def test_takes_the_address_of_called_functions(self):
         # This is what keeps game addresses out of bleck: the linker resolves
         # the name, we never write a number.
-        out = compile_source("script main {\n evt_thing(1)\n}").generated
-        assert "(s32) &evt_thing" in out.text
+        out = compile_source("script main {\n evt_pouch_add_coins(1)\n}").generated
+        assert "(s32) &evt_pouch_add_coins" in out.text
 
     def test_no_game_addresses_appear(self):
-        out = compile_source("script main {\n evt_thing(1)\n}").generated
+        out = compile_source("script main {\n evt_pouch_add_coins(1)\n}").generated
         assert "0x80" not in out.text
 
     def test_entry_point_starts_the_main_script(self):
@@ -422,17 +424,19 @@ class TestGeneratedC:
     def test_output_is_ascii(self):
         # Mods build on three platforms whose compilers disagree about default
         # source encoding.
-        out = compile_source('script main {\n evt_x("café — ok")\n}').generated
+        out = compile_source(
+            'script main {\n evt_msg_print_add(0, "café — ok")\n}'
+        ).generated
         out.text.encode("ascii")
 
     def test_non_ascii_strings_survive_as_octal_escapes(self):
-        out = compile_source('script main {\n evt_x("café")\n}').generated
+        out = compile_source('script main {\n evt_msg_print_add(0, "café")\n}').generated
         # 'é' is 0xC3 0xA9 in UTF-8 -> \303\251
         assert "\\303\\251" in out.text
 
     def test_quotes_and_backslashes_are_escaped(self):
-        out = compile_source('script main {\n evt_x("a\\"b\\\\c")\n}').generated
-        assert '\\"' in out.text
+        source = 'script main {\n evt_msg_print_add(0, "a\\"b\\\\c")\n}'
+        assert '\\"' in compile_source(source).generated.text
 
     def test_forward_declares_scripts_when_several_exist(self):
         source = "script main {\n spawn helper\n}\nscript helper {\n wait(1)\n}"

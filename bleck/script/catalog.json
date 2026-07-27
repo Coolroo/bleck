@@ -1,0 +1,2664 @@
+{
+ "attribution": "Function names and argument counts extracted from SeekyCt/spm-headers, MIT licensed (https://github.com/SeekyCt/spm-headers). Regenerate with `bleck script index <path-to-spm-headers/include>`.",
+ "source": "176 headers, 443 builtins",
+ "builtins": [
+  {
+   "name": "bomb_damage_mario",
+   "module": "npc_ninja",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_ac_delete",
+   "module": "evt_ac",
+   "arity": 1,
+   "signature": "evt_ac_delete(const char * name)"
+  },
+  {
+   "name": "evt_ac_entry",
+   "module": "evt_ac",
+   "arity": 2,
+   "signature": "evt_ac_entry(const char * name, s32 type)"
+  },
+  {
+   "name": "evt_ac_return_results",
+   "module": "evt_ac",
+   "arity": 2,
+   "signature": "evt_ac_return_results(const char * name, s32& ret)"
+  },
+  {
+   "name": "evt_an2_08_draw_face",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_an_darkness_onoff",
+   "module": "an",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_an_init_tpl",
+   "module": "an",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_an_remove_npcs",
+   "module": "an",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_bos_01_pure_heart_get_pos",
+   "module": "bos_01",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_bos_01_pure_heart_set_pos",
+   "module": "bos_01",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam3d_evt_zoom_in",
+   "module": "evt_cam",
+   "arity": 9,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_check_dimension",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_flag_onoff",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_get_at",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_get_pos",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_look_at_door",
+   "module": "evt_cam",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_shake",
+   "module": "evt_cam",
+   "arity": 6,
+   "signature": ""
+  },
+  {
+   "name": "evt_cam_zoom_to_coords",
+   "module": "evt_cam",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_dan_boss_room_set_door_name",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_boss_room_set_door_name()"
+  },
+  {
+   "name": "evt_dan_decide_key_enemy",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_decide_key_enemy(s32 itemId)"
+  },
+  {
+   "name": "evt_dan_get_chest_room_item",
+   "module": "dan",
+   "arity": 2,
+   "signature": "evt_dan_get_chest_room_item(s32 no, &s32 itemId)"
+  },
+  {
+   "name": "evt_dan_get_door_names",
+   "module": "dan",
+   "arity": 2,
+   "signature": "evt_dan_get_door_names(&char * enterName, &char * exitName)"
+  },
+  {
+   "name": "evt_dan_get_enemy_info",
+   "module": "dan",
+   "arity": 4,
+   "signature": "evt_dan_get_enemy_info(s32 no, s32 enemyIdx, &s32 templateId, &s32 num)"
+  },
+  {
+   "name": "evt_dan_get_enemy_spawn_pos",
+   "module": "dan",
+   "arity": 6,
+   "signature": "evt_dan_get_enemy_spawn_pos(s32 num, s32 no, s32 enemyIdx, &f32 x, &f32 y, &f32 z)"
+  },
+  {
+   "name": "evt_dan_get_exit_door_name_l",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_get_exit_door_name_l(&char * name)"
+  },
+  {
+   "name": "evt_dan_handle_chest_room_dokans_and_doors",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_handle_chest_room_dokans_and_doors(s32 no)"
+  },
+  {
+   "name": "evt_dan_handle_dokans",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_handle_dokans(s32 no)"
+  },
+  {
+   "name": "evt_dan_handle_doors",
+   "module": "dan",
+   "arity": 7,
+   "signature": "evt_dan_handle_doors(s32 no, s32 room, &char * enterDoor, &char * exitDoor, &f32 lockX,"
+  },
+  {
+   "name": "evt_dan_handle_key_failsafe",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_handle_key_failsafe()"
+  },
+  {
+   "name": "evt_dan_handle_map_parts",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_handle_map_parts(s32 no)"
+  },
+  {
+   "name": "evt_dan_make_spawn_table",
+   "module": "dan",
+   "arity": 1,
+   "signature": "evt_dan_make_spawn_table(s32 no)"
+  },
+  {
+   "name": "evt_dan_read_data",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_read_data()"
+  },
+  {
+   "name": "evt_dan_screen_blink",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_screen_blink()"
+  },
+  {
+   "name": "evt_dan_set_wracktail_disp_cb",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_set_wracktail_disp_cb()"
+  },
+  {
+   "name": "evt_dan_start_countdown",
+   "module": "dan",
+   "arity": 0,
+   "signature": "evt_dan_start_countdown()"
+  },
+  {
+   "name": "evt_del_case_evt",
+   "module": "evt_case",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_door_enable_disable_dokan_desc",
+   "module": "evt_door",
+   "arity": 2,
+   "signature": "evt_door_enable_disable_dokan_desc(bool enabled, const char * name)"
+  },
+  {
+   "name": "evt_door_enable_disable_door_desc",
+   "module": "evt_door",
+   "arity": 2,
+   "signature": "evt_door_enable_disable_door_desc(bool enableDisable, const char * doorName)"
+  },
+  {
+   "name": "evt_door_enable_disable_map_door_desc",
+   "module": "evt_door",
+   "arity": 2,
+   "signature": "evt_door_enable_disable_map_door_desc(bool enabled, const char * name)"
+  },
+  {
+   "name": "evt_door_openable_onoff",
+   "module": "evt_door",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_door_set_dokan_descs",
+   "module": "evt_door",
+   "arity": 2,
+   "signature": "evt_door_set_dokan_descs(DokanDesc * descs, s32 count)"
+  },
+  {
+   "name": "evt_door_set_door_descs",
+   "module": "evt_door",
+   "arity": 1,
+   "signature": "evt_door_set_door_descs(DoorDesc * descs, s32 count)"
+  },
+  {
+   "name": "evt_door_set_event",
+   "module": "evt_door",
+   "arity": 3,
+   "signature": "evt_door_set_event(char *door, int unknown, EvtScriptCode * script)"
+  },
+  {
+   "name": "evt_door_set_map_door_descs",
+   "module": "evt_door",
+   "arity": 2,
+   "signature": "evt_door_set_map_door_descs(MapDoorDesc * descs, s32 count)"
+  },
+  {
+   "name": "evt_door_wait_flag",
+   "module": "evt_door",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_eff",
+   "module": "evt_eff",
+   "arity": 14,
+   "signature": ""
+  },
+  {
+   "name": "evt_eff_delete",
+   "module": "evt_eff",
+   "arity": 1,
+   "signature": "evt_eff_delete(const * char name)"
+  },
+  {
+   "name": "evt_eff_exclamation_question",
+   "module": "evt_eff",
+   "arity": 11,
+   "signature": ""
+  },
+  {
+   "name": "evt_eff_softdelete",
+   "module": "evt_eff",
+   "arity": 1,
+   "signature": "evt_eff_softdelete(const char * name)"
+  },
+  {
+   "name": "evt_eff_sundale_support",
+   "module": "evt_eff",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_env_blur_on",
+   "module": "evt_env",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_env_static_blur_on",
+   "module": "evt_env",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_exit_case_evt",
+   "module": "evt_case",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_fade_callfade",
+   "module": "evt_fade",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_fade_end_wait",
+   "module": "evt_fade",
+   "arity": 1,
+   "signature": "evt_fade_end_wait(s32)"
+  },
+  {
+   "name": "evt_fade_entry",
+   "module": "evt_fade",
+   "arity": 6,
+   "signature": "evt_fade_entry(int transitionType, everything else is unknown ints)"
+  },
+  {
+   "name": "evt_fade_set_center_pos",
+   "module": "evt_fade",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_fairy_all_enter_run_mode1",
+   "module": "evt_fairy",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_fairy_all_enter_run_mode2",
+   "module": "evt_fairy",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_fairy_flag_onoff",
+   "module": "evt_fairy",
+   "arity": 2,
+   "signature": "evt_fairy_flag_onoff(bool onoff, u32 flags)"
+  },
+  {
+   "name": "evt_fairy_fly_to",
+   "module": "evt_fairy",
+   "arity": 5,
+   "signature": "evt_fairy_fly_to(s32 id, f32 x, f32 y, f32 z, s32 time)"
+  },
+  {
+   "name": "evt_fairy_get_pos",
+   "module": "evt_fairy",
+   "arity": 4,
+   "signature": "evt_fairy_get_pos(s32 id, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_fairy_reset",
+   "module": "evt_fairy",
+   "arity": 0,
+   "signature": "evt_fairy_reset()"
+  },
+  {
+   "name": "evt_fairy_set_anim",
+   "module": "evt_fairy",
+   "arity": 2,
+   "signature": "evt_fairy_set_anim(s32 id, char *animName)"
+  },
+  {
+   "name": "evt_fairy_set_pos",
+   "module": "evt_fairy",
+   "arity": 4,
+   "signature": "evt_fairy_set_pos(s32 id, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_fairy_wait_anim_end",
+   "module": "evt_fairy",
+   "arity": 1,
+   "signature": "evt_fairy_wait_anim_end(s32 id)"
+  },
+  {
+   "name": "evt_frame_bind_offscreen",
+   "module": "evt_frame",
+   "arity": 3,
+   "signature": "evt_frame_bind_offscreen(const char * instanceName, const char * offsInstanceName, void * callback)"
+  },
+  {
+   "name": "evt_frame_check_draw_finished",
+   "module": "evt_frame",
+   "arity": 1,
+   "signature": "evt_frame_check_draw_finished(const char * instanceName)"
+  },
+  {
+   "name": "evt_frame_delete",
+   "module": "evt_frame",
+   "arity": 1,
+   "signature": "evt_frame_delete(const char * instanceName)"
+  },
+  {
+   "name": "evt_frame_evt_entry",
+   "module": "evt_frame",
+   "arity": 6,
+   "signature": "evt_frame_evt_entry(const char * instanceName, f32 x, f32 y, f32 z, f32 width, f32 height)"
+  },
+  {
+   "name": "evt_frame_flag_onoff",
+   "module": "evt_frame",
+   "arity": 3,
+   "signature": "evt_frame_flag_onoff(bool onOff, const char * instanceName, u32 flags)"
+  },
+  {
+   "name": "evt_frame_offscreen_draw_flag_onoff",
+   "module": "evt_frame",
+   "arity": 2,
+   "signature": "evt_frame_offscreen_draw_flag_onoff(bool onOff, const char * instanceName)"
+  },
+  {
+   "name": "evt_frame_offscreen_entry",
+   "module": "evt_frame",
+   "arity": 7,
+   "signature": "evt_frame_offscreen_entry(const char * instanceName, const char * animPoseName, const char * animDef,"
+  },
+  {
+   "name": "evt_frame_set_color",
+   "module": "evt_frame",
+   "arity": 5,
+   "signature": "evt_frame_set_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)"
+  },
+  {
+   "name": "evt_frame_set_color2",
+   "module": "evt_frame",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_frame_set_draw_speed",
+   "module": "evt_frame",
+   "arity": 2,
+   "signature": "evt_frame_set_draw_speed(const char * instanceName, f32 drawSpeed)"
+  },
+  {
+   "name": "evt_frame_set_img_anim",
+   "module": "evt_frame",
+   "arity": 2,
+   "signature": "evt_frame_set_img_anim(const char * instanceName, const char * animDef)"
+  },
+  {
+   "name": "evt_frame_set_rotation",
+   "module": "evt_frame",
+   "arity": 4,
+   "signature": "evt_frame_set_rotation(const char * instanceName, f32 xRot, f32 yRot, f32 zRot)"
+  },
+  {
+   "name": "evt_frame_set_wire_color",
+   "module": "evt_frame",
+   "arity": 5,
+   "signature": "evt_frame_set_wire_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)"
+  },
+  {
+   "name": "evt_frame_set_wire_draw_rotation",
+   "module": "evt_frame",
+   "arity": 4,
+   "signature": "evt_frame_set_wire_draw_rotation(const char * instanceName, f32 rotX, f32 rotY, f32 rotZ)"
+  },
+  {
+   "name": "evt_frame_set_wire_line_width",
+   "module": "evt_frame",
+   "arity": 2,
+   "signature": "evt_frame_set_wire_line_width(const char * instanceName, u32 lineWidth)"
+  },
+  {
+   "name": "evt_frame_spin_device_entry",
+   "module": "evt_frame",
+   "arity": 3,
+   "signature": "evt_frame_spin_device_entry(s32 arg1, const char * startSegment, const char * segmentArray)"
+  },
+  {
+   "name": "evt_frame_wire_entry",
+   "module": "evt_frame",
+   "arity": 7,
+   "signature": "evt_frame_wire_entry(const char * instanceName, const char * animPoseName, const char * animDef,"
+  },
+  {
+   "name": "evt_guide_check_flag0",
+   "module": "evt_guide",
+   "arity": 2,
+   "signature": "evt_guide_check_flag0(u32 flags, bool &ret)"
+  },
+  {
+   "name": "evt_guide_flag0_onoff",
+   "module": "evt_guide",
+   "arity": 2,
+   "signature": "evt_guide_flag0_onoff(bool onoff, u32 flags)"
+  },
+  {
+   "name": "evt_guide_flag2_onoff",
+   "module": "evt_guide",
+   "arity": 2,
+   "signature": "evt_guide_flag2_onoff(bool onoff, u32 flags)"
+  },
+  {
+   "name": "evt_guide_get_can_search",
+   "module": "evt_guide",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_hit_bind_mapobj",
+   "module": "evt_hit",
+   "arity": 2,
+   "signature": "evt_hit_bind_mapobj(const char * hit_name, const char * map_name)"
+  },
+  {
+   "name": "evt_hit_bind_update",
+   "module": "evt_hit",
+   "arity": 1,
+   "signature": "evt_hit_bind_update(const char * hit_name)"
+  },
+  {
+   "name": "evt_hitobj_attr_onoff",
+   "module": "evt_hit",
+   "arity": 4,
+   "signature": "evt_hitobj_attr_onoff(s32 group, bool on, const char * name, u32 mask)"
+  },
+  {
+   "name": "evt_hitobj_get_pos",
+   "module": "evt_hit",
+   "arity": 4,
+   "signature": "evt_hitobj_get_pos(const char * hit_name, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_hitobj_onoff",
+   "module": "evt_hit",
+   "arity": 3,
+   "signature": "evt_hitobj_onoff(const char * name, s32 group, bool on)"
+  },
+  {
+   "name": "evt_img_alloc_capture",
+   "module": "evt_img",
+   "arity": 8,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_entry",
+   "module": "evt_img",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_free_capture",
+   "module": "evt_img",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_release",
+   "module": "evt_img",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_set_paper",
+   "module": "evt_img",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_set_paper_anim",
+   "module": "evt_img",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_img_wait_animend",
+   "module": "evt_img",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_item_entry",
+   "module": "evt_item",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_item_event_free_work",
+   "module": "evt_item",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_item_flag_onoff",
+   "module": "evt_item",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_item_get_position",
+   "module": "evt_item",
+   "arity": 4,
+   "signature": "evt_item_get_position(const char* name, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_item_set_position",
+   "module": "evt_item",
+   "arity": 4,
+   "signature": "evt_item_set_position(const char* name, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_item_spawn_thunder",
+   "module": "evt_item",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_item_wait_collected",
+   "module": "evt_item",
+   "arity": 1,
+   "signature": "evt_item_wait_collected(const char *name)"
+  },
+  {
+   "name": "evt_itemdata_get_return_pipe_info",
+   "module": "item_event_data",
+   "arity": 2,
+   "signature": "evt_itemdata_get_return_pipe_info(char * &mapNameOut, char * &doorNameOut)"
+  },
+  {
+   "name": "evt_key_get_button",
+   "module": "evt_sub",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_machi_set_elv_descs",
+   "module": "machi",
+   "arity": 2,
+   "signature": "evt_machi_set_elv_descs(ElvDesc * descs, s32 count)"
+  },
+  {
+   "name": "evt_map_checkanim",
+   "module": "evt_map",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_map_playanim",
+   "module": "evt_map",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_map_set_blend",
+   "module": "evt_map",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_map_spawn_ladder",
+   "module": "evt_map",
+   "arity": 8,
+   "signature": ""
+  },
+  {
+   "name": "evt_mapdisp_onoff",
+   "module": "evt_map",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_mapobj_color",
+   "module": "evt_map",
+   "arity": 6,
+   "signature": "evt_mapobj_color(s32 group, const char * name, u8 r, u8 g, u8 b, u8 a)"
+  },
+  {
+   "name": "evt_mapobj_flag4_onoff",
+   "module": "evt_map",
+   "arity": 4,
+   "signature": "evt_mapobj_flag4_onoff(s32 group, bool on, const char * name, u32 mask)"
+  },
+  {
+   "name": "evt_mapobj_flag_onoff",
+   "module": "evt_map",
+   "arity": 4,
+   "signature": "evt_mapobj_flag_onoff(s32 group, bool on, const char * name, u32 mask)"
+  },
+  {
+   "name": "evt_mapobj_get_position",
+   "module": "evt_map",
+   "arity": 4,
+   "signature": "evt_mapobj_get_position(const char * name, f32& x, f32& y, f32& z)"
+  },
+  {
+   "name": "evt_mapobj_scale",
+   "module": "evt_map",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_mapobj_trans",
+   "module": "evt_map",
+   "arity": 4,
+   "signature": "evt_mapobj_trans(const char * name, s32 x, s32 y, s32 z)"
+  },
+  {
+   "name": "evt_mario_check_3d",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_direction_face",
+   "module": "evt_mario",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_direction_reset",
+   "module": "evt_mario",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_face_coords",
+   "module": "evt_mario",
+   "arity": 2,
+   "signature": "evt_mario_face_coords(float positionX, float PositionZ)"
+  },
+  {
+   "name": "evt_mario_face_npc",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": "evt_mario_face_npc(const char * name)"
+  },
+  {
+   "name": "evt_mario_fairy_reset",
+   "module": "evt_mario",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_flag8_onoff",
+   "module": "evt_mario",
+   "arity": 2,
+   "signature": "evt_mario_flag8_onoff(bool onOff, u32 mask)"
+  },
+  {
+   "name": "evt_mario_get_character",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": "evt_mario_get_character(s32& ret)"
+  },
+  {
+   "name": "evt_mario_get_height",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": "evt_mario_get_height(f32& ret)"
+  },
+  {
+   "name": "evt_mario_get_pos",
+   "module": "evt_mario",
+   "arity": 3,
+   "signature": "evt_mario_get_pos(f32& x, f32& y, f32& z)"
+  },
+  {
+   "name": "evt_mario_jump_to",
+   "module": "evt_mario",
+   "arity": 5,
+   "signature": "evt_mario_jump_to(f32 x, f32 y, f32 z, f32 jumpHeight, f32 time_msec)"
+  },
+  {
+   "name": "evt_mario_key_off",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": "evt_mario_key_off(int)"
+  },
+  {
+   "name": "evt_mario_key_on",
+   "module": "evt_mario",
+   "arity": 0,
+   "signature": "evt_mario_key_on()"
+  },
+  {
+   "name": "evt_mario_pos_change",
+   "module": "evt_mario",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_set_anim_change_handler",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": "evt_mario_set_anim_change_handler(MarioAnimChangeHandler * handler)"
+  },
+  {
+   "name": "evt_mario_set_character",
+   "module": "evt_mario",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_set_gravity",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_set_pos",
+   "module": "evt_mario",
+   "arity": 3,
+   "signature": "evt_mario_set_pos(f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_mario_set_pose",
+   "module": "evt_mario",
+   "arity": 2,
+   "signature": "evt_mario_set_pose(const char * name, s16 time)"
+  },
+  {
+   "name": "evt_mario_take_damage",
+   "module": "evt_mario",
+   "arity": 6,
+   "signature": "evt_mario_take_damage(s32 type, f32 x, f32 y, f32 z, s32 dmgFlags, s32 damage)"
+  },
+  {
+   "name": "evt_mario_wait_anim",
+   "module": "evt_mario",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_walk_back_from_pos",
+   "module": "evt_mario",
+   "arity": 6,
+   "signature": ""
+  },
+  {
+   "name": "evt_mario_walk_to",
+   "module": "evt_mario",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_mobj_arrow",
+   "module": "evt_mobj",
+   "arity": 5,
+   "signature": "evt_mobj_arrow(const char * name, f32 x, f32 y, f32 z, UNK arg5)"
+  },
+  {
+   "name": "evt_mobj_blk",
+   "module": "evt_mobj",
+   "arity": 8,
+   "signature": "evt_mobj_blk(s32 type, char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_delete",
+   "module": "evt_mobj",
+   "arity": 1,
+   "signature": "evt_mobj_delete(const char * name)"
+  },
+  {
+   "name": "evt_mobj_eria_block",
+   "module": "evt_mobj",
+   "arity": 6,
+   "signature": "evt_mobj_eria_block(const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_exec_cancel",
+   "module": "evt_mobj",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_mobj_fire_block",
+   "module": "evt_mobj",
+   "arity": 9,
+   "signature": "evt_mobj_fire_block(const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_flag_onoff",
+   "module": "evt_mobj",
+   "arity": 4,
+   "signature": "evt_mobj_flag_onoff(bool on, bool flag4, const char * name, u32 mask)"
+  },
+  {
+   "name": "evt_mobj_get_joint_names",
+   "module": "evt_mobj",
+   "arity": 3,
+   "signature": "evt_mobj_get_joint_names(const char * name, const char * a2Name, const char * a3Name)"
+  },
+  {
+   "name": "evt_mobj_get_position",
+   "module": "evt_mobj",
+   "arity": 4,
+   "signature": "evt_mobj_get_position(const char * name, f32& x, f32& y, f32& z)"
+  },
+  {
+   "name": "evt_mobj_hip_kui",
+   "module": "evt_mobj",
+   "arity": 8,
+   "signature": "evt_mobj_hip_kui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_hit_onoff",
+   "module": "evt_mobj",
+   "arity": 2,
+   "signature": "evt_mobj_hit_onoff(bool on, const char * name)"
+  },
+  {
+   "name": "evt_mobj_hunmer_blk",
+   "module": "evt_mobj",
+   "arity": 7,
+   "signature": "evt_mobj_hunmer_blk(s32 type, const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_jumpstand",
+   "module": "evt_mobj",
+   "arity": 8,
+   "signature": "evt_mobj_jumpstand(s32 type, const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_kan",
+   "module": "evt_mobj",
+   "arity": 7,
+   "signature": "evt_mobj_kan(bool rotation, const char * name, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_save_blk",
+   "module": "evt_mobj",
+   "arity": 5,
+   "signature": "evt_mobj_save_blk(char * instanceName, f32 x, f32 y, f32 z, EvtScriptCode * interactScript)"
+  },
+  {
+   "name": "evt_mobj_set_anim",
+   "module": "evt_mobj",
+   "arity": 2,
+   "signature": "evt_mobj_set_anim(const char * mobjName, const char * animName)"
+  },
+  {
+   "name": "evt_mobj_set_position",
+   "module": "evt_mobj",
+   "arity": 4,
+   "signature": "evt_mobj_set_position(const char * name, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_mobj_set_rotation",
+   "module": "evt_mobj",
+   "arity": 4,
+   "signature": "evt_mobj_set_rotation(const char * name, f32 xRotation, f32 yRotation, f32 zRotation)"
+  },
+  {
+   "name": "evt_mobj_set_scale",
+   "module": "evt_mobj",
+   "arity": 4,
+   "signature": "evt_mobj_set_scale(const char * name, f32 xScale, f32 yScale, f32 zScale)"
+  },
+  {
+   "name": "evt_mobj_sui",
+   "module": "evt_mobj",
+   "arity": 8,
+   "signature": "evt_mobj_sui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,"
+  },
+  {
+   "name": "evt_mobj_thako",
+   "module": "evt_mobj",
+   "arity": 9,
+   "signature": "evt_mobj_thako(s32 type, const char * name, f32 x, f32 y, f32 z, EvtScriptCode * interactScript,"
+  },
+  {
+   "name": "evt_mobj_wait_animation_end",
+   "module": "evt_mobj",
+   "arity": 2,
+   "signature": "evt_mobj_wait_animation_end(const char * name, UNUSED)"
+  },
+  {
+   "name": "evt_mobj_zyo",
+   "module": "evt_mobj",
+   "arity": 9,
+   "signature": "evt_mobj_zyo(const char * name, s32 lockItemId, f32 x, f32 y, f32 z, f32 yRotation,"
+  },
+  {
+   "name": "evt_msg_continue",
+   "module": "evt_msg",
+   "arity": 0,
+   "signature": "evt_msg_continue()"
+  },
+  {
+   "name": "evt_msg_fmt_str",
+   "module": "evt_msg",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_msg_print",
+   "module": "evt_msg",
+   "arity": 4,
+   "signature": "evt_msg_print(u32 flags, const char * msg, s32 mainFunc, const char * speaker)"
+  },
+  {
+   "name": "evt_msg_print_add",
+   "module": "evt_msg",
+   "arity": 2,
+   "signature": "evt_msg_print_add(u32 flags, const char * message)"
+  },
+  {
+   "name": "evt_msg_print_add_insert",
+   "module": "evt_msg",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_msg_print_insert",
+   "module": "evt_msg",
+   "arity": null,
+   "signature": "evt_msg_print_insert(u32 flags, const char * msg, s32 mainFunc, const char * speaker, insertion)"
+  },
+  {
+   "name": "evt_msg_select",
+   "module": "evt_msg",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_msg_toge",
+   "module": "evt_msg",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_add_flip_part",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_agb_async",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_agb_async(const char * animPoseName, val???)"
+  },
+  {
+   "name": "evt_npc_animflag_onoff",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_animflag_onoff(const char * instanceName, bool on, u32 mask)"
+  },
+  {
+   "name": "evt_npc_arc_to",
+   "module": "evt_npc",
+   "arity": 10,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_delete",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": "evt_npc_delete(const char * name)"
+  },
+  {
+   "name": "evt_npc_entry",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_entry(const char * instanceName, const char * animPoseName, s32 instanceId)"
+  },
+  {
+   "name": "evt_npc_entry_from_template",
+   "module": "evt_npc",
+   "arity": 7,
+   "signature": "evt_npc_entry_from_template(s32 instanceIdOverride, s32 templateId, s32 x, s32 y,"
+  },
+  {
+   "name": "evt_npc_finish_flip_instant",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_flag46C_onoff",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_flag8_onoff",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_flag8_onoff(const char * instanceName, bool on, u32 mask)"
+  },
+  {
+   "name": "evt_npc_flagC_onoff",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_flip",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_flip_to",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_freeze_all",
+   "module": "evt_npc",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_get_active_count",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_get_axis_movement_unit",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_get_axis_movement_unit(const char * name, f32& ret)"
+  },
+  {
+   "name": "evt_npc_get_cur_anim",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_get_cur_anim(const char * name, s32 ret)"
+  },
+  {
+   "name": "evt_npc_get_damage_type",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_get_hp",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_get_max_hp",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_get_position",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": "evt_npc_get_position(const char * name, f32& x, f32& y, f32& z)"
+  },
+  {
+   "name": "evt_npc_get_property",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_get_property(const char * instanceName, s32 propertyId, EvtVar ret)"
+  },
+  {
+   "name": "evt_npc_get_unitwork",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_glide_to",
+   "module": "evt_npc",
+   "arity": 10,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_id_to_name",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_jump_to",
+   "module": "evt_npc",
+   "arity": 6,
+   "signature": "evt_npc_jump_to(const char * name, f32 destX, f32 destY, f32 destZ, f32 height, s32 length)"
+  },
+  {
+   "name": "evt_npc_modify_part",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_restart_evt_id",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": "evt_npc_restart_evt_id(const char * name)"
+  },
+  {
+   "name": "evt_npc_rotate",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_sammer_display_count",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": "evt_npc_sammer_display_count(s32 count)"
+  },
+  {
+   "name": "evt_npc_set_anim",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_animpose_disp_callback",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_axis_movement_unit",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_camid",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_set_camid(const char * name, s32 camId)"
+  },
+  {
+   "name": "evt_npc_set_color",
+   "module": "evt_npc",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_colorcopy",
+   "module": "evt_npc",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_colorcopytwo",
+   "module": "evt_npc",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_disp_callback",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_hp",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_move_mode",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_set_move_mode(const char * name, NPCMoveMode moveMode )"
+  },
+  {
+   "name": "evt_npc_set_part_attack_power",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_set_part_attack_power(const char * name, npcPartIndex, attackPower)"
+  },
+  {
+   "name": "evt_npc_set_partswork",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_set_position",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": "evt_npc_set_position(const char * instanceName, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_npc_set_property",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_set_property(const char * instanceName, s32 propertyId, s32 value)"
+  },
+  {
+   "name": "evt_npc_set_scale",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": "evt_npc_set_scale(const char * instanceName, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_npc_set_thoreau_override",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_set_thoreau_override(const char * name, void *func)"
+  },
+  {
+   "name": "evt_npc_set_unitwork",
+   "module": "evt_npc",
+   "arity": 3,
+   "signature": "evt_npc_set_unitwork(const char * name, s32 idx, s32 val)"
+  },
+  {
+   "name": "evt_npc_spawn_sammer_guy",
+   "module": "evt_npc",
+   "arity": 6,
+   "signature": "evt_npc_spawn_sammer_guy(s32 instanceId, s32 sammerId, f32 x, f32 y, f32 z, EvtVar ret)"
+  },
+  {
+   "name": "evt_npc_stats_set_up",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_teleport_effect",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_teleport_effect(bool appearDisappear, const char * instanceName)"
+  },
+  {
+   "name": "evt_npc_tribe_agb_async",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": "evt_npc_tribe_agb_async(s32 tribeId)"
+  },
+  {
+   "name": "evt_npc_unfreeze_all",
+   "module": "evt_npc",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_wait_anim_end",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_wait_anim_end(const char * npcName, s32 partId)"
+  },
+  {
+   "name": "evt_npc_wait_axis_movement_unit_end",
+   "module": "evt_npc",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_wait_flip_finished",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_npc_wait_for",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": "evt_npc_wait_for(const char * name, s32 timeInMiliseconds)"
+  },
+  {
+   "name": "evt_npc_walk_to",
+   "module": "evt_npc",
+   "arity": 8,
+   "signature": ""
+  },
+  {
+   "name": "evt_offscreen_delete",
+   "module": "evt_offscreen",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_offscreen_entry",
+   "module": "evt_offscreen",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_offscreen_get_boundingbox2",
+   "module": "evt_offscreen",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_paper_delete",
+   "module": "evt_paper",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_paper_entry",
+   "module": "evt_paper",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_add_attack",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_add_coins",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_add_hp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_add_item",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": "evt_pouch_add_item(s32 id)"
+  },
+  {
+   "name": "evt_pouch_add_shop_item",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_add_xp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_change_char_selectable",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_change_pixl_selectable",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_check_free_use_item",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_check_have_item",
+   "module": "evt_pouch",
+   "arity": 2,
+   "signature": "evt_pouch_check_have_item(s32 id, bool& ret)"
+  },
+  {
+   "name": "evt_pouch_count_free_shop_items",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_count_shop_items",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_count_use_items",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_arcade_tokens",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_attack",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_coins",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_enemies_defeated",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_hp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_level",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_max_hp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_max_jump_combo",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_max_stylish_combo",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_next_level_xp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_total_coins_collected",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_get_xp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_increment_enemies_defeated",
+   "module": "evt_pouch",
+   "arity": 0,
+   "signature": "evt_pouch_increment_enemies_defeated(void)"
+  },
+  {
+   "name": "evt_pouch_remove_item",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_remove_item_idx",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_remove_shop_item",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_remove_shop_item_idx",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_arcade_tokens",
+   "module": "evt_pouch",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_attack",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_coins",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_hp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_level",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_max_hp",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_pouch_set_pixl_selected",
+   "module": "evt_pouch",
+   "arity": 1,
+   "signature": "evt_pouch_set_pixl_selected(s32 id)"
+  },
+  {
+   "name": "evt_read_setup_file",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_add_xp",
+   "module": "an2_08",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_calc_damage_to_enemy",
+   "module": "an2_08",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_calc_item_stats",
+   "module": "an2_08",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_calc_mario_damage",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_change_menu_flag",
+   "module": "an2_08",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_char_get",
+   "module": "an2_08",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_choice_handler",
+   "module": "an2_08",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_effect_check",
+   "module": "an2_08",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_effects_handle",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_enemy_death_check",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_enemy_take_damage",
+   "module": "an2_08",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_get_item_msg",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_mario_take_damage",
+   "module": "an2_08",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_menu_effects_handler",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_npctribe_handle",
+   "module": "an2_08",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_point_calculation",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_point_handling",
+   "module": "an2_08",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_status_remove",
+   "module": "an2_08",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_underchomp_name_grab",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_rpg_wakeup_check",
+   "module": "an2_08",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_run_case_evt",
+   "module": "evt_case",
+   "arity": 6,
+   "signature": "evt_run_case_evt(int caseType, int unk, const char * a2Name, const char * a3Name, EvtScriptCode * script, unk)"
+  },
+  {
+   "name": "evt_seq_mapchange",
+   "module": "evt_seq",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_seq_set_seq",
+   "module": "evt_seq",
+   "arity": 3,
+   "signature": "evt_seq_set_seq(s32 seq, void * p0, void * p1)"
+  },
+  {
+   "name": "evt_seq_wait",
+   "module": "evt_seq",
+   "arity": 1,
+   "signature": "evt_seq_wait(s32 seq)"
+  },
+  {
+   "name": "evt_set_transition",
+   "module": "evt_fade",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_add_charm",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_add_shop_point",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_build_flimm_flipside_item_tables",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_build_flimm_pit_item_tables",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_build_howzit_item_table",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_build_map_table",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_check_all_maps_owned",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_clear_shop_points",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_count_cards",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_filter_flimm_flipside_items",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_filter_flimm_pit_items",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_flimm_select_item",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_buy_price",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_card_bag",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_card_give_info",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_fortune_message",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_map_info",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_name_items",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_otoya_bgm",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_point_reward",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_get_shop_points",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_handle_roten_item_flag",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_howzit_select_item",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_init_card_item_flags",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_init_flopside_cards",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_remove_card",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_remove_item",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_restore_itemdata_prices",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_select_card",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_select_item",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_set_defs",
+   "module": "evt_shop",
+   "arity": 2,
+   "signature": "evt_shop_set_defs(EvtShopDef * defs, s32 count)"
+  },
+  {
+   "name": "evt_shop_set_point_reward_collected",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_shop_wait_coin_sfx",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_bgmoff",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_bgmoff(s32 bgmPlayerId)"
+  },
+  {
+   "name": "evt_snd_bgmoff_f_d",
+   "module": "evt_snd",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_bgmon",
+   "module": "evt_snd",
+   "arity": 2,
+   "signature": "evt_snd_bgmon(s32 bgmPlayerId, const char * name)"
+  },
+  {
+   "name": "evt_snd_bgmon_f_d",
+   "module": "evt_snd",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_channel_fadeout",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_envon",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_envon_f",
+   "module": "evt_snd",
+   "arity": 3,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_get_bgm_wait_time",
+   "module": "evt_snd",
+   "arity": 2,
+   "signature": "evt_snd_get_bgm_wait_time(s32 bgmPlayerId, s32& ret)"
+  },
+  {
+   "name": "evt_snd_get_last_sfx_id",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_get_last_sfx_id(s32& ret)"
+  },
+  {
+   "name": "evt_snd_set_sfx_reverb_mode",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_set_sfx_reverb_mode(s32 mode)"
+  },
+  {
+   "name": "evt_snd_sfx_fadeout",
+   "module": "evt_snd",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_sfx_wait",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_sfx_wait_name",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_sfxoff",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_sfxoff(s32 id)"
+  },
+  {
+   "name": "evt_snd_sfxon",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_sfxon(const char * name)"
+  },
+  {
+   "name": "evt_snd_sfxon_3d",
+   "module": "evt_snd",
+   "arity": 4,
+   "signature": "evt_snd_sfxon_3d(const char * name, f32 x, f32 y, f32 z)"
+  },
+  {
+   "name": "evt_snd_sfxon_3d_player",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": "evt_snd_sfxon_3d_player(const char * name)"
+  },
+  {
+   "name": "evt_snd_sfxon_3d_player_character",
+   "module": "evt_snd",
+   "arity": 4,
+   "signature": "evt_snd_sfxon_3d_player_character(const char * marioName, const char * peach,"
+  },
+  {
+   "name": "evt_snd_sfxon_character",
+   "module": "evt_snd",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_snd_sfxon_npc",
+   "module": "evt_snd",
+   "arity": 2,
+   "signature": "evt_snd_sfxon_npc(const char * sfxName, const char * npcName)"
+  },
+  {
+   "name": "evt_snd_sfxon_npc_delay",
+   "module": "evt_snd",
+   "arity": 3,
+   "signature": "evt_snd_sfxon_npc_delay(const char * sfxName, const char * npcName, s32 delayTime)"
+  },
+  {
+   "name": "evt_snd_string_call",
+   "module": "evt_snd",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_animgroup_async",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": "evt_sub_animgroup_async(const char * name)"
+  },
+  {
+   "name": "evt_sub_display_room_name",
+   "module": "evt_sub",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_get_dist",
+   "module": "evt_sub",
+   "arity": 5,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_get_entername",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": "evt_sub_get_entername(&char* ret)"
+  },
+  {
+   "name": "evt_sub_get_language",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_get_mapname",
+   "module": "evt_sub",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_hud_configure",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_intpl_msec_get_value",
+   "module": "evt_sub",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_intpl_msec_init",
+   "module": "evt_sub",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_item_select_menu",
+   "module": "evt_sub",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "evt_sub_random",
+   "module": "evt_sub",
+   "arity": 2,
+   "signature": "evt_sub_random(s32 max, s32& ret)"
+  },
+  {
+   "name": "evt_sub_set_game_speed",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": "evt_sub_set_game_speed(float newSpeed)"
+  },
+  {
+   "name": "func_800d2268",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d22d8",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d3144",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d31a0",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d35d8",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d3644",
+   "module": "evt_snd",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800d4de4",
+   "module": "evt_sub",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "func_800d8700",
+   "module": "evt_sub",
+   "arity": 1,
+   "signature": ""
+  },
+  {
+   "name": "func_800e01f8",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e02bc",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0720",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e07bc",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0890",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e08f8",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e092c",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0a14",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0a84",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0b58",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0b8c",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0bbc",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e0c40",
+   "module": "evt_cam",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e6250",
+   "module": "evt_eff",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e8518",
+   "module": "evt_fairy",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800e8824",
+   "module": "evt_fairy",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f05b0",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f119c",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f1684",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f1a4c",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f23e4",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800f240c",
+   "module": "evt_mario",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_800fe92c",
+   "module": "evt_npc",
+   "arity": 4,
+   "signature": ""
+  },
+  {
+   "name": "func_800ff8f8",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801049ec",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80104a3c",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80105b94",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801072a4",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80107c38",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "func_80108194",
+   "module": "evt_npc",
+   "arity": 2,
+   "signature": ""
+  },
+  {
+   "name": "func_8010d2b8",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010d3d4",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010d5b8",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010d674",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010da90",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010db80",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010dc04",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010e020",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010e110",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010e700",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010e8bc",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010ea10",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010ea78",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010eb1c",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010eb60",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_8010ed70",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801103b8",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801108f4",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80110ac4",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80111074",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80111334",
+   "module": "evt_shop",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801e5fd0",
+   "module": "npc_dimeen_l",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801f0d30",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801f1880",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801f2344",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801f2664",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_801f2af8",
+   "module": "evt_npc",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_802154fc",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80215514",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80215540",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80215f44",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80224804",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80224874",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80225380",
+   "module": "npc_shadoo",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80c4d444",
+   "module": "machi",
+   "arity": null,
+   "signature": ""
+  },
+  {
+   "name": "func_80c5c36c",
+   "module": "sp4_13",
+   "arity": 0,
+   "signature": ""
+  },
+  {
+   "name": "func_80c83c48",
+   "module": "dan",
+   "arity": 0,
+   "signature": "func_80c83c48()"
+  },
+  {
+   "name": "npc_dimeen_l_box_deal_damage",
+   "module": "npc_dimeen_l",
+   "arity": 6,
+   "signature": "npc_dimeen_l_box_deal_damage(s32 unused, s32 flags, s32 damage, f32 posX, f32 posY, f32 posZ)"
+  },
+  {
+   "name": "npc_dimeen_l_determine_move_pos",
+   "module": "npc_dimeen_l",
+   "arity": null,
+   "signature": ""
+  }
+ ]
+}

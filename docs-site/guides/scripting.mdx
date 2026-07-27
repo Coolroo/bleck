@@ -147,9 +147,25 @@ loop {
 `and`, `or` and `not` work, spelled either way (`&&`, `||`). Comparisons are
 `== != < > <= >=`.
 
+### Finding what you can call
+
+The game has **443 script builtins**. `bleck` knows all of them:
+
+```bash
+bleck script builtins --search coin
+```
+
+```
+evt_pouch
+  evt_pouch_add_coins(...)        1 argument
+  evt_pouch_get_coins(...)        1 argument
+```
+
+Drop `--search` to list everything, grouped by subsystem.
+
 ### Calling game functions
 
-Any of the game's several hundred script builtins can be called by name:
+Any of those builtins can be called by name:
 
 ```text
 evt_mario_set_pos(0.0, 100.0, 0.0)
@@ -157,13 +173,26 @@ evt_msg_print(0, "Hello!", 0, 0)
 evt_sub_set_game_speed(2.0)
 ```
 
-Names are resolved when the module is built, so a typo is caught then:
+Typos and wrong argument counts are caught by `bleck script check`, before
+anything is compiled:
 
 ```
-bleck: the script calls game functions that spm.eu0.lst does not list:
-  Missing 1 required symbol(s): evt_mario_no_such_function
-  Check the spelling, or use a symbol list that covers them
+main.evt:2:5: 'evt_pouch_add_coin' is not a known game function.
+  Did you mean one of: evt_pouch_add_coins, evt_pouch_add_item, evt_pouch_add_xp?
+2 |     evt_pouch_add_coin(1)
+        ^
 ```
+
+```
+main.evt:3:5: evt_mario_set_pos takes 3 argument(s), but 2 were given
+  evt_mario_set_pos(f32 x, f32 y, f32 z)
+```
+
+<Note>
+Argument counts are only checked where upstream documents them — about two
+thirds of builtins. The rest are variadic or simply undocumented, and `bleck`
+skips them rather than guessing, since a wrong guess would reject working code.
+</Note>
 
 <Note>
 **Calls are statements, not expressions.** `var x = evt_sub_random(5)` will not
@@ -215,7 +244,8 @@ exists in one list may simply be absent from another.
 
 | Command | What it does |
 |---|---|
-| `bleck script check <file>` | Parse and compile; report scripts and functions called |
+| `bleck script builtins [--search X]` | List the game functions a script can call |
+| `bleck script check <file>` | Parse and compile; validate every call |
 | `bleck script dump <file>` | Print the C the script compiles to |
 | `bleck script build <file>` | Compile all the way to a `.rel` module |
 | `bleck mod build <mod>` | Compile the mod's script and build a disc |

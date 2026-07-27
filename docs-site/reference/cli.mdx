@@ -202,6 +202,25 @@ resulting module is packaged automatically.
 Scripts compile to the game's own `evt` bytecode VM. See
 [Scripting](/guides/scripting).
 
+### `bleck script builtins`
+
+```bash
+bleck script builtins [--search TEXT]
+```
+
+List the game functions a script can call — 443 of them, grouped by subsystem,
+with argument counts and documented signatures where upstream provides them.
+
+### `bleck script index`
+
+```bash
+bleck script index <path-to-spm-headers/include>
+```
+
+Regenerate the builtin catalog from a `spm-headers` checkout. Rarely needed —
+a catalog ships with `bleck` — but useful when upstream documents more
+functions.
+
 ### `bleck script check`
 
 ```bash

@@ -24,6 +24,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
+from bleck.script import catalog as builtin_catalog
 from bleck.script import evt, syntax
 from bleck.script.errors import Position, ScriptError
 
@@ -631,6 +632,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         if not isinstance(call, syntax.Call):
             raise self.fail("expected a call", node.position)
 
+        self.owner.check_call(call)
         arguments = [self.evaluate(argument) for argument in call.arguments]
         self.owner.note_symbol(call.callee)
         # USER_FUNC takes the function pointer as its first argument, so the
@@ -654,9 +656,15 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 class _ProgramCompiler:
     """Compiles every script in one source file."""
 
-    def __init__(self, program: syntax.Program, source: str) -> None:
+    def __init__(
+        self,
+        program: syntax.Program,
+        source: str,
+        catalog: builtin_catalog.Catalog | None = None,
+    ) -> None:
         self.program = program
         self.source = source
+        self.catalog = catalog if catalog is not None else builtin_catalog.load()
         self.strings: list[str] = []
         self.symbols: list[str] = []
         self.names = {script.name for script in program.scripts}
@@ -676,6 +684,43 @@ class _ProgramCompiler:
             raise ScriptError(
                 f"no script named {name!r} in this file (declared: {known})",
                 at,
+                self.source,
+            )
+
+    def check_call(self, call: syntax.Call) -> None:
+        """Reject a call the catalog says cannot be right.
+
+        Both failures below are otherwise found far too late: an unknown name
+        surfaces as `elf2rel`'s "Missing 1 required symbol(s)" after a compile
+        and a toolchain, and a wrong argument count is not caught at all -- it
+        links cleanly and misbehaves in-game.
+        """
+        if not self.catalog.builtins:
+            return  # No catalog generated; nothing to check against.
+
+        known = self.catalog.find(call.callee)
+        if known is None:
+            suggestions = self.catalog.suggest(call.callee)
+            if len(suggestions) == 1:
+                hint = f" Did you mean {suggestions[0]}?"
+            elif suggestions:
+                hint = f" Did you mean one of: {', '.join(suggestions)}?"
+            else:
+                hint = " Run `bleck script builtins` to see what is available."
+            raise ScriptError(
+                f"{call.callee!r} is not a known game function.{hint}",
+                call.position,
+                self.source,
+            )
+
+        if known.arity is not None and len(call.arguments) != known.arity:
+            # Only show the signature when there is one; the fallback would
+            # just restate the sentence above it.
+            shape = f"\n  {known.signature}" if known.signature else ""
+            raise ScriptError(
+                f"{call.callee} takes {known.arity} argument(s), "
+                f"but {len(call.arguments)} were given{shape}",
+                call.position,
                 self.source,
             )
 
@@ -709,6 +754,10 @@ def _fold_negation(node: syntax.Expression) -> syntax.Expression | None:
     return None
 
 
-def compile_program(program: syntax.Program, source: str = "") -> CompiledProgram:
+def compile_program(
+    program: syntax.Program,
+    source: str = "",
+    catalog: builtin_catalog.Catalog | None = None,
+) -> CompiledProgram:
     """Compile a parsed program to `evt` bytecode."""
-    return _ProgramCompiler(program, source).compile()
+    return _ProgramCompiler(program, source, catalog).compile()
