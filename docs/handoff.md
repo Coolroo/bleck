@@ -7,6 +7,8 @@ For anything else:
 
 - [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D39)
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
+- [`hook-points.md`](./hook-points.md) — **when custom code can safely run.**
+  Two debugging cycles went into this; read it before writing a hook
 - [`roadmap.md`](./roadmap.md) — what to build next and what blocks it
 - [`disc-layout.md`](./disc-layout.md) — observed facts about the disc
 - [`../docs-site/`](../docs-site/) — user-facing docs
