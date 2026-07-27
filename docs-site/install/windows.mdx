@@ -3,10 +3,15 @@ title: Windows
 description: Installing bleck on Windows 11
 ---
 
+<Note>
+**Verified on Windows 11.** Install, the full test suite and the linters all
+pass there.
+</Note>
+
 <Warning>
-**Not yet verified on Windows.** The platform support is implemented and covered
-by tests that run on Linux, but nobody has run it on Windows. If you do, please
-report back.
+**`extract` and `build` are still unverified on Windows.** They shell out to
+`wit.exe` and `DolphinTool.exe`, which were not installed on the machine used
+for verification. If you run them, please report back.
 </Warning>
 
 <Steps>
