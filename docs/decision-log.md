@@ -2865,3 +2865,63 @@ chunk boundary is not missed.
 It answers "which of these did the game load?" without knowing anything about
 *how* it loads them — mark the candidates differently and look for the marks.
 That generalises well beyond setup files.
+
+---
+
+## D54 — Attribution audit, and a constraint it surfaced (2026-07-27)
+
+A `README.md` now credits the projects `bleck` is built on. Verified against
+each repository rather than written from memory, which caught things worth
+recording.
+
+### ✅ `spm-headers` is MIT — but only in part
+
+Its README is precise, and it matters:
+
+> All code originally written for this project (everything under the `include`,
+> `decomp` and `linker` directories) is available under the MIT license.
+>
+> Everything under the `mod` folder is available under the GPLv3 license as it's
+> derived from other GPL code.
+
+⚠️ **There is no `LICENSE` file at the repository root**, so a tool that looks
+for one finds nothing and a reader might conclude "unlicensed". The statement is
+in the README. `bleck/script/catalog.json`'s existing MIT attribution is
+therefore **correct** — it derives from `include/` — and vendoring it is
+permitted with attribution, which is what that file carries.
+
+⛔ Nothing may be taken from `spm-headers/mod/`. Same repository, different
+licence.
+
+### ⛔ `spm-decomp` states no licence at all
+
+Checked the root listing and both `README.md` and `CONTRIBUTING.md`: **no
+`LICENSE` file, no licence statement anywhere.** Default is all-rights-reserved.
+
+**This constrains the planned symbol-table switch** (D39, and still on the
+roadmap). `config/EU0/symbols.txt` has ~9,566 named symbols against the lst's
+976, and adopting it is high value — but it **cannot be vendored**.
+
+✅ The existing design already solves this. `bleck` does not ship symbol lists
+either; `BLECK_SYMBOLS_DIR` points at a copy the user supplies. Reading a
+user-provided `spm-decomp` clone the same way needs no new mechanism and no
+licence grant. Recording it now so the constraint is met by design rather than
+discovered at the end.
+
+⚠️ Reading it as *documentation* — which is how `evtmgr_cmd.c` settled
+`SET`/`SETI`/`SETF` (D45) — is unaffected. Understanding a format from published
+source and then implementing it is not redistribution.
+
+### ✅ `spm-rel-loader` is GPLv3, confirmed by its `LICENSE` file
+
+Its loader codes are what a built disc carries. They are **not committed here** —
+`work/gecko/` is gitignored and the user supplies them — so `bleck`'s own
+licence question stays independent of GPLv3, which is the property D37 was
+designed around and this audit confirms still holds.
+
+### The general point
+
+**Every fact above was checked, and two of them contradicted a reasonable
+assumption**: a repository with no `LICENSE` file that *is* licensed, and a
+sibling repository from the same author that is not licensed at all. "Same
+author, same terms" would have been wrong in both directions.

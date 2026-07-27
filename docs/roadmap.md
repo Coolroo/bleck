@@ -50,7 +50,9 @@ compile but nothing has run on them.
    route deliberately avoids patching game data; expect the same to be true
    here, and read D51 before patching any pointer the game owns.
 4. 🟢 **Switch to the decomp symbol table** — 11× more named symbols, with
-   sizes and types (D39).
+   sizes and types (D39). ⚠️ **`spm-decomp` states no licence** (D54), so it
+   cannot be vendored; read a clone the user supplies, exactly as symbol lists
+   already work.
 5. 🟢 **Multiple code mods.** ⚠️ **Unclaimed across the entire scene** (D39):
    `chainrel` is a stub, and both major distributions tell users to run one REL
    mod at a time. The clearest differentiator available.

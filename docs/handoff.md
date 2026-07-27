@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D51)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D54)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -124,6 +124,8 @@ trying it.
 | ✅ **`.env` is loaded automatically** | tool paths survive between shells; real env still wins |
 | ⛔ `SEQ_TITLE` is never entered | zero frames unattended; there is no menu to hook (D47) |
 | ⛔ Input cannot be injected | DirectInput plus a locked session (D48) |
+| ✅ **The game reads the *embedded* setup copy** | control run: swapping markers left both addresses unchanged (D53) |
+| ✅ **Any map is reachable unattended** | `evt_seq_mapchange` from a map hook (D52) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
 
 ---
@@ -165,7 +167,9 @@ not vendor it, deliberately — see "Licensing" below.
 Anchor to **eu0**. Coverage varies sharply: eu0 documents ~976 symbols, `kr0`
 only 456.
 
-⚠️ **There is a much better source** (D39): `spm-decomp/config/EU0/symbols.txt`
+⚠️ **There is a much better source** (D39), though it **cannot be vendored** —
+`spm-decomp` states no licence (D54), so read a user-supplied clone:
+`spm-decomp/config/EU0/symbols.txt`
 carries ~9,566 human-named symbols — **11x** the lst — with sizes and types, and
 parses with one regex. Switching to it is on the next-steps list.
 
@@ -229,6 +233,12 @@ Then invert pixel data from `0x40` to the end of each — script in
 1. **Licensing.** `bleck` is still **unlicensed**, which technically means
    all-rights-reserved while `docs-site` tells users to clone it. This needs
    settling before any release.
+
+   ✅ **Upstream attribution is now done** (D54): `README.md` credits every
+   project `bleck` builds on, verified against each repository. Two assumptions
+   turned out wrong — `spm-headers` has no `LICENSE` file but *is* MIT for
+   `include`/`decomp`/`linker` (and GPLv3 for `mod/`), while `spm-decomp` from
+   the same author states no licence at all.
 
    ⚠️ **It no longer blocks the code track.** D37 changed that: scripts name
    game functions and `elf2rel` binds them at build time, so `bleck` vendors no
