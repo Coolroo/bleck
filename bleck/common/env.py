@@ -55,6 +55,15 @@ DOLPHIN = EnvVar(
     "BLECK_DOLPHIN",
     description="Path to the Dolphin emulator itself, used by `bleck launch`",
 )
+PPC_GCC = EnvVar(
+    "BLECK_PPC_GCC",
+    description="Path to the PowerPC cross-compiler used to build code mods",
+)
+SYMBOLS_DIR = EnvVar(
+    "BLECK_SYMBOLS_DIR",
+    default="symbols",
+    description="Directory of per-version symbol lists, e.g. spm.eu0.lst",
+)
 EXTRACT_ROOT = EnvVar(
     "BLECK_EXTRACT_ROOT",
     default="extracted",
@@ -84,6 +93,8 @@ DECLARED: list[EnvVar] = [
     WIT,
     DOLPHIN_TOOL,
     DOLPHIN,
+    PPC_GCC,
+    SYMBOLS_DIR,
     EXTRACT_ROOT,
     NO_COLOR,
     MODS_DIR,

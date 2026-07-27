@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .base import DOLPHIN, DOLPHIN_TOOL, WIT, PlatformProfile, ToolLocation
+from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
 
 # Dolphin ships as a portable folder rather than an installer, so there is no
 # canonical install path — these are the conventional ones. A user who unzipped
@@ -46,6 +46,20 @@ PROFILE = PlatformProfile(
                 "folder to PATH or set BLECK_DOLPHIN to its full path.\n"
                 "  Get it from https://dolphin-emu.org/download/ — not winget, "
                 "which ships the 2016 release"
+            ),
+        ),
+        PPC_GCC: ToolLocation(
+            # devkitPPC is the only realistic source on Windows; there is no
+            # distro package to fall back to.
+            names=["powerpc-eabi-gcc.exe", "powerpc-eabi-gcc"],
+            directories=[
+                r"C:\devkitPro\devkitPPC\bin",
+                r"D:\devkitPro\devkitPPC\bin",
+            ],
+            hint=(
+                "install devkitPPC, then reopen your shell:\n"
+                "  bleck toolchain install\n"
+                "  or set BLECK_PPC_GCC to powerpc-eabi-gcc.exe"
             ),
         ),
     },

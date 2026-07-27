@@ -20,6 +20,16 @@ conflate — but only one of them boots a game, and only the other one converts
 an image. Finding the wrong one fails confusingly, so they are separate keys.
 """
 
+PPC_GCC = "powerpc-gcc"
+"""The cross-compiler that builds code mods for the Wii's PowerPC CPU.
+
+Only the C compiler is looked up. Its siblings — `g++`, `ld`, `objcopy` — always
+live in the same directory under the same prefix, so deriving them from this one
+is more reliable than searching for each separately: a machine with two
+toolchains installed could otherwise mix a compiler from one with a linker from
+the other, which fails in ways that look like source bugs.
+"""
+
 
 @dataclass(frozen=True)
 class ToolLocation:

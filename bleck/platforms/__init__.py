@@ -9,7 +9,7 @@ from __future__ import annotations
 import platform as _platform
 
 from . import linux, macos, windows
-from .base import DOLPHIN, DOLPHIN_TOOL, WIT, PlatformProfile, ToolLocation
+from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
 
 _PROFILES = {
     "Linux": linux.PROFILE,
@@ -30,6 +30,7 @@ __all__ = [
     "CURRENT",
     "DOLPHIN",
     "DOLPHIN_TOOL",
+    "PPC_GCC",
     "WIT",
     "PlatformProfile",
     "ToolLocation",

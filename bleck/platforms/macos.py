@@ -13,7 +13,7 @@ Three things differ from Linux in ways that matter:
 
 from __future__ import annotations
 
-from .base import DOLPHIN, DOLPHIN_TOOL, WIT, PlatformProfile, ToolLocation
+from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
 
 # Apple Silicon first: /usr/local also exists on those machines but is not
 # where Homebrew installs.
@@ -64,6 +64,20 @@ PROFILE = PlatformProfile(
                 "(/Applications/Dolphin.app/Contents/MacOS/Dolphin).\n"
                 "  Install with `brew install --cask dolphin`, or set "
                 "BLECK_DOLPHIN to its full path"
+            ),
+        ),
+        PPC_GCC: ToolLocation(
+            # Homebrew has no PowerPC cross-compiler cask; devkitPPC installs to
+            # the same /opt/devkitpro prefix it uses on Linux.
+            names=["powerpc-eabi-gcc"],
+            directories=[
+                "/opt/devkitpro/devkitPPC/bin",
+                *[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
+            ],
+            hint=(
+                "install devkitPPC:\n"
+                "  bleck toolchain install\n"
+                "  or set BLECK_PPC_GCC to powerpc-eabi-gcc"
             ),
         ),
     },
