@@ -23,6 +23,8 @@ this file is forward-looking only.
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
+| **Reaching any map unattended** | ✅ `evt_seq_mapchange` from a map hook — no controller needed (D52) |
+| **Setup files: which copy the game reads** | ✅ **Settled** — the one embedded in the map archive (D53) |
 | Windows 11 | ✅ **Fully verified** — tests, linters, `extract`, `verify`, `mod build`, boot (D33, D35, D36) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
@@ -179,7 +181,14 @@ Shipping a broken multi-mod story is worse than declining to support it.
 
 Booting works, so questions that needed a running game are answerable:
 
-### 🟢 Settle the setup-file duplication (D13)
+### ✅ ~~Settle the setup-file duplication (D13)~~ — *done (D53)*
+
+The game reads the copy **embedded in the map archive**. The standalone
+`files/setup/*.dat` is loaded into MEM2 but never used, so editing it alone is a
+silent no-op — `bleck` now says so at build time. Proven with a control run:
+swapping which copy carried which marker left both buffer addresses unchanged.
+
+The original reasoning is kept below.
 
 Setup files exist as **two byte-identical copies** — standalone in `setup/` and
 embedded in some map archives — and we do not know which the game reads. `bleck`

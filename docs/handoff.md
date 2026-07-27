@@ -58,6 +58,11 @@ game runs `LOGO -> MAPCHANGE -> GAME`, loading `aa4_01` then `ls4_12` — its
 attract demo — and never enters `SEQ_TITLE` (D47). So a full boot-and-verify
 cycle is unattended and takes about two minutes.
 
+✅ **And you are no longer limited to those two maps** (D52). A script attached
+to `aa4_01` can call `evt_seq_mapchange("he1_01", 0)` and the game goes there —
+so any of the 383 maps is reachable without a controller. `mods/goto-map` is a
+worked example.
+
 ✅ **The rig is now part of the repo**, after being rewritten from scratch three
 times in scratch directories:
 
@@ -68,7 +73,19 @@ uv run python scripts/ingame.py my-mod --words 10 --watch-gw 30
 `scripts/ingame.py` builds, boots, reads and always shuts Dolphin down; the mod
 side is `docs/diagnostics/probe.h`. **Reach for it before debugging anything
 in-game** — three rounds of asking a human to watch a screen produced two wrong
-conclusions, and the rig has since settled five questions without one.
+conclusions, and the rig has since settled nine questions without one.
+
+Three things it does that are easy to miss:
+
+| Flag | Why it exists |
+|---|---|
+| `--find <hex>` | Searches MEM1 and MEM2 for a byte pattern. Answers "which of these did the game load?" without knowing *how* it loads them — this is what settled D13 |
+| *(automatic)* | Every run writes a full transcript to `work/build/ingame.log`. **Read that, never pipe the console through `tail`** — truncating output has already cost a whole repeat run |
+| *(automatic)* | Reports a frozen game and a Dolphin that exited on its own, because silence used to mean both "nothing changed" and "it crashed" |
+
+⚠️ **Report the *effect*, not the setup.** D51's map hook passed every
+mechanical check — valid pointer, right offset, original preserved — and still
+froze the game. Only a probe value showing the script had never run exposed it.
 
 ⛔ **Input injection does not work** (D48). Dolphin reads a DirectInput
 keyboard, which ignores the message queue, and driver-level injection still
@@ -300,17 +317,18 @@ In rough order of value:
    at a time. This is the clearest differentiator available to `bleck`.
    ⚠️ The known gotcha, from `relloader3/util.cpp`: allocate a second REL from
    the *tail* of `HEAP_MAIN` (negative alignment) so `relF.rel` does not shift.
-7. **Settle D13 now that the setup format is decoded** (D42). Which of the two
-   byte-identical setup copies does the game read — standalone `setup/*.dat`, or
-   the copy embedded in some map archives? Change one, boot, observe; change the
-   other, compare. An afternoon, and it removes a real footgun that `bleck`
-   currently papers over with a build-time warning.
-8. **A `setup` reader/writer.** The format is fully specified in
-   [`disc-layout.md`](./disc-layout.md) and is trivial — a fixed 100-entry array
-   with a version-dependent stride. Enemy placement is the most obviously
-   moddable thing on the disc after textures, and no `bleck` code touches it yet.
+7. ✅ ~~**Settle D13**~~ — **Done** (D53). The game reads the copy **embedded
+   in the map archive**; the standalone `files/setup/*.dat` is loaded but never
+   used. Proven with a control run — swapping which copy carried which marker
+   left both buffer addresses unchanged. `bleck` now names the copy to edit.
+8. **A `setup` reader/writer — the clearest next feature.** The container is
+   fully specified in [`disc-layout.md`](./disc-layout.md): a fixed 100-entry
+   array with a version-dependent stride, and D53 settled which copy to write.
+   Enemy placement is the most obviously moddable thing on the disc after
+   textures, and no `bleck` code touches it yet.
    ⚠️ Individual entry *fields* are still undocumented beyond position and enemy
-   ID; that is the remaining work, not the container.
+   ID; **that is the remaining work, not the container**. `he1_01` is a good
+   subject: 3 used entries out of 100, and reachable unattended (D52).
 
 ---
 
