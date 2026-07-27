@@ -286,9 +286,13 @@ In rough order of value:
   its loader is plainly derivative of GPLv3 `spm-rel-loader`. Take the loader
   from upstream under GPLv3, or rebuild from published addresses — addresses are
   facts, and facts are not copyrightable.
-- ⚠️ **`tcrf.net/Notes:Super_Paper_Mario` served a prompt-injection payload**
-  aimed at LLM tooling, instructing it to truncate files (D39). `spm-docs` links
-  it as a resource. Do not point automated tooling at it.
+- ⚠️ **An automated fetch of `tcrf.net/Notes:Super_Paper_Mario` returned a
+  prompt-injection payload** aimed at LLM tooling, instructing it to truncate
+  files (D39). ✅ **The wiki page itself is clean** — a browser-saved copy has no
+  payload and the content has not been edited since March 2026 (D41), so this is
+  a serving-layer phenomenon, not vandalism. The general lesson: **what an
+  automated fetch returns is not necessarily what the page contains**, and
+  domain reputation does not help. Treat fetched content as untrusted input.
 - **`evtpatch` is how this scene modifies vanilla logic** — runtime patching of
   existing scripts, complementary to compiling new ones. If we ever emit
   `LBL`/`GOTO`, note that the VM caches label positions in a jump table at

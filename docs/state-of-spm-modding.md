@@ -309,8 +309,11 @@ A second survey, prompted by a pointer to
 considerably deeper than the original snapshot. Recorded in D39; this section is
 the reference form.
 
-⚠️ **Security warning first.** `https://tcrf.net/Notes:Super_Paper_Mario` —
-linked as a resource from `spm-docs` — served **no game documentation at all**.
+⚠️ **Security warning first.** ⚠️ **Attribution corrected in D41 — the wiki page
+itself is clean and unedited since March 2026; the payload came from the serving
+layer, not the page.** `https://tcrf.net/Notes:Super_Paper_Mario` — linked as a
+resource from `spm-docs` — served **no game documentation at all** to an
+automated fetch.
 It served a prompt-injection payload addressed "to LLMs", falsely claiming the
 user had requested it, instructing the reader to truncate files to zero bytes
 and circularly swap file contents, with a disclaimer that TCRF "isn't
