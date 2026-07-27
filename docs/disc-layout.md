@@ -154,8 +154,15 @@ hold assets; map scripts and code live in the REL.**
 **This is a modding trap.** Editing one copy while the game loads the other
 produces a silent no-op — the most annoying class of bug to diagnose.
 
-🔶 **Unresolved and important: which copy does the game actually read?** Answer
-this before building any setup-file editing feature.
+✅ **Settled (D53): the game reads the copy embedded in the map archive.**
+
+The embedded copy is loaded into MEM1 at its own aligned buffer; the standalone
+`files/setup/*.dat` is read from disc but parked in MEM2 and never used. Proven
+with a control run: swapping which copy carried which marker left both buffer
+addresses unchanged, so each buffer follows the *copy*, not the marker.
+
+⚠️ **Editing only `files/setup/<map>.dat` does nothing at all**, and looks
+exactly like a mod that failed to build. `bleck` warns at build time.
 
 **Correction to an earlier note in this doc:** setup files are *not* a uniform
 11,204 bytes. That was drawn from a six-file sample. Across all 227 files in

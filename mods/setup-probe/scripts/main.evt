@@ -1,0 +1,29 @@
+-- Drive the game somewhere it would never go on its own.
+--
+-- An unattended boot reaches exactly two maps -- aa4_01 then ls4_12 -- and
+-- input cannot be injected (D48), so everything else in the game has been
+-- untestable without a human. This attaches to the one map that does load,
+-- waits for it to settle, and then asks the game to change maps.
+--
+-- If it works, the whole game becomes reachable unattended.
+
+script on_arrive {
+    -- gw[31] is the progress marker; each value is a stage reached, so a
+    -- stall is visible as a value rather than as silence.
+    gw[31] = 1
+
+    -- Two seconds. The map has just finished loading and the previous
+    -- sequence is still unwinding; asking for another change immediately is
+    -- the kind of thing that deadlocks (D51).
+    wait(120)
+    gw[31] = 2
+
+    -- Second argument is the door to arrive at. 0 means "use the map's own
+    -- fallback", which spm/map_data.h documents as the behaviour when a map
+    -- is entered with a null door name.
+    evt_seq_mapchange("he1_01", 0)
+
+    -- Never reached if the call takes effect: the map change tears down evt
+    -- state, and this script with it.
+    gw[31] = 3
+}

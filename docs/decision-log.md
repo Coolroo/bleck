@@ -2790,3 +2790,78 @@ things, not about whether a file is valid, so `check` no longer applies it.
 console output was read through `tail` with `--words 9`, and the answer — the
 destination map name — sat in words 9–12. A run costs two to three minutes; the
 log costs nothing. Do not truncate probe output.
+
+---
+
+## D53 — D13 settled: the game reads the *embedded* setup copy (2026-07-27)
+
+✅ **The copy inside the map archive is the one the game uses. The standalone
+`files/setup/*.dat` is read from disc but parked in MEM2 and never reaches
+working memory.**
+
+This has been open since D13 and blocked any setup-editing feature. It was
+unanswerable while only two maps could be reached unattended; D52 removed that.
+
+### Method — mark, don't measure
+
+The two copies are byte-identical, so they had to be made distinguishable. Every
+obvious marker risks changing behaviour: the `version` field selects the entry
+stride, and entry bytes may be parsed. The safe one is the **`padding` u16 at
+offset 2**, documented as `0` across all 227 files and read by nothing.
+
+Two bytes alone would produce false positives when scanning 88 MB of RAM, so the
+search pattern was the marker *plus* the known first bytes of entry 0 — eight
+bytes total, `00 06 <marker> C4 28 C0 00`.
+
+`he1_01` was the test map: Chapter 1-1, carries **both** copies at 11,204 bytes,
+and is reachable via `evt_seq_mapchange` (D52).
+
+### Result, with a control
+
+The control is what makes this ✅ rather than 🔶. Both runs are identical except
+that the markers are swapped between the two copies:
+
+| Address | Run 1 | Run 2, markers swapped | Holds |
+|---|---|---|---|
+| **MEM1 `0x81266420`** | `B2B2` = embedded | `A1A1` = embedded | ✅ **always the embedded copy** |
+| MEM2 `0x91B31980` | `A1A1` = standalone | `B2B2` = standalone | always the standalone copy |
+| MEM2 `0x9204F0A9` | embedded | embedded | inside the decompressed archive (unaligned) |
+
+**The addresses did not move.** Each buffer follows the *copy*, not the marker
+value, which rules out the alternative readings — load order, marker value, or
+coincidence.
+
+`0x81266420` is 32-byte aligned and the match sits at offset 0, so it is the
+file's own start in a buffer of its own, in MEM1: the Wii's fast main RAM, where
+live game data lives. The unaligned MEM2 hit is the same bytes seen inside the
+decompressed U8 archive they came from.
+
+🔶 Strictly, "reaches MEM1 in its own aligned buffer" is one step short of
+"`npcEntryFromSetupEnemy` is handed a pointer into it". Confirming that needs a
+trampoline hook on `npcEntryFromSetupEnemy` (`0x801bf7a0`) and was not worth it
+against a control this clean.
+
+### What changes
+
+`bleck`'s build-time warning was *"which copy the game reads is unconfirmed"*.
+It now says which copy to edit:
+
+```
+warning: files/setup/he1_01.dat is the standalone setup copy, which the game
+loads but does not read (D13). Edit the copy inside the map archive, or this
+change will do nothing
+```
+
+⚠️ **This is the trap the earlier note predicted**, now confirmed rather than
+feared: a mod that edits `files/setup/*.dat` alone changes nothing, and looks
+exactly like a mod that failed to build.
+
+### Tooling
+
+`scripts/ingame.py --find <hex>` searches MEM1 and MEM2 for a byte pattern.
+Chunked at 1 MB with an overlap of `len(pattern) - 1` so a match straddling a
+chunk boundary is not missed.
+
+It answers "which of these did the game load?" without knowing anything about
+*how* it loads them — mark the candidates differently and look for the marks.
+That generalises well beyond setup files.

@@ -279,8 +279,12 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
     """Warn when a mod edits a setup file that exists in two places.
 
     Setup files ship both standalone in `setup/` and embedded inside some map
-    archives, byte-identically (see docs/decision-log.md D13). Which copy the
-    game reads is unresolved, so editing one may silently do nothing.
+    archives, byte-identically (see docs/decision-log.md D13).
+
+    D13 is now settled: the game loads the copy **embedded in the map archive**
+    into MEM1 working memory, and the standalone `files/setup/*.dat` is read but
+    parked in MEM2. So editing only the standalone copy is a silent no-op, which
+    is what these warnings exist to prevent.
     """
     warnings: list[str] = []
     for file_plan in plan.files:
@@ -291,12 +295,13 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
                 if (base / twin).exists():
                     warnings.append(
                         f"{path}/{member} also exists as {twin}; "
-                        "which copy the game reads is unconfirmed (D13) — "
-                        "consider editing both"
+                        "the game reads this embedded copy, not the standalone "
+                        "one (D13). Edit both to keep them consistent"
                     )
         if "/setup/" in f"/{path}":
             warnings.append(
-                f"{path} may also be embedded in a map archive; "
-                "which copy the game reads is unconfirmed (D13)"
+                f"{path} is the standalone setup copy, which the game loads but "
+                "does not read (D13). Edit the copy inside the map archive, or "
+                "this change will do nothing"
             )
     return warnings

@@ -131,6 +131,43 @@ class Session:
             return None
 
 
+#: The Wii's two RAM regions. A file the game loaded could be in either.
+REGIONS = [("MEM1", 0x80000000, 0x01800000), ("MEM2", 0x90000000, 0x04000000)]
+
+#: Big enough that the per-read overhead does not dominate, small enough that a
+#: failed read loses little.
+CHUNK = 1 << 20
+
+
+def find_bytes(dme, pattern: bytes) -> list[int]:  # pylint: disable=container-return
+    """Every address in the game's RAM holding `pattern`.
+
+    Used to answer "which copy of a file did the game actually load?" without
+    knowing anything about how it loads them: mark two candidates differently,
+    then look for the marks. See D13.
+    """
+    hits: list[int] = []
+    overlap = len(pattern) - 1
+    for _name, base, size in REGIONS:
+        offset = 0
+        while offset < size:
+            try:
+                block = dme.read_bytes(base + offset, min(CHUNK, size - offset))
+            except RuntimeError:
+                offset += CHUNK
+                continue
+            start = 0
+            while True:
+                at = block.find(pattern, start)
+                if at < 0:
+                    break
+                hits.append(base + offset + at)
+                start = at + 1
+            # Step back so a match straddling a chunk boundary is not missed.
+            offset += CHUNK - overlap
+    return hits
+
+
 def build(mod: str, image: Path) -> None:
     result = subprocess.run(
         ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"],
@@ -173,6 +210,20 @@ def main() -> int:
     parser.add_argument(
         "--log", help="where to write the full transcript (default: work/build/ingame.log)"
     )
+    parser.add_argument(
+        "--find",
+        nargs="*",
+        default=[],
+        metavar="HEX",
+        help="byte patterns to search RAM for, e.g. 0006a1a1c428c000",
+    )
+    parser.add_argument(
+        "--find-at",
+        type=int,
+        default=80,
+        metavar="SECONDS",
+        help="when to run the search (default: 80, i.e. once the game is up)",
+    )
     args = parser.parse_args()
 
     image = registry.build_root() / f"{args.mod}.wbfs"
@@ -202,6 +253,7 @@ def main() -> int:
     say(f"booting {image.name} ...   (full log: {log_path})")
     seen = ""
     quiet = 0
+    searched = False
     with Session(image, dolphin) as session:
         start = time.time()
         while time.time() - start < args.seconds:
@@ -214,6 +266,16 @@ def main() -> int:
             if session.exited:
                 say(f"[t+{elapsed:>3}s] *** dolphin exited on its own ***")
                 break
+
+            if args.find and elapsed >= args.find_at and not searched:
+                searched = True
+                import dolphin_memory_engine as dme  # noqa: PLC0415
+
+                for text_pattern in args.find:
+                    pattern = bytes.fromhex(text_pattern)
+                    hits = find_bytes(dme, pattern)
+                    where = ", ".join(f"0x{a:08X}" for a in hits[:4]) or "not found"
+                    say(f"[t+{elapsed:>3}s] {text_pattern}: {len(hits)} hit(s)  {where}")
 
             snapshot = session.read(args.probe, args.words, args.watch_gw)
             if snapshot is None:
@@ -231,8 +293,7 @@ def main() -> int:
                 quiet = elapsed
     say("dolphin stopped")
     log.close()
-    print(f"
-full log: {log_path}")
+    print(f"\nfull log: {log_path}")
     return 0
 
 
