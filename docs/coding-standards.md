@@ -80,6 +80,17 @@ Currently declared: `BLECK_WIT`, `BLECK_DOLPHIN_TOOL`, `BLECK_EXTRACT_ROOT`,
 
 ---
 
+## Running the linters
+
+```bash
+./scripts/lint.sh --fix          # POSIX
+powershell scripts\lint.ps1 -fix  # Windows
+python scripts/lint.py --fix     # anywhere
+```
+
+The shell wrappers are thin; the logic lives in `scripts/lint.py` so Windows is
+a first-class target rather than an afterthought.
+
 ## Ruff
 
 Formatter plus lint rules: pycodestyle, pyflakes, import sorting, pyupgrade,

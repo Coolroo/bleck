@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -65,7 +66,7 @@ def stage(base: Path, dest: Path) -> int:
     if not base.is_dir():
         raise BuildError(f"base not found: {base}")
     if dest.exists():
-        shutil.rmtree(dest)
+        remove_tree(dest)
 
     count = 0
     for source in base.rglob("*"):
@@ -82,16 +83,33 @@ def stage(base: Path, dest: Path) -> int:
     return count
 
 
-def _detach(path: Path) -> None:
-    """Break a hardlink before writing, so the base is never modified.
+def _on_rmtree_error(func, path: str, _exc) -> None:
+    """Retry a failed removal after clearing the read-only bit.
 
-    Writing through a hardlink would edit the base file in place — exactly the
-    failure this whole design exists to prevent.
+    Windows refuses to delete read-only files, which staged copies inherit from
+    a read-only base. POSIX does not care, so this is a no-op there.
     """
-    if path.exists() and path.stat().st_nlink > 1:
-        data = path.read_bytes()
-        path.unlink()
-        path.write_bytes(data)
+    Path(path).chmod(stat.S_IWRITE)
+    func(path)
+
+
+def remove_tree(path: Path) -> None:
+    shutil.rmtree(path, onexc=_on_rmtree_error)
+
+
+def _detach(path: Path) -> None:
+    """Remove a staged file before rewriting it, so the base is never modified.
+
+    Staged files are hardlinks to the base, and writing through one would edit
+    the base in place — the exact failure this design exists to prevent.
+
+    This unlinks unconditionally rather than checking `st_nlink > 1`: Windows
+    does not reliably report link counts, so a check that silently returns 1
+    there would write straight through the link. Unlinking always is cheap and
+    cannot get this wrong. Callers either rewrite the file or fall back to
+    reading the base, both of which are correct once it is gone.
+    """
+    path.unlink(missing_ok=True)
 
 
 def apply_plan(context: BuildContext, report: BuildReport) -> None:

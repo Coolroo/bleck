@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Nintendo U8 archive reading.
 
 A U8 archive is a 0x20-byte header followed by a flat node table and a string

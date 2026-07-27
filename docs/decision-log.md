@@ -790,3 +790,45 @@ as the asset pipeline was in D25.
 ⚠️ **Licensing is unresolved and blocks vendoring.** `spm-rel-loader` is GPLv3
 including the loader code; `spm-headers` is MIT except its `mod/` folder. `bleck`
 is unlicensed. Decide before copying any upstream code into this repo.
+
+---
+
+### D27 — Windows 11 support ✅
+
+The CLI now targets Windows as well as Linux. Four real portability gaps, none
+of which would have shown up on this host:
+
+**1. Tool names differ.** Dolphin ships `dolphin-tool` on Linux but
+`DolphinTool.exe` on Windows, so `shutil.which("dolphin-tool")` would simply
+fail there. Replaced the flat name/hint constants with a `ToolSpec` carrying
+per-platform executable names, search directories, and install hints. Windows
+looks in `C:\Program Files\Dolphin` and friends; POSIX keeps `/usr/games`
+(where Debian hides it off PATH). Errors now list what was tried and name the
+`BLECK_WIT` / `BLECK_DOLPHIN_TOOL` override.
+
+**2. `scripts/lint.sh` was bash-only.** Logic moved to `scripts/lint.py`, with
+`lint.sh` and a new `lint.ps1` as thin wrappers. Both find the venv in its
+platform-appropriate location (`bin/` vs `Scripts/`). ANSI colour is suppressed
+on Windows consoles that would render it as garbage.
+
+**3. ⚠️ `_detach` relied on `st_nlink`, which Windows does not report reliably.**
+This was the dangerous one. Staged files are hardlinks to the base; `_detach`
+broke the link before writing by checking `st_nlink > 1`. If Windows reports 1
+for a hardlinked file, that check silently passes and the write goes **straight
+through to the base** — corrupting the one thing this whole design protects.
+Now unlinks unconditionally: cheap, and it cannot get this wrong.
+
+**4. Windows refuses to delete read-only files.** `shutil.rmtree` on a staging
+tree inherited from a read-only base would fail. Added `builder.remove_tree`
+with an `onexc` handler that clears the read-only bit and retries.
+
+**Testing approach:** `tests/test_platform.py` (21 tests) exercises the Windows
+paths *on Linux* by patching `disc.IS_WINDOWS`, plus filesystem behaviours that
+are genuinely testable here — read-only removal, hardlink failure fallback, a
+full build with `os.link` monkeypatched to raise, posix-style path storage, and
+CRLF manifest parsing. A Windows regression should surface here rather than on a
+user's machine.
+
+⚠️ **Not actually run on Windows yet.** These are informed fixes and simulated
+tests, not confirmation. The honest status is "should work"; running `bleck`
+on Windows 11 is what would make it "does".

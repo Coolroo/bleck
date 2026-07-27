@@ -7,6 +7,7 @@ produces an actionable message rather than a traceback.
 
 from __future__ import annotations
 
+import platform
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -18,13 +19,77 @@ from bleck.common import env
 WIT = "wit"
 DOLPHIN_TOOL = "dolphin-tool"
 
-# Debian ships dolphin-tool under /usr/games, which is not always on PATH.
-_EXTRA_PATHS = [Path("/usr/games")]
+IS_WINDOWS = platform.system() == "Windows"
 
-INSTALL_HINTS = {
-    WIT: "install Wiimms ISO Tools:  sudo apt install wit",
-    DOLPHIN_TOOL: "install Dolphin for dolphin-tool:  sudo apt install dolphin-emu",
+
+@dataclass(frozen=True)
+class ToolSpec:
+    """How to find one external tool, across platforms.
+
+    Executable names differ: Dolphin ships `dolphin-tool` on Linux and
+    `DolphinTool.exe` on Windows, so `shutil.which` on one name is not enough.
+    """
+
+    key: str
+    posix_names: tuple[str, ...]
+    windows_names: tuple[str, ...]
+    posix_dirs: tuple[str, ...] = ()
+    windows_dirs: tuple[str, ...] = ()
+    hint_posix: str = ""
+    hint_windows: str = ""
+
+    @property
+    def names(self) -> list[str]:
+        """Executable names to try, in order, for the current platform."""
+        return list(self.windows_names if IS_WINDOWS else self.posix_names)
+
+    @property
+    def search_dirs(self) -> list[Path]:
+        raw = self.windows_dirs if IS_WINDOWS else self.posix_dirs
+        return [Path(d) for d in raw]
+
+    @property
+    def hint(self) -> str:
+        return self.hint_windows if IS_WINDOWS else self.hint_posix
+
+
+TOOLS = {
+    WIT: ToolSpec(
+        key=WIT,
+        posix_names=("wit",),
+        windows_names=("wit.exe", "wit"),
+        windows_dirs=(
+            r"C:\Program Files\Wiimm\wit\bin",
+            r"C:\Program Files (x86)\Wiimm\wit\bin",
+            r"C:\wit\bin",
+        ),
+        hint_posix="install Wiimms ISO Tools:  sudo apt install wit",
+        hint_windows=(
+            "install Wiimms ISO Tools from https://wit.wiimm.de/ and add it to "
+            "PATH, or set BLECK_WIT to wit.exe"
+        ),
+    ),
+    DOLPHIN_TOOL: ToolSpec(
+        key=DOLPHIN_TOOL,
+        posix_names=("dolphin-tool",),
+        # Windows ships it beside the emulator with different casing.
+        windows_names=("DolphinTool.exe", "dolphin-tool.exe", "DolphinTool"),
+        # Debian puts it here, which is not always on PATH.
+        posix_dirs=("/usr/games", "/usr/local/games"),
+        windows_dirs=(
+            r"C:\Program Files\Dolphin",
+            r"C:\Program Files (x86)\Dolphin",
+            r"C:\Program Files\Dolphin-x64",
+        ),
+        hint_posix="install Dolphin for dolphin-tool:  sudo apt install dolphin-emu",
+        hint_windows=(
+            "DolphinTool.exe ships with Dolphin; add its folder to PATH or set "
+            "BLECK_DOLPHIN_TOOL to its full path"
+        ),
+    ),
 }
+
+INSTALL_HINTS = {key: spec.hint for key, spec in TOOLS.items()}
 
 
 class DiscError(Exception):
@@ -36,21 +101,36 @@ _OVERRIDES = {WIT: env.WIT, DOLPHIN_TOOL: env.DOLPHIN_TOOL}
 
 
 def find_tool(name: str) -> str:
+    """Locate an external tool: explicit override, then PATH, then known dirs."""
     override = _OVERRIDES.get(name)
     if override is not None:
         configured = env.path(override)
         if configured is not None:
             return str(configured)
 
-    found = shutil.which(name)
-    if found:
-        return found
-    for base in _EXTRA_PATHS:
-        candidate = base / name
-        if candidate.exists():
-            return str(candidate)
-    hint = INSTALL_HINTS.get(name, "")
-    raise DiscError(f"{name} not found on PATH" + (f"\n  {hint}" if hint else ""))
+    spec = TOOLS.get(name)
+    if spec is None:
+        found = shutil.which(name)
+        if found:
+            return found
+        raise DiscError(f"{name} not found on PATH")
+
+    for candidate in spec.names:
+        found = shutil.which(candidate)
+        if found:
+            return found
+
+    for directory in spec.search_dirs:
+        for candidate in spec.names:
+            path = directory / candidate
+            if path.exists():
+                return str(path)
+
+    tried = ", ".join(spec.names)
+    hint = spec.hint
+    raise DiscError(
+        f"{name} not found (looked for: {tried})" + (f"\n  {hint}" if hint else "")
+    )
 
 
 def _run(args: list[str]) -> None:
