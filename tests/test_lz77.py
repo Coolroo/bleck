@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 from bleck.formats import lz77
@@ -76,16 +78,16 @@ class TestMatching:
     def test_never_emits_displacement_one(self):
         """Nintendo's encoder avoids disp=1; we mirror that."""
         packed = lz77.compress(b"\x00" * 512)
-        for _, disp in _tokens(packed):
-            if disp:
-                assert disp >= lz77.MIN_DISP
+        for token in _tokens(packed):
+            if token.is_match:
+                assert token.displacement >= lz77.MIN_DISP
 
     def test_respects_format_bounds(self, compressible: bytes):
-        for length, disp in _tokens(lz77.compress(compressible)):
-            if not disp:
+        for token in _tokens(lz77.compress(compressible)):
+            if not token.is_match:
                 continue
-            assert lz77.MIN_MATCH <= length <= lz77.MAX_MATCH
-            assert lz77.MIN_DISP <= disp <= lz77.MAX_DISP
+            assert lz77.MIN_MATCH <= token.length <= lz77.MAX_MATCH
+            assert lz77.MIN_DISP <= token.displacement <= lz77.MAX_DISP
 
     def test_literals_are_larger_than_greedy(self, compressible: bytes):
         assert len(lz77.compress_literals(compressible)) > len(
@@ -105,8 +107,20 @@ class TestCorruption:
             lz77.decompress(b"\x10\xff\xff\xff\x00abc")
 
 
-def _tokens(data: bytes) -> list[tuple[int, int]]:
-    """Decode a stream into (length, displacement); literals are (1, 0)."""
+@dataclass(frozen=True)
+class Token:
+    """One decoded unit: a literal byte, or a back-reference."""
+
+    length: int
+    displacement: int
+
+    @property
+    def is_match(self) -> bool:
+        return self.displacement > 0
+
+
+def _tokens(data: bytes) -> list[Token]:
+    """Decode a stream into its literal and back-reference units."""
     expected = lz77.decompressed_size(data)
     pos, produced, out = 4, 0, []
     while produced < expected:
@@ -120,9 +134,9 @@ def _tokens(data: bytes) -> list[tuple[int, int]]:
                 disp = ((data[pos] & 0x0F) << 8 | data[pos + 1]) + 1
                 pos += 2
                 produced += length
-                out.append((length, disp))
+                out.append(Token(length, disp))
             else:
                 pos += 1
                 produced += 1
-                out.append((1, 0))
+                out.append(Token(1, 0))
     return out

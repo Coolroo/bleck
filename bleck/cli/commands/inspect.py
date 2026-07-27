@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ...backends import disc
-from ...common.errors import UserError
-from ...common.fsio import read_bytes
-from ...formats import detect, u8
+from bleck.backends import disc
+from bleck.common.errors import UserError
+from bleck.common.fsio import read_bytes
+from bleck.formats import detect, u8
+
 from .archive import unwrap
 
 CATEGORY = "inspection"
@@ -22,13 +23,13 @@ def cmd_info(args: argparse.Namespace) -> int:
     print(f"{path.name}  {len(data):,} bytes")
 
     if path.suffix.lower() in DISC_SUFFIXES:
-        fields = disc.identify(path)
-        if fields:
-            for key, value in fields.items():
-                print(f"  {key}: {value}")
+        info = disc.identify(path)
+        if not info.is_empty:
+            for field in info.describe():
+                print(f"  {field.label}: {field.value}")
             return 0
 
-    for line in detect.render(detect.identify(data, path.name), indent=1):
+    for line in detect.render(detect.identify(data), indent=1):
         print(line)
     return 0
 
@@ -41,7 +42,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     ok = bad = skipped = 0
     for path in files:
-        raw, _ = unwrap(read_bytes(path))
+        raw = unwrap(read_bytes(path)).data
         if not u8.is_u8(raw):
             skipped += 1
             continue

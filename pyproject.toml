@@ -9,8 +9,67 @@ dependencies = []
 bleck = "bleck.cli.app:main"
 
 [project.optional-dependencies]
-# Dev-only cross-check oracle. Not used at runtime — see docs/decision-log.md D16.
-dev = ["libWiiPy>=0.6.0", "pytest>=8.0"]
+# Dev-only. libWiiPy is a cross-check oracle, not a runtime dep — see D16.
+dev = ["libWiiPy>=0.6.0", "pytest>=8.0", "ruff>=0.6", "pylint>=3.2"]
+
+[tool.ruff]
+line-length = 90
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # import sorting
+    "UP",        # pyupgrade — modern syntax
+    "B",         # bugbear — likely bugs
+    "SIM",       # simplify
+    "C4",        # comprehensions
+    "RET",       # return-statement clarity
+    "PTH",       # prefer pathlib over os.path
+    "ARG",       # unused arguments
+    "TID",       # tidy imports
+    "RUF",
+]
+ignore = [
+    "E501",    # line length is enforced by the formatter
+    "RET504",  # a named variable before return often documents intent
+    "B008",    # argparse and dataclass idioms rely on calls in defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests deliberately poke at internals and use fixtures as arguments.
+"tests/*" = ["ARG001", "ARG002"]
+
+[tool.pylint.main]
+load-plugins = ["lint_plugins.container_returns", "lint_plugins.env_access"]
+ignore-paths = ["\\.venv", "build", "dist"]
+# Must stay 1: with jobs > 1 pylint loads custom plugins once per worker and
+# every plugin message is reported twice. Verified on pylint 4.0.6.
+jobs = 1
+# Plugins live in the repo, so the repo root must be importable.
+init-hook = "import sys; sys.path.insert(0, '.')"
+
+[tool.pylint."messages control"]
+disable = [
+    "missing-module-docstring",     # covered by review, not worth failing on
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "too-few-public-methods",       # dataclasses are the point of this project
+    "duplicate-code",               # noisy across command modules
+    "fixme",
+    # Requesting a pytest fixture shadows its name by design; this fires on
+    # every fixture-using test and flags nothing real.
+    "redefined-outer-name",
+]
+
+[tool.pylint.format]
+max-line-length = 90
+
+[tool.pylint.design]
+max-args = 6
+max-locals = 18
+max-returns = 8   # annotation dispatch legitimately branches a lot
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

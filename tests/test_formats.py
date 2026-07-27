@@ -6,7 +6,8 @@ import struct
 
 import pytest
 
-from bleck.formats import detect as formats, lz77, u8
+from bleck.formats import detect as formats
+from bleck.formats import lz77, u8
 
 
 def _rel(sections: int = 19, version: int = 3) -> bytes:
@@ -51,7 +52,9 @@ class TestNesting:
         assert [c.name for c in layer.children] == ["BRSTM"]
 
     def test_unwraps_lz77_over_u8(self):
-        archive = u8.write([("a.tpl", struct.pack(">I", formats.TPL_MAGIC) + b"\x00" * 8)])
+        archive = u8.write(
+            [u8.U8Item("a.tpl", struct.pack(">I", formats.TPL_MAGIC) + b"\x00" * 8)]
+        )
         layer = formats.identify(lz77.compress_literals(archive))
         assert layer.name == "LZ77"
         inner = layer.children[0]
@@ -67,7 +70,7 @@ class TestNesting:
 
 class TestRender:
     def test_indents_by_depth(self):
-        archive = u8.write([("a.bin", b"data")])
+        archive = u8.write([u8.U8Item("a.bin", b"data")])
         lines = formats.render(formats.identify(archive))
         assert lines[0].startswith("U8")
         assert lines[1].startswith("  ")

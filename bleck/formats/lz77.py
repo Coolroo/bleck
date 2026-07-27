@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Nintendo LZ77 (type 0x10) decompression.
 
 Header is 4 bytes: a 0x10 type marker followed by a 24-bit little-endian
@@ -10,6 +9,7 @@ means "back-reference", encoded big-endian across two bytes as a 4-bit
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 
 LZ77_TYPE = 0x10
 HEADER_SIZE = 4
@@ -105,6 +105,21 @@ def compress_literals(data: bytes) -> bytes:
 MAX_CANDIDATES = 256
 
 
+@dataclass(frozen=True)
+class Match:
+    """A back-reference candidate: copy `length` bytes from `displacement` back."""
+
+    length: int
+    displacement: int
+
+    @property
+    def is_usable(self) -> bool:
+        return self.length >= MIN_MATCH
+
+
+NO_MATCH = Match(0, 0)
+
+
 def _extend(data: bytes, pos: int, src: int, limit: int) -> int:
     """Length of the match at `src`, allowing the copy to overlap `pos`.
 
@@ -119,20 +134,19 @@ def _extend(data: bytes, pos: int, src: int, limit: int) -> int:
     return n
 
 
-def _longest_match(data: bytes, pos: int, end: int) -> tuple[int, int]:
-    """Return (length, displacement) of the longest match, or (0, 0).
+def _longest_match(data: bytes, pos: int, end: int) -> Match:
+    """Longest match at `pos`, or NO_MATCH.
 
     Candidates come from searching backwards for the 3-byte prefix; each is then
     extended with overlap allowed. Ties keep the nearest (smallest) displacement.
     """
     limit = min(MAX_MATCH, end - pos)
     if limit < MIN_MATCH:
-        return 0, 0
+        return NO_MATCH
 
     lowest = max(0, pos - MAX_DISP)
     prefix = data[pos : pos + MIN_MATCH]
-    best_len = 0
-    best_disp = 0
+    best = NO_MATCH
 
     # Candidates must start at or before pos - MIN_DISP.
     search_end = pos - MIN_DISP + MIN_MATCH
@@ -142,14 +156,14 @@ def _longest_match(data: bytes, pos: int, end: int) -> tuple[int, int]:
             break
 
         length = _extend(data, pos, found, limit)
-        if length > best_len:
-            best_len, best_disp = length, pos - found
-            if best_len == limit:
+        if length > best.length:
+            best = Match(length, pos - found)
+            if length == limit:
                 break
 
         search_end = found + MIN_MATCH - 1
 
-    return (best_len, best_disp) if best_len >= MIN_MATCH else (0, 0)
+    return best if best.is_usable else NO_MATCH
 
 
 def compress(data: bytes) -> bytes:
@@ -166,13 +180,13 @@ def compress(data: bytes) -> bytes:
         for bit in range(7, -1, -1):
             if pos >= end:
                 break
-            length, disp = _longest_match(data, pos, end)
-            if length >= MIN_MATCH:
+            match = _longest_match(data, pos, end)
+            if match.is_usable:
                 flags |= 1 << bit
-                encoded = disp - 1
-                out.append((length - MIN_MATCH) << 4 | encoded >> 8)
+                encoded = match.displacement - 1
+                out.append((match.length - MIN_MATCH) << 4 | encoded >> 8)
                 out.append(encoded & 0xFF)
-                pos += length
+                pos += match.length
             else:
                 out.append(data[pos])
                 pos += 1

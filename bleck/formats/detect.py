@@ -21,10 +21,10 @@ REL_VERSIONS = {1, 2, 3}
 class Layer:
     name: str
     detail: str = ""
-    children: list["Layer"] = field(default_factory=list)
+    children: list[Layer] = field(default_factory=list)
 
 
-def identify(data: bytes, name: str = "") -> Layer:
+def identify(data: bytes) -> Layer:
     """Describe a blob, unwrapping containers as far as they go."""
     if lz77.is_lz77(data):
         size = lz77.decompressed_size(data)

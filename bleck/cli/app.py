@@ -9,10 +9,11 @@ from __future__ import annotations
 import argparse
 import sys
 
-from ..backends.disc import DiscError
-from ..common.errors import BleckError
-from ..formats.lz77 import Lz77Error
-from ..formats.u8 import U8Error
+from bleck.backends.disc import DiscError
+from bleck.common.errors import BleckError
+from bleck.formats.lz77 import Lz77Error
+from bleck.formats.u8 import U8Error
+
 from . import commands
 
 PROG = "bleck"
@@ -29,9 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared flags go on each subcommand rather than the top level, so
     # `bleck pack dir out --force` works — the order people actually type.
     shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument(
-        "--force", action="store_true", help="overwrite existing output"
-    )
+    shared.add_argument("--force", action="store_true", help="overwrite existing output")
 
     def add(name: str, **kwargs) -> argparse.ArgumentParser:
         return sub.add_parser(name, parents=[shared], **kwargs)

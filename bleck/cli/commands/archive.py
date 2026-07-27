@@ -7,25 +7,41 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
-from ...common import manifest
-from ...common.errors import UserError
-from ...common.fsio import guard_overwrite, read_bytes, require_dir
-from ...formats import lz77, u8
+from bleck.common import manifest
+from bleck.common.errors import UserError
+from bleck.common.fsio import guard_overwrite, read_bytes, require_dir
+from bleck.formats import lz77, u8
 
 CATEGORY = "archives"
 
 
-def unwrap(data: bytes) -> tuple[bytes, bool]:
-    """Return (u8_bytes, was_lz77_wrapped)."""
+@dataclass(frozen=True)
+class Unwrapped:
+    """An archive with any LZ77 wrapper removed, remembering whether there was one."""
+
+    data: bytes
+    was_compressed: bool
+
+
+@dataclass(frozen=True)
+class DirectoryListing:
+    """Paths found on disk, in the order they will be packed."""
+
+    order: list[str]
+    dirs: set[str]
+
+
+def unwrap(data: bytes) -> Unwrapped:
     if lz77.is_lz77(data):
-        return lz77.decompress(data), True
-    return data, False
+        return Unwrapped(lz77.decompress(data), True)
+    return Unwrapped(data, False)
 
 
 def require_archive(data: bytes) -> bytes:
-    raw, _ = unwrap(data)
+    raw = unwrap(data).data
     if not u8.is_u8(raw):
         raise UserError("not a U8 archive")
     return raw
@@ -46,7 +62,8 @@ def cmd_ls(args: argparse.Namespace) -> int:
 def cmd_unpack(args: argparse.Namespace) -> int:
     src = Path(args.archive)
     dest = Path(args.dest) if args.dest else src.with_suffix("")
-    data, compressed = unwrap(read_bytes(src))
+    source = unwrap(read_bytes(src))
+    data = source.data
     if not u8.is_u8(data):
         raise UserError("not a U8 archive")
     guard_overwrite(dest, args.force)
@@ -65,7 +82,7 @@ def cmd_unpack(args: argparse.Namespace) -> int:
         manifest.Manifest(
             order=[e.path for e in entries],
             dirs=[e.path for e in entries if e.is_dir],
-            compressed=compressed,
+            compressed=source.was_compressed,
             source=src.name,
         ),
     )
@@ -86,7 +103,8 @@ def cmd_pack(args: argparse.Namespace) -> int:
             "packing in depth-first order; byte-exact output is not guaranteed",
             file=sys.stderr,
         )
-        order, dirs = _walk(src)
+        listing = _walk(src)
+        order, dirs = listing.order, listing.dirs
         was_compressed = True
     else:
         order, dirs = found.order, set(found.dirs)
@@ -101,15 +119,15 @@ def cmd_pack(args: argparse.Namespace) -> int:
     else:
         compressed = was_compressed
 
-    entries: list[tuple[str, bytes | None]] = []
+    entries: list[u8.U8Item] = []
     for path in order:
         if path in dirs:
-            entries.append((path, None))
+            entries.append(u8.U8Item(path, None))
             continue
         blob = src / path
         if not blob.exists():
             raise UserError(f"{path} listed in manifest but missing from {src}")
-        entries.append((path, blob.read_bytes()))
+        entries.append(u8.U8Item(path, blob.read_bytes()))
 
     packed = u8.write(entries)
     if compressed:
@@ -121,7 +139,7 @@ def cmd_pack(args: argparse.Namespace) -> int:
     return 0
 
 
-def _walk(root: Path) -> tuple[list[str], set[str]]:
+def _walk(root: Path) -> DirectoryListing:
     order: list[str] = []
     dirs: set[str] = set()
     for path in sorted(root.rglob("*")):
@@ -131,7 +149,7 @@ def _walk(root: Path) -> tuple[list[str], set[str]]:
         order.append(rel)
         if path.is_dir():
             dirs.add(rel)
-    return order, dirs
+    return DirectoryListing(order, dirs)
 
 
 def register(add) -> None:

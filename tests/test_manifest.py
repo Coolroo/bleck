@@ -42,9 +42,7 @@ def test_rejects_unknown_version(tmp_path: Path, sample: manifest.Manifest):
         manifest.read(tmp_path)
 
 
-def test_order_survives_exactly(sample: manifest.Manifest):
+def test_order_survives_exactly():
     """Order is the whole point — it must not be sorted or deduplicated."""
-    scrambled = manifest.Manifest(
-        order=["z", "a", "m", "a"], dirs=[], compressed=False
-    )
+    scrambled = manifest.Manifest(order=["z", "a", "m", "a"], dirs=[], compressed=False)
     assert manifest.Manifest.from_json(scrambled.to_json()).order == ["z", "a", "m", "a"]

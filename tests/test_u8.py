@@ -8,16 +8,16 @@ from bleck.formats import lz77, u8
 
 
 @pytest.fixture
-def simple() -> list[tuple[str, bytes | None]]:
+def simple() -> list[u8.U8Item]:
     """A small tree exercising nesting, siblings, and a trailing top-level file."""
     return [
-        ("dvd", None),
-        ("dvd/map", None),
-        ("dvd/map/a.bin", b"first"),
-        ("dvd/map/b.bin", b"second" * 10),
-        ("dvd/bg", None),
-        ("dvd/bg/c.tpl", b"\x00\x20\xaf\x30" + b"pixels"),
-        ("readme.txt", b"top level"),
+        u8.U8Item("dvd", None),
+        u8.U8Item("dvd/map", None),
+        u8.U8Item("dvd/map/a.bin", b"first"),
+        u8.U8Item("dvd/map/b.bin", b"second" * 10),
+        u8.U8Item("dvd/bg", None),
+        u8.U8Item("dvd/bg/c.tpl", b"\x00\x20\xaf\x30" + b"pixels"),
+        u8.U8Item("readme.txt", b"top level"),
     ]
 
 
@@ -45,7 +45,7 @@ class TestRoundTrip:
         assert u8.read_all(packed) == []
 
     def test_zero_length_file(self):
-        entries = [("empty.bin", b"")]
+        entries = [u8.U8Item("empty.bin", b"")]
         assert u8.read_all(u8.write(entries)) == entries
 
     def test_paths_and_contents_survive(self, simple):
@@ -73,7 +73,7 @@ class TestLayout:
     def test_node_order_is_preserved(self, simple):
         """Order is load-bearing: byte-exact repacking depends on it."""
         packed = u8.write(simple)
-        assert [p for p, _ in u8.read_all(packed)] == [p for p, _ in simple]
+        assert [i.path for i in u8.read_all(packed)] == [i.path for i in simple]
 
         reordered = [simple[i] for i in (0, 1, 3, 2, 4, 5, 6)]
         assert u8.write(reordered) != packed

@@ -8,8 +8,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ...common.fsio import guard_overwrite, read_bytes
-from ...formats import lz77
+from bleck.common.fsio import guard_overwrite, read_bytes
+from bleck.formats import lz77
 
 CATEGORY = "streams"
 

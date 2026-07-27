@@ -20,12 +20,48 @@ class U8Error(Exception):
     pass
 
 
-@dataclass
+@dataclass(frozen=True)
 class U8Entry:
+    """An entry as it appears on disc, with its location in the archive."""
+
     path: str
     is_dir: bool
     offset: int
     size: int
+
+
+@dataclass(frozen=True)
+class U8Item:
+    """An entry detached from any archive: a path and its contents.
+
+    `data is None` marks a directory. This is what `read_all` yields and `write`
+    consumes, so the two compose without the caller handling raw pairs.
+    """
+
+    path: str
+    data: bytes | None
+
+    @property
+    def is_dir(self) -> bool:
+        return self.data is None
+
+
+@dataclass(frozen=True)
+class _RawNode:
+    """The 12-byte on-disc node, before its fields are interpreted."""
+
+    kind: int
+    name_offset: int
+    first: int
+    second: int
+
+
+@dataclass(frozen=True)
+class _OpenDir:
+    """A directory being walked: where its subtree ends, and its path."""
+
+    end_index: int
+    path: str
 
 
 def is_u8(data: bytes) -> bool:
@@ -37,30 +73,29 @@ def read(data: bytes) -> list[U8Entry]:
     if not is_u8(data):
         raise U8Error("not a U8 archive")
 
-    root_off, header_size, data_off = struct.unpack_from(">3I", data, 4)
+    root_off = struct.unpack_from(">I", data, 4)[0]
 
     # The root node's "size" field carries the total node count.
-    _, _, node_count = _node(data, root_off, 0)
+    node_count = _node(data, root_off, 0).second
     string_table = root_off + node_count * NODE_SIZE
 
     entries: list[U8Entry] = []
-    # dir_stack holds (end_index, path) so we know when a directory's subtree ends.
-    dir_stack: list[tuple[int, str]] = [(node_count, "")]
+    open_dirs = [_OpenDir(node_count, "")]
 
     for i in range(1, node_count):
-        kind, name_off, field1, field2 = _node_full(data, root_off, i)
-        name = _string(data, string_table + name_off)
+        node = _node(data, root_off, i)
+        name = _string(data, string_table + node.name_offset)
 
-        while len(dir_stack) > 1 and i >= dir_stack[-1][0]:
-            dir_stack.pop()
-        parent = dir_stack[-1][1]
+        while len(open_dirs) > 1 and i >= open_dirs[-1].end_index:
+            open_dirs.pop()
+        parent = open_dirs[-1].path
         path = f"{parent}/{name}" if parent else name
 
-        if kind == 1:
+        if node.kind == 1:
             entries.append(U8Entry(path, True, 0, 0))
-            dir_stack.append((field2, path))
+            open_dirs.append(_OpenDir(node.second, path))
         else:
-            entries.append(U8Entry(path, False, field1, field2))
+            entries.append(U8Entry(path, False, node.first, node.second))
 
     return entries
 
@@ -79,14 +114,12 @@ def _align(value: int, to: int = DATA_ALIGN) -> int:
     return (value + to - 1) // to * to
 
 
-def read_all(data: bytes) -> list[tuple[str, bytes | None]]:
-    """Read into the (path, contents) form `write` accepts. None marks a dir."""
-    return [
-        (e.path, None if e.is_dir else extract(data, e)) for e in read(data)
-    ]
+def read_all(data: bytes) -> list[U8Item]:
+    """Read into the detached form `write` accepts."""
+    return [U8Item(e.path, None if e.is_dir else extract(data, e)) for e in read(data)]
 
 
-def write(entries: list[tuple[str, bytes | None]]) -> bytes:
+def write(entries: list[U8Item]) -> bytes:
     """Pack entries into a U8 archive.
 
     Entry order is preserved exactly as given — the node table is a flat
@@ -96,7 +129,7 @@ def write(entries: list[tuple[str, bytes | None]]) -> bytes:
     # Node 0 is the implicit root; the caller's list supplies nodes 1..n.
     count = len(entries) + 1
 
-    names = [""] + [p.rsplit("/", 1)[-1] for p, _ in entries]
+    names = [""] + [item.path.rsplit("/", 1)[-1] for item in entries]
     name_offsets: list[int] = []
     string_table = bytearray()
     for name in names:
@@ -110,26 +143,27 @@ def write(entries: list[tuple[str, bytes | None]]) -> bytes:
     # Lay out file data, then fill in the node table now that offsets are known.
     blobs = bytearray()
     offsets: list[int] = []
-    for _, contents in entries:
-        if contents is None:
+    for item in entries:
+        if item.data is None:
             offsets.append(0)
             continue
         pos = data_start + len(blobs)
-        pad = _align(pos) - pos
-        blobs += b"\0" * pad
+        blobs += b"\0" * (_align(pos) - pos)
         offsets.append(data_start + len(blobs))
-        blobs += contents
+        blobs += item.data
 
     nodes = bytearray()
     nodes += struct.pack(">3I", 1 << 24, 0, count)  # root
-    for i, (path, contents) in enumerate(entries, start=1):
-        if contents is None:
-            parent = _parent_index(entries, path)
+    for i, item in enumerate(entries, start=1):
+        if item.data is None:
             nodes += struct.pack(
-                ">3I", 1 << 24 | name_offsets[i], parent, _subtree_end(entries, path, i)
+                ">3I",
+                1 << 24 | name_offsets[i],
+                _parent_index(entries, item.path),
+                _subtree_end(entries, item.path, i),
             )
         else:
-            nodes += struct.pack(">3I", name_offsets[i], offsets[i - 1], len(contents))
+            nodes += struct.pack(">3I", name_offsets[i], offsets[i - 1], len(item.data))
 
     out = bytearray(struct.pack(">4I", U8_MAGIC, 0x20, header_size, data_start))
     out += b"\0" * 16  # reserved
@@ -140,36 +174,29 @@ def write(entries: list[tuple[str, bytes | None]]) -> bytes:
     return bytes(out)
 
 
-def _parent_index(entries: list[tuple[str, bytes | None]], path: str) -> int:
+def _parent_index(entries: list[U8Item], path: str) -> int:
     if "/" not in path:
         return 0
     parent = path.rsplit("/", 1)[0]
-    for i, (p, _) in enumerate(entries, start=1):
-        if p == parent:
+    for i, item in enumerate(entries, start=1):
+        if item.path == parent:
             return i
     return 0
 
 
-def _subtree_end(entries: list[tuple[str, bytes | None]], path: str, index: int) -> int:
+def _subtree_end(entries: list[U8Item], path: str, index: int) -> int:
     """Index of the first node after this directory's subtree."""
     end = index + 1
-    for i, (p, _) in enumerate(entries[index:], start=index + 1):
-        if p.startswith(path + "/"):
-            end = i + 1
-        else:
+    for i, item in enumerate(entries[index:], start=index + 1):
+        if not item.path.startswith(path + "/"):
             break
+        end = i + 1
     return end
 
 
-def _node(data: bytes, root_off: int, index: int) -> tuple[int, int, int]:
-    kind, name_off, f1, f2 = _node_full(data, root_off, index)
-    return kind, f1, f2
-
-
-def _node_full(data: bytes, root_off: int, index: int) -> tuple[int, int, int, int]:
-    off = root_off + index * NODE_SIZE
-    raw, f1, f2 = struct.unpack_from(">3I", data, off)
-    return raw >> 24, raw & 0x00FFFFFF, f1, f2
+def _node(data: bytes, root_off: int, index: int) -> _RawNode:
+    packed, first, second = struct.unpack_from(">3I", data, root_off + index * NODE_SIZE)
+    return _RawNode(packed >> 24, packed & 0x00FFFFFF, first, second)
 
 
 def _string(data: bytes, off: int) -> str:

@@ -9,19 +9,24 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from ...backends import disc
-from ...common.fsio import guard_overwrite, require_dir
+from bleck.backends import disc
+from bleck.common import env
+from bleck.common.fsio import guard_overwrite, require_dir
 
 CATEGORY = "discs"
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
     image = Path(args.disc)
-    dest = Path(args.dest) if args.dest else Path("extracted") / image.stem
+    dest = Path(args.dest) if args.dest else _default_dest(image)
     guard_overwrite(dest, args.force)
     disc.extract(image, dest, keep_iso=args.keep_iso)
     print(f"extracted {image.name} -> {dest}/")
     return 0
+
+
+def _default_dest(image: Path) -> Path:
+    return Path(env.text(env.EXTRACT_ROOT)) / image.stem
 
 
 def cmd_build(args: argparse.Namespace) -> int:

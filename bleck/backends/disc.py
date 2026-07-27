@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+
+from bleck.common import env
 
 WIT = "wit"
 DOLPHIN_TOOL = "dolphin-tool"
@@ -19,7 +22,7 @@ _EXTRA_PATHS = [Path("/usr/games")]
 
 INSTALL_HINTS = {
     WIT: "install Wiimms ISO Tools:  sudo apt install wit",
-    DOLPHIN_TOOL: "install Dolphin (provides dolphin-tool):  sudo apt install dolphin-emu",
+    DOLPHIN_TOOL: "install Dolphin for dolphin-tool:  sudo apt install dolphin-emu",
 }
 
 
@@ -27,7 +30,17 @@ class DiscError(Exception):
     pass
 
 
+# Declared overrides, checked before PATH.
+_OVERRIDES = {WIT: env.WIT, DOLPHIN_TOOL: env.DOLPHIN_TOOL}
+
+
 def find_tool(name: str) -> str:
+    override = _OVERRIDES.get(name)
+    if override is not None:
+        configured = env.path(override)
+        if configured is not None:
+            return str(configured)
+
     found = shutil.which(name)
     if found:
         return found
@@ -40,7 +53,7 @@ def find_tool(name: str) -> str:
 
 
 def _run(args: list[str]) -> None:
-    result = subprocess.run(args, capture_output=True, text=True)
+    result = subprocess.run(args, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip()
         raise DiscError(f"{Path(args[0]).name} failed:\n{detail}")
@@ -86,22 +99,63 @@ def build(source: Path, out: Path) -> None:
     _run([wit, "COPY", str(source), str(out), "--iso", "--align-files"])
 
 
-def identify(image: Path) -> dict[str, str]:
-    """Return disc header fields, or {} if the image cannot be read."""
+@dataclass(frozen=True)
+class DiscInfo:
+    """Header fields read from a disc image. Empty strings mean "not reported"."""
+
+    name: str = ""
+    region: str = ""
+    ids: str = ""
+    disc_type: str = ""
+
+    @property
+    def is_empty(self) -> bool:
+        return not any((self.name, self.region, self.ids, self.disc_type))
+
+    def describe(self) -> list[DiscField]:
+        """Populated fields, in display order."""
+        fields = [
+            DiscField("Disc name", self.name),
+            DiscField("ID Region", self.region),
+            DiscField("Disc & part IDs", self.ids),
+            DiscField("File & disc type", self.disc_type),
+        ]
+        return [field for field in fields if field.value]
+
+
+@dataclass(frozen=True)
+class DiscField:
+    label: str
+    value: str
+
+
+# wit DUMP labels -> DiscInfo attribute names.
+_WIT_FIELDS = {
+    "Disc name": "name",
+    "ID Region": "region",
+    "Disc & part IDs": "ids",
+    "File & disc type": "disc_type",
+}
+
+
+def identify(image: Path) -> DiscInfo:
+    """Read disc header fields. Returns an empty DiscInfo if unreadable."""
     try:
         wit = find_tool(WIT)
     except DiscError:
-        return {}
-    result = subprocess.run([wit, "DUMP", str(image)], capture_output=True, text=True)
+        return DiscInfo()
+    result = subprocess.run(
+        [wit, "DUMP", str(image)], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
-        return {}
+        return DiscInfo()
 
-    fields: dict[str, str] = {}
+    found: dict[str, str] = {}
     for line in result.stdout.splitlines():
-        if ":" not in line:
+        key, sep, value = line.partition(":")
+        if not sep:
             continue
-        key, _, value = line.partition(":")
-        key = key.strip()
-        if key in {"Disc name", "ID Region", "Disc & part IDs", "File & disc type"}:
-            fields[key] = value.strip()
-    return fields
+        attr = _WIT_FIELDS.get(key.strip())
+        if attr and attr not in found:
+            found[attr] = value.strip()
+    return DiscInfo(**found)

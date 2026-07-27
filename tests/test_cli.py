@@ -9,7 +9,8 @@ import pytest
 
 from bleck.cli import app as cli
 from bleck.common import manifest
-from bleck.formats import detect as formats, u8
+from bleck.formats import detect as formats
+from bleck.formats import u8
 
 
 @pytest.fixture
@@ -19,10 +20,12 @@ def archive(tmp_path: Path) -> Path:
     path.write_bytes(
         u8.write(
             [
-                ("dvd", None),
-                ("dvd/map", None),
-                ("dvd/map/a.bin", b"contents of a"),
-                ("dvd/tex.tpl", struct.pack(">I", formats.TPL_MAGIC) + b"\x00" * 16),
+                u8.U8Item("dvd", None),
+                u8.U8Item("dvd/map", None),
+                u8.U8Item("dvd/map/a.bin", b"contents of a"),
+                u8.U8Item(
+                    "dvd/tex.tpl", struct.pack(">I", formats.TPL_MAGIC) + b"\x00" * 16
+                ),
             ]
         )
     )
@@ -30,7 +33,7 @@ def archive(tmp_path: Path) -> Path:
 
 
 class TestInvocation:
-    def test_help_exits_zero(self, capsys):
+    def test_help_exits_zero(self):
         with pytest.raises(SystemExit) as exc:
             cli.main(["--help"])
         assert exc.value.code == 0

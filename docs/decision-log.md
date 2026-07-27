@@ -516,6 +516,49 @@ repo should assume a slow core and plan around it rather than around memory.
 
 ---
 
+### D21 — Enforced coding standards ✅
+
+Full detail in [`coding-standards.md`](./coding-standards.md). Two project rules,
+enforced by custom pylint plugins rather than convention, plus ruff and stock
+pylint. One entry point: `./scripts/lint.sh [--fix]`.
+
+**Rule 1 — return named types, never `dict`/`tuple`** (`C9001`). Nesting counts:
+`list[tuple[str, int]]` fails. Unions, `typing.Tuple[...]`, and string
+annotations are all checked.
+
+This was not free. Existing code returned tuples in five places, each replaced
+with a frozen dataclass: `Match` (lz77), `U8Item` / `_RawNode` / `_OpenDir` (u8),
+`Unwrapped` / `DirectoryListing` (archive commands), `DiscInfo` / `DiscField`
+(disc backend). The refactor is a genuine readability win — `match.is_usable`
+reads better than `length >= MIN_MATCH` on an anonymous first element.
+
+**Rule 2 — environment access confined to `bleck/common/env.py`** (`C9002`).
+Every variable is declared once as an `EnvVar` with a description, so `DECLARED`
+is the complete list of what can be configured. Scattered `os.getenv` calls are
+invisible and fail silently on a typo. Wired into real behaviour rather than left
+decorative: `BLECK_WIT` / `BLECK_DOLPHIN_TOOL` override tool discovery and
+`BLECK_EXTRACT_ROOT` sets the default extract destination.
+
+**Both plugins verified against a deliberate-violations file** rather than
+assumed to work — bare dict, bare tuple, nested tuple, `os.environ`, `os.getenv`
+all caught, and the documented escape hatch confirmed to suppress correctly.
+
+**Two config decisions worth recording:**
+
+⚠️ **`jobs` must stay 1.** With `jobs > 1`, pylint loads custom plugins once per
+worker and reports every plugin message **twice** (verified on pylint 4.0.6).
+Cost us a confusing round of double output. Parallelism isn't worth it.
+
+**Switched to absolute imports.** Ruff's `TID252` flagged parent-relative imports
+(`from ...formats import lz77`). My first instinct was to silence the rule; the
+rule was right. `from bleck.formats import lz77` says where things come from
+without counting dots.
+
+**Also disabled `redefined-outer-name`** — requesting a pytest fixture shadows
+its name by design, so it fired on nearly every test and flagged nothing real.
+
+---
+
 ## Standing principles
 
 These emerged from the above and should guide later choices:
