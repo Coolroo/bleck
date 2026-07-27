@@ -192,8 +192,8 @@ For Dolphin this is automatable: codes live in
 the built image, so testing is turnkey:
 
 ```
-build/my-mod.wbfs
-build/my-mod.R8PP01.ini      ← drop into Dolphin's GameSettings
+work/build/my-mod.wbfs
+work/build/my-mod.R8PP01.ini      ← drop into Dolphin's GameSettings
 ```
 
 For real hardware, the same code goes into a `.gct` via Riivolution or a code

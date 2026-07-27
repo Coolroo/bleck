@@ -85,7 +85,7 @@ should unwrap and report the whole stack, so a user can point it at anything and
 learn what they have:
 
 ```
-$ bleck info extracted/eu0/files/map/aa1_01.bin
+$ bleck info work/extracted/eu0/files/map/aa1_01.bin
 aa1_01.bin  424,712 bytes
   LZ77 (type 0x10) -> 1,131,524 bytes
     U8 archive, 13 entries (7 files)

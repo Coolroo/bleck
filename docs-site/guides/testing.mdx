@@ -11,7 +11,7 @@ clean. Only running the game verifies that it *works*.
 Build to **WBFS** unless you know your Dolphin is recent:
 
 ```bash
-uv run bleck mod build my-mod out.wbfs
+uv run bleck mod build my-mod work/out/my-mod.wbfs
 ```
 
 See [Disc formats](/concepts/disc-formats) for why.
@@ -21,13 +21,13 @@ See [Disc formats](/concepts/disc-formats) for why.
 The quickest route is to let `bleck` do it, on any platform:
 
 ```bash
-uv run bleck mod build my-mod out.wbfs --force --launch
+uv run bleck mod build my-mod work/out/my-mod.wbfs --force --launch
 ```
 
 That builds and boots in one step. For an image you already have:
 
 ```bash
-uv run bleck launch --batch out.wbfs
+uv run bleck launch --batch work/out/my-mod.wbfs
 ```
 
 `--batch` skips Dolphin's game list and goes straight into the game. Both need
@@ -63,7 +63,7 @@ the emulator itself, found via `BLECK_DOLPHIN`.
 
   <Tab title="Linux">
     ```bash
-    dolphin-emu -e out.wbfs
+    dolphin-emu -e work/out/my-mod.wbfs
     ```
 
     <Warning>
@@ -88,7 +88,7 @@ the emulator itself, found via `BLECK_DOLPHIN`.
         -C Logger.Options.Verbosity=4 \
         -C Logger.Logs.BOOT=True \
         -C Logger.Logs.FILEMON=True \
-        -e out.wbfs
+        -e work/out/my-mod.wbfs
     ```
 
     <Tip>
@@ -121,7 +121,7 @@ the emulator itself, found via `BLECK_DOLPHIN`.
     Something about the rebuilt file is wrong. Confirm the archive round-trips:
 
     ```bash
-    uv run bleck verify build/my-mod/files/lyt/title.bin.uk
+    uv run bleck verify work/build/my-mod/files/lyt/title.bin.uk
     ```
   </Accordion>
 </AccordionGroup>
@@ -131,7 +131,7 @@ the emulator itself, found via `BLECK_DOLPHIN`.
 Much can be checked before booting:
 
 ```bash
-uv run bleck verify extracted/eu0/files/map    # every archive round-trips
+uv run bleck verify work/extracted/eu0/files/map    # every archive round-trips
 uv run bleck mod check my-mod                  # conflicts, no writes
-diff -r --brief extracted/eu0 build/my-mod     # exactly what changed
+diff -r --brief work/extracted/eu0 work/build/my-mod     # exactly what changed
 ```

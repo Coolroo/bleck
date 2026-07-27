@@ -7,8 +7,8 @@ choices that produced these lives in [`decision-log.md`](./decision-log.md).
 
 | Build | Disc ID | Rev | Origin | Extracted to |
 |---|---|---|---|---|
-| us0 | `R8PE01` | 0 | `Super Paper Mario (USA).wbfs` | `extracted/us0` |
-| **eu0** | `R8PP01` | **0** | `…(Europe, Australia)….rvz` → `spm-pal.iso` | `extracted/eu0` |
+| us0 | `R8PE01` | 0 | `Super Paper Mario (USA).wbfs` | `work/extracted/us0` |
+| **eu0** | `R8PP01` | **0** | `…(Europe, Australia)….rvz` → `spm-pal.iso` | `work/extracted/eu0` |
 
 `eu0` is **the reference build** — the target of all upstream documentation and
 the zero-argument default in `spm-rel-loader`. Confirmed via

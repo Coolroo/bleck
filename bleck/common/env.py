@@ -43,6 +43,15 @@ class EnvSetting:
 
 # --- declarations ---------------------------------------------------------
 
+#: Everything the toolkit generates or is handed lives under one directory.
+#: These are large (a disc image is ~424 MB, an extract ~400 MB), all
+#: gitignored, and none of them are source — grouping them keeps the repository
+#: root readable and makes "what can I safely delete?" a single answer.
+#:
+#: `mods/` is deliberately NOT here: manifests and scripts are committed.
+WORK_DIR = "work"
+
+
 WIT = EnvVar(
     "BLECK_WIT",
     description="Path to the wit binary, if it is not on PATH",
@@ -65,17 +74,17 @@ WSTRT = EnvVar(
 )
 GECKO_DIR = EnvVar(
     "BLECK_GECKO_DIR",
-    default="gecko",
+    default="work/gecko",
     description="Directory of per-version loader codelists, e.g. loader.eu0.txt",
 )
 SYMBOLS_DIR = EnvVar(
     "BLECK_SYMBOLS_DIR",
-    default="symbols",
+    default="work/symbols",
     description="Directory of per-version symbol lists, e.g. spm.eu0.lst",
 )
 EXTRACT_ROOT = EnvVar(
     "BLECK_EXTRACT_ROOT",
-    default="extracted",
+    default="work/extracted",
     description="Where `bleck extract` puts output when no destination is given",
 )
 NO_COLOR = EnvVar(
@@ -89,12 +98,12 @@ MODS_DIR = EnvVar(
 )
 BASE_DIR = EnvVar(
     "BLECK_BASE_DIR",
-    default="extracted/eu0",
+    default="work/extracted/eu0",
     description="The pristine extracted base game. Never written to",
 )
 BUILD_DIR = EnvVar(
     "BLECK_BUILD_DIR",
-    default="build",
+    default="work/build",
     description="Where mod staging and output ISOs go",
 )
 

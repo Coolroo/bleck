@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
-GAME_DATA = REPO / "extracted" / "eu0" / "files"
+GAME_DATA = REPO / "work" / "extracted" / "eu0" / "files"
 
 
 def pytest_configure(config: pytest.Config) -> None:

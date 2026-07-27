@@ -13,7 +13,7 @@ Assumes you have [installed](/install) `bleck` and have a disc image.
 ## 1. Extract a base
 
 ```bash
-uv run bleck extract "Super Paper Mario.rvz" extracted/eu0
+uv run bleck extract "Super Paper Mario.rvz" work/extracted/eu0
 ```
 
 Takes about 10 seconds from an ISO, or ~80 from RVZ (which converts first).
@@ -21,7 +21,7 @@ Takes about 10 seconds from an ISO, or ~80 from RVZ (which converts first).
 Confirm you got what you expected:
 
 ```bash
-uv run bleck info extracted/eu0
+uv run bleck info work/extracted/eu0
 ```
 
 ## 2. Find something to change
@@ -29,7 +29,7 @@ uv run bleck info extracted/eu0
 The title screen lives in `lyt/title.bin.uk`:
 
 ```bash
-uv run bleck info extracted/eu0/files/lyt/title.bin.uk
+uv run bleck info work/extracted/eu0/files/lyt/title.bin.uk
 ```
 
 ```
@@ -113,13 +113,13 @@ worth running before every build.
 ## 7. Build
 
 ```bash
-uv run bleck mod build title-invert out.wbfs
+uv run bleck mod build title-invert work/out/my-mod.wbfs
 ```
 
 ```
 chain OK: title-invert
 staged build/title-invert  (0 file(s), 1 archive(s) merged)
-built out.wbfs  (444,596,224 bytes, wbfs)
+built work/out/my-mod.wbfs  (444,596,224 bytes, wbfs)
 ```
 
 <Check>
@@ -129,7 +129,7 @@ and the other 34 members repacked untouched.
 
 ## 8. Run it
 
-Open `out.wbfs` in Dolphin. Mario should appear in inverted colours on the title
+Open `work/out/my-mod.wbfs` in Dolphin. Mario should appear in inverted colours on the title
 screen.
 
 See [Testing](/guides/testing) for per-platform emulation notes.
@@ -139,11 +139,11 @@ See [Testing](/guides/testing) for per-platform emulation notes.
 The base is untouched, so you can diff against it:
 
 ```bash
-diff -r --brief extracted/eu0 build/title-invert
+diff -r --brief work/extracted/eu0 build/title-invert
 ```
 
 ```
-Files extracted/eu0/files/lyt/title.bin.uk and build/title-invert/files/lyt/title.bin.uk differ
+Files work/extracted/eu0/files/lyt/title.bin.uk and build/title-invert/files/lyt/title.bin.uk differ
 ```
 
 One file. That is the whole point of keeping the base immutable.

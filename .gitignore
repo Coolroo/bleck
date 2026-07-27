@@ -1,12 +1,11 @@
-# Game data — never commit. Large, and not ours to distribute.
-roms/
-extracted/
+# Everything the toolkit generates or is handed: discs, extracts, staging,
+# built images, symbol lists, loader codelists. Large, and mostly not ours to
+# distribute. Grouped under one directory so the repository root stays readable.
+work/
 
 # Mod overlays contain extracted game assets — manifests are committed,
 # contents are not. Remove this line for a mod of wholly original work.
 mods/*/overlay/
-build/
-out/
 
 # Built disc images. `bleck mod build` writes wherever it is told, and the docs
 # use `out.wbfs` in the repo root — a 424 MB accidental commit is easy to make
@@ -29,7 +28,3 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
-
-# Gecko loader codelists are GPLv3 upstream and user-supplied, like symbols.
-gecko/
-symbols/

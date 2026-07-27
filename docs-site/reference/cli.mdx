@@ -21,7 +21,7 @@ Identify a file and unwrap its nested formats. Works on disc images, archives,
 compressed streams, textures and REL modules.
 
 ```bash
-bleck info extracted/eu0/files/map/aa1_01.bin
+bleck info work/extracted/eu0/files/map/aa1_01.bin
 ```
 
 ### `bleck verify`
@@ -108,7 +108,7 @@ be chained after a build without pinning your terminal.
 | `--wait` | Block until the emulator exits, and return its exit code |
 
 ```bash
-bleck mod build my-mod out.wbfs && bleck launch --batch out.wbfs
+bleck mod build my-mod work/out/my-mod.wbfs && bleck launch --batch work/out/my-mod.wbfs
 ```
 
 <Note>
@@ -191,7 +191,7 @@ Stage the base, apply the chain, and write a disc image.
 `--launch` makes the whole edit-build-boot loop a single command:
 
 ```bash
-bleck mod build my-mod out.wbfs --force --launch
+bleck mod build my-mod work/out/my-mod.wbfs --force --launch
 ```
 
 If the mod declares a `code` block, its script is compiled first and the

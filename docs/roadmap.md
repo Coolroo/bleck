@@ -131,8 +131,8 @@ Riivolution and ISO rebuilds only place the *file*. Without the Gecko code,
 and make testing turnkey:
 
 ```
-build/my-mod.wbfs
-build/my-mod.R8PP01.ini
+work/build/my-mod.wbfs
+work/build/my-mod.R8PP01.ini
 ```
 
 The loader codes ship pre-assembled per region, so this is packaging, not

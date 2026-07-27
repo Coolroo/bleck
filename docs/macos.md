@@ -103,10 +103,10 @@ genuine mistakes, so the behaviour is per-platform.
 ## Use
 
 ```bash
-uv run bleck extract ~/roms/spm.rvz extracted/eu0
+uv run bleck extract ~/roms/spm.rvz work/extracted/eu0
 uv run bleck mod new my-mod
 uv run bleck mod vendor my-mod lyt/title.bin.uk/arc/timg/mario.tpl
-uv run bleck mod build my-mod out.wbfs
+uv run bleck mod build my-mod work/out/my-mod.wbfs
 ```
 
 Share builds as `.wbfs` — RVZ needs Dolphin 5.0-12188 or newer (D24).

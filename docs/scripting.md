@@ -179,7 +179,7 @@ Honest scope, because the ceiling is real:
 Resolving `evt_mario_set_pos` to an address needs `spm.<version>.lst` from
 [spm-headers](https://github.com/SeekyCt/spm-headers). `bleck` does not vendor
 it. Point `BLECK_SYMBOLS_DIR` at a directory containing it, or drop it in
-`symbols/`.
+`work/symbols/`.
 
 This is deliberate. Vendoring is *permitted* — `include/`, `decomp/` and
 `linker/` are MIT — but D26's licensing question is still open, and the

@@ -59,7 +59,7 @@ uv run bleck --help
 ## 2. Extract your disc
 
 ```bash
-uv run bleck extract "Super Paper Mario.rvz" extracted/eu0
+uv run bleck extract "Super Paper Mario.rvz" work/extracted/eu0
 ```
 
 This becomes your **base** — a pristine reference `bleck` never writes to.
@@ -67,7 +67,7 @@ This becomes your **base** — a pristine reference `bleck` never writes to.
 ## 3. Look inside
 
 ```bash
-uv run bleck info extracted/eu0/files/lyt/title.bin.uk
+uv run bleck info work/extracted/eu0/files/lyt/title.bin.uk
 ```
 
 ```
@@ -103,7 +103,7 @@ TPL-capable editor, or invert its pixel data for an unmistakable change. See
 ## 6. Build
 
 ```bash
-uv run bleck mod build my-first-mod out.wbfs
+uv run bleck mod build my-first-mod work/out/my-mod.wbfs
 ```
 
 <Warning>
@@ -113,7 +113,7 @@ or newer — older builds reject it as *"not a GC/Wii ISO"*.
 
 ## 7. Run it
 
-Open `out.wbfs` in Dolphin. The title screen should show your change.
+Open `work/out/my-mod.wbfs` in Dolphin. The title screen should show your change.
 
 <CardGroup cols={2}>
   <Card title="Your first mod" icon="paintbrush" href="/guides/first-mod">

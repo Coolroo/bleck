@@ -245,7 +245,7 @@ structure was verified by script, but nothing has been rendered visually.
 
 ## What a fresh clone does *not* include
 
-- **`roms/` and `extracted/`** are gitignored. Supply your own disc image.
+- **`work/roms/` and `work/extracted/`** are gitignored. Supply your own disc image.
 - **`mods/*/overlay/`** is gitignored — it holds extracted game assets. The
   `title-invert` and `tex-koopa` manifests are committed, so they resolve as a
   dependency chain, but override nothing until re-vendored.

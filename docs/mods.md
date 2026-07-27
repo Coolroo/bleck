@@ -11,7 +11,7 @@ How `bleck` represents a mod, and how a mod becomes a bootable disc.
 The obvious approach — extract the disc, edit files in place, rebuild — is a
 trap:
 
-- **No baseline.** Once you edit `extracted/eu0/`, you no longer have a pristine
+- **No baseline.** Once you edit `work/extracted/eu0/`, you no longer have a pristine
   copy to diff against. "What did I actually change?" becomes unanswerable, and
   our main verification tool (byte-exact comparison) stops working.
 - **Nothing is shareable.** A mod becomes "my 400 MB directory", not a set of
@@ -26,7 +26,7 @@ build time.
 
 ## Concepts
 
-**Base** — a pristine extracted disc (`extracted/eu0`). Read-only, never
+**Base** — a pristine extracted disc (`work/extracted/eu0`). Read-only, never
 modified, not committed to git.
 
 **Mod** — a named directory holding a manifest and an overlay tree containing
@@ -312,9 +312,9 @@ project rule:
 | Variable | Default | Meaning |
 |---|---|---|
 | `BLECK_MODS_DIR` | `mods` | Where mods live |
-| `BLECK_BASE_DIR` | `extracted/eu0` | The pristine extracted base |
+| `BLECK_BASE_DIR` | `work/extracted/eu0` | The pristine extracted base |
 | `BLECK_BUILD_DIR` | `build` | Where staging and output ISOs go |
-| `BLECK_EXTRACT_ROOT` | `extracted` | Where `bleck extract` writes *(exists)* |
+| `BLECK_EXTRACT_ROOT` | `work/extracted` | Where `bleck extract` writes *(exists)* |
 
 Defaults point at the repo layout, so a dev checkout works with no configuration.
 
@@ -324,7 +324,7 @@ Defaults point at the repo layout, so a dev checkout works with no configuration
 
 1. **Validate** — manifest parses; `base` matches the configured base; every
    overlay path resolves.
-2. **Stage** — materialise the base into `build/<name>/`. Copying 400 MB per
+2. **Stage** — materialise the base into `work/build/<name>/`. Copying 400 MB per
    build is wasteful, so prefer **hardlinks** for untouched files, falling back
    to copies across filesystems. Only merged archives are written fresh.
 3. **Merge** — apply the overlay per the rules above.

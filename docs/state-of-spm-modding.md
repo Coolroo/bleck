@@ -118,7 +118,7 @@ preprocessor defines (headers).
 > "it's advised to not put work into [NTSC-U] until some kind of automated
 > porting setup has been created."
 
-⚠️ **This matters for you specifically** — `roms/` holds *Super Paper Mario (USA)*
+⚠️ **This matters for you specifically** — `work/roms/` holds *Super Paper Mario (USA)*
 and *(USA) (Rev 1)*, i.e. **us0 and us1**. us1 has the *second-smallest* symbol
 list of all 8 builds (17 KB vs eu0's 34 KB). If you plan to develop against the
 reference build's documentation, expect friction. Consider sourcing a PAL rev 0
@@ -289,7 +289,7 @@ Relevant to licensing (MIT except `mod/`, which is GPLv3).
   Relevant because skawo's editor and parts of the Wii tooling ecosystem are
   Windows/.NET-oriented. devkitPPC, WIT, and the Python tools are cross-platform.
 - No Wii tooling installed yet — `wit`, `wszst`, `dolphin-tool` all absent.
-- `roms/` holds US rev 0 and US rev 1 as **`.wbfs`** inside 7z archives.
+- `work/roms/` holds US rev 0 and US rev 1 as **`.wbfs`** inside 7z archives.
 
 ### Suggested first steps
 
