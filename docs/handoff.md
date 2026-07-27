@@ -94,6 +94,7 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ Our REL is byte-identical once staged | hash-checked overlay vs `build/` |
 | ✅ `setup/*.dat` format fully decoded | all 227 files parsed, no exceptions (D42) |
 | ✅ **A script runs in-game** | 60 iterations/sec, survives a map change (D43) |
+| ✅ **No Dolphin cheat setup needed** | loader embedded in the disc, verified with the INI removed (D44) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
 
 ---
@@ -109,6 +110,7 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 setx BLECK_WIT         "C:\Users\Wyatt\tools\wit\bin\wit.exe"
 setx BLECK_DOLPHIN     "C:\Users\Wyatt\tools\dolphin\Dolphin.exe"
 setx BLECK_SYMBOLS_DIR "W:\Repos\bleck\symbols"
+setx BLECK_WSTRT       "C:\Users\Wyatt\tools\szs\szs-v2.42a-r8989-cygwin64\bin\wstrt.exe"
 ```
 
 ### Symbol lists — required for code mods, not shipped
@@ -129,13 +131,14 @@ only 456.
 carries ~9,566 human-named symbols — **11x** the lst — with sizes and types, and
 parses with one regex. Switching to it is on the next-steps list.
 
-### Dolphin — the two silent traps
+### Dolphin — the two silent traps, now avoidable
 
-⚠️ **These may be avoidable entirely** (D39). `wstrt patch main.dol --add-sect
-X.gct` bakes the Gecko code handler *into the disc*, which removes both traps
-and works on real hardware. Untried here. Until then:
+✅ **`bleck` embeds the loader into the disc** (D44), so neither trap below
+applies any more. Verified with `R8PP01.ini` moved aside entirely. It needs
+`wstrt` (Wiimms SZS Toolset, a separate download from `wit`) and a codelist at
+`gecko/loader.eu0.txt`; without them the build warns and continues.
 
-Both are already configured on this machine, and both fail *invisibly* if not:
+The old path, for reference — both fail *invisibly* if misconfigured:
 
 1. `User/GameSettings/R8PP01.ini` must contain the Gecko loader under **both**
    `[Gecko]` **and** `[Gecko_Enabled]`. Listed once, it never runs.
@@ -227,12 +230,7 @@ now that D41 and D42 have extracted what it was worth.
 
 In rough order of value:
 
-0. **Bake the Gecko loader into the DOL** (D39) — the highest value-per-effort
-   item on this list. `wstrt patch main.dol --add-sect X.gct` embeds the code
-   handler *and* the codes into a new TEXT section at `0x80001800`. That deletes
-   both silent setup traps at once: no `R8PP01.ini` under two sections, no
-   `EnableCheats`. And it works on real hardware. `wstrt` is Wiimms SZS Toolset,
-   a separate tool from `wit`, so it would be a new dependency.
+0. ✅ ~~Bake the Gecko loader into the DOL.~~ **Done** (D44).
 1. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need

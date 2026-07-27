@@ -38,9 +38,8 @@ compile but nothing has run on them.
 
 ## In rough order of value
 
-1. 🟢 **Bake the Gecko loader into the DOL.** `wstrt patch main.dol --add-sect`
-   removes both Dolphin setup traps and works on hardware (D39). Highest
-   value-per-effort item on the list. Needs `wstrt` as a new dependency.
+1. ✅ ~~**Bake the Gecko loader into the DOL.**~~ Done (D44) — verified with
+   Dolphin's cheat config removed entirely. 🔶 Console untested.
 2. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; removes a papercut
    the language shipped with.
 3. 🟢 **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest capability gap —
