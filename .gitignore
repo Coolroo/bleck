@@ -6,6 +6,14 @@ extracted/
 # contents are not. Remove this line for a mod of wholly original work.
 mods/*/overlay/
 build/
+out/
+
+# Built disc images. `bleck mod build` writes wherever it is told, and the docs
+# use `out.wbfs` in the repo root — a 424 MB accidental commit is easy to make
+# and unpleasant to undo.
+*.iso
+*.rvz
+*.wbfs
 
 # Mintlify
 docs-site/node_modules/
