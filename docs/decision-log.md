@@ -832,3 +832,38 @@ user's machine.
 ⚠️ **Not actually run on Windows yet.** These are informed fixes and simulated
 tests, not confirmation. The honest status is "should work"; running `bleck`
 on Windows 11 is what would make it "does".
+
+---
+
+### D28 — Roadmap and Windows setup written down ✅
+
+Added [`roadmap.md`](./roadmap.md) (forward-looking: what to build next, what
+blocks what) and [`windows.md`](./windows.md) (setup for the Windows target).
+The decision log stays backward-looking; the two do not overlap.
+
+**The state worth stating plainly:** the asset pipeline is finished and proven
+(D25). Code injection is the active track, and its toolchain is proven (D26) but
+nothing has been integrated or run.
+
+**Ordering, and why:**
+
+1. **Licensing first** — `spm-rel-loader` is GPLv3 including the Gecko loader,
+   and `bleck` is unlicensed. Nothing upstream has been copied into this repo
+   yet; the clones are in scratchpad deliberately. Unwinding a licensing mistake
+   later is much worse than deciding now.
+2. **`g++-powerpc-linux-gnu`** — cheap, and upstream is C++17.
+3. **One hook actually running** — this is the code track's D25. Until a REL we
+   built demonstrably *runs*, everything above it rests on an untested
+   assumption, and the risk is specific rather than vague: Debian's compiler
+   targets SysV, devkitPPC targets `powerpc-eabi`, so code can build cleanly and
+   misbehave.
+
+**Also noted as newly unblocked by D25:** the setup-file duplication (D13) and
+the `rel.bin`/`relF.bin` question (D11) both needed a bootable game to settle,
+and now have one. D13 in particular is worth doing — a build-time warning that
+says "we don't know which copy the game reads" is a confession, not a feature.
+
+**Deferred with reasons recorded** rather than dropped: `map.dat` needs a
+visualiser before editing is tractable (the feedback loop is otherwise "rebuild
+400 MB, boot, squint"), and cross-region symbol porting — the highest-leverage
+gap in the wider ecosystem — only matters once there is code worth porting.
