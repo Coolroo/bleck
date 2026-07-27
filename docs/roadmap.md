@@ -42,25 +42,78 @@ compile but nothing has run on them.
 
 ## In rough order of value
 
-1. ✅ ~~**Bake the Gecko loader into the DOL.**~~ Done (D44) — verified with
-   Dolphin's cheat config removed entirely. 🔶 Console untested.
-2. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; removes a papercut
-   the language shipped with.
-3. 🟢 **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining
-   capability gap — it is what lets a script attach itself to an **NPC, door or
-   item**. ⚠️ Maps are already done without it (`code.maps`, D51), and that
-   route deliberately avoids patching game data; expect the same to be true
-   here, and read D51 before patching any pointer the game owns.
-4. 🟢 **Switch to the decomp symbol table** — 11× more named symbols, with
-   sizes and types (D39). ⚠️ **`spm-decomp` states no licence** (D54), so it
-   cannot be vendored; read a clone the user supplies, exactly as symbol lists
-   already work.
-5. 🟢 **Multiple code mods.** ⚠️ **Unclaimed across the entire scene** (D39):
-   `chainrel` is a stub, and both major distributions tell users to run one REL
-   mod at a time. The clearest differentiator available.
-6. ✅ ~~**Native hooks in `bleck mod build`**~~ — Done (D46, D47). A
-   `code.sources` block compiles C alongside the script into one module.
-   ⚠️ C++ still unavailable: `g++-powerpc-linux-gnu` is not installed.
+**Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent
+
+### Needs no emulator at all
+
+1. 🟢 **A `setup` reader/writer — the clearest next feature.** Turns `bleck`
+   from "runs code" into "changes the game". Enemy and item placement is the
+   most obviously moddable thing on the disc after textures, and no `bleck` code
+   touches it yet.
+
+   Both former blockers are gone: the container is fully specified in
+   [`disc-layout.md`](./disc-layout.md) (a fixed 100-entry array, stride by
+   version), and D53 settled which of the two copies to write.
+
+   ⚠️ **The real work is the entry *fields*.** Only position and enemy ID are
+   known, out of 112 bytes. `he1_01` is a good subject: 3 used entries out of
+   100, and reachable unattended (D52).
+
+2. 🟢 **Switch to the decomp symbol table** (D39). ~9,566 named symbols against
+   the lst's 976, with sizes and types — enough to reject a `user_func` target
+   that is actually *data* at compile time, instead of shipping a REL that jumps
+   into a table.
+   ⚠️ `spm-decomp` states **no licence** (D54), so it cannot be vendored. Read a
+   clone the user supplies, exactly as symbol lists already work.
+
+3. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; `var a = -30000000`
+   is a compile error and need not be.
+
+### Testable unattended, now that D52 landed
+
+4. 🟢 **`peek`/`poke`, then doors, NPCs and items.** The remaining event
+   surfaces — maps are done (`code.maps`, D51).
+   ⚠️ **Read D51 first.** Patching a pointer the game owns deadlocked the map
+   loader while passing every mechanical check; the design that works watches
+   state instead. Expect the same trap here.
+
+5. 🟢 **More opcodes**: `switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/
+   `SET_SPD`. The language reaches 39 of the VM's 120. Unwritten, not blocked.
+
+### Bigger swings
+
+6. 🟢 **Multiple code mods.** ⚠️ **Unclaimed across the entire scene** (D39):
+   `chainrel` is a stub with its loader body in `#if 0`, and both major
+   distributions tell users to run one REL mod at a time. Highest
+   differentiation, highest risk, and no user-visible payoff until it works.
+
+7. 🟢 **Verify beyond `eu0`.** Everything so far has run on one build. Other
+   versions compile; nothing has booted. `spm-porter` ships `pal0→us0` match
+   CSVs.
+
+### Needs a human
+
+8. 🔵 **Confirm the `mod_loaded` banner.** Parked on `feat/mod-banner` because
+   nothing here can see the screen and the title screen is unreachable
+   unattended (D47, D48). `work/out/banner-probe.wbfs` is already built — boot
+   it and check the text lands bottom-right, unclipped.
+
+9. 🟡 **Settle the `LICENSE`.** Now the **only** thing between this and being
+   shareable. `README.md` credits every upstream project and states that no game
+   data is included, but `bleck` itself is all-rights-reserved by default while
+   `docs-site` tells people to clone it. MIT would match `spm-headers`, whose
+   material we resolve against.
+
+### Done this cycle
+
+| | |
+|---|---|
+| ✅ Bake the Gecko loader into the DOL | D44 — verified with Dolphin's cheat config removed. 🔶 Console untested |
+| ✅ Native hooks in `bleck mod build` | D46, D47. ⚠️ C++ still unavailable — `g++-powerpc-linux-gnu` not installed |
+| ✅ Event mods (`code.maps`) | D51 |
+| ✅ Reach any map unattended | D52 |
+| ✅ Settle D13 | D53 |
+| ✅ Credit upstream projects | D54 |
 
 ---
 
