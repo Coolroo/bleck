@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "hook-demo",
+  "version": "0.1.0",
+  "description": "A script and native C in one module, showing what each is for",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "sources": ["src/hooks.c"],
+    "target": "eu0",
+    "module_id": 2
+  }
+}

@@ -1,0 +1,7 @@
+-- The script half: event logic, running on the game's own scheduler.
+script main {
+    loop {
+        wait_ms(10000)
+        evt_pouch_add_coins(1)
+    }
+}

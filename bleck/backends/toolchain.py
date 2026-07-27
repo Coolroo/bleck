@@ -140,45 +140,85 @@ def symbols_file(target: str, directory: Path | None = None) -> Path:
     )
 
 
-def build_rel(
-    source: str,
-    workdir: Path,
-    target: str = "eu0",
-    module_id: int = DEFAULT_MODULE_ID,
-    toolchain: Toolchain | None = None,
-) -> BuildResult:
-    """Compile C source into a REL module.
+@dataclass(frozen=True)
+class BuildRequest:
+    """Everything one REL build needs.
 
-    `workdir` receives the intermediate `.c`, `.o` and `.elf`. They are kept
-    rather than cleaned up: when a generated script fails to compile, the only
-    way to understand the compiler's line numbers is to read the file it was
-    complaining about.
+    Bundled rather than passed as seven positionals, following the same
+    reasoning as `BuildContext` in the mod builder: these always travel
+    together, and a call site reading `build_rel(a, b, c, d, e, f, g)` says
+    nothing about what any of them are.
     """
-    chain = toolchain or detect()
-    lst = symbols_file(target)
 
+    source: str
+    """Generated scaffolding -- the entry points and any compiled script."""
+
+    workdir: Path
+
+    target: str = "eu0"
+    module_id: int = DEFAULT_MODULE_ID
+
+    extra_sources: list[Path] = field(default_factory=list)
+    """The mod author's own translation units, linked into the same module."""
+
+    include_dirs: list[Path] = field(default_factory=list)
+    toolchain: Toolchain | None = None
+
+
+def build_rel(request: BuildRequest) -> BuildResult:
+    """Compile C into a REL module.
+
+    `request.workdir` keeps its intermediates rather than cleaning them up:
+    when generated code fails to compile, the only way to understand the
+    compiler's line numbers is to read the file it was complaining about.
+    """
+    chain = request.toolchain or detect()
+    lst = symbols_file(request.target)
+
+    workdir = request.workdir
     workdir.mkdir(parents=True, exist_ok=True)
     csource = workdir / "mod.c"
-    obj = workdir / "mod.o"
     elf = workdir / "mod.elf"
     # newline="" suppresses translation, so the generated C is byte-identical on
     # every platform. Without it Windows writes CRLF and Linux writes LF, and two
     # machines building the same script produce different intermediates — which
     # makes "is this REL the same one?" needlessly hard to answer.
-    csource.write_text(source, encoding="ascii", newline="")
+    csource.write_text(request.source, encoding="ascii", newline="")
+
+    includes = [f"-I{path}" for path in request.include_dirs]
+    objects: list[Path] = []
+    for index, unit in enumerate([csource, *request.extra_sources]):
+        # Names are prefixed so two sources called `main.c` in different
+        # directories cannot overwrite each other's object file.
+        output = workdir / f"{index:02d}-{unit.stem}.o"
+        _run(
+            [
+                chain.compiler,
+                *chain.compile_flags(),
+                *includes,
+                "-c",
+                str(unit),
+                "-o",
+                str(output),
+            ],
+            f"compiling {unit.name}",
+        )
+        objects.append(output)
 
     _run(
-        [chain.compiler, *chain.compile_flags(), "-c", str(csource), "-o", str(obj)],
-        f"compiling {csource.name}",
-    )
-    _run(
-        [chain.compiler, *chain.link_flags(), str(obj), "-o", str(elf)],
+        [
+            chain.compiler,
+            *chain.link_flags(),
+            *[str(path) for path in objects],
+            "-o",
+            str(elf),
+        ],
         "linking the module",
     )
 
-    rel = _to_rel(elf, lst, module_id)
+    rel = _to_rel(elf, lst, request.module_id)
     return BuildResult(
-        rel=rel, toolchain=chain.name, module_id=module_id, symbols_file=lst
+        rel=rel, toolchain=chain.name, module_id=request.module_id, symbols_file=lst
     )
 
 

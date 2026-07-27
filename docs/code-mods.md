@@ -1,6 +1,7 @@
 # Code Mods — Design
 
-**Status: toolchain proven (D26); the *scripting* path is now built (D37).**
+**Status: built.** Scripts (D37, D43) and native sources (D46) both compile
+into a mod's `mod.rel` through `bleck mod build`.
 
 > **Read [`scripting.md`](./scripting.md) first.** Most of what this document
 > anticipated — compiling into `overlay/files/mod/mod.rel`, the `code` block in
@@ -152,9 +153,10 @@ Manifest gains a `code` block:
 
 ```json
 "code": {
-  "sources": ["code/source"],
+  "script":  "scripts/main.evt",
+  "sources": ["src/hooks.c"],
   "target": "eu0",
-  "rel_id": 2
+  "module_id": 2
 }
 ```
 

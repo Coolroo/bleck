@@ -58,10 +58,12 @@ def cmd_build(args: argparse.Namespace) -> int:
     out = Path(args.output) if args.output else path.with_suffix(".rel")
 
     result = toolchain.build_rel(
-        compiled.generated.text,
-        workdir=out.parent / f".{out.stem}.build",
-        target=args.target,
-        module_id=args.module_id,
+        toolchain.BuildRequest(
+            source=compiled.generated.text,
+            workdir=out.parent / f".{out.stem}.build",
+            target=args.target,
+            module_id=args.module_id,
+        )
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(result.rel)

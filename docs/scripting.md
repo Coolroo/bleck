@@ -152,9 +152,12 @@ Honest scope, because the ceiling is real:
 - **`evt` is an event/cutscene language, not a systems language.** It is
   excellent at "wait, move, speak, branch on a flag, spawn a child" and has no
   answer for "run every frame inside the collision solver".
-- **It cannot replace a native hook.** Changing how an existing function behaves
-  still means patching code — see [`code-mods.md`](code-mods.md). Scripting and
-  native hooks are complementary, and a mod can ship both.
+- **It cannot replace a native hook.** `USER_FUNC` only reaches declared evt
+  builtins, all of which take `(EvtEntry *, bool)`, so an ordinary game
+  function like `mapDataPtr` is unreachable from a script whatever syntax we
+  add. ✅ **A mod can now ship C alongside its script** via `code.sources`
+  (D46) — that is what reaches those functions, and what lets a mod attach
+  behaviour to a map, door, item or NPC by name.
 - **`USER_FUNC` is the only escape hatch today.** Whatever the game's builtins
   can do, a script can do; nothing else. ⚠️ The VM *also* has `SET_RAM`/`GET_RAM`
   for arbitrary memory, but **the language exposes no syntax for them** — an

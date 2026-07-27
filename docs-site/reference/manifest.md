@@ -77,9 +77,18 @@ Every mod has a `mod.json` at its root.
 
     ??? note "fields"
 
-        `code.script` <span class="pf-type">string</span>{ .pf-required }
+        `code.script` <span class="pf-type">string</span>
 
         :   Path to the script source, relative to the mod directory.
+
+        `code.sources` <span class="pf-type">array</span>
+
+        :   Native C sources compiled into the same module, relative to the mod
+            directory. Each entry may be a file or a directory; a directory
+            contributes every `.c` beneath it. See
+            [Code mods](../guides/code-mods.md).
+
+            At least one of `script` or `sources` is required.
 
         `code.target` <span class="pf-type">string</span> <span class="pf-default">default: `eu0`</span>
 

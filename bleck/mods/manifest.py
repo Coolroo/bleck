@@ -91,13 +91,20 @@ REL_DISC_PATH = "files/mod/mod.rel"
 class CodeSpec:
     """A mod's compiled-code half.
 
-    Present only for mods that ship behaviour rather than only assets. The
-    script named here is compiled to `evt` bytecode and packaged as the mod's
+    Present only for mods that ship behaviour rather than only assets. A mod
+    may supply a script, native C sources, or both -- they compile into one
     `mod.rel`.
+
+    Scripts cover event logic and are far easier to write. Native sources exist
+    for what a script cannot reach: calling ordinary game functions, and
+    attaching scripts to maps, doors, items and NPCs by name.
     """
 
-    script: str
+    script: str = ""
     """Path to the script source, relative to the mod directory."""
+
+    sources: list[str] = field(default_factory=list)
+    """Native C sources, relative to the mod directory. Files or directories."""
 
     target: str = "eu0"
     """Game version whose symbol list resolves the functions this script calls.
@@ -109,12 +116,23 @@ class CodeSpec:
     module_id: int = 2
     """REL module id. The game's own REL is 1, so mods start at 2."""
 
+    @property
+    def has_script(self) -> bool:
+        return bool(self.script)
+
+    @property
+    def has_sources(self) -> bool:
+        return bool(self.sources)
+
     def to_json(self) -> dict[str, object]:  # pylint: disable=container-return
-        return {
-            "script": self.script,
-            "target": self.target,
-            "module_id": self.module_id,
-        }
+        body: dict[str, object] = {}
+        if self.script:
+            body["script"] = self.script
+        if self.sources:
+            body["sources"] = list(self.sources)
+        body["target"] = self.target
+        body["module_id"] = self.module_id
+        return body
 
 
 @dataclass(frozen=True)
@@ -201,12 +219,18 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         raise ManifestError(f"{source}: 'code' must be an object")
 
     script = raw.get("script", "")
-    if not script:
-        raise ManifestError(
-            f"{source}: 'code' needs a 'script' naming the source to compile"
-        )
     if not isinstance(script, str):
         raise ManifestError(f"{source}: 'code.script' must be a path")
+
+    sources = raw.get("sources", [])
+    if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
+        raise ManifestError(f"{source}: 'code.sources' must be a list of paths")
+
+    if not script and not sources:
+        raise ManifestError(
+            f"{source}: 'code' needs a 'script', 'sources', or both -- "
+            f"otherwise there is nothing to compile"
+        )
 
     module_id = raw.get("module_id", 2)
     if not isinstance(module_id, int) or isinstance(module_id, bool):
@@ -221,6 +245,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
 
     return CodeSpec(
         script=script,
+        sources=list(sources),
         target=str(raw.get("target", "eu0")),
         module_id=module_id,
     )

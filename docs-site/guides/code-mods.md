@@ -13,11 +13,52 @@ description: Running custom PowerPC code — work in progress
     This page is about **native hooks**: changing how an existing game function
     behaves. Scripting cannot do that, and the two work together in one mod.
 
+Add a `sources` entry to the mod's `code` block:
+
+```json title="mod.json"
+{
+  "code": {
+    "script":  "scripts/main.evt",
+    "sources": ["src/hooks.c"],
+    "target": "eu0"
+  }
+}
+```
+
+Either half is optional; at least one is required. `bleck mod build` compiles
+them into a single `mod.rel`.
+
+## Writing a hook
+
+`bleck` owns `_prolog` — it has to install its sequence hooks first. Your code
+defines `mod_prolog` instead, and `bleck` calls it:
+
+```c title="src/hooks.c"
+extern MapData *mapDataPtr(const char *name);
+
+void mod_prolog(void)
+{
+    MapData *flipside = mapDataPtr("mac_01");
+    /* ... */
+}
+```
+
 !!! warning
 
-    **Hand-written native hooks are not yet integrated into the CLI.** The toolchain
-    is proven — `bleck` builds valid REL modules, and `bleck mod build` compiles
-    *scripts* — but there is no `code.sources` block for C/C++ yet.
+    `mod_prolog` runs at **load time**, when the game is barely up. Patching
+    pointers and reading tables is fine; anything touching live engine state is
+    not — that belongs in a sequence hook. See the timing table in the
+    project's `docs/hook-points.md`.
+
+Function names are resolved by `elf2rel` against the symbol list, exactly like
+a script's builtin calls, so no addresses appear in your source.
+
+!!! note
+
+    `BLECK_HEADERS_DIR` supplies `-I` for your sources — point it at
+    [spm-headers](https://github.com/SeekyCt/spm-headers)' `include`. Without
+    it, declare what you use `extern` yourself.
+
 
 ## What a code mod is
 

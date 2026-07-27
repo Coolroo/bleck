@@ -52,6 +52,23 @@ typedef unsigned int u32;
 typedef unsigned char u8;
 """
 
+#: Declared in every generated module, so a mod's own C can run at load time
+#: without owning `_prolog` itself. Weak, so a script-only mod links with
+#: nothing defining it and the call is simply skipped.
+MOD_HOOK = """/*
+    A mod's own C may define `mod_prolog` to run when the module loads.
+
+    It is declared weak so a script-only module links without one. `_prolog`
+    stays owned by the generated code because it has to install the sequence
+    hooks first -- see the comment below for why that ordering matters.
+
+    Anything touching live engine state belongs in a sequence hook, not here:
+    at load time the game is barely up. docs/hook-points.md has the timings.
+*/
+__attribute__((weak)) void mod_prolog(void);
+"""
+
+
 _FOOTER = """
 /*
     Starting the script, and keeping it started.
@@ -142,6 +159,9 @@ void _prolog(void)
         bleck_real_main[i] = seq_data[i].main;
         seq_data[i].main = bleck_hooks[i];
     }}
+
+    if (mod_prolog != 0)
+        mod_prolog();
 }}
 
 void _epilog(void)
@@ -151,6 +171,25 @@ void _epilog(void)
 void _unresolved(void)
 {{
 }}
+"""
+
+
+#: For a mod that ships only native sources. No script means no scheduler
+#: hand-off and nothing to hook, so `_prolog` does one thing.
+BARE_FOOTER = """
+void _prolog(void)
+{
+    if (mod_prolog != 0)
+        mod_prolog();
+}
+
+void _epilog(void)
+{
+}
+
+void _unresolved(void)
+{
+}
 """
 
 
@@ -229,6 +268,17 @@ def _script_array(script: CompiledScript) -> str:
     return "\n".join(lines)
 
 
+def generate_bare(origin: str = "native sources") -> GeneratedSource:
+    """Scaffolding for a mod that ships only native C.
+
+    The REL format still needs its three entry points, and the mod still needs
+    somewhere to be called from, but there is no script to schedule.
+    """
+    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + BARE_FOOTER
+    _require_ascii(text)
+    return GeneratedSource(text=text, entry_script="", external_symbols=[])
+
+
 def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
     entry = _entry_script(program)
@@ -245,6 +295,7 @@ def generate(program: CompiledProgram, origin: str = "a script") -> GeneratedSou
         "/* Started by the game's script scheduler. */\n"
         "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
     )
+    parts.append(MOD_HOOK)
 
     if program.strings:
         parts.append(

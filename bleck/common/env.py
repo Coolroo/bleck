@@ -77,6 +77,11 @@ GECKO_DIR = EnvVar(
     default="work/gecko",
     description="Directory of per-version loader codelists, e.g. loader.eu0.txt",
 )
+HEADERS_DIR = EnvVar(
+    "BLECK_HEADERS_DIR",
+    default="work/headers",
+    description="Include directory for native code mods, e.g. spm-headers/include",
+)
 SYMBOLS_DIR = EnvVar(
     "BLECK_SYMBOLS_DIR",
     default="work/symbols",
@@ -114,6 +119,7 @@ DECLARED: list[EnvVar] = [
     PPC_GCC,
     WSTRT,
     GECKO_DIR,
+    HEADERS_DIR,
     SYMBOLS_DIR,
     EXTRACT_ROOT,
     NO_COLOR,

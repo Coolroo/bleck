@@ -16,7 +16,7 @@ import pytest
 
 from bleck.mods import code, registry, resolver
 from bleck.mods import manifest as mod_manifest
-from bleck.script import compile_source, evt
+from bleck.script import compile_source, emit, evt
 from bleck.script.compiler import (
     Literal,
     ScriptWord,
@@ -554,3 +554,85 @@ class TestOneCodeModPerBuild:
             ]
         )
         assert [m.name for m in code.mods_with_code(chain)] == ["behaviour"]
+
+
+class TestNativeSources:
+    """`code.sources`: native C compiled into the same module as the script.
+
+    This exists because a script cannot reach ordinary game functions. Every
+    evt builtin takes `(EvtEntry *, bool)`, so calling something like
+    `mapDataPtr` -- which is how a mod attaches behaviour to a specific map --
+    is only possible from C.
+    """
+
+    def _mod(self, tmp_path: Path, **code) -> registry.Mod:
+        root = tmp_path / "m"
+        (root / "src").mkdir(parents=True)
+        spec = mod_manifest.CodeSpec(**code)
+        return registry.Mod(
+            manifest=mod_manifest.Manifest(name="m", code=spec), root=root
+        )
+
+    def test_a_named_file_is_collected(self, tmp_path: Path):
+        mod = self._mod(tmp_path, sources=["src/hooks.c"])
+        (mod.root / "src" / "hooks.c").write_text("void mod_prolog(void) {}")
+        found = code.collect_sources(mod, mod.manifest.code)
+        assert [p.name for p in found] == ["hooks.c"]
+
+    def test_a_directory_contributes_every_c_file(self, tmp_path: Path):
+        mod = self._mod(tmp_path, sources=["src"])
+        for name in ("b.c", "a.c"):
+            (mod.root / "src" / name).write_text("")
+        found = code.collect_sources(mod, mod.manifest.code)
+        # Sorted, so a build does not depend on filesystem ordering.
+        assert [p.name for p in found] == ["a.c", "b.c"]
+
+    def test_headers_are_not_mistaken_for_sources(self, tmp_path: Path):
+        mod = self._mod(tmp_path, sources=["src"])
+        (mod.root / "src" / "a.c").write_text("")
+        (mod.root / "src" / "shared.h").write_text("")
+        assert [p.name for p in code.collect_sources(mod, mod.manifest.code)] == ["a.c"]
+
+    def test_an_empty_directory_is_an_error(self, tmp_path: Path):
+        mod = self._mod(tmp_path, sources=["src"])
+        with pytest.raises(code.CodeError, match=r"no .c files"):
+            code.collect_sources(mod, mod.manifest.code)
+
+    def test_a_missing_file_names_the_manifest_entry(self, tmp_path: Path):
+        mod = self._mod(tmp_path, sources=["src/absent.c"])
+        with pytest.raises(code.CodeError, match=r"code.sources"):
+            code.collect_sources(mod, mod.manifest.code)
+
+
+class TestGeneratedHandoff:
+    """How generated scaffolding hands control to a mod's own C."""
+
+    def test_the_hook_is_declared_weak(self):
+        # A script-only module links with nothing defining mod_prolog, so the
+        # declaration must be weak and the call guarded.
+        out = compile_source(SIMPLE).generated.text
+        assert "__attribute__((weak)) void mod_prolog(void);" in out
+        assert "if (mod_prolog != 0)" in out
+
+    def test_generated_code_keeps_ownership_of_prolog(self):
+        """The sequence hooks must be installed before the mod's own code runs.
+
+        If a mod owned `_prolog` it could start work before the scaffolding was
+        in place, and the ordering would depend on link order.
+        """
+        out = compile_source(SIMPLE).generated.text
+        prolog = out.split("void _prolog(void)")[1]
+        assert prolog.index("seq_data[i].main") < prolog.index("mod_prolog()")
+
+    def test_a_sources_only_module_still_has_the_entry_points(self):
+
+        out = emit.generate_bare().text
+        for symbol in ("_prolog", "_epilog", "_unresolved"):
+            assert f"void {symbol}(void)" in out
+        # Nothing to schedule, so no sequence machinery.
+        assert "seq_data" not in out
+        assert "evtEntry" not in out
+
+    def test_a_sources_only_module_still_calls_the_mod(self):
+
+        assert "mod_prolog();" in emit.generate_bare().text

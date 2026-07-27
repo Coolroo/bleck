@@ -2369,3 +2369,94 @@ with matching arity.
   start rather than the middle of one.
 
 Test suite 269 → 291. pylint 10.00/10.
+
+---
+
+## D46 — Native sources: mods can react instead of poll (2026-07-27)
+
+Until now every `bleck` mod was a polling loop. A script started when gameplay
+began and ran forever; it could call ~443 builtins but could not be *triggered*
+by anything. "Infinite HP" worked; "change what this NPC says" did not.
+
+The reason is narrow and structural: **`USER_FUNC` only reaches declared evt
+builtins**, every one of which takes `(EvtEntry *, bool)`. An ordinary game
+function — `mapDataPtr`, `pouchGetCoin`, `getItemUseEvt` — is unreachable from
+a script no matter what syntax we add. Raw memory access would not fix it
+either, because getting the pointer requires the call you cannot make.
+
+So `code.sources` now compiles the mod author's own C into the same module.
+
+```json
+"code": {
+  "script":  "scripts/main.evt",
+  "sources": ["src/hooks.c"]
+}
+```
+
+Either half is optional; at least one is required. A script-only mod is what
+existed before. A sources-only mod gets scaffolding with the three REL entry
+points and nothing else — no scheduler hand-off, because there is no script.
+
+### Who owns `_prolog`
+
+The generated code does, and a mod defines `mod_prolog` instead:
+
+```c
+__attribute__((weak)) void mod_prolog(void);
+```
+
+⚠️ **This ordering is load-bearing.** `_prolog` must install the sequence hooks
+*before* the mod's own code runs (D43), and if a mod owned `_prolog` that
+ordering would depend on link order — which is exactly the kind of thing that
+works until someone adds a second source file.
+
+Declared **weak** so a script-only module links with nothing defining it and the
+guarded call is simply skipped. Asserted by a test that the sequence-hook
+install precedes the `mod_prolog()` call.
+
+### What this unlocks
+
+Verified compiling and linking against the real symbol list:
+
+- `mapDataPtr("mac_01")->initScript` — reach any map's init script **by name**,
+  which is how a mod attaches behaviour to one specific room without touching a
+  file
+- `pouchGetCoin` / `pouchSetCoin` and every other plain function in the lst
+- game structures read and written directly
+
+`mods/hook-demo` demonstrates both halves in one mod: a script that adds a coin
+every ten seconds, and C that calls two ordinary functions a script cannot.
+1,628 bytes with both; a sources-only variant came to 612.
+
+### Also decided
+
+- **A directory entry contributes every `.c` beneath it, sorted.** Filesystem
+  ordering must not change link order, because it would change the output
+  without changing the input.
+- **Object files are prefixed with an index**, so two sources named `main.c` in
+  different directories cannot overwrite each other's `.o`. That would have
+  been a silent wrong-output bug rather than an error.
+- **`BLECK_HEADERS_DIR`** supplies `-I` for native sources, defaulting to
+  `work/headers`. Same reasoning as the symbol lists: `spm-headers` is
+  third-party, so it is pointed at rather than vendored. Without it you declare
+  what you use `extern` yourself, which is what `hook-demo` does.
+- **`build_rel` now takes a `BuildRequest`.** Seven positionals tripped the
+  project's own argument limit; bundling follows the precedent `BuildContext`
+  set in the mod builder, and a call site that reads
+  `build_rel(a, b, c, d, e, f, g)` tells a reader nothing.
+
+### Unproven 🔶
+
+- **Nothing has been booted.** The module compiles, links against real symbols,
+  and is structurally valid, but no native hook has been observed running.
+  D38 proved the technique in principle; this is the same technique reached
+  through the build system rather than by hand.
+- **`hook-demo` only records `initScript`; it does not replace one.** Replacing
+  a map's init script means deciding whether to chain to the original, and
+  getting that wrong deletes the map's own setup. Left for when there is a
+  reason to do it.
+- The **weak-symbol behaviour under `--gc-sections`** is untested for the case
+  where a mod defines `mod_prolog` but nothing else references it. It survives
+  here because `_prolog` calls it.
+
+Test suite 291 → 300. pylint 10.00/10.
