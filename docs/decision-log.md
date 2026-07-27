@@ -745,3 +745,48 @@ workflow — no longer carries the risk that the foundation is silently wrong.
 - 🔶 `rel.bin` vs `relF.bin` (D11).
 - ⚠️ Untested: whether a *large* number of modified archives, or edits to
   `main.dol`/RELs, behave as well as one archive did.
+
+---
+
+### D26 — PowerPC toolchain works without devkitPPC ✅
+
+**A distro cross-compiler produces a valid REL.** devkitPPC is unobtainable here
+(`apt.devkitpro.org`: 403, empty arm64 package lists), so this was the gating
+question for code mods. Debian's `gcc-powerpc-linux-gnu` 14.2.0 answers it.
+
+Full recipe and verification in [`code-mods.md`](./code-mods.md).
+
+**The one non-obvious requirement: `-fno-pic -fno-PIE`.** Debian's GCC defaults
+to PIE and devkitPPC does not, so without these it emits `R_PPC_REL16_HA`
+(type 252) relocations and `pyelf2rel` fails with
+`UnsupportedRelocationError: Unsupported relocation type 252`. With them, only
+`R_PPC_ADDR16_HA/LO` and `R_PPC_REL32` appear. This would be genuinely hard to
+guess from the error message alone.
+
+Only `-mgcn` of the upstream flags is rejected — devkitPPC-specific multilib
+selection, safely dropped since `-mcpu=750 -meabi` are explicit.
+
+**Two upstream findings that simplify the design:**
+
+- **`pyelf2rel` (PyPI 1.0.9) replaces the C++ `elf2rel`.** Upstream's Makefile
+  wants `$(TTYDTOOLS)/bin/elf2rel`, a binary the user must build. The same
+  author's Python port installs cleanly and exposes an importable API, so
+  `bleck` can call it in-process.
+- **The Gecko loader ships pre-assembled** in `spm-rel-loader/loader/*.txt`, one
+  per region — a `C2` insert at `0x8023E5FC` for eu0/eu1 with `./mod/mod.rel`
+  embedded as ASCII. No assembler needed; it is data we can ship.
+
+**Nice cross-validation:** `bleck info`, written to parse the *game's* RELs,
+correctly identifies our freshly built one as `REL v3 (13 sections)`. Two
+independently-written pieces agreeing.
+
+⚠️ **Structural validity is not runtime correctness.** devkitPPC targets
+`powerpc-eabi`, Debian's targets `powerpc-linux-gnu` (SysV). ABI differences
+could still produce code that builds and misbehaves. Must be proven by booting,
+as the asset pipeline was in D25.
+
+⚠️ **`g++-powerpc-linux-gnu` is not installed** and upstream uses C++17.
+
+⚠️ **Licensing is unresolved and blocks vendoring.** `spm-rel-loader` is GPLv3
+including the loader code; `spm-headers` is MIT except its `mod/` folder. `bleck`
+is unlicensed. Decide before copying any upstream code into this repo.
