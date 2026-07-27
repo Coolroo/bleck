@@ -67,6 +67,18 @@ def _run(args: list[str]) -> None:
         raise DiscError(f"{Path(args[0]).name} failed:\n{detail}")
 
 
+def _ensure_parent(path: Path) -> None:
+    """Create an output's parent directory before an external tool writes there.
+
+    Neither wit nor DolphinTool creates missing parents, and both report the
+    failure uninformatively — DolphinTool says only "Conversion failed", naming
+    neither the path nor the reason. This bites on exactly the fresh-machine
+    path `bleck extract disc.rvz extracted/eu0`, where `extracted/` does not
+    exist yet.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
 def is_rvz(path: Path) -> bool:
     return path.suffix.lower() == ".rvz"
 
@@ -74,6 +86,7 @@ def is_rvz(path: Path) -> bool:
 def convert_rvz(src: Path, dest: Path) -> Path:
     """RVZ -> ISO. wit cannot read RVZ, so this must happen first."""
     tool = find_tool(DOLPHIN_TOOL)
+    _ensure_parent(dest)
     _run([tool, "convert", "-f", "iso", "-i", str(src), "-o", str(dest)])
     return dest
 
@@ -127,6 +140,7 @@ def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
     forget it.
     """
     wit = find_tool(WIT)
+    _ensure_parent(out)
     _run([wit, "COPY", str(source), str(out), wit_format, "--align-files"])
 
 
@@ -141,6 +155,7 @@ RVZ_LEVEL = "5"
 def convert_to_rvz(src: Path, dest: Path) -> None:
     """ISO -> RVZ. Roughly a 14x size reduction, and Dolphin reads it natively."""
     tool = find_tool(DOLPHIN_TOOL)
+    _ensure_parent(dest)
     _run(
         [
             tool,
