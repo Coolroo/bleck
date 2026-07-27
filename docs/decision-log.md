@@ -631,3 +631,46 @@ merge opt-in; `"remove"` supported.
 ⚠️ **Still nothing has booted.** The pipeline produces a disc that is
 *structurally* correct at every layer we can verify offline. Whether SPM accepts
 our re-encoded LZ77 at runtime remains untested.
+
+---
+
+### D23 — RVZ output, and the Pi can boot after all ✅
+
+**Dolphin boots SPM on the Pi 4.** The earlier assumption that emulation was
+out of reach here was wrong — `dolphin-emu-nogui -p headless -v Null` reaches
+`Active title: Super Paper Mario (R8PP01)`, fakes Wii BS2, and the apploader
+loads `main.dol` and the RELs via a series of `DVDRead`s. With
+`Logger.Logs.FILEMON=True` it then names every asset the game reads
+(`sound/wiimario_snd.brsar`, `msg/UK/global.txt`, `sptexture.tpl`, …), which is
+a precise instrument for confirming a modded file is actually loaded.
+
+⚠️ **But it is too slow to reach the title screen**, and a Null video backend
+shows no picture — so visual confirmation of a texture change is not possible
+here. Emulation validation belongs on a desktop; the Pi run is a smoke test that
+proves the disc is bootable and readable.
+
+**Hence RVZ output.** A 4.5 GB ISO is painful to move to another machine; RVZ is
+Dolphin-native and ~18× smaller.
+
+    bleck mod build title-invert out.rvz     # 4,482 MB -> 249 MB in ~50s
+
+Format is **inferred from the output extension**, with `--format {iso,rvz}` to
+override — less to remember than a flag. `wit` can only write ISO, so RVZ goes
+through a temporary ISO that is removed afterwards (`--keep-iso` retains it).
+
+**Three bugs found while wiring this up:**
+
+⚠️ **The staging ISO shadowed the output path.** Using `out.with_suffix(".iso")`
+collided with a real `spm-modded.iso` the user already had, and `wit` refuses to
+overwrite. Now a hidden `.{stem}.staging.iso`.
+
+⚠️ **`dolphin-tool` needs block size and compression stated explicitly** for RVZ
+("Block size must be set for GCZ/RVZ/WIA"). Now 128 KiB / zstd / level 5 —
+level 5 rather than the 19 seen on retail dumps, since 19 costs far more time
+for a few percent, the wrong trade for an iteration artifact.
+
+⚠️ **`bleck info` would have slurped a whole disc image into memory.** `wit`
+cannot parse RVZ, so `identify` returned empty and the code fell through to
+byte-level format sniffing — reading 249 MB to guess at a format. Now disc
+images are identified by extension, RVZ headers come from `dolphin-tool header`,
+and unrecognised images say so instead of being read.

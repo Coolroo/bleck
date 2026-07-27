@@ -9,11 +9,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from bleck.backends import disc
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
 from bleck.mods import builder, manifest, registry, resolver
 from bleck.mods.overlay import normalize_disc_path, resolve_target
+
+from .disc import add_format_flags, resolve_format
 
 CATEGORY = "mods"
 
@@ -146,13 +149,19 @@ def cmd_build(args: argparse.Namespace) -> int:
         + ")"
     )
 
-    if args.no_iso:
+    if args.no_image:
         return 0
 
-    out = Path(args.out) if args.out else registry.build_root() / f"{args.name}.iso"
+    default_suffix = disc.ImageFormat(args.format).suffix if args.format else ".iso"
+    out = (
+        Path(args.out)
+        if args.out
+        else registry.build_root() / f"{args.name}{default_suffix}"
+    )
     guard_overwrite(out, args.force)
-    builder.emit(staged, out)
-    print(f"built {out}  ({out.stat().st_size:,} bytes)")
+    image_format = resolve_format(out, args.format)
+    builder.emit(staged, out, image_format, keep_iso=args.keep_iso)
+    print(f"built {out}  ({out.stat().st_size:,} bytes, {image_format.value})")
     return 0
 
 
@@ -203,8 +212,9 @@ def register(add) -> None:
     child.add_argument("name")
     child.add_argument("out", nargs="?")
     child.add_argument(
-        "--no-iso", action="store_true", help="stage only, skip the 4.7 GB ISO write"
+        "--no-image", action="store_true", help="stage only, skip writing a disc image"
     )
+    add_format_flags(child)
     _add_merge_flag(child)
 
 

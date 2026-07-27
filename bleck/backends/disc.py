@@ -10,6 +10,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 from bleck.common import env
@@ -88,6 +89,23 @@ def extract(image: Path, dest: Path, keep_iso: bool = False) -> None:
         temp_iso.unlink(missing_ok=True)
 
 
+class ImageFormat(Enum):
+    """Output disc image formats."""
+
+    ISO = "iso"
+    RVZ = "rvz"
+
+    @property
+    def suffix(self) -> str:
+        return f".{self.value}"
+
+    @classmethod
+    def for_path(cls, path: Path) -> ImageFormat:
+        """Infer the format from an output filename, defaulting to ISO."""
+        suffix = path.suffix.lower().lstrip(".")
+        return next((f for f in cls if f.value == suffix), cls.ISO)
+
+
 def build(source: Path, out: Path) -> None:
     """Rebuild an extracted filesystem into an ISO.
 
@@ -97,6 +115,63 @@ def build(source: Path, out: Path) -> None:
     """
     wit = find_tool(WIT)
     _run([wit, "COPY", str(source), str(out), "--iso", "--align-files"])
+
+
+# dolphin-tool requires these explicitly for RVZ; these are its suggested
+# values. Level 5 rather than the 19 seen on retail dumps — 19 is far slower
+# for a few percent, which is the wrong trade for an iteration artifact.
+RVZ_BLOCK_SIZE = "131072"
+RVZ_COMPRESSION = "zstd"
+RVZ_LEVEL = "5"
+
+
+def convert_to_rvz(src: Path, dest: Path) -> None:
+    """ISO -> RVZ. Roughly a 14x size reduction, and Dolphin reads it natively."""
+    tool = find_tool(DOLPHIN_TOOL)
+    _run(
+        [
+            tool,
+            "convert",
+            "-f",
+            "rvz",
+            "-b",
+            RVZ_BLOCK_SIZE,
+            "-c",
+            RVZ_COMPRESSION,
+            "-l",
+            RVZ_LEVEL,
+            "-i",
+            str(src),
+            "-o",
+            str(dest),
+        ]
+    )
+
+
+def build_image(
+    source: Path, out: Path, image_format: ImageFormat, keep_iso: bool = False
+) -> None:
+    """Rebuild an extracted filesystem into a disc image.
+
+    `wit` can only write ISO, so RVZ goes through a temporary ISO which is
+    removed afterwards unless `keep_iso` is set.
+    """
+    if image_format is ImageFormat.ISO:
+        build(source, out)
+        return
+
+    # A distinct hidden name, not `out.with_suffix('.iso')` — that would collide
+    # with a real ISO the user already has, and wit refuses to overwrite.
+    staging_iso = out.parent / f".{out.stem}.staging.iso"
+    staging_iso.unlink(missing_ok=True)
+    build(source, staging_iso)
+    try:
+        convert_to_rvz(staging_iso, out)
+    finally:
+        if keep_iso:
+            staging_iso.replace(out.with_suffix(".iso"))
+        else:
+            staging_iso.unlink(missing_ok=True)
 
 
 @dataclass(frozen=True)
@@ -138,8 +213,19 @@ _WIT_FIELDS = {
 }
 
 
+# dolphin-tool header labels -> DiscInfo attribute names.
+_DOLPHIN_FIELDS = {
+    "Internal Name": "name",
+    "Region": "region",
+    "Game ID": "ids",
+    "Country": "disc_type",
+}
+
+
 def identify(image: Path) -> DiscInfo:
     """Read disc header fields. Returns an empty DiscInfo if unreadable."""
+    if is_rvz(image):
+        return _identify_rvz(image)
     try:
         wit = find_tool(WIT)
     except DiscError:
@@ -156,6 +242,29 @@ def identify(image: Path) -> DiscInfo:
         if not sep:
             continue
         attr = _WIT_FIELDS.get(key.strip())
+        if attr and attr not in found:
+            found[attr] = value.strip()
+    return DiscInfo(**found)
+
+
+def _identify_rvz(image: Path) -> DiscInfo:
+    """RVZ headers come from dolphin-tool; wit cannot read the format."""
+    try:
+        tool = find_tool(DOLPHIN_TOOL)
+    except DiscError:
+        return DiscInfo()
+    result = subprocess.run(
+        [tool, "header", "-i", str(image)], capture_output=True, text=True, check=False
+    )
+    if result.returncode != 0:
+        return DiscInfo()
+
+    found: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        key, sep, value = line.partition(":")
+        if not sep:
+            continue
+        attr = _DOLPHIN_FIELDS.get(key.strip())
         if attr and attr not in found:
             found[attr] = value.strip()
     return DiscInfo(**found)

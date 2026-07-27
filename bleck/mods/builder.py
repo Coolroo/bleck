@@ -221,8 +221,13 @@ def build(chain: Chain, base: Path, staged: Path, allow_binary: bool) -> BuildRe
     return report
 
 
-def emit(staged: Path, out: Path) -> None:
-    disc.build(staged, out)
+def emit(
+    staged: Path,
+    out: Path,
+    image_format: disc.ImageFormat = disc.ImageFormat.ISO,
+    keep_iso: bool = False,
+) -> None:
+    disc.build_image(staged, out, image_format, keep_iso=keep_iso)
 
 
 def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:

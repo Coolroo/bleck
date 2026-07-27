@@ -33,9 +33,32 @@ def cmd_build(args: argparse.Namespace) -> int:
     src = require_dir(Path(args.dir))
     out = Path(args.out)
     guard_overwrite(out, args.force)
-    disc.build(src, out)
-    print(f"built {out}  ({out.stat().st_size:,} bytes)")
+    image_format = resolve_format(out, args.format)
+    disc.build_image(src, out, image_format, keep_iso=args.keep_iso)
+    print(f"built {out}  ({out.stat().st_size:,} bytes, {image_format.value})")
     return 0
+
+
+def resolve_format(out: Path, requested: str) -> disc.ImageFormat:
+    """Explicit --format wins; otherwise infer from the output extension."""
+    if requested:
+        return disc.ImageFormat(requested)
+    return disc.ImageFormat.for_path(out)
+
+
+def add_format_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--format",
+        choices=[f.value for f in disc.ImageFormat],
+        default="",
+        help="output format; inferred from the output extension by default. "
+        "rvz is ~14x smaller and Dolphin reads it natively",
+    )
+    parser.add_argument(
+        "--keep-iso",
+        action="store_true",
+        help="keep the intermediate ISO when writing RVZ",
+    )
 
 
 def register(add) -> None:
@@ -49,7 +72,8 @@ def register(add) -> None:
     )
     p.set_defaults(func=cmd_extract)
 
-    p = add("build", help="extracted filesystem -> ISO")
+    p = add("build", help="extracted filesystem -> disc image")
     p.add_argument("dir")
     p.add_argument("out")
+    add_format_flags(p)
     p.set_defaults(func=cmd_build)

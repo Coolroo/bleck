@@ -19,8 +19,9 @@ DISC_SUFFIXES = {".iso", ".wbfs", ".rvz"}
 
 def cmd_info(args: argparse.Namespace) -> int:
     path = Path(args.file)
-    data = read_bytes(path)
-    print(f"{path.name}  {len(data):,} bytes")
+    if not path.is_file():
+        raise UserError(f"no such file: {path}")
+    print(f"{path.name}  {path.stat().st_size:,} bytes")
 
     if path.suffix.lower() in DISC_SUFFIXES:
         info = disc.identify(path)
@@ -28,7 +29,11 @@ def cmd_info(args: argparse.Namespace) -> int:
             for field in info.describe():
                 print(f"  {field.label}: {field.value}")
             return 0
+        # Disc images are far too large to slurp for format sniffing.
+        print("  (unrecognised disc image; is wit or dolphin-tool installed?)")
+        return 0
 
+    data = read_bytes(path)
     for line in detect.render(detect.identify(data), indent=1):
         print(line)
     return 0
