@@ -464,10 +464,9 @@ same principle as the record-don't-re-run rule.
 (383/383 from D17), which covers the container layer well but nothing else.
 Worth real tests before the surface grows.
 
-⚠️ **Untested end-to-end:** nothing here has produced a disc a real game has
-booted. `extract`/`build` wrap `wit` and are exercised only insofar as the
-underlying commands were run manually earlier. The first genuine validation is
-still the modified-disc test.
+~~⚠️ **Untested end-to-end:** nothing here has produced a disc a real game has
+booted.~~ **Resolved in D25 — a disc built by `bleck` boots and renders the
+modified textures.**
 
 ---
 
@@ -628,9 +627,8 @@ contents gitignored (they contain extracted game assets); ISO output — 26 s
 proved acceptable, and `--no-iso` covers fast iteration; no `unvendor`; binary
 merge opt-in; `"remove"` supported.
 
-⚠️ **Still nothing has booted.** The pipeline produces a disc that is
-*structurally* correct at every layer we can verify offline. Whether SPM accepts
-our re-encoded LZ77 at runtime remains untested.
+~~⚠️ **Still nothing has booted.**~~ **Resolved in D25 — confirmed on real
+hardware-equivalent emulation.**
 
 ---
 
@@ -704,3 +702,46 @@ order intact.
 
 **Format guidance:** wbfs to share, rvz when the target Dolphin is known-recent,
 iso only when something demands it.
+
+---
+
+### D25 — END-TO-END VALIDATED: a bleck-built disc boots and renders the mod ✅
+
+**Confirmed visually in Dolphin on Windows: the Super Paper Mario title screen
+shows Mario and Bowser with inverted colours.**
+
+This closes the assumption every other decision rested on. The full chain works:
+
+```
+LZ77 decompress → U8 unpack → replace member → U8 repack
+  → LZ77 RE-COMPRESS → disc rebuild → game loads and renders it
+```
+
+**The specific question answered: bit-exact compression is NOT required.** Our
+greedy encoder produces a stream ~0.25% larger than Nintendo's with entirely
+different token boundaries (D16), and the game accepts it without complaint.
+That retires the open worry from D16 and D19 — matching Nintendo's exact
+tie-breaking would be satisfying, but it is not necessary.
+
+**Also validated in the same run**, since the shipped mod was a two-mod chain:
+
+- **Dependency resolution end-to-end.** `tex-koopa → title-invert` linearised,
+  and *both* mods' edits appear on screen — Bowser from the dependency, Mario
+  from the target.
+- **Archive-aware merging against the real game.** Two mods edited different
+  members of one archive; both landed, and the other 33 members were untouched
+  enough that the title screen rendered normally.
+- **The immutable-base design.** The base was never written to, yet the built
+  disc is correct.
+
+**What this means going forward:** the asset pipeline is proven, not
+provisional. Work built on it — `map.dat` internals, texture tooling, the REL
+workflow — no longer carries the risk that the foundation is silently wrong.
+
+**Remaining known-unknowns are now much narrower:**
+
+- 🔶 Which setup-file copy the game reads (D13) — still unresolved, still warned
+  about at build time.
+- 🔶 `rel.bin` vs `relF.bin` (D11).
+- ⚠️ Untested: whether a *large* number of modified archives, or edits to
+  `main.dol`/RELs, behave as well as one archive did.

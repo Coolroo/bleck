@@ -344,10 +344,11 @@ Until that is settled, `bleck mod build` should **warn** when an overlay touches
 a path that has a known duplicate, and name the other copy. Silently editing one
 of two copies is exactly the bug that wastes an afternoon.
 
-⚠️ **Compression is not bit-exact** (D16). A rebuilt archive is ~0.25% larger
-than Nintendo's and differs in token stream. Believed fine — untested against a
-running game, which is what the current end-to-end work is for. `--store` gives
-an instant all-literals encode for fast iteration at ~1.125× size.
+✅ **Compression is not bit-exact, and that is fine** (D16, D25). A rebuilt
+archive is ~0.25% larger than Nintendo's with different token boundaries, and a
+disc built this way **boots and renders correctly** — verified visually. Bit-exact
+output is not required. `--store` gives an instant all-literals encode for fast
+iteration at ~1.125× size.
 
 ⚠️ **Mods are base-specific.** `eu0` ⊃ `us0`, so a mod referencing
 `map/go1_03.bin` cannot apply to a US disc at all.
