@@ -13,7 +13,15 @@ Three things differ from Linux in ways that matter:
 
 from __future__ import annotations
 
-from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
+from .base import (
+    DOLPHIN,
+    DOLPHIN_TOOL,
+    PPC_GCC,
+    WIT,
+    WSTRT,
+    PlatformProfile,
+    ToolLocation,
+)
 
 # Apple Silicon first: /usr/local also exists on those machines but is not
 # where Homebrew installs.
@@ -64,6 +72,16 @@ PROFILE = PlatformProfile(
                 "(/Applications/Dolphin.app/Contents/MacOS/Dolphin).\n"
                 "  Install with `brew install --cask dolphin`, or set "
                 "BLECK_DOLPHIN to its full path"
+            ),
+        ),
+        WSTRT: ToolLocation(
+            names=["wstrt"],
+            directories=[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
+            hint=(
+                "wstrt ships with Wiimms SZS Toolset, a separate download from "
+                "wit: https://szs.wiimm.de/download.html\n"
+                "  Its folder is version-stamped, so setting BLECK_WSTRT to the "
+                "wstrt binary is usually easier than adding it to PATH"
             ),
         ),
         PPC_GCC: ToolLocation(

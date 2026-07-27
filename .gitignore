@@ -29,3 +29,7 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+
+# Gecko loader codelists are GPLv3 upstream and user-supplied, like symbols.
+gecko/
+symbols/

@@ -6,11 +6,13 @@ wit and DolphinTool, not what those tools do with the bytes.
 
 from __future__ import annotations
 
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from bleck.backends import disc
+from bleck.backends import disc, gecko
 
 
 @pytest.fixture(name="stub_tools")
@@ -100,3 +102,83 @@ class TestAlignFiles:
         disc.build(tmp_path / "extracted", tmp_path / "out.iso")
 
         assert "--overwrite" in captured[0]
+
+
+class TestGeckoCodelist:
+    """Assembling a Gecko codelist into a GCT. Pure logic, no external tool."""
+
+    def test_wraps_codes_in_header_and_terminator(self):
+        out = gecko.build_gct("0423E45C 88030009\n0423E5E4 98030009\n")
+        assert out.startswith(gecko.GCT_HEADER)
+        assert out.endswith(gecko.GCT_TERMINATOR)
+        assert len(out) == 8 + 4 * 4 + 8
+
+    def test_words_are_big_endian(self):
+        # The Wii is big-endian; a byte-swapped code list is silently wrong.
+        out = gecko.build_gct("0423E45C 88030009\n")
+        assert out[8:16] == bytes.fromhex("0423E45C88030009")
+
+    def test_comments_and_blank_lines_are_ignored(self):
+        source = "# a comment\n\n0423E45C 88030009\n// another\n0423E5E4 98030009\n"
+        assert len(gecko.build_gct(source)) == 8 + 4 * 4 + 8
+
+    def test_rejects_a_file_that_is_not_a_codelist(self):
+        # wstrt's own message for this is "Invalid WCH header", which says
+        # nothing about what the user actually handed it.
+        with pytest.raises(gecko.GeckoError, match=r"expected 8-digit hex words"):
+            gecko.build_gct("this is not a gecko code")
+
+    def test_rejects_an_odd_number_of_words(self):
+        with pytest.raises(gecko.GeckoError, match=r"come in pairs"):
+            gecko.build_gct("0423E45C 88030009\n0423E5E4\n")
+
+    def test_rejects_an_empty_file(self):
+        with pytest.raises(gecko.GeckoError, match=r"no code words"):
+            gecko.build_gct("# nothing but comments\n")
+
+    def test_missing_codelist_names_the_path_and_the_reason(self, tmp_path: Path):
+        with pytest.raises(gecko.GeckoError) as caught:
+            gecko.codelist("eu0", tmp_path)
+        message = str(caught.value)
+        assert "loader.eu0.txt" in message
+        assert "GPLv3" in message  # why bleck does not simply bundle it
+
+
+@pytest.mark.usefixtures("stub_tools")
+class TestGeckoEmbedding:
+    def test_detaches_the_dol_before_patching(self, monkeypatch, tmp_path: Path):
+        """The staged DOL is a hardlink to the base; wstrt rewrites in place.
+
+        Patching without detaching would edit the pristine base — the one
+        failure the whole build design exists to prevent.
+        """
+        base = tmp_path / "base.dol"
+        base.write_bytes(b"original")
+        staged = tmp_path / "staged.dol"
+        os.link(base, staged)
+
+        def fake_run(args, **_kwargs):
+            Path(args[2]).write_bytes(b"patched and longer")
+            return subprocess.CompletedProcess(args, 0, "", "")
+
+        monkeypatch.setattr(gecko.subprocess, "run", fake_run)
+        monkeypatch.setattr(gecko, "find_tool", lambda _name: "/fake/wstrt")
+
+        gecko.embed(staged, gecko.build_gct("0423E45C 88030009\n"), tmp_path / "work")
+
+        assert base.read_bytes() == b"original"
+        assert staged.read_bytes() == b"patched and longer"
+
+    def test_unchanged_dol_is_an_error(self, monkeypatch, tmp_path: Path):
+        # wstrt reports a dropped section as a warning and still exits 0.
+        dol = tmp_path / "main.dol"
+        dol.write_bytes(b"unchanged")
+        monkeypatch.setattr(
+            gecko.subprocess,
+            "run",
+            lambda args, **_k: subprocess.CompletedProcess(args, 0, "", ""),
+        )
+        monkeypatch.setattr(gecko, "find_tool", lambda _name: "/fake/wstrt")
+
+        with pytest.raises(gecko.GeckoError, match=r"left the DOL unchanged"):
+            gecko.embed(dol, gecko.build_gct("0423E45C 88030009\n"), tmp_path / "w")

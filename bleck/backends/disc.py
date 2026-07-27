@@ -20,6 +20,7 @@ from bleck.common import env
 WIT = platforms.WIT
 DOLPHIN_TOOL = platforms.DOLPHIN_TOOL
 DOLPHIN = platforms.DOLPHIN
+WSTRT = platforms.WSTRT
 
 
 class DiscError(Exception):
@@ -27,7 +28,13 @@ class DiscError(Exception):
 
 
 # Declared overrides, checked before PATH.
-_OVERRIDES = {WIT: env.WIT, DOLPHIN_TOOL: env.DOLPHIN_TOOL, DOLPHIN: env.DOLPHIN}
+_OVERRIDES = {
+    WIT: env.WIT,
+    DOLPHIN_TOOL: env.DOLPHIN_TOOL,
+    DOLPHIN: env.DOLPHIN,
+    WSTRT: env.WSTRT,
+    platforms.PPC_GCC: env.PPC_GCC,
+}
 
 
 def find_tool(name: str) -> str:

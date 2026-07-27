@@ -59,6 +59,15 @@ PPC_GCC = EnvVar(
     "BLECK_PPC_GCC",
     description="Path to the PowerPC cross-compiler used to build code mods",
 )
+WSTRT = EnvVar(
+    "BLECK_WSTRT",
+    description="Path to wstrt, used to embed the Gecko loader into the DOL",
+)
+GECKO_DIR = EnvVar(
+    "BLECK_GECKO_DIR",
+    default="gecko",
+    description="Directory of per-version loader codelists, e.g. loader.eu0.txt",
+)
 SYMBOLS_DIR = EnvVar(
     "BLECK_SYMBOLS_DIR",
     default="symbols",
@@ -94,6 +103,8 @@ DECLARED: list[EnvVar] = [
     DOLPHIN_TOOL,
     DOLPHIN,
     PPC_GCC,
+    WSTRT,
+    GECKO_DIR,
     SYMBOLS_DIR,
     EXTRACT_ROOT,
     NO_COLOR,

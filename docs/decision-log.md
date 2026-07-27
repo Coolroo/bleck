@@ -2185,3 +2185,78 @@ two wrong conclusions. **The lesson is not about SPM: when a system can be made
 to report on itself, do that before asking anyone to watch a screen.**
 
 Test suite 253 → 254. pylint 10.00/10.
+
+---
+
+## D44 — The Gecko loader now travels inside the disc (2026-07-27)
+
+✅ **A built image boots with its code mod active on a stock Dolphin with no
+cheat configuration at all.** Verified by moving `R8PP01.ini` aside entirely and
+watching the script still run at 60 iterations per second.
+
+Until now a code mod needed two pieces of out-of-band setup, both of which fail
+*silently*: the loader pasted into `User/GameSettings/R8PP01.ini` under **both**
+`[Gecko]` and `[Gecko_Enabled]`, and `EnableCheats = True`. Neither is required
+any more, and neither exists on real hardware.
+
+### How
+
+`wstrt patch main.dol --add-sect loader.gct` (Wiimms SZS Toolset) creates a new
+TEXT section and redirects the game's VBI hook into it:
+
+```
+80001800..800022a8   aa8 : Gecko Code Handler
+800022b0..800024c0   210 : our loader
+800024c8..80003000   b38 : unused available
+Patch address 0x802848a8 (VBI) from 0x4e800020 to 0x4bd7d000
+```
+
+⚠️ **`wstrt` supplies its own copy of the code handler.** That is the reason
+this approach was chosen over patching the DOL ourselves: `bleck` never ships,
+vendors, or even reads any part of the GPLv3 Gecko handler. Doing it by hand
+would have meant sourcing a `codehandleronly.bin` from somewhere.
+
+`bleck` assembles the GCT itself — it is two magic words, the code words
+big-endian, and a terminator — so the only external step is the patch. The
+codelist stays **user-supplied** in `gecko/loader.<version>.txt`, same reasoning
+as the symbol lists: the SPM loader code is GPLv3.
+
+### ⚠️ The hazard this nearly caused
+
+The staged DOL is a **hardlink to the pristine base** — `stat` showed both at
+inode 562949953577906 with a link count of 9. `wstrt` rewrites in place. Patching
+without detaching first would have silently corrupted
+`extracted/eu0/sys/main.dol`, the one file the entire build design exists to
+protect, and nothing would have noticed until a later build produced a subtly
+wrong disc.
+
+`gecko.embed` copies the DOL aside, unlinks, and copies back before invoking
+`wstrt`, mirroring `builder._detach`. Verified after the fact: the base hash is
+unchanged and its link count dropped from 9 to 8, while the staged copy is at 1.
+A test constructs a real hardlink and asserts the base survives.
+
+### Also
+
+- **`wstrt` reports a dropped section as a warning and still exits 0.** A size
+  or address collision therefore looks like success. `embed` compares the file
+  size before and after and raises if it did not change.
+- **`wstrt` does not accept a raw codelist** despite documenting GCT-TXT among
+  its input types; it answers `Invalid WCH header`, which says nothing about
+  what the user actually handed it. `bleck` parses the codelist itself and gives
+  a line-numbered error instead.
+- Embedding is **automatic when the chain ships code**, and skipped with a loud
+  warning when the codelist is missing rather than failing the build — people
+  with a working Dolphin cheat setup should not be forced into this.
+  `--no-embed-loader` opts out.
+- Room for about **2,872 more bytes** of codes in the section before it collides,
+  per `wstrt`'s own memory map. Not a constraint yet.
+
+### Unproven 🔶
+
+- **Only tested in Dolphin.** The claim that this removes the Riivolution
+  requirement on console follows from what `--add-sect` does, but no hardware
+  has run it.
+- **Only `eu0`.** Other versions need their own codelist; nothing else changes.
+
+Tool count is now five: `wit`, `dolphin-tool`, `dolphin`, `powerpc-gcc`,
+`wstrt`. Test suite 254 → 263. pylint 10.00/10.

@@ -20,6 +20,13 @@ conflate — but only one of them boots a game, and only the other one converts
 an image. Finding the wrong one fails confusingly, so they are separate keys.
 """
 
+WSTRT = "wstrt"
+"""Wiimms StaticR Tool, from the SZS toolset -- a different package from `wit`.
+
+Used to embed the Gecko loader into the game's DOL. It carries its own copy of
+the code handler, which is why `bleck` never has to ship one.
+"""
+
 PPC_GCC = "powerpc-gcc"
 """The cross-compiler that builds code mods for the Wii's PowerPC CPU.
 

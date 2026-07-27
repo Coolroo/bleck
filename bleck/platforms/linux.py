@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
+from .base import (
+    DOLPHIN,
+    DOLPHIN_TOOL,
+    PPC_GCC,
+    WIT,
+    WSTRT,
+    PlatformProfile,
+    ToolLocation,
+)
 
 PROFILE = PlatformProfile(
     name="Linux",
@@ -33,6 +41,16 @@ PROFILE = PlatformProfile(
             hint=(
                 "install the Dolphin emulator:  sudo apt install dolphin-emu\n"
                 "  or set BLECK_DOLPHIN to its full path"
+            ),
+        ),
+        WSTRT: ToolLocation(
+            names=["wstrt"],
+            directories=["/usr/bin", "/usr/local/bin", "~/tools/szs/bin"],
+            hint=(
+                "wstrt ships with Wiimms SZS Toolset, a separate download from "
+                "wit: https://szs.wiimm.de/download.html\n"
+                "  Its folder is version-stamped, so setting BLECK_WSTRT to the "
+                "wstrt binary is usually easier than adding it to PATH"
             ),
         ),
         PPC_GCC: ToolLocation(

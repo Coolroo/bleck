@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bleck.backends import disc, emulator
+from bleck.backends import disc, emulator, gecko
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
@@ -154,6 +154,8 @@ def cmd_build(args: argparse.Namespace) -> int:
             raise UserError("--launch needs an image to boot; drop --no-image")
         return 0
 
+    _embed_loader(chain, staged, args)
+
     default_suffix = disc.ImageFormat(args.format).suffix if args.format else ".iso"
     out = (
         Path(args.out)
@@ -169,6 +171,32 @@ def cmd_build(args: argparse.Namespace) -> int:
         started = emulator.launch(out)
         print(f"launched {out.name} in Dolphin  (pid {started.pid})")
     return 0
+
+
+def _embed_loader(chain: resolver.Chain, staged: Path, args: argparse.Namespace) -> None:
+    """Put the Gecko loader inside the disc, so a code mod runs without setup.
+
+    Only meaningful when the chain actually ships code. Skipped rather than
+    fatal when the codelist is missing: plenty of people already have the
+    loader pasted into Dolphin's cheat configuration and do not need this.
+    But it says so loudly, because a code mod that silently does nothing is
+    exactly the failure this feature exists to remove.
+    """
+    coded = [mod for mod in chain.mods if mod.manifest.has_code]
+    if not coded or args.no_embed_loader:
+        return
+
+    target = coded[-1].manifest.code.target
+    try:
+        result = gecko.embed_loader(staged, target, registry.build_root() / ".gecko")
+    except gecko.GeckoError as exc:
+        print(f"warning: the Gecko loader was NOT embedded:\n  {exc}")
+        print(
+            "  The mod will only run if the loader is in Dolphin's cheat "
+            "configuration.\n  Pass --no-embed-loader to silence this."
+        )
+        return
+    print(result.describe())
 
 
 def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
@@ -221,6 +249,11 @@ def register(add) -> None:
     child.add_argument("out", nargs="?")
     child.add_argument(
         "--no-image", action="store_true", help="stage only, skip writing a disc image"
+    )
+    child.add_argument(
+        "--no-embed-loader",
+        action="store_true",
+        help="do not put the Gecko loader inside the disc",
     )
     child.add_argument(
         "--launch",

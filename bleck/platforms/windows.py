@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from .base import DOLPHIN, DOLPHIN_TOOL, PPC_GCC, WIT, PlatformProfile, ToolLocation
+from .base import (
+    DOLPHIN,
+    DOLPHIN_TOOL,
+    PPC_GCC,
+    WIT,
+    WSTRT,
+    PlatformProfile,
+    ToolLocation,
+)
 
 # Dolphin ships as a portable folder rather than an installer, so there is no
 # canonical install path — these are the conventional ones. A user who unzipped
@@ -46,6 +54,20 @@ PROFILE = PlatformProfile(
                 "folder to PATH or set BLECK_DOLPHIN to its full path.\n"
                 "  Get it from https://dolphin-emu.org/download/ — not winget, "
                 "which ships the 2016 release"
+            ),
+        ),
+        WSTRT: ToolLocation(
+            names=["wstrt.exe", "wstrt"],
+            directories=[
+                r"~\tools\szs\bin",
+                r"C:\Program Files\Wiimm\SZS\bin",
+                r"C:\szs\bin",
+            ],
+            hint=(
+                "wstrt ships with Wiimms SZS Toolset, a separate download from "
+                "wit: https://szs.wiimm.de/download.html\n"
+                "  Its folder is version-stamped, so setting BLECK_WSTRT to "
+                "wstrt.exe is usually easier than adding it to PATH"
             ),
         ),
         PPC_GCC: ToolLocation(
