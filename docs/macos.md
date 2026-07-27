@@ -21,7 +21,7 @@ uv sync --extra dev
 ## Verify
 
 ```bash
-uv run pytest                      # expect 145 passed
+uv run pytest                      # expect 164 passed
 uv run python scripts/lint.py
 uv run bleck --help
 ```

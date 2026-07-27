@@ -40,6 +40,6 @@ contributing/      dev setup, coding standards
 ## Keeping it honest
 
 Pages carry explicit status where something is unverified — macOS is implemented
-but never run there, Windows is verified except for the tools it shells out to
-(`wit`, `DolphinTool`), and code mods are not integrated. **Do not quietly drop
-those callouts**; update them when the status actually changes.
+but never run there, and code mods are not integrated. Windows and Linux are both
+verified end to end, including booting a built disc. **Do not quietly drop those
+callouts**; update them when the status actually changes.

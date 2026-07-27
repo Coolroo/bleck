@@ -21,7 +21,7 @@ the single biggest assumption in the project: **bit-exact LZ77 is not required.*
 
 Working and verified: LZ77, U8 (byte-exact repacking on 383/383 archives),
 format detection, disc extract/build in ISO/RVZ/WBFS, mod overlays, dependency
-resolution, conflict detection. 145 tests, pylint 10.00/10.
+resolution, conflict detection. 164 tests, pylint 10.00/10.
 
 **Code injection is the active track.** The toolchain is proven — a distro
 PowerPC compiler produces a valid REL — but nothing is integrated into the CLI
@@ -104,24 +104,28 @@ winget install --id=astral-sh.uv -e
 git clone git@github.com:Coolroo/bleck.git
 cd bleck
 uv sync --extra dev
-uv run pytest          # expect 145 passed
+uv run pytest          # expect 164 passed
 ```
 
-Then install **Wiimms ISO Tools** (`wit.exe`) and **Dolphin**
-(`DolphinTool.exe`), and put both on PATH or set `BLECK_WIT` /
-`BLECK_DOLPHIN_TOOL`. Full detail in [`windows.md`](./windows.md).
+Then install **Wiimms ISO Tools** (`wit.exe`) and **Dolphin** (which supplies
+both `DolphinTool.exe` and `Dolphin.exe`), and put them on PATH or set
+`BLECK_WIT` / `BLECK_DOLPHIN_TOOL` / `BLECK_DOLPHIN`. Full detail, including the
+winget and Cygwin traps, in [`windows.md`](./windows.md).
 
-✅ **Done** (D33, D35). The suite, the linters, `extract` and `verify` all run on
-Windows against real game data — 150 tests, 0 skips, pylint 10.00/10, and
-`verify` reproduces D17's 383/383 corpus result.
+✅ **Done, end to end** (D33, D35, D36). The suite, the linters, `extract`,
+`verify`, `mod build` and `launch` all run on Windows against real game data —
+164 tests, 0 skips, pylint 10.00/10, `verify` reproduces D17's 383/383 corpus
+result, and **a disc built on Windows boots in Dolphin with both textures
+inverted**, reproducing D25 on a second platform.
 
 Finding one real bug in the process (D35): `bleck extract` failed on any machine
 where `extracted/` did not already exist, because the RVZ→ISO step wrote into a
 parent nobody had created. Not Windows-specific — it was masked on the Pi by the
-order commands happened to run in months earlier. Fixed, with tests.
+order commands happened to run in months earlier. Fixed, with tests, and since
+confirmed against real `wit` by building into a directory that did not exist.
 
-⚠️ **Still unproven on Windows:** `bleck mod build` end to end, and booting a
-built disc in Dolphin here.
+A full `mod build` here takes **4.4 seconds**. Setup is documented step by step,
+including what went wrong, in [`windows.md`](./windows.md).
 
 ### Docs site
 

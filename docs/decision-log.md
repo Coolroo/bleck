@@ -1260,3 +1260,101 @@ Pi and may simply not hold on a desktop.
 
 **Test suite is now 150, with zero skips** — the three game-data tests that skip
 on a bare clone now have `extracted/eu0` to run against. pylint 10.00/10.
+
+---
+
+## D36 — A built disc boots on Windows; `bleck launch` closes the loop
+
+*2026-07-27*
+
+### D25 reproduced on a second platform ✅
+
+`title-invert` (which depends on `tex-koopa`) was re-vendored, inverted, built
+and booted on Windows. **Both textures render inverted on the title screen** —
+confirmed visually. The asset pipeline is now verified end to end on two
+platforms, not one.
+
+The build is fast enough to change how it feels to work:
+
+| Step | Time |
+|---|---:|
+| `mod build` — stage, merge archive, write 424 MB WBFS | **4.4 s** |
+| Full-tree hash diff of build vs base (2,722 files) | 3.9 s |
+
+**4.4 seconds** for edit → bootable disc. On the Pi this was minutes. This
+reinforces D35's note that the `map.dat` deferral deserves revisiting.
+
+### The build was byte-verified, not just eyeballed ✅
+
+Hashing every file in the staged tree against the base:
+
+- **1 of 2,722 files differs** — `files/lyt/title.bin.uk`, exactly the archive
+  the chain targets. Nothing else moved.
+- Inside that archive: **2 of 31 members changed** (`mario.tpl`, `koopa.tpl`),
+  both byte-identical to the vendored overrides. The other 29 repacked
+  unchanged.
+- The base is untouched, as designed.
+
+This is the first time the overlay merge has been checked at file-hash level
+rather than by looking at the screen. It holds.
+
+### `bleck extract`'s parent-directory fix is real ✅
+
+The build wrote into `out\`, which did not exist. It succeeded. That path had
+only ever been exercised by a unit test with a stubbed `_run`, so this is the
+first confirmation against actual `wit`.
+
+### Decision: `bleck launch` is a first-class command
+
+**Why at all** — every other step of the loop was a `bleck` command and the last
+one was "go find Dolphin and open the file". Closing that is what makes
+`bleck mod build my-mod out.wbfs --launch` a single iteration.
+
+**The emulator is a separate tool key from `dolphin-tool`.** ⚠️ `Dolphin.exe` and
+`DolphinTool.exe` ship in the same folder and neither can do the other's job.
+They are declared as distinct entries in the platform profiles
+(`platforms.DOLPHIN` vs `platforms.DOLPHIN_TOOL`) with a separate `BLECK_DOLPHIN`
+override, and a test asserts no platform ever lists the same executable name
+under both.
+
+⚠️ **On Linux, never search for a binary called `dolphin`.** That is KDE's file
+manager, and it is installed on a great many desktops. The emulator is
+`dolphin-emu`. Searching the obvious name would silently open a file browser —
+a failure that looks like `bleck` malfunctioning rather than like a missing
+dependency. Guarded by a test.
+
+**Rejected: blocking until the emulator exits.** A build-and-boot loop wants its
+shell back. `launch` returns as soon as Dolphin starts (~0.2 s) and reports the
+PID; `--wait` is available for scripting, where the exit code is the point.
+
+**Rejected: `--exec=<path>`.** ⚠️ Dolphin's joined argument form has to be quoted
+by whoever builds the command line, and a path arriving with its quotes still
+attached makes Dolphin report:
+
+> Could not be opened! This may happen with improper permissions, or use by
+> another process.
+
+This cost real debugging time here — the message blames permissions and the file
+was fine. It was reached through PowerShell's
+`Start-Process -ArgumentList '--exec="..."'`, which forwards the quotes
+literally. The two-token `-e <path>` form cannot be misquoted, so that is what
+`bleck` emits, asserted by a test.
+
+**Dolphin's `-b` (batch) verified** ✅ — boots straight into the game with no
+game-list window. Exposed as `--batch`.
+
+### Also recorded
+
+- **`DolphinTool verify` reports three Low-severity problems on every disc
+  `bleck` builds** ✅ — missing update partition, unsigned DATA partition, and a
+  format that does not store the disc size. All three are expected consequences
+  of `--psel data` + modification + WBFS scrubbing. None prevent booting. Noted
+  because "Problems Found: Yes" reads alarming and is not.
+- **Built disc images are now gitignored.** `out/`, `*.iso`, `*.rvz`, `*.wbfs`.
+  The docs tell users to build `out.wbfs` in the repo root, and nothing stopped
+  a 424 MB accidental commit.
+
+**Test suite is now 164** (150 → 164; 14 new across `test_emulator.py` and the
+platform profiles). pylint 10.00/10, with one deliberate suppression —
+`consider-using-with` on the `Popen` call, verified as genuinely required, since
+the emulator must outlive the CLI process.
