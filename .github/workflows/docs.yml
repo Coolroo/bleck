@@ -49,12 +49,12 @@ jobs:
         # link check the Mintlify setup relied on, and runs on every change.
         run: uv run --extra docs mkdocs build --strict
 
+      # Pages must already be enabled: Settings -> Pages -> Source -> GitHub
+      # Actions. This step's `enablement: true` option cannot do it for you —
+      # the default GITHUB_TOKEN lacks repo-admin rights and the call fails
+      # with "Resource not accessible by integration", which errors rather
+      # than warning and takes the whole job down with it.
       - uses: actions/configure-pages@v5
-        with:
-          # Turns Pages on for the repository if it is not already, so the
-          # first run does not fail on a setting nobody knew to flip. Needs
-          # the `pages: write` permission granted above.
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
