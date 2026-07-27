@@ -13,6 +13,7 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from bleck import platforms
 from bleck.backends import disc
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, u8
@@ -68,8 +69,13 @@ def stage(base: Path, dest: Path) -> int:
     if dest.exists():
         remove_tree(dest)
 
+    profile = platforms.current()
     count = 0
     for source in base.rglob("*"):
+        # Never stage OS clutter — macOS scatters .DS_Store and ._ sidecars
+        # through any directory a user browses, and it must not reach the disc.
+        if profile.is_ignored(source.name):
+            continue
         target = dest / source.relative_to(base)
         if source.is_dir():
             target.mkdir(parents=True, exist_ok=True)
@@ -87,14 +93,17 @@ def _on_rmtree_error(func, path: str, _exc) -> None:
     """Retry a failed removal after clearing the read-only bit.
 
     Windows refuses to delete read-only files, which staged copies inherit from
-    a read-only base. POSIX does not care, so this is a no-op there.
+    a read-only base.
     """
     Path(path).chmod(stat.S_IWRITE)
     func(path)
 
 
 def remove_tree(path: Path) -> None:
-    shutil.rmtree(path, onexc=_on_rmtree_error)
+    if platforms.current().strip_readonly_on_delete:
+        shutil.rmtree(path, onexc=_on_rmtree_error)
+    else:
+        shutil.rmtree(path)
 
 
 def _detach(path: Path) -> None:

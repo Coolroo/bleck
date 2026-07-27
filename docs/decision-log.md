@@ -903,3 +903,52 @@ The suite now passes under `uv run pytest`, bare `pytest`, and `python -m pytest
 
 **Both workflows are supported.** uv is recommended; `pip install -e ".[dev]"`
 still works, and `scripts/lint.py` finds the venv either way.
+
+---
+
+### D30 — Platform differences extracted into a profile layer; macOS supported ✅
+
+Windows support (D27) had scattered `IS_WINDOWS` conditionals through
+`disc.py` and `builder.py`. Adding a third OS that way would have been the point
+where it turned into a mess, so the differences moved into data first.
+
+```
+bleck/platforms/
+  base.py       PlatformProfile / ToolLocation types
+  linux.py      PROFILE
+  macos.py      PROFILE
+  windows.py    PROFILE
+  __init__.py   selects one at import; unknown systems fall back to Linux
+```
+
+Supporting another OS is now "add a module with a `PROFILE` and list it" —
+nothing in `disc.py` or `builder.py` changes.
+
+**macOS differs in three ways that are easy to miss from a Linux box:**
+
+1. **Dolphin is an application bundle**, so `DolphinTool` lives inside
+   `Dolphin.app/Contents/MacOS/` and is not on PATH. `shutil.which` alone would
+   never find it.
+2. **Homebrew's prefix depends on the CPU** — `/opt/homebrew` on Apple Silicon,
+   `/usr/local` on Intel. Both are searched.
+3. ⚠️ **Finder creates `.DS_Store` files** in any directory a user browses, and
+   non-native volumes collect `._` AppleDouble sidecars. Browsing an extracted
+   disc would otherwise stage that clutter into a rebuilt image — files the real
+   game never shipped. Now filtered from both staging and mod overlays, **on
+   macOS only**: doing it everywhere would hide genuine mistakes.
+
+That third one is the kind of bug that produces a subtly wrong disc and no error
+message, which is why it is handled rather than left to chance.
+
+**A test caught a real inconsistency:** every tool hint names its `BLECK_*`
+override except Linux's `wit`, which just said "sudo apt install wit". Fixed
+rather than exempted.
+
+**Verified after the refactor:** the real title-screen mod still builds, the base
+is still pristine (0 differences), and a simulated macOS staging run excludes
+`.DS_Store` and `._real.bin` while keeping `real.bin`.
+
+⚠️ **Never run on macOS.** Same status as Windows — informed implementation plus
+tests that exercise the paths from Linux.
+
+145 tests.

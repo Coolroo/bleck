@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from bleck import platforms
 from bleck.common import env
 from bleck.common.errors import BleckError
 
@@ -44,10 +45,11 @@ class Mod:
         """
         if not self.overlay.is_dir():
             return []
+        profile = platforms.current()
         return sorted(
             entry.relative_to(self.overlay).as_posix()
             for entry in self.overlay.rglob("*")
-            if entry.is_file()
+            if entry.is_file() and not profile.is_ignored(entry.name)
         )
 
 

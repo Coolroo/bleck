@@ -10,46 +10,91 @@ from pathlib import Path, PureWindowsPath
 
 import pytest
 
+from bleck import platforms
 from bleck.backends import disc
 from bleck.formats import u8
 from bleck.mods import builder, manifest, registry, resolver
 from tests.test_mods import ModSpec, make_mod
 
+ALL_PROFILES = [
+    platforms.linux.PROFILE,
+    platforms.macos.PROFILE,
+    platforms.windows.PROFILE,
+]
+
+
+class TestProfiles:
+    def test_every_profile_covers_both_tools(self):
+        for profile in ALL_PROFILES:
+            for key in (platforms.WIT, platforms.DOLPHIN_TOOL):
+                location = profile.tool(key)
+                assert location.names, f"{profile.name} has no names for {key}"
+                assert location.hint, f"{profile.name} has no hint for {key}"
+
+    def test_executable_names_differ_where_they_should(self):
+        """Dolphin ships different executable names per platform."""
+        assert (
+            "dolphin-tool" in platforms.linux.PROFILE.tool(platforms.DOLPHIN_TOOL).names
+        )
+        assert (
+            "DolphinTool.exe"
+            in platforms.windows.PROFILE.tool(platforms.DOLPHIN_TOOL).names
+        )
+        assert "DolphinTool" in platforms.macos.PROFILE.tool(platforms.DOLPHIN_TOOL).names
+
+    def test_search_dirs_are_platform_appropriate(self):
+        windows_dirs = str(platforms.windows.PROFILE.tool(platforms.WIT).directories)
+        assert "Program Files" in windows_dirs
+        assert "/usr" not in windows_dirs
+
+        for profile in (platforms.linux.PROFILE, platforms.macos.PROFILE):
+            posix_dirs = str(profile.tool(platforms.WIT).directories)
+            assert "Program Files" not in posix_dirs
+
+    def test_venv_layout(self):
+        assert platforms.windows.PROFILE.venv_bin == "Scripts"
+        assert platforms.linux.PROFILE.venv_bin == "bin"
+        assert platforms.macos.PROFILE.venv_bin == "bin"
+
+    def test_hints_name_the_env_override(self):
+        for profile in ALL_PROFILES:
+            assert "BLECK_WIT" in profile.tool(platforms.WIT).hint
+            assert "BLECK_DOLPHIN_TOOL" in profile.tool(platforms.DOLPHIN_TOOL).hint
+
+    def test_unknown_tool_falls_back_to_its_own_name(self):
+        assert platforms.linux.PROFILE.tool("ghost").names == ["ghost"]
+
+
+class TestMacOS:
+    """macOS differs in ways that are easy to miss from a Linux box."""
+
+    def test_dolphin_is_found_inside_the_app_bundle(self):
+        dirs = platforms.macos.PROFILE.tool(platforms.DOLPHIN_TOOL).directories
+        assert any("Dolphin.app/Contents/MacOS" in d for d in dirs)
+
+    def test_both_homebrew_prefixes_are_searched(self):
+        """Apple Silicon uses /opt/homebrew, Intel uses /usr/local."""
+        dirs = platforms.macos.PROFILE.tool(platforms.WIT).directories
+        assert any("/opt/homebrew" in d for d in dirs)
+        assert any("/usr/local" in d for d in dirs)
+
+    @pytest.mark.parametrize("name", [".DS_Store", "._resource", ".localized"])
+    def test_finder_clutter_is_ignored(self, name: str):
+        assert platforms.macos.PROFILE.is_ignored(name)
+
+    @pytest.mark.parametrize("name", ["map.dat", "aa1_01.bin", "mario.tpl"])
+    def test_real_files_are_kept(self, name: str):
+        assert not platforms.macos.PROFILE.is_ignored(name)
+
+    def test_other_platforms_do_not_filter(self):
+        """Only macOS creates this clutter; filtering elsewhere would hide bugs."""
+        assert not platforms.linux.PROFILE.is_ignored(".DS_Store")
+        assert not platforms.windows.PROFILE.is_ignored(".DS_Store")
+
 
 class TestToolDiscovery:
-    def test_windows_uses_different_executable_names(self, monkeypatch):
-        """Dolphin ships `dolphin-tool` on Linux, `DolphinTool.exe` on Windows."""
-        spec = disc.TOOLS[disc.DOLPHIN_TOOL]
-
-        monkeypatch.setattr(disc, "IS_WINDOWS", False)
-        assert "dolphin-tool" in spec.names
-
-        monkeypatch.setattr(disc, "IS_WINDOWS", True)
-        assert "DolphinTool.exe" in spec.names
-
-    def test_windows_search_dirs_are_windows_paths(self, monkeypatch):
-        monkeypatch.setattr(disc, "IS_WINDOWS", True)
-        for spec in disc.TOOLS.values():
-            for directory in spec.search_dirs:
-                assert not str(directory).startswith("/usr")
-
-    def test_posix_search_dirs_exclude_program_files(self, monkeypatch):
-        monkeypatch.setattr(disc, "IS_WINDOWS", False)
-        for spec in disc.TOOLS.values():
-            assert all("Program Files" not in str(d) for d in spec.search_dirs)
-
-    def test_hint_names_the_env_override(self, monkeypatch):
-        monkeypatch.setattr(disc, "IS_WINDOWS", True)
-        assert "BLECK_WIT" in disc.TOOLS[disc.WIT].hint
-        assert "BLECK_DOLPHIN_TOOL" in disc.TOOLS[disc.DOLPHIN_TOOL].hint
-
     def test_missing_tool_lists_what_it_tried(self, monkeypatch):
         monkeypatch.setattr(disc.shutil, "which", lambda _name: None)
-        monkeypatch.setattr(
-            disc,
-            "TOOLS",
-            {"ghost": disc.ToolSpec("ghost", ("ghost",), ("ghost.exe",))},
-        )
         with pytest.raises(disc.DiscError, match="looked for"):
             disc.find_tool("ghost")
 
