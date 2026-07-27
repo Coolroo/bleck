@@ -87,3 +87,16 @@ class TestAlignFiles:
         disc.build(tmp_path / "extracted", tmp_path / "out.iso")
 
         assert "--align-files" in captured[0]
+
+    def test_build_always_passes_overwrite(self, monkeypatch, tmp_path: Path):
+        """`--force` must reach wit, not just satisfy bleck's own guard.
+
+        Without this, rebuilding over an existing image staged the whole build
+        and then failed at the last step with wit's ERROR #64.
+        """
+        captured: list[list[str]] = []
+        monkeypatch.setattr(disc, "_run", captured.append)
+
+        disc.build(tmp_path / "extracted", tmp_path / "out.iso")
+
+        assert "--overwrite" in captured[0]

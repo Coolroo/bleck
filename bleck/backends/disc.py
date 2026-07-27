@@ -139,10 +139,27 @@ def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
     --align-files is mandatory: upstream requires it and omitting it fails
     subtly rather than loudly. It is passed unconditionally so callers cannot
     forget it.
+
+    --overwrite is also unconditional, and that is deliberate. Whether the user
+    may clobber the destination is decided earlier by `guard_overwrite`, which
+    refuses without `--force`; reaching here means the answer was yes. Leaving
+    it off made `--force` a half-truth — `bleck` allowed the overwrite and then
+    `wit` refused it, reporting ERROR #64 FILE ALREADY EXISTS after the build
+    had already been staged.
     """
     wit = find_tool(WIT)
     _ensure_parent(out)
-    _run([wit, "COPY", str(source), str(out), wit_format, "--align-files"])
+    _run(
+        [
+            wit,
+            "COPY",
+            str(source),
+            str(out),
+            wit_format,
+            "--align-files",
+            "--overwrite",
+        ]
+    )
 
 
 # dolphin-tool requires these explicitly for RVZ; these are its suggested
