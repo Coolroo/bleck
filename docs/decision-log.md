@@ -2623,3 +2623,113 @@ two-second sampling missed entirely.
 
 It is the difference between "nothing happened" and "reached stage 3 of 5, hook
 fired 130 times, `evtEntry` returned `0x807E7AA0`".
+
+---
+
+## D49 — Every `bleck` disc names itself on screen (2026-07-27)
+
+✅ **Mods built by `bleck` now draw `mod_loaded: <name>` in the bottom right of
+the title screen, generated from the manifest and opted out of rather than into.**
+
+The problem is one that only appears once someone has more than one build: a
+modded disc is byte-for-byte indistinguishable from a stock one *to look at*.
+Someone holding four `.wbfs` files has no way to tell which is in the emulator
+without playing far enough to trigger whatever the mod changed — and if the mod
+is subtle, or broken, that never happens. The disc cannot answer "what am I".
+
+### It is a property of the toolkit, not of a mod
+
+The banner is emitted into the **generated scaffolding**, so no mod declares
+anything. `coin-tick`, `hook-demo` and `menu-watch` all gained it with zero
+changes to their `mod.json`. Rejected alternatives:
+
+- ⛔ **A helper a mod calls.** Every mod would have to remember, and the ones
+  most likely to forget — half-finished experiments — are exactly the ones a
+  person is most likely to be confused by.
+- ⛔ **Opt-in via the manifest.** Same failure, one step further away.
+
+`code.banner` exists only as an escape hatch: `"banner": false` suppresses it,
+and `{"text": ..., "sequences": [...]}` moves it. A default banner is *not*
+written back into `mod.json`, so ordinary manifests read as they did before.
+
+### The drawing API, and where the numbers came from
+
+`fontmgr` is already in the symbol list; `spm-rel-loader`'s title-screen
+example is the only known-working use of it, so its call sequence was copied
+exactly — `FontDrawStart` → style → measure → `FontDrawString`, drawn **before**
+delegating to the real sequence main.
+
+✅ **Screen space is centred, with y increasing upward.** Deduced from that
+example: it centres a string with `x = -(width * scale / 2)` and places it near
+the top with `y = 200`. So the visible area is roughly x −320..320, y −240..240.
+The banner right-aligns at `x = 296 - width*scale`, `y = -200`.
+
+### What was measured, and what was not
+
+Run: `scripts/ingame.py banner-probe --seconds 150`, on a disc whose banner was
+also placed on `SEQ_GAME` — the title screen is unreachable unattended (D47,
+D48), gameplay is reached in ~45 s.
+
+| Observation | Value |
+|---|---|
+| `mod_prolog` ran | magic `42414E52` `'BANR'` |
+| Gameplay frames, banner drawing on every one | **6,198** |
+| Frame rate under that load | **exactly 180 frames / 3 s = 60 fps** |
+| `FontGetMessageWidth("mod_loaded: banner-probe")` | **362**, early and late |
+| Survived `GAME → MAPCHANGE → GAME` | yes, 196 mapchange frames |
+| `SEQ_TITLE` frames | 0, consistent with D47 |
+
+✅ The call sequence is **safe and free**: 6,198 draws with no crash, no hang,
+and no measurable frame cost. ✅ The font subsystem really processes our string
+— a stable non-zero width is positive evidence, not merely absence of a crash,
+and it is what the right-alignment depends on.
+
+🔶 **Where the text physically lands is still a hypothesis.** Nothing here can
+see the screen. The arithmetic checks out — 362 × 0.6 ≈ 217 px wide, spanning
+x ≈ 79→296 at y = −200 — but "bottom right, not clipped, not behind the logo"
+needs a human, and the title screen placement is doubly unverified because that
+sequence never runs unattended.
+
+### A build-breaking bug found on the way
+
+⛔ **A mod with a script and no C of its own could not be built at all**, and
+had not been buildable since `mod_prolog` was introduced. The generated
+scaffolding declared it:
+
+```c
+__attribute__((weak)) void mod_prolog(void);
+```
+
+A weak *declaration* leaves an undefined symbol, and `elf2rel` resolves every
+undefined symbol against the game's list. `mod_prolog` is not a game function,
+so the build died with `Missing 1 required symbol(s): mod_prolog`. `hook-demo`
+and `menu-watch` were unaffected because their own C defines it, which is why
+this went unnoticed — the only mods being rebuilt were the ones that masked it.
+
+The fix is a weak **definition**, so nothing is left undefined:
+
+```c
+__attribute__((weak)) void mod_prolog(void)
+{
+}
+```
+
+✅ **The override works under `ld -r`**, which was the risk worth checking
+rather than assuming. `powerpc-eabi-nm` on the linked module:
+
+```
+menu-watch:  8000368c T mod_prolog     <- the mod's own, strong
+coin-tick:   800032bc W mod_prolog     <- the generated stub, weak
+```
+
+The strong definition wins and the weak one is discarded. ✅ Sections are as
+intended too: `bleck_banner_text` and `bleck_banner_on` in `.rodata`,
+`bleck_banner_color` in `.data` — nothing in `.bss`, whose handling by the
+loader is still undocumented.
+
+⚠️ **`bleck mod check` still reports this failure for script-only mods**, since
+it runs the same `elf2rel` path — that is now fixed by the same change, but the
+lesson stands: *the test suite asserted the broken behaviour*. A test read
+"the declaration must be weak and the call guarded" and passed for as long as
+the bug existed. A test that encodes an assumption protects the assumption, not
+the user.

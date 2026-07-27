@@ -100,6 +100,20 @@ Every mod has a `mod.json` at its root.
 
         :   REL module id. The game's own REL is 1, so mods start at 2.
 
+        `code.banner` <span class="pf-type">object or `false`</span> <span class="pf-default">default: on</span>
+
+        :   The `mod_loaded: <name>` label drawn in the bottom right of the
+            title screen. **On by default — you do not need to declare it.**
+
+            Set it to `false` to suppress the label, or pass an object to
+            change it:
+
+            - `text` — replaces the whole label. Defaults to
+              `mod_loaded: <mod name>`.
+            - `sequences` — which parts of the game draw it. One or more of
+              `logo`, `title`, `game`, `mapchange`, `gameover`, `load`.
+              Defaults to `["title"]`.
+
 ```json
 {
   "schema": 1,
@@ -117,6 +131,13 @@ Every mod has a `mod.json` at its root.
     The compiled module is written to `overlay/files/mod/mod.rel` and then carried
     by the ordinary overlay machinery — a code mod is still just a mod. Only one
     code mod can be in a build, because the loader opens exactly that one path.
+
+!!! tip "Telling your builds apart"
+
+    A modded disc looks exactly like a stock one, so the title screen shows
+    `mod_loaded: <name>` in the bottom right. If you are juggling several
+    `.wbfs` files, that is how you know which one is running — and if it is
+    missing, the mod did not load at all.
 
 ## Layout
 

@@ -92,7 +92,12 @@ it so a map change does not silently kill it.
 `evt`, the game's own bytecode VM — 120 opcodes, cooperative scheduling, ~444
 native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md).
 
-300 tests, pylint 10.00/10.
+✅ **Every built disc names itself on screen** (D49). Mods draw
+`mod_loaded: <name>` in the bottom right of the title screen, generated from the
+manifest — no mod opts in. This also makes "the mod did not load" and "the mod
+loaded but did nothing" distinguishable, which they were not before.
+
+319 tests, pylint 10.00/10.
 
 ### What is verified, and what is not
 
@@ -110,6 +115,9 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 | ✅ **Native C runs in-game** | `code.sources` module executes, measured per frame (D46, D47) |
 | ⛔ `SEQ_TITLE` is never entered | zero frames unattended; there is no menu to hook (D47) |
 | ⛔ Input cannot be injected | DirectInput plus a locked session (D48) |
+| ✅ **Drawing text from a `.main` hook is safe and free** | 6,198 frames, locked 60 fps (D49) |
+| ✅ **A script-only mod builds again** | `mod_prolog` was an undefined weak symbol (D49) |
+| 🔶 **Where the banner lands on screen** | arithmetic checks out; nobody has looked (D49) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
 
 ---

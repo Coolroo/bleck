@@ -111,6 +111,28 @@ does not start-and-unhook: every sequence other than gameplay re-arms a flag,
 and gameplay starts the script whenever it is armed. All six `.main` entries are
 hooked; only gameplay starts anything.
 
+### Drawing from a `.main` hook
+
+✅ **A `seq_data[].main` override is a legal place to draw text**, and it is
+free. Measured on `SEQ_GAME` over 6,198 consecutive frames (D49): no crash, no
+hang, and a locked 60 fps throughout — 180 frames per 3 seconds, unchanged from
+an unmodded run.
+
+The call sequence is `FontDrawStart` → styling → `FontGetMessageWidth` →
+`FontDrawString`, **before** delegating to the real sequence main. That order
+comes from `spm-rel-loader`, whose title-screen text is the only known-working
+use of this API, and it is what the generated `mod_loaded` banner does.
+
+✅ **`FontGetMessageWidth` works from this context too** — it returned a stable
+`362` for a 24-character string, both on the first gameplay frame and 600 frames
+later, so the font subsystem is fully up by the time gameplay starts. That
+matters because right-aligning anything depends on it.
+
+🔶 Screen space appears to be **centred with y increasing upward** — roughly
+x −320..320, y −240..240 — inferred from `spm-rel-loader` centring a string at
+`x = -(width * scale / 2)` and placing it near the top with `y = 200`. Nothing
+here can see the screen, so exact placement stays unverified.
+
 ---
 
 ## The diagnostic method

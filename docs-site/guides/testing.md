@@ -105,6 +105,18 @@ the emulator itself, found via `BLECK_DOLPHIN`.
 
 ## What to look for
 
+The first thing to check is the **title screen**, which shows
+`mod_loaded: <name>` in the bottom right for any mod that ships code. That one
+line separates two failures which otherwise look identical:
+
+- **The label is there, your change is not.** The module loaded and ran; the
+  problem is in what it does.
+- **No label at all.** The module never loaded, so nothing it contains could
+  have run. Look at the build and the loader, not at your code.
+
+Without it, "nothing happened" is ambiguous — and that ambiguity has cost real
+debugging time on this project more than once.
+
 ??? note "Your change appears"
 
     The pipeline worked end to end, including recompression.
