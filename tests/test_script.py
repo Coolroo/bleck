@@ -367,6 +367,38 @@ class TestGeneratedC:
         assert "void _prolog(void)" in out.text
         assert "evtEntry(bleck_script_main, 0, 0)" in out.text
 
+    def test_prolog_only_arms_a_hook(self):
+        # Measured, not assumed: calling evtEntry from _prolog does nothing,
+        # because the evt manager is not initialised that early (D38). The
+        # script must be started once gameplay begins instead.
+        out = compile_source("script main {\n wait(1)\n}").generated
+        prolog = out.text.split("void _prolog(void)")[1]
+        assert "seq_data[BLECK_SEQ_GAME].init = &bleck_start_scripts" in prolog
+        assert "evtEntry" not in prolog
+
+    def test_the_hook_unhooks_itself_before_starting(self):
+        # Gameplay is re-entered after every map change; without unhooking,
+        # each one would start another copy of the script.
+        out = compile_source("script main {\n wait(1)\n}").generated
+        body = out.text.split("static void bleck_start_scripts")[1]
+        restore = body.index("seq_data[BLECK_SEQ_GAME].init = bleck_real_game_init")
+        assert restore < body.index("evtEntry")
+
+    def test_the_original_sequence_function_is_still_called(self):
+        out = compile_source("script main {\n wait(1)\n}").generated
+        assert "bleck_real_game_init(work)" in out.text
+
+    def test_saved_pointer_avoids_bss(self):
+        # The loader allocates this module's bss but nothing documents whether
+        # it zeroes it, so the initialiser must be non-zero to force .data.
+        out = compile_source("script main {\n wait(1)\n}").generated
+        assert "static SeqFunc *bleck_real_game_init = (SeqFunc *) 1;" in out.text
+
+    def test_sequence_table_is_referenced_by_name(self):
+        out = compile_source("script main {\n wait(1)\n}").generated
+        assert "extern SeqDef seq_data[];" in out.text
+        assert "0x80" not in out.text
+
     def test_all_rel_entry_points_are_defined(self):
         out = compile_source("script main {\n wait(1)\n}").generated
         for symbol in ("_prolog", "_epilog", "_unresolved"):

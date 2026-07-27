@@ -4,12 +4,9 @@
 -- rather than blocking it, so this costs the game essentially nothing: the
 -- script is asleep for all but one instruction out of every ten seconds.
 
--- spm/seqdrv.h: SEQ_LOGO 0, SEQ_TITLE 1, SEQ_GAME 2, SEQ_MAPCHANGE 3, ...
--- The script is started at boot, long before a save file exists, so it waits
--- for actual gameplay before touching the player's wallet.
+-- No sequence gate is needed here: bleck starts scripts when gameplay begins,
+-- not at boot, so a save file already exists by the time this runs.
 script main {
-    evt_seq_wait(2)
-
     loop {
         -- Milliseconds rather than frames: PAL builds do not all run at the
         -- same refresh rate, and `wait(600)` would be twelve seconds at 50Hz.

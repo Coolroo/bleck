@@ -39,8 +39,9 @@ _HEADER = """\
     Do not edit: rebuild the script instead.
 
     This is an evt script module. The arrays below are bytecode for Super Paper
-    Mario's own script VM; `_prolog` hands the entry script to the game's
-    scheduler, which runs it cooperatively from that point on.
+    Mario's own script VM. `_prolog` hooks the game's sequence table so the
+    entry script is handed to the scheduler once gameplay starts, and runs
+    cooperatively from that point on.
 
     Game functions are referenced by name and resolved by `elf2rel` against a
     symbol list, so no addresses appear here.
@@ -54,16 +55,60 @@ typedef unsigned char u8;
 _FOOTER = """\
 
 /*
-    Entry points required by the REL format.
+    Starting the script at the right moment.
 
-    `_prolog` runs once, when the loader links this module after the game's own
-    REL. Starting the script here means it is scheduled before any map loads;
-    see `docs/scripting.md` for what that implies about which functions are safe
-    to call immediately.
+    `_prolog` runs the instant the loader links this module, which is far too
+    early to hand anything to the script scheduler: the evt manager has not been
+    initialised yet, so `evtEntry` there does nothing at all. That was measured,
+    not guessed -- see D38.
+
+    So `_prolog` only arms a hook. `seq_data` is the game's table of
+    {{init, main, exit}} function pointers, one row per sequence; swapping a
+    pointer in it needs no code patching and no cache flush, and the replacement
+    runs at a point where the game is fully up and running its own scripts.
 */
+
+typedef void(SeqFunc)(void *);
+
+typedef struct
+{{
+    SeqFunc *init;
+    SeqFunc *main;
+    SeqFunc *exit;
+}} SeqDef;
+
+/* Resolved by name from the symbol list, like everything else here. */
+extern SeqDef seq_data[];
+
+/* spm/seqdrv.h: LOGO 0, TITLE 1, GAME 2, MAPCHANGE 3, GAMEOVER 4, LOAD 5 */
+#define BLECK_SEQ_GAME 2
+
+/*
+    Deliberately initialised to a non-zero value so it lands in .data rather
+    than .bss. The loader allocates this module's bss but nothing documents
+    whether it zeroes it, and depending on that would be a silent hazard.
+*/
+static SeqFunc *bleck_real_game_init = (SeqFunc *) 1;
+
+static void bleck_start_scripts(void *work)
+{{
+    /*
+        Unhook before doing anything else. Gameplay is re-entered every time a
+        map change finishes, and without this each one would start another copy
+        of the script -- coins would arrive twice as fast after the first door.
+    */
+    seq_data[BLECK_SEQ_GAME].init = bleck_real_game_init;
+
+    if (bleck_real_game_init != 0)
+        bleck_real_game_init(work);
+
+    evtEntry({entry}, 0, 0);
+}}
+
 void _prolog(void)
 {{
-    evtEntry({entry}, 0, 0);
+    bleck_real_game_init = seq_data[BLECK_SEQ_GAME].init;
+    seq_data[BLECK_SEQ_GAME].init = &bleck_start_scripts;
 }}
 
 void _epilog(void)
