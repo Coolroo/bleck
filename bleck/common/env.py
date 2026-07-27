@@ -60,8 +60,31 @@ NO_COLOR = EnvVar(
     "NO_COLOR",
     description="Set to any value to disable coloured output (no-color.org)",
 )
+MODS_DIR = EnvVar(
+    "BLECK_MODS_DIR",
+    default="mods",
+    description="Where mods live; dependencies resolve against this directory",
+)
+BASE_DIR = EnvVar(
+    "BLECK_BASE_DIR",
+    default="extracted/eu0",
+    description="The pristine extracted base game. Never written to",
+)
+BUILD_DIR = EnvVar(
+    "BLECK_BUILD_DIR",
+    default="build",
+    description="Where mod staging and output ISOs go",
+)
 
-DECLARED: list[EnvVar] = [WIT, DOLPHIN_TOOL, EXTRACT_ROOT, NO_COLOR]
+DECLARED: list[EnvVar] = [
+    WIT,
+    DOLPHIN_TOOL,
+    EXTRACT_ROOT,
+    NO_COLOR,
+    MODS_DIR,
+    BASE_DIR,
+    BUILD_DIR,
+]
 
 
 # --- readers --------------------------------------------------------------

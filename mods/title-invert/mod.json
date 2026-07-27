@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "title-invert",
+  "version": "0.1.0",
+  "description": "Invert the title screen Mario",
+  "author": "coolroo",
+  "base": "eu0",
+  "created": "",
+  "dependencies": [
+    {
+      "name": "tex-koopa"
+    }
+  ],
+  "exclusive": [],
+  "remove": []
+}

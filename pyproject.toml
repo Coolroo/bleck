@@ -70,6 +70,7 @@ max-line-length = 90
 max-args = 6
 max-locals = 18
 max-returns = 8   # annotation dispatch legitimately branches a lot
+max-attributes = 12   # manifests and reports are wide by nature
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

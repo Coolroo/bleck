@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "tex-koopa",
+  "version": "0.1.0",
+  "description": "Invert Bowser",
+  "author": "",
+  "base": "eu0",
+  "created": "",
+  "dependencies": [],
+  "exclusive": [],
+  "remove": []
+}

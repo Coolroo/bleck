@@ -573,3 +573,61 @@ These emerged from the above and should guide later choices:
 4. **Anchor to eu0 for anything address-dependent**, and treat US support as a
    porting problem to be solved later, ideally by automating it (which is the
    highest-leverage gap identified in research).
+
+---
+
+### D22 — Mods implemented: overlays, dependency chains, conflict detection ✅
+
+Full design in [`mods.md`](./mods.md). `bleck/mods/` — manifest, registry,
+resolver, overlay, conflicts, builder — plus a `bleck mod` command group.
+113 tests, 10.00/10 lint.
+
+**Verified against real game data**, not just fixtures:
+
+- A mod editing `lyt/title.bin.uk/arc/timg/mario.tpl` produced a staged disc
+  differing from the base in **exactly one file**, with the archive's other
+  **34 members byte-identical and node order preserved**.
+- The **base stayed pristine** — still 0 differences against a fresh ISO extract
+  after builds.
+- Two mods in a chain editing **different members of the same archive** merged
+  cleanly, both edits present.
+- Two **independent** mods editing the **same member** produced a conflict with
+  byte ranges and a non-zero exit.
+
+**Bugs the tests caught, both real:**
+
+⚠️ **Dependency filtering existed in only one of two code paths.** Conflict
+detection dropped edits superseded by a dependent mod, but the builder did not —
+so a mod overriding its own dependency reported clean, then hit a phantom
+conflict during staging and silently kept the base file. Fixed by promoting the
+filter to a shared `effective_edits`, used by both. Two code paths reasoning
+independently about the same question is the underlying smell.
+
+⚠️ **The D13 duplicate-setup warning never fired**, because it matched
+`setup/...` while real disc paths carry the `files/` prefix. A warning that
+cannot trigger is worse than none — it reads as "checked, fine."
+
+**Design decisions worth recording:**
+
+- **Hardlink staging.** Unchanged files are hardlinked from the base, so a build
+  writes only what differs. `_detach` breaks the link before any write — writing
+  through a hardlink would edit the base in place, the exact failure this design
+  exists to prevent. Verified: untouched staged files show link count 2, edited
+  ones 1. Falls back to copying across filesystems.
+- **`BuildContext`** groups the five values every build helper needs. Pylint
+  flagged six-positional-argument functions; the fix was a named type rather
+  than raising the limit — the same rule we apply to returns.
+- **`ModSpec` in tests** for the same reason: an 8-parameter helper became a
+  frozen dataclass instead of an exemption.
+- **Overlays mirror the extract root**, so `sys/main.dol` is moddable, and the
+  directory is `overlay/` so paths read `overlay/files/...` rather than
+  `files/files/...`.
+
+**Open-question calls made** (from mods.md): manifests committed, overlay
+contents gitignored (they contain extracted game assets); ISO output — 26 s
+proved acceptable, and `--no-iso` covers fast iteration; no `unvendor`; binary
+merge opt-in; `"remove"` supported.
+
+⚠️ **Still nothing has booted.** The pipeline produces a disc that is
+*structurally* correct at every layer we can verify offline. Whether SPM accepts
+our re-encoded LZ77 at runtime remains untested.

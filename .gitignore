@@ -2,6 +2,11 @@
 roms/
 extracted/
 
+# Mod overlays contain extracted game assets — manifests are committed,
+# contents are not. Remove this line for a mod of wholly original work.
+mods/*/overlay/
+build/
+
 # Python
 __pycache__/
 *.py[cod]
