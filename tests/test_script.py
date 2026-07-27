@@ -607,12 +607,22 @@ class TestNativeSources:
 class TestGeneratedHandoff:
     """How generated scaffolding hands control to a mod's own C."""
 
-    def test_the_hook_is_declared_weak(self):
-        # A script-only module links with nothing defining mod_prolog, so the
-        # declaration must be weak and the call guarded.
+    def test_the_hook_is_a_weak_definition_not_a_declaration(self):
+        """A script-only module must leave `mod_prolog` defined, not undefined.
+
+        This was a real build failure, not a style preference. A weak
+        *declaration* leaves an undefined symbol, and `elf2rel` resolves every
+        undefined symbol against the game's list -- so a mod with a script and
+        no C of its own died with "Missing 1 required symbol(s): mod_prolog"
+        before it could ever be built. A weak definition leaves nothing
+        undefined, and a mod's own strong definition still overrides it.
+        """
         out = compile_source(SIMPLE).generated.text
-        assert "__attribute__((weak)) void mod_prolog(void);" in out
-        assert "if (mod_prolog != 0)" in out
+        assert "__attribute__((weak)) void mod_prolog(void)\n{\n}" in out
+        assert "__attribute__((weak)) void mod_prolog(void);" not in out
+        # With a definition present the address is never null, so a guard here
+        # is dead code that -Waddress would flag.
+        assert "if (mod_prolog != 0)" not in out
 
     def test_generated_code_keeps_ownership_of_prolog(self):
         """The sequence hooks must be installed before the mod's own code runs.

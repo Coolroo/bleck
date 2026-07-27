@@ -52,20 +52,29 @@ typedef unsigned int u32;
 typedef unsigned char u8;
 """
 
-#: Declared in every generated module, so a mod's own C can run at load time
-#: without owning `_prolog` itself. Weak, so a script-only mod links with
-#: nothing defining it and the call is simply skipped.
+#: Defined in every generated module, so a mod's own C can run at load time
+#: without owning `_prolog` itself. Weak, so a mod that supplies its own
+#: strong definition overrides this empty one at link time.
 MOD_HOOK = """/*
     A mod's own C may define `mod_prolog` to run when the module loads.
 
-    It is declared weak so a script-only module links without one. `_prolog`
-    stays owned by the generated code because it has to install the sequence
-    hooks first -- see the comment below for why that ordering matters.
+    This is a weak *definition* rather than a declaration, and the difference
+    matters: a weak declaration leaves an undefined symbol, and `elf2rel` tries
+    to resolve every undefined symbol against the game's list. `mod_prolog` is
+    not a game function, so a script-only mod failed to build with
+    "Missing 1 required symbol(s): mod_prolog". Defining it here means there is
+    nothing left undefined, and a mod that supplies its own strong definition
+    overrides this one at link time.
+
+    `_prolog` stays owned by the generated code because it has to install the
+    sequence hooks first -- see the comment below for why that ordering matters.
 
     Anything touching live engine state belongs in a sequence hook, not here:
     at load time the game is barely up. docs/hook-points.md has the timings.
 */
-__attribute__((weak)) void mod_prolog(void);
+__attribute__((weak)) void mod_prolog(void)
+{
+}
 """
 
 
@@ -160,8 +169,7 @@ void _prolog(void)
         seq_data[i].main = bleck_hooks[i];
     }}
 
-    if (mod_prolog != 0)
-        mod_prolog();
+    mod_prolog();
 }}
 
 void _epilog(void)
@@ -179,8 +187,7 @@ void _unresolved(void)
 BARE_FOOTER = """
 void _prolog(void)
 {
-    if (mod_prolog != 0)
-        mod_prolog();
+    mod_prolog();
 }
 
 void _epilog(void)
