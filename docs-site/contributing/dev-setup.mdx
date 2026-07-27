@@ -104,6 +104,35 @@ docs-site/      this documentation
 Adding a CLI command means adding a module under `cli/commands/` and listing it
 in `MODULES` — nothing in the CLI core changes.
 
+## Working on these docs
+
+The site is Mintlify, built with [bun](https://bun.sh/).
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    curl -fsSL https://bun.sh/install | bash
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    powershell -c "irm bun.sh/install.ps1 | iex"
+    ```
+  </Tab>
+</Tabs>
+
+```bash
+cd docs-site
+bun install
+bun run dev       # preview on http://localhost:3000
+bun run check     # broken-link check, no server needed
+```
+
+<Note>
+`bun run check` is Mintlify's own link validator and needs no server, so it is
+worth running before committing doc changes.
+</Note>
+
 ## Where the reasoning lives
 
 <CardGroup cols={2}>

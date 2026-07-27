@@ -992,3 +992,34 @@ lead with "not yet verified on this platform", and the code-mods guide opens
 with "not integrated into the CLI". `docs-site/README.md` explicitly says not to
 quietly drop them — documentation that overstates readiness is worse than none,
 because it costs someone an afternoon before they discover the truth.
+
+---
+
+### D32 — Docs site uses bun; handoff written for the move to Windows ✅
+
+**bun instead of npm** for `docs-site/`. `package.json` adds `dev` and `check`
+scripts, and `bun.lock` is committed for the same reason `uv.lock` is — everyone
+resolves the same Mintlify version.
+
+Installing it paid off immediately: `bun run check` is **Mintlify's own
+broken-link validator**, and it passes. That is stronger than the script check
+from D31, which only confirmed that link targets existed as files.
+
+⚠️ **The dev server still has not run.** Deliberate — visual verification moves
+to the Windows machine, where Dolphin also runs at full speed.
+
+**Added [`handoff.md`](./handoff.md)** for continuing on another machine. It
+captures what the other docs do not: which decisions are still open, what exists
+only on the Linux box and is therefore absent from a fresh clone, and the
+non-obvious traps.
+
+The one most likely to waste someone's time: **the committed mods will look
+empty, and that is correct.** `mods/*/overlay/` is gitignored because it holds
+extracted game assets, so `bleck mod status title-invert` reports "overrides
+nothing yet" on a fresh clone. The handoff gives the two `vendor` commands that
+restore them.
+
+**A genuine improvement for the Windows move:** devkitPPC installs normally
+there, so the ABI risk flagged in D26 — Debian's SysV target versus devkitPPC's
+`powerpc-eabi` — largely disappears. Building code mods on Windows is the better
+path, not merely a fallback.

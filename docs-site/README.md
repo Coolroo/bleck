@@ -13,15 +13,16 @@ maintainers rather than users.
 
 ## Preview locally
 
-Requires Node.
+Uses [bun](https://bun.sh/).
 
 ```bash
-npm i -g mint
 cd docs-site
-mint dev
+bun install
+bun run dev       # http://localhost:3000
+bun run check     # broken-link check, no server
 ```
 
-Opens on http://localhost:3000.
+`bun.lock` is committed so everyone gets the same Mintlify version.
 
 ## Structure
 
