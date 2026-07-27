@@ -1,0 +1,12 @@
+# Game data — never commit. Large, and not ours to distribute.
+roms/
+extracted/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+build/
+dist/

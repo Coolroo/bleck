@@ -1,0 +1,26 @@
+[project]
+name = "spm-modkit"
+version = "0.1.0"
+description = "Modding toolkit for Super Paper Mario (Wii)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+bleck = "bleck.cli.app:main"
+
+[project.optional-dependencies]
+# Dev-only cross-check oracle. Not used at runtime — see docs/decision-log.md D16.
+dev = ["libWiiPy>=0.6.0", "pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `slow` compresses real game data and takes minutes on a Pi — opt in with
+# `-m slow`. Everything else must stay fast enough to run on every change.
+addopts = "-m 'not slow'"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["bleck*"]
