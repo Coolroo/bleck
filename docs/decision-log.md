@@ -4355,3 +4355,52 @@ and do not build on it.
 
 The clean part of the run -- probe words and `gw[28]`, from t+45 to t+51 -- is
 unaffected, because the module reports those itself.
+
+---
+
+## D75 — ⚠️ The map DID change; the instrument missed it (2026-07-27)
+
+⚠️ **Corrects D74, and probably D70/D73 with it.** The observer reported ending
+up in **Flipside**. The rig reported `seq=GAME` continuously and concluded the
+map never changed.
+
+D74 was committed saying "the map does not change" roughly a minute before a
+human said it had.
+
+### Why the rig missed it
+
+Two weaknesses, both mine:
+
+1. **It polls every three seconds.** A transition that completes between polls
+   is invisible.
+2. **It infers the map from `seqWork.p0`**, which is only meaningful *during* a
+   map change. Between changes it shows whatever was left there, and
+   `_destination` rejects anything that does not look like a name -- so "no
+   `map=` field" reads as "no map change happened", which it does not mean.
+
+The one transition it did catch, `map=mac_02` at t+93s, is 45 seconds after the
+script reached its call.
+
+### 🔶 What this means for D70-D74
+
+**Every one of those entries rests on "the map did not change", inferred the
+same wrong way.** They may all be measuring a delay rather than a failure.
+
+⚠️ Do not treat D70, D73 or D74 as settled. What survives is only what was
+measured directly: the probe words, the `gw` writes, and the binding checks.
+The conclusions drawn *from absence of a map change* are suspect.
+
+### The fix the rig needs
+
+Track the current map from something valid between transitions, not from
+`seqWork.p0`. `mapDataPtr` (`0x800294E0`) is the obvious candidate and is
+already in the lst. Until then, a run that reports no map change has not shown
+that no map change happened.
+
+### The lesson, again
+
+D65 recorded "the rig cannot see a game that never starts". This is the same
+failure with a different face: **the rig cannot see a state it only samples**.
+An instrument that looks away is not evidence of absence, and this is the second
+time in one session that a human glance overturned a confident memory-read
+conclusion.
