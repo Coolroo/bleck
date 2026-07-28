@@ -26,6 +26,7 @@ this file is forward-looking only.
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
+| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ⛔ Branch *replacement* only — no trampoline, and no manifest surface |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -110,6 +111,18 @@ descriptor array is registered per map by `evt_door_set_door_descs`, and
 `mod_prolog`. A door patch would have to *intercept* that registration — a
 different shape from `map:` and `item:`, and unproven (D91). 🔶 The same likely
 applies to `npcdrv.h`'s `templateinitScript`.
+
+⛔ **Interception is now built and it does not help.** Instruction patching works
+(D94): a branch written over `evt_door_set_door_descs` at `mod_prolog` was in
+place, verified by readback, and entered **zero** times while Flipside loaded and
+ran for 90 s — with a control hook on `npcDispMain` firing 62,480 times in the
+same window. D93 had already ruled out reaching it from map init scripts. So the
+function is not on the path for `mac_01` or `aa4_01` at all.
+
+🔶 **Where to look next:** `door_init_evt` (`0x8041a2b0`) sits in the REL address
+range, so door setup plausibly lives in each map's own module. Hooking that, or
+finding the caller of `evt_door_set_door_descs` in a map that does use it, is the
+next cheap experiment. Two maps is not the game.
 
 ### 🔶 Remaining button masks
 

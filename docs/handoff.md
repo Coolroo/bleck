@@ -763,6 +763,40 @@ What to know before extending it:
 
 ---
 
+## ✅ Done: patching the game's own *code* (D94)
+
+Evt patching reaches scripts; this reaches C functions. Every generated module
+now carries helpers a mod's own sources can declare and call:
+
+```c
+extern s32 bleck_code_hook(void *at, const void *to);   /* encode, write, flush */
+extern void bleck_code_write(void *at, u32 word);
+extern s32 bleck_code_branch(const void *from, const void *to, u32 *out);
+```
+
+What to know before extending it:
+
+- ⚠️ **The flush is load-bearing, and now measured.** A store lands in the data
+  cache; the instruction fetcher cannot see it. Two identical patches in one run,
+  differing only in `dcbst`/`sync`/`icbi`/`isync`, read back the same word and
+  behaved differently — the unflushed one did nothing while looking applied.
+  D38 said the flush "behaves"; it had never been shown to be *necessary*.
+- ⛔ **Branch replacement only.** The original body is destroyed. A trampoline
+  is the next increment, and upstream's `hookFunction` is not a drop-in — it
+  blindly copies instruction[0] (D37).
+- ⛔ **No manifest surface**, deliberately. Nothing in `mod.json` yet.
+- ⛔ **Doors are still not reachable.** `evt_door_set_door_descs` was hooked
+  successfully and entered **zero** times while Flipside loaded and ran 90 s,
+  with a control hook firing 62,480 times in the same window. 🔶 Two maps only.
+- ⛔ **Do not stub `effMain`** — it hangs the map-change sequence. Use
+  `npcDispMain` as a hot-function control; it is a draw pass.
+- ✅ Existing mods are byte-identical: `--gc-sections` drops the helpers unless
+  a module calls one.
+- `mods/code-patch-probe` (the mechanism, with the no-flush control) and
+  `mods/door-hook-probe` (live game code) are the worked examples.
+
+---
+
 ## Next, toward the base app
 
 1. **More editing surfaces through the API.** Placement is done because its

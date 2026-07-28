@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "code-patch-probe",
+  "version": "0.1.0",
+  "description": "Stage 1: does writing a PowerPC branch take effect, and is the cache flush what makes it (D94)",
+  "base": "eu0",
+  "code": { "sources": ["src"], "target": "eu0", "module_id": 2 }
+}

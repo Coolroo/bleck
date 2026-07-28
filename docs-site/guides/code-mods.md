@@ -167,6 +167,46 @@ extern unsigned int bleck_patch_shared[];
 
 Full field reference: [`code.patches`](../reference/manifest.md).
 
+## Patching the game's own code
+
+`code.patches` reaches the game's *scripts*. To redirect one of the game's C
+functions you write the branch yourself, using helpers every module carries:
+
+```c
+extern int  bleck_code_hook(void *at, const void *to);   /* encode, write, flush */
+extern void bleck_code_write(void *at, unsigned int word);
+extern int  bleck_code_branch(const void *from, const void *to, unsigned int *out);
+
+extern void someGameFunction(void);   /* resolved from the symbol list, by name */
+
+void mod_prolog(void)
+{
+    if (bleck_code_hook((void *) someGameFunction, (void *) myHandler) != 0)
+        return;   /* 1 misaligned, 2 out of range. Nothing was written. */
+}
+```
+
+The branch is a plain `b`, so its reach is about ±32 MB. Out of range is
+**refused**, never truncated — a masked displacement would be a valid branch to
+the wrong place.
+
+!!! warning "This replaces the function; it does not wrap it"
+
+    The original body never runs. There is no trampoline yet, so anything the
+    game relied on that function for stops happening. Useful for probes and for
+    functions you fully reimplement; not yet a general hook.
+
+!!! warning "Never store an instruction without flushing"
+
+    `bleck_code_write` and `bleck_code_hook` issue `dcbst`/`sync`/`icbi`/`isync`.
+    Without that the word is in memory — a debugger will show your patch — but
+    the CPU keeps fetching the old instruction and nothing changes. This was
+    measured, not assumed: the unflushed half of the experiment did nothing at
+    all while reading back as correctly patched.
+
+    `bleck_code_store` deliberately omits the flush so that experiment can be
+    repeated. Do not use it in a mod.
+
 ## C++
 
 `code.sources` takes `.cpp`, `.cc` and `.cxx` as well as `.c`, and a mod may mix

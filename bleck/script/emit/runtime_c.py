@@ -51,6 +51,93 @@ __attribute__((weak)) void mod_prolog(void)
 """
 
 
+#: Writing PowerPC instructions at run time. Emitted into every module: a mod
+#: declares the prototypes it wants and `--gc-sections` drops the rest.
+CODE_PATCH = """/*
+    Patching PowerPC instructions at run time.
+
+    A store lands in the *data* cache. The instruction fetcher reads through
+    the *instruction* cache and cannot see it, so a patched word looks correct
+    to a debugger and does nothing until the line is pushed out and the matching
+    instruction line invalidated: `dcbst`, `sync`, `icbi`, `isync`.
+
+    `bleck_code_store` deliberately omits that. It exists so the flush can be
+    measured against a control rather than assumed (D94).
+
+    Unlike evt bytecode patching, which the VM reads as data (D89), this is the
+    only route to intercepting a C function -- `evt_door_set_door_descs` among
+    them (D93).
+*/
+
+#define BLECK_CODE_OK 0
+#define BLECK_CODE_ALIGN 1
+#define BLECK_CODE_RANGE 2
+
+/* Unconditional branch, I-form: opcode 18, then a 24-bit word displacement. */
+#define BLECK_CODE_BRANCH 0x48000000U
+#define BLECK_CODE_DISP 0x03FFFFFCU
+
+/* The displacement field is 26 bits signed, so roughly +/-32 MB. */
+#define BLECK_CODE_MAX 0x01FFFFFC
+#define BLECK_CODE_MIN (-0x02000000)
+
+/* Store only, no flush. For measuring the flush, not for shipping. */
+void bleck_code_store(void *at, u32 word)
+{
+    *(volatile u32 *) at = word;
+}
+
+/* Push the data line to memory, then invalidate the instruction line. */
+void bleck_code_flush(void *at)
+{
+    __asm__ __volatile__("dcbst 0,%0\\n\\t"
+                         "sync\\n\\t"
+                         "icbi 0,%0\\n\\t"
+                         "isync"
+                         :
+                         : "r"(at)
+                         : "memory");
+}
+
+void bleck_code_write(void *at, u32 word)
+{
+    bleck_code_store(at, word);
+    bleck_code_flush(at);
+}
+
+/*
+    Encode `b to` as it would sit at `from`.
+
+    An out-of-range displacement is refused, not truncated: masking it would
+    emit a perfectly valid branch to somewhere else entirely, which is the
+    failure this project keeps having to design out.
+*/
+s32 bleck_code_branch(const void *from, const void *to, u32 *out)
+{
+    s32 delta = (s32) ((const char *) to - (const char *) from);
+
+    if ((((u32) from | (u32) to) & 3u) != 0)
+        return BLECK_CODE_ALIGN;
+    if (delta > BLECK_CODE_MAX || delta < BLECK_CODE_MIN)
+        return BLECK_CODE_RANGE;
+    *out = BLECK_CODE_BRANCH | ((u32) delta & BLECK_CODE_DISP);
+    return BLECK_CODE_OK;
+}
+
+/* Encode, write and flush. Nothing is written unless the encode succeeded. */
+s32 bleck_code_hook(void *at, const void *to)
+{
+    u32 word = 0;
+    s32 status = bleck_code_branch(at, to, &word);
+
+    if (status != BLECK_CODE_OK)
+        return status;
+    bleck_code_write(at, word);
+    return BLECK_CODE_OK;
+}
+"""
+
+
 #: Running C++ global constructors. Emitted only for a mod with C++ sources, so
 #: a C-only module's generated source is unchanged.
 CTOR_BLOCK = """

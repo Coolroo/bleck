@@ -323,6 +323,65 @@ class TestGeneratedHandoff:
         assert "mod_prolog();" in emit.generate_bare().text
 
 
+class TestInstructionPatching:
+    """The PowerPC write-and-flush helpers every module carries (D94)."""
+
+    def sources(self) -> list[str]:
+        """Every shape of generated module, so none can quietly lose them."""
+        return [
+            compile_source(SIMPLE).generated.text,
+            emit.generate_bare().text,
+            emit.generate_merged(
+                [
+                    emit.ModPart(
+                        "a",
+                        compile_source(
+                            SIMPLE, scaffolding=emit.Scaffolding(require_entry=False)
+                        ).program,
+                    )
+                ]
+            ).text,
+        ]
+
+    def test_every_module_carries_them(self):
+        for out in self.sources():
+            for name in ("bleck_code_store", "bleck_code_flush", "bleck_code_write"):
+                assert f"void {name}(" in out
+            assert "s32 bleck_code_branch(" in out
+            assert "s32 bleck_code_hook(" in out
+
+    def test_the_flush_is_the_full_four_instruction_sequence(self):
+        """`dcbst` alone leaves the fetcher reading a stale line, and a store
+        with no flush was measured doing exactly nothing in-game (D94)."""
+        out = compile_source(SIMPLE).generated.text
+        flush = out.split("void bleck_code_flush")[1].split("\n}")[0]
+        for instruction in ("dcbst 0,%0", "sync", "icbi 0,%0", "isync"):
+            assert instruction in flush
+        assert flush.index("dcbst") < flush.index("icbi")
+
+    def test_the_unflushed_store_stays_unflushed(self):
+        """It exists to be the control. A flush creeping in would make the
+        experiment pass for the wrong reason."""
+        out = compile_source(SIMPLE).generated.text
+        store = out.split("void bleck_code_store")[1].split("\n}")[0]
+        assert "dcbst" not in store and "icbi" not in store
+
+    def test_an_out_of_range_branch_is_refused_not_truncated(self):
+        """Masking a 26-bit field would emit a valid branch somewhere else."""
+        out = compile_source(SIMPLE).generated.text
+        assert "#define BLECK_CODE_MAX 0x01FFFFFC" in out
+        assert "#define BLECK_CODE_MIN (-0x02000000)" in out
+        assert "return BLECK_CODE_RANGE;" in out
+        # The write is downstream of the encode, never beside it.
+        hook = out.split("s32 bleck_code_hook")[1].split("\n}")[0]
+        assert hook.index("if (status != BLECK_CODE_OK)") < hook.index("bleck_code_write")
+
+    def test_the_branch_opcode_is_the_i_form(self):
+        out = compile_source(SIMPLE).generated.text
+        assert "#define BLECK_CODE_BRANCH 0x48000000U" in out
+        assert "#define BLECK_CODE_DISP 0x03FFFFFCU" in out
+
+
 class TestCxxConstructorWalk:
     """`.ctors` is emitted for C++ globals and nothing else walks it in a REL."""
 
@@ -355,7 +414,9 @@ class TestCxxConstructorWalk:
     def test_the_bounds_are_hidden_from_the_optimiser(self):
         """The markers are separate objects, so a folded compare could legally
         delete the whole loop; only the linker makes them one table."""
-        assert self._armed().count("__asm__") == 2
+        # Only the walk's own asm counts: the cache-flush helper has one too.
+        walk = self._armed().split("static void bleck_run_ctors")[1]
+        assert walk.split("void _prolog")[0].count("__asm__") == 2
 
     def test_a_sources_only_module_can_arm_it_too(self):
         """A mod with C++ and no script still needs its globals constructed."""

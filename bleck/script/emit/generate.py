@@ -423,6 +423,8 @@ def generate_bare(
         runtime_c.HEADER.format(origin=origin)
         + "\n"
         + runtime_c.MOD_HOOK
+        + "\n"
+        + runtime_c.CODE_PATCH
         + _footer(
             [],
             [],
@@ -463,6 +465,7 @@ def generate(
         "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
     )
     parts.append(runtime_c.MOD_HOOK)
+    parts.append(runtime_c.CODE_PATCH)
 
     parts.extend(_program_section(program, plan.prefix))
     parts.append(
@@ -599,6 +602,7 @@ def generate_merged(
         "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
     )
     head.append(runtime_c.MOD_HOOK)
+    head.append(runtime_c.CODE_PATCH)
 
     footer = _footer(
         entries,

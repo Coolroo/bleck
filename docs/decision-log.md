@@ -5850,3 +5850,164 @@ It is a bigger capability than doors alone. `evtpatch` needs it too, for the
 dispatcher changes that add `Call`/`ReturnFromCall`. If it is built, doors and
 that both become reachable — which argues for treating it as its own piece of
 work rather than as a door feature.
+
+---
+
+## D94 — ✅ PowerPC instruction patching, and the cache flush is load-bearing (2026-07-28)
+
+D93 left interception of `evt_door_set_door_descs` as the only route to door
+descriptors, and it needed something `bleck` could not do: write an instruction
+at a live address. That is now built, measured on this project's own code with a
+control that failed in the expected direction, and then pointed at the game.
+
+**Three unattended runs.** Full transcript of the last one in
+`work/build/ingame.log`.
+
+### The helpers
+
+Generated into every module (`runtime_c.CODE_PATCH`), so a mod's C declares the
+prototype it wants and `--gc-sections` drops the rest:
+
+| Function | What |
+|---|---|
+| `bleck_code_store(at, word)` | store only, **no flush**. Exists to be the control |
+| `bleck_code_flush(at)` | `dcbst` / `sync` / `icbi` / `isync` |
+| `bleck_code_write(at, word)` | store then flush |
+| `bleck_code_branch(from, to, out)` | encode `b to`; `0` ok, `1` misaligned, `2` out of range |
+| `bleck_code_hook(at, to)` | encode, write, flush. Writes **nothing** unless the encode succeeded |
+
+`0x48000000 | ((to - from) & 0x03FFFFFC)`. The field is 26 bits signed, so the
+range check is `-0x02000000 <= delta <= 0x01FFFFFC`; out of range is refused
+rather than masked, because masking emits a perfectly valid branch to somewhere
+else entirely.
+
+### ✅ Stage 1 — the flush is what makes the patch real
+
+`mods/code-patch-probe`. Two pairs of trivial functions in the module's own
+`.text`, patched identically, differing **only** in whether the line was
+flushed. Each pair is called once *before* the write, so the old body is already
+in the instruction cache when the store lands — otherwise the no-flush case is
+not adversarial and proves nothing.
+
+Checked against the disassembly of what was actually built
+(`powerpc-eabi-objdump`) before the run, because a constant-folded call would
+have made a working patch invisible: the bodies are two-instruction leaves
+(`lis r3,imm; blr`, no stack frame), and every call goes through a `volatile`
+function pointer, compiling to `bctrl`. `bleck_code_store` is one `stw`;
+`bleck_code_hook` is `stw; dcbst; sync; icbi; isync`.
+
+| | pair A — no flush | pair B — flush |
+|---|---|---|
+| encoded word | `48000008` | `48000008` |
+| return **before** the write | `A11A0000` | `B11B0000` |
+| return **after** the write | **`A11A0000` — unchanged** | **`B22B0000` — the jump took** |
+| first instruction, read back | `48000008` | `48000008` |
+
+⚠️ **Read the third and fourth rows together.** The unflushed word *is* in
+memory — a debugger, or any load, sees the branch. The instruction fetcher does
+not, and ran the old body anyway. That is precisely the failure this was
+expected to have: a check that passes for the wrong reason.
+
+So the flush is not a formality, **and it is not one in Dolphin either** — the
+emulator reproduced the stale-fetch behaviour without anything being asked of
+it. 🔶 Hardware is untested; nothing here was run on a Wii.
+
+⚠️ One hazard the ordering hides: at 8 bytes apart, pair A and pair B share a
+32-byte cache line, so B's `icbi` would also have invalidated A's. A's result is
+clean only because it was measured before B ran. Separate functions were not
+enough; separate *measurement order* was.
+
+✅ **The refusal was exercised, not reasoned about.** `bleck_code_hook` aimed at
+`0x90000000` from a scratch word in `.data` returned `2` and left the word at
+`DEADBEEF`. A range check that has only ever been skipped has not been tested.
+
+Game healthy throughout: attract demo `aa4_01` → `ls4_12`, counter climbing.
+
+### ✅ Stage 2 — the mechanism works on live game code
+
+`mods/door-hook-probe`, booted straight to Flipside (`--map mac_01`). Branch
+*replacement*, not a trampoline: the original never runs.
+
+⚠️ **The first attempt hung, and saying so is the point.** Its positive control
+was `effMain` (`spm/effdrv.h`, the effect driver's per-frame update, chosen as
+"cosmetic, cannot gate anything"). It counted **104,419 entries** — the
+mechanism proven outright on DOL text — and the game **sat in `SEQ_MAPCHANGE`
+for the full 90 s and never reached gameplay**. The door count of `0` in that
+run was therefore *truncation, not absence*, exactly the failure D93 had to
+correct for. 🔶 The map-change sequence appears to wait on something the effect
+driver advances; ⛔ do not stub `effMain`.
+
+Re-run with `npcDispMain` (`spm/npcdrv.h`, the NPC display pass — drawing cannot
+gate a sequence, and it only ticks once a map is *live*, so a non-zero count
+also proves gameplay was reached):
+
+| Report field | Value |
+|---|---|
+| door hook install status | `0` ok |
+| control install status | `0` ok |
+| word at `evt_door_set_door_descs`, read back | `48E83A44` = `b 0x80F66054` = `&doorHook` |
+| word at `npcDispMain`, read back | `48DB806C` = `b 0x80F65F5C` = `&controlHook` |
+| **`evt_door_set_door_descs` entries** | **0** |
+| **`npcDispMain` entries** | **62,480** |
+| map changes completed | `2` |
+| game, 90 s | `SEQ_GAME`, `mac_01`, counter `0x252` → `0xEB7C`, 29 samples |
+
+Both hooks were installed by the same code at `mod_prolog` and verified by
+readback. The control also settles the timing question the readback cannot:
+a branch written into DOL text at `mod_prolog` is still there and still firing
+tens of thousands of frames later — so "the door hook was overwritten in
+between" is excluded, not assumed.
+
+### What this says about doors
+
+⛔ **`evt_door_set_door_descs` is not called when Flipside loads**, nor during
+the attract demo that preceded it. D93 showed it is not called from any map's
+init script; this shows it is not called *at all* for these maps, from script or
+from C.
+
+That is a stronger negative than D93's and it is trustworthy for the first time:
+the run reached the map, stayed 90 s, and an identically-installed hook on
+another DOL function fired 62,480 times in the same window.
+
+🔶 **This is two maps, not the game.** `mac_01` and `aa4_01` do not use it;
+another map may. `door_init_evt` (`0x8041a2b0`) sits in the REL address range
+(D93), so door setup living in map modules — reaching descriptors some other way
+— remains the standing hypothesis. `door:` stays refused.
+
+### Still unproven
+
+- ⛔ **No trampoline.** Branch *replacement* only: the original body is
+  destroyed, so interception-without-breaking-the-original is **not** proven.
+  Every hook here is a probe, and `mac_01`'s doors were disabled for the test.
+  This is the next increment, and it is where upstream's `hookFunction` is known
+  to be wrong (D37: it blindly copies instruction[0], so it breaks on any
+  function starting with a PC-relative instruction).
+- ⛔ **No manifest surface.** Deliberately: what a declarative form should say
+  depends on what stage 2 showed, and what it showed is that the obvious target
+  is not called. Nothing is exposed in `mod.json`.
+- 🔶 **Hardware.** Dolphin reproduced the stale fetch, which is the interesting
+  direction, but the Wii's cache is not Dolphin's.
+
+### ⚠️ Correcting an earlier ✅
+
+`hook-points.md` and D38 record instruction patching as verified from `_prolog`,
+from a hand-written detour over `marioGetGameSpeedScale` in
+`scratchpad/diag/mod.c`. That is true, and D38 went further: *"the branch
+encoding, the 26-bit range check and the `dcbst`/`sync`/`icbi`/`isync` flush all
+behave."*
+
+**The flush was never a measurement.** It was present in code that worked, which
+says nothing about whether it was needed — the classic never-failed check. Stage
+1 is the first run where the flush could have been shown to be unnecessary, and
+it was not: without it, the patch does nothing. The conclusion was right; the
+evidence for it did not exist until now.
+
+### Housekeeping
+
+- ✅ **Existing modules are byte-identical.** The helpers are emitted into every
+  generated `mod.c`, and `--gc-sections` drops the unreferenced ones at the
+  relocatable link: `door-probe` and `evt-patch` rebuilt to the same `mod.rel`
+  already committed. Only a mod that actually calls one pays for it.
+- 704 tests pass (699 before). ruff clean, pylint 10.00/10.
+- One existing test needed narrowing: it counted `__asm__` across the whole
+  generated file, and the flush block adds one.

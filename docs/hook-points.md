@@ -44,6 +44,24 @@ script module.
 ✅ Verified working from `_prolog` (D38): patching instructions. A branch written
 over `marioGetGameSpeedScale` took effect and was visible on screen.
 
+✅ **And it lasts.** A branch written into DOL text at `_prolog` was still in
+place and still being taken 60,000 frames later, across two map changes — the
+hook on `npcDispMain` fired 62,480 times (D94). So `_prolog` is early enough to
+patch anything the game will call later, not only what it calls immediately.
+
+⚠️ **The flush is what makes an instruction patch real** (D94). A store lands in
+the *data* cache and the fetcher cannot see it: two identical patches in one run,
+differing only in `dcbst`/`sync`/`icbi`/`isync`, read back the same word and
+behaved differently — the unflushed one did nothing at all while looking
+perfectly applied. Use `bleck_code_write` / `bleck_code_hook`, which every
+generated module carries; see [`code-mods.md`](./code-mods.md).
+
+⛔ **Do not stub `effMain`** from a hook. Replacing it counts entries fine and
+hangs the map-change sequence: the game sat in `SEQ_MAPCHANGE` for 90 s and never
+reached gameplay (D94). 🔶 Something in the transition appears to wait on the
+effect driver. `npcDispMain` is the safe hot function to use as a control — it is
+a draw pass, so nothing gates on it.
+
 ⛔ Verified *not* working from `_prolog` (D38): `evtEntry()`. It returns, and no
 script is ever scheduled. The evt manager has not been initialised, so there is
 no entry table to allocate from.
