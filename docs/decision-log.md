@@ -5226,3 +5226,96 @@ adding to the index.
   rather than dropping them silently.
 - No `<memory>`, `<savegame>` or `<folder>` patches are emitted. `<file>` covers
   everything `bleck` produces today.
+
+---
+
+## D87 — evt script patching: the ⛔ does not apply, and what does (2026-07-28)
+
+Investigation only. **Nothing here has been run**; every claim is from headers,
+the symbol list and the ecosystem snapshot. Marked accordingly.
+
+### ✅ The ruled-out approach and the proposed one are different mechanisms
+
+`scripting.md` carries a ⛔ on patching `MapData.initScript`, and it is easy to
+read that as "patching vanilla scripts does not work". It says something
+narrower. What failed was **swapping the pointer** to a wrapper script:
+`initScript` was repointed at our own bytecode, which then tried to run the
+original. The map froze mid-load, and the 🔶 explanation was that the loader
+waits on the specific `EvtEntry` it built from `initScript`.
+
+`evtpatch` does not touch the pointer. It **mutates the bytecode the pointer
+already refers to**. The loader still builds its `EvtEntry` from the same
+address with the same identity, so the condition that deadlocked us is never
+created.
+
+That is a real distinction, not a retry. ⚠️ It is also not a guarantee — nothing
+below has been observed. But the ⛔ is not evidence against it.
+
+### ✅ Grounded facts (`spm-headers`, eu0)
+
+| Fact | Source |
+|---|---|
+| `mapDataPtr` | `0x800294e0` |
+| `getItemUseEvt(itemId)` | `0x80025164` |
+| `make_jump_table(EvtEntry *)` | `0x800d890c` |
+| `MapData.initScript` | `map_data.h` +0x18 |
+| `EvtEntry.labelIds[16]` / `jumptable[16]` | `evtmgr.h` +0x018 / +0x028 |
+| `MAX_EVT_JMPTBL` | 16 labels per script, hard ceiling |
+
+Other patchable surfaces exist beyond map init: `evt_door.h` `initScript`,
+`npcdrv.h` `initScript` and `templateinitScript`. **Item and door scripts are
+not reached through the map loader**, so the handshake that deadlocked D51 has
+no reason to apply to them — 🔶 the cheapest place to get a first positive.
+
+### ⚠️ Two constraints that will bite in this order
+
+**1. The jump table is cached per `EvtEntry`, at entry time.** `jumptable[]`
+lives in the *entry*, not the script, and `make_jump_table` fills it when the
+script starts. Mutating bytecode that moves a label leaves every running entry
+holding stale addresses. `evtpatch` rebuilds after mutation for exactly this
+reason.
+
+**Consequence for a first increment: patch same-size, in place.** Replacing an
+instruction with another of identical word count moves no label and invalidates
+no cached table. It is the only mutation that is safe without solving jump-table
+rebuilding first, and it is enough to prove the mechanism.
+
+**2. 🔶 A map's init script may not exist when `mod_prolog` runs.**
+`map_data.h` annotates `initScript` as *"In rel, linked by prolog function"* —
+the map's own REL supplies it, linked by that REL's prolog. So at our
+`mod_prolog`, `mapDataPtr("he3_01")->initScript` is plausibly null or stale
+until that map loads.
+
+D51 checked `mapDataPtr("aa4_01")` was valid at `_prolog` and recorded ✅ — but
+it checked the **`MapData`**, not the `initScript` field. That is a different
+claim, and the distinction was never tested. ⚠️ If the pointer is not yet linked,
+a boot-time patch writes into whatever the field happened to hold — which would
+look exactly like the freeze D51 recorded.
+
+**This is the first thing to measure**, and it is measurable without patching
+anything: read `mapDataPtr(name)->initScript` at `mod_prolog` and again from a
+map hook once the map is live, and compare.
+
+### The proposed first experiment
+
+Cheap, and discriminating in the way this log has repeatedly needed:
+
+1. Report `mapDataPtr("he1_01")->initScript` at `mod_prolog` and from the map
+   hook. If they differ, constraint 2 is real and boot-time map patching is
+   ruled out for the same reason D51 failed.
+2. Read the first few words of a live script and check they decode as plausible
+   `evt` bytecode — proving the pointer is a script before writing to one.
+3. Only then patch one same-size instruction and observe an effect.
+
+Step 3 is the only one that writes. Steps 1 and 2 are the instrument check that
+D83 and D76 both cost a session for skipping.
+
+### Rejected for now
+
+- ⛔ **Pointer swapping**, for map init scripts — D51 measured the freeze.
+- ⛔ **Inserting or deleting instructions** in a first increment. It moves
+  labels, and jump-table rebuilding is a second problem stacked on an unproven
+  first one.
+- ⛔ **Adding `Call`/`ReturnFromCall` opcodes** as `evtpatch` does. It requires
+  patching `evtmgrCmd`'s dispatcher and bypassing a bound check; worth revisiting
+  once in-place patching is proven, not before.
