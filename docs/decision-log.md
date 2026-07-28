@@ -4503,3 +4503,57 @@ claimed was broken. It was never broken; the rig could not see map changes
 
 Mario is invisible in a map entered this way -- no save profile (D63). It is a
 property of arriving without loading a save, not of combinations.
+
+---
+
+## D78 — Two mods run from one REL (2026-07-27)
+
+✅ **Several code mods now share one `mod.rel`, and both halves run.**
+
+```
+[t+45s] seq=GAME  map=aa4_01  gw[28]=2  gw[29]=2
+```
+
+`mods/merge-a` writes `gw[28]`, `mods/merge-b` writes `gw[29]`, and **both
+declare `script main`** -- the collision the whole feature exists to allow. Each
+script is `slot = 1; wait(60); slot = 2`, so reaching **2** means it ran to
+completion rather than merely being scheduled.
+
+Each slot is the other's positive control: the rig plainly sees `gw` writes, so
+one staying at 0 would have meant something. That check is here because of D76,
+where six runs went into a bug that did not exist for want of exactly this.
+
+### What this settles
+
+D39 recorded multi-mod loading as unsolved in this scene -- `chainrel` is a
+three-commit stub with its loader body wrapped in `#if 0`, and both major mod
+distributions tell users to enable one REL mod at a time.
+
+**That problem is real and was never on this path.** The Gecko loader opens
+exactly one `/mod/mod.rel`; it does not care how many mods went into it. Merging
+at *compile* time satisfies the limit with no runtime chaining to go wrong.
+
+### The shape that makes it work
+
+| | |
+|---|---|
+| Per-**mod** | scripts, strings, map-name literals -- each in its own namespace, `bleck_merge_a_script_main` |
+| Per-**disc** | one `_prolog`, one set of sequence hooks, one banner |
+| **Unioned** | map hooks, combinations, entry scripts -- one table each, rows pointing at whichever mod declared them |
+
+A second `_prolog` would be a second set of installs fighting over `seq_data`,
+which is why the split is the design rather than an implementation detail.
+
+### Refused rather than guessed
+
+- Two mods declaring a boot map -- a disc starts in one place
+- Mods targeting different game versions -- addresses differ per version, and a
+  merged build would bind half its calls wrongly and do it silently
+- Two mod names reducing to the same namespace (`hard-mode` / `hard mode`) --
+  named as a mod collision rather than a linker error about a generated symbol
+
+### Still open
+
+🔶 `mod_prolog` from two mods with `code.sources` would collide at link time.
+Not hit yet -- neither merge mod ships native C -- and the plan's answer is to
+detect and refuse, naming both, rather than build a registry nobody needs yet.
