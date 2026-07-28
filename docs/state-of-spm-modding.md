@@ -560,3 +560,13 @@ it is archived and far weaker. `bleck` compiles *new* scripts; the scene patches
 > with a guard that refuses rather than writes on a mismatch. ⛔ What is still
 > not done is the dispatcher surgery `evtpatch` performs, and there is no
 > trampoline — a hooked function's original body never runs.
+
+> ⚠️ **Correction, 2026-07-28 (second).** The final clause above was
+> unconditional and is now wrong: it is only true of `mode: "replace"`.
+> `code.hooks` accepts `before` and `after` as well (D97), and under those the
+> original body **does** run — reached by restoring the patched instruction
+> around the call, generated as a PowerPC assembly wrapper per hook. ⛔ "There is
+> no trampoline" stands as written; the detour pays two cache flushes per call
+> where a trampoline would pay none. Both modes return the *original's* value, so
+> a handler still cannot change what the caller receives, and ⛔ a function taking
+> more than eight integer arguments cannot be intercepted at all.

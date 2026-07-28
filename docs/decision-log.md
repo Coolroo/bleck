@@ -6609,3 +6609,102 @@ whatever the words held.
 - `DEFERRED_HOOK_MODES` and `_REPLACE_MEANS` deleted from `codespec.py`.
 - 4 tests in `tests/test_hooks.py::TestMode` asserted the old refusal and were
   rewritten rather than deleted.
+
+---
+
+## D98 — ✅ `HookMode` as an enum, and the duplicate predicate it removed (2026-07-28)
+
+A review pass for "strings with a fixed set of legal values should be enums"
+found the first one to fix, and it was a **bug introduced hours earlier in
+D97**.
+
+### Two definitions of the same question, which agreed by luck
+
+```python
+# bleck/mods/manifest/codespec.py   -- gates "does this need a guard word?"
+def intercepts(self): return self.mode in INTERCEPT_MODES
+
+# bleck/script/emit/scaffold.py     -- gates "does this get a wrapper?"
+def intercepts(self): return self.mode != "replace"
+```
+
+Both were written in D97, in different files, and they agree **only because
+there happen to be exactly three modes**. A fourth mode added to one and not the
+other emits an intercepting wrapper for a hook with no word to restore — which
+is precisely the infinite recursion `_check_interception_possible` exists to
+prevent. The build would be clean and the game would blow the stack.
+
+`HookMode.intercepts` is now the single definition, and the divergence is no
+longer expressible. This is the argument for the enum in one example: the tuple
+`INTERCEPT_MODES` was a *second* place to record the same fact, and D97 added
+a third without noticing.
+
+Three module-level structures deleted: `HOOK_MODES`, `HOOK_MODE_MEANS`,
+`INTERCEPT_MODES`.
+
+### ⚠️ `str, Enum`, not `Enum`, and not `StrEnum`
+
+Two traps, both load-bearing:
+
+- **`pyproject.toml` requires Python ≥3.10, and `enum.StrEnum` is 3.11+.** The
+  mixin form is what is available.
+- **A bare `str, Enum` still inherits `Enum.__str__`**, which renders
+  `HookMode.REPLACE`. That string reaches *generated C comments* and every error
+  message, so `__str__` is overridden to return the value. ✅ Checked by
+  rebuilding `intercept-probe` and diffing: byte-identical generated C.
+
+✅ **The wire format is unchanged.** `mod.json` round-trips as a plain string,
+tested for all three modes, asserting `"HookMode"` does not appear in the
+output. `json.dumps` emits a `str` subclass as its value — an `Enum` that was
+not a `str` would have written `"HookMode.AFTER"` into every manifest.
+
+### The published contract was stale, separately
+
+`bleck/api/v1/mods.py` described `mode` as *"⚠️ Only 'replace' exists … 'before'
+and 'after' are refused"*. That text ships in `bleck mod schema` output, so
+integrators were reading a contract that D97 had already falsified. Fixed, and
+the field is now typed `HookMode`, so the published JSON Schema carries
+`enum: ["replace", "before", "after"]` instead of a bare `type: string`. A
+tightening: every previously-valid document still validates.
+
+⚠️ **A pydantic field's docstring is published.** The enum's first draft
+explained *why it lives in `scaffold.py`* — import layering — and that appeared
+verbatim in the schema. Rationale for maintainers moved to a comment above the
+class; the docstring now says only what the values mean.
+
+### Where it lives, and why not a shared types module
+
+`bleck/script/emit/scaffold.py`, re-exported through `bleck.script.emit`.
+
+⛔ **A `bleck/common/types.py` was considered and rejected.** The usual reason
+to want one is breaking an import cycle, and an import scan showed there is no
+cycle to break — the packages form a clean DAG, and `codespec` already imports
+`bleck.script.emit`, so this costs no new edge. `bleck/common/` is
+infrastructure (`env`, `config`, `errors`, `fsio`); putting SPM's
+function-hooking vocabulary there would make the lowest layer depend on the
+domain, in exchange for nothing. The `__all__` barrels already give
+discoverability, and `emit.HookMode` says which layer owns it where
+`types.HookMode` would not.
+
+### Also fixed
+
+- 13 unannotated parameters in `bleck/mods/code/parts.py` — `spec`, `hook`,
+  `dol`, `settings`. None was cycle avoidance; every type was already imported.
+  Until this, `hook.mode` was untyped at every use site, so the enum bought
+  nothing there.
+
+### Not done, deliberately
+
+- ⛔ **`OutputKind` and `Language` stay data tables.** Each value carries a
+  callable plus several fields; an enum would either lose that or become an
+  enum-of-dataclasses. They are the pattern `docs/` already endorses.
+- ⛔ **`Symbol.kind` stays a string.** It is an *open* set, parsed from
+  spm-decomp's `type=` tag.
+- ⛔ **The pyelf2rel error dispatch stays stringly-typed** (`type(exc).__name__`).
+  Importing pyelf2rel at module scope would break startup when it is absent.
+
+Still queued: `ToolKey` (no serialization at all, three parallel structures),
+`PatchKind`, and `Sequence` — the last with a real trap, since an `IntEnum`
+serializes as a number and `code.banner.sequences` is written as names.
+
+779 tests (775 before), pylint 10.00/10.

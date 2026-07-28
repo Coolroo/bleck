@@ -33,14 +33,19 @@ was left untouched.
 |---|---|---|
 | Run its own script or C, on a loop, on arrival at a map, or on a button combo | `code.script`, `code.maps`, `code.combos` | D43, D46, D51, D77 |
 | Make a **vanilla** script call into it — a map's init script, an item's use script | `code.patches` | D89, D90, D92 |
-| Replace a **game C function** by name | `code.hooks` | D94, D95 |
+| Replace a **game C function** by name, or run **before** / **after** it with the original intact | `code.hooks` | D94, D95, D97 |
 | **Trace** a game function without breaking it — arguments, return value, original still runs | a pattern, not a manifest key | D96 |
 
-⚠️ **Two of those have a hole worth knowing.** An item patch has been *applied*
+⚠️ **One of those has a hole worth knowing.** An item patch has been *applied*
 and never *entered* — using an item needs menu navigation and input cannot be
-injected (D92). And `code.hooks` has only `mode: "replace"`, which destroys the
-function it hooks; `before` and `after` are refused by name because there is no
-trampoline (D95).
+injected (D92).
+
+⛔ **The paragraph that used to sit here said `code.hooks` has only
+`mode: "replace"` and refuses `before`/`after` for want of a trampoline (D95).
+D97 superseded it**: all three modes work, generated as a PowerPC assembly
+wrapper over D96's self-healing detour. There is still **no trampoline** — and
+still no way to change what the caller receives, since `before` and `after` both
+return the *original's* value.
 
 ⛔ **Nothing has ever run on a real Wii.** Riivolution output exists (D86) and
 Dolphin runs it, but hardware is untested, and so is Dolphin's cache model
@@ -166,7 +171,9 @@ than trusting a number written here.
 | 🔶 **A patched *item* hook has never been entered** | using an item needs menu input, which cannot be injected (D48, D92) |
 | ✅ **A game C function can be replaced by name** | `code.hooks`, guard derived from `main.dol`, 63,644 entries (D95) |
 | ✅ **The instruction-cache flush is necessary, not ceremonial** | a no-flush control read back the new word and ran the old body (D94) |
-| ⛔ **No trampoline; `replace` destroys the original** | `before`/`after` refused at build time (D95) |
+| ✅ **`before` and `after` run with the original intact** | generated asm wrapper; `beforeSaw=0` vs `afterSaw=0x901D6248` told the modes apart (D97) |
+| ⛔ **Still no trampoline** | interception restores/re-installs instead — two cache flushes per call (D97) |
+| ⛔ **More than eight integer arguments cannot be intercepted** | they live in the caller's frame; not checked and cannot be (D97) |
 | ✅ **A function can be traced with the original still running** | restore, call, re-arm — `effMain` through four map changes (D96) |
 | ⛔ **Doors are not reachable at all** | absent from five maps' init scripts, and a hook on `evt_door_set_door_descs` fired zero times (D93, D94) |
 | ✅ **C++ code mods build** | `.ctors` survives `-r --gc-sections` and elf2rel; markers checked at link (D85) |
@@ -348,38 +355,35 @@ DOL (D44), native C and C++ sources (D46, D85), several code mods in one REL
 (D78), a setup reader/writer (D80), and the setup-duplication question (D62) all
 closed. What remains, in rough order of value:
 
-1. **A trampoline**, so `code.hooks` can offer `mode: "before"`/`"after"`.
-   Today `replace` destroys the function, which is why every hook so far is a
-   probe. It needs the displaced instruction decoded well enough to know whether
-   it is position-dependent, the ones that cannot move refused, and
-   `<relocated>; b <original + 4>` emitted. ⚠️ Upstream's `hookFunction` copies
-   instruction[0] blindly and breaks on a PC-relative one (D37). ⚠️ D96's
-   self-healing detour already keeps the original running without relocating
-   anything, at the cost of two cache flushes per call — so the trampoline is a
-   performance and ergonomics story now, not a capability one.
-2. **A save state**, which needs a human once (D63). It unblocks the item hook
+⛔ **"A trampoline, so `code.hooks` can offer `mode: \"before\"`/`\"after\"`" was
+item 1 here and is now closed** (D97) — both modes ship, generated as an
+assembly wrapper over D96's self-healing detour. A trampoline itself is *still
+not built* and has dropped to an optimisation: it would avoid two cache flushes
+per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
+
+1. **A save state**, which needs a human once (D63). It unblocks the item hook
    nobody has seen fire, player state, and anything past the attract demo.
-3. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** Raw memory access is the biggest
+2. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** Raw memory access is the biggest
    remaining gap in the language.
    ⚠️ **Maps did *not* need it** (D51): `code.maps` watches the map-change work
    instead, because repointing a pointer the game owns deadlocked it. Expect the
    same trap for NPCs — read D51 first. ⛔ It does not open doors either: D93 and
    D94 showed the descriptor registration is not reachable at all.
-4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
+3. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need
    not be. Small, and removes a papercut the language shipped with.
-5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+4. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
    `switch` is done (D84), though nothing has run one in-game yet.
    ⚠️ `RUN_EVT` is *emitted* nowhere — the map-hook design that used it was
    ruled out (D51) — so `spawn` starts from scratch.
-6. **Switch to the decomp's symbol table** (D39).
+5. **Switch to the decomp's symbol table** (D39).
    `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
    `spm.eu0.lst`'s 1,111 — and carries sizes and types, so `user_func` targets
    and `code.hooks` targets could be validated rather than just resolved. One
    regex parses it. ⚠️ It states no licence (D54), so it must stay a
    user-supplied clone.
-7. **Run something on a real Wii.** The Riivolution output is built for it and
+6. **Run something on a real Wii.** The Riivolution output is built for it and
    has never touched one.
 
 ---
@@ -828,9 +832,12 @@ What to know before extending it:
   differing only in `dcbst`/`sync`/`icbi`/`isync`, read back the same word and
   behaved differently — the unflushed one did nothing while looking applied.
   D38 said the flush "behaves"; it had never been shown to be *necessary*.
-- ⛔ **Branch replacement only.** The original body is destroyed. A trampoline
-  is the next increment, and upstream's `hookFunction` is not a drop-in — it
-  blindly copies instruction[0] (D37).
+- ⛔ **The branch itself replaces.** Written on its own, it destroys the
+  original body. Keeping the original means restoring the instruction around the
+  call — D96's self-healing detour, which `mode: "before"`/`"after"` now
+  generates for you (D97). ⛔ **A trampoline is still not built**, and upstream's
+  `hookFunction` is not a drop-in for one — it blindly copies instruction[0]
+  (D37).
 - ✅ **`code.hooks` is the manifest surface** (D95). D94 shipped none on purpose;
   this is it, with the guard *derived* from the base disc's `main.dol` so a user
   never types an instruction word:
@@ -841,8 +848,37 @@ What to know before extending it:
 
   Positive and negative both measured: 63,644 entries in `mac_01`, and a second
   hook on the same function refused by the guard with `0` entries and the
-  instruction still pointing at the first. ⚠️ `mode` is `replace` **only**;
-  `before`/`after` are refused rather than silently becoming it.
+  instruction still pointing at the first.
+- ✅ **All three modes work** (D97). `before` runs your function then the
+  original; `after` runs the original then yours. Both return the **original's**
+  value, so a handler cannot change what the caller receives.
+
+  ```json
+  "hooks": [{ "function": "GetBasicPlayer", "call": "afterGBP", "mode": "after" }]
+  ```
+
+  What to know before extending it:
+
+  - The wrapper is **generated PowerPC assembly**, one per intercepting hook, in
+    `bleck/script/emit/runtime_intercept.py`. Assembly because a hook is
+    resolved from a symbol *name* and nothing carries a signature — a generated
+    C wrapper would have to guess one, and an integer guess silently drops float
+    arguments, which the EABI passes in `f1-f8` separately from `r3-r10`. The
+    wrapper saves and restores both sets and interprets nothing.
+  - Interception needs a derived guard word, so a hook whose address the DOL does
+    not map (a REL address) is a build **error** under `before`/`after`, where
+    `replace` merely warns and installs unguarded.
+  - ⛔ **More than eight integer arguments cannot be intercepted** — they live in
+    the caller's frame and the wrapper builds its own. Not checked, and cannot be
+    without signatures.
+  - ⚠️ **The handler's prototype must still match the target.** The wrapper
+    protects the *original* from a wrong one; the handler still reads whatever it
+    declared.
+  - ✅ Verified in one 120 s run, `mods/intercept-probe`: `beforeSaw = 0` (with
+    the field shown non-zero at rest, so the zero means something) against
+    `afterSaw = 0x901D6248`, and `result − arg = 0xD8`, independently
+    reproducing D96's `GetBasicPlayer` finding. 26,996 SEQ_GAME frames, map names
+    readable as text. 🔶 Dolphin only, as ever.
 - ⛔ **Doors are still not reachable.** `evt_door_set_door_descs` was hooked
   successfully and entered **zero** times while Flipside loaded and ran 90 s,
   with a control hook firing 62,480 times in the same window. 🔶 Two maps only.

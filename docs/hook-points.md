@@ -65,8 +65,9 @@ base disc's `main.dol`:
 ```
 
 ⚠️ **`replace` means the original never runs**, so the hooked function's whole
-job moves into the mod. `before` and `after` are refused at build time rather
-than quietly becoming `replace`.
+job moves into the mod. ✅ `before` and `after` keep it running (D97) — the
+sentence here used to say they were refused at build time, which D95 was right
+about and D97 superseded. Both return the *original's* value.
 
 ⛔ **Do not stub `effMain`** from a hook. Replacing it counts entries fine and
 hangs the map-change sequence: the game sat in `SEQ_MAPCHANGE` for 90 s and never
@@ -241,24 +242,34 @@ calling `evtEntry`, rather than inferring it from a missing effect.
 
 ## A fifth timing: inside any function, by name
 
-✅ D95, D96. `code.hooks` writes a branch over a named function's first
+✅ D95, D96, D97. `code.hooks` writes a branch over a named function's first
 instruction from `_prolog`, so a mod's own C runs **whenever the game calls that
 function** — a hook point chosen by name rather than from the four fixed
 timings above.
 
-Two shapes, and the difference is the whole thing:
+⚠️ This table used to read "Two shapes". Since D97 there are **three declarable
+shapes** plus the hand-written instrument:
 
-| | `replace` | trace |
-|---|---|---|
-| Original body | never runs | runs, every call |
-| Return value | the mod invents one | the original's, recorded |
-| Declared in `mod.json` | yes, `code.hooks` | no — a pattern over one |
-| Cost per call | none | two cache flushes, 7–10 time-base ticks |
+| | `replace` | `before` / `after` | hand-written trace |
+|---|---|---|---|
+| Original body | never runs | runs, every call | runs, every call |
+| Return value | the mod invents one | **the original's** | the original's, recorded |
+| Declared in `mod.json` | yes, `code.hooks` | yes, `code.hooks` | no — a pattern over one |
+| Cost per call | none | two cache flushes | two cache flushes, 7–10 time-base ticks |
+| Unmappable address | warns, installs unguarded | build **error** | n/a |
 
-The trace restores the original instruction, calls the function through its own
-symbol, and re-installs the branch — so it is available on functions that
-`replace` breaks. ⛔ Stubbing `effMain` wedges `SEQ_MAPCHANGE` (D94); **tracing**
-it ran through four map changes (D96).
+`before` and `after` are a generated PowerPC assembly wrapper (D97) over the same
+mechanism as the trace: restore the original instruction, call the function
+through its own symbol, re-install the branch — so both are available on
+functions that `replace` breaks. ⛔ Stubbing `effMain` wedges `SEQ_MAPCHANGE`
+(D94); **tracing** it ran through four map changes (D96). ⛔ There is still **no
+trampoline**; that is what the two flushes buy.
+
+Reach for the hand-written trace when the *instrument* is the point — it records
+arguments and results into a report block. Reach for `before`/`after` when the
+mod wants to run its own code and does not want to hand-write a detour.
+⚠️ Neither can change what the caller receives, and ⛔ neither can intercept a
+function taking more than eight integer arguments (D97).
 
 ⚠️ Safe timings still apply *inside* a hook. The hook fires whenever the game
 calls the function, which may be long before evt is alive — so `evtEntry` from a

@@ -28,8 +28,8 @@ this file is forward-looking only.
 | **Riivolution output** | ✅ `--output riivolution` writes an XML plus only the changed files — 5.3 MB and 3.2 s against minutes for an image (D86). The loader travels inside the patched `main.dol`, so nothing has to be configured in the emulator. 🔶 **Dolphin only; never run on a Wii** |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
-| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ⛔ Branch *replacement* only — no trampoline. ✅ A mod can still keep the original by restoring it around the call: the self-healing detour records arguments **and** return values, and traced `mapDataPtr` and `effMain` live (D96) |
-| **Tracing a game function** | ✅ The self-healing detour records arguments **and** return values while the original still runs — `mapDataPtr`, `effMain` and `GetBasicPlayer` measured live (D96). A pattern over `code.hooks`, deliberately **not** a manifest field. ⚠️ Floats are invisible to it |
+| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ✅ **All three modes** — `replace`, `before` and `after` — via a generated PowerPC **assembly** wrapper per intercepting hook (D97); `before` and `after` both return the *original's* value. ⛔ Still **no trampoline**: interception reuses D96's self-healing detour, so it pays two cache flushes per call. ✅ A mod can also keep the original by hand-restoring it around the call: arguments **and** return values, `mapDataPtr` and `effMain` traced live (D96) |
+| **Tracing a game function** | ✅ The self-healing detour records arguments **and** return values while the original still runs — `mapDataPtr`, `effMain` and `GetBasicPlayer` measured live (D96). Hand-written tracing is still a pattern over `code.hooks`, deliberately **not** a manifest field; `mode: "before"`/`"after"` (D97) covers the declarative case over the same mechanism. ⚠️ Floats are invisible to the trace record either way |
 | **Doors** | ⛔ **Unreachable, with a reason.** `DoorDesc` has no lookup by name; descriptors are registered per map by `evt_door_set_door_descs`. That call is absent from all five map init scripts walked (D93, positive control 8 hits), and a branch installed over the function itself was entered **zero** times across 90 s in Flipside while a control hook fired 62,480 times (D94). `door:` is refused by the manifest. 🔶 Two maps is not the game; `door_init_evt` sits in the REL range, so door setup plausibly lives in each map's own module |
 | **US (`us0`) support** | 🔴 **Blocked on a US disc image.** `work/extracted/` holds `eu0` only, so nothing US-targeted can be extracted, built or booted here. `base`/`code.target` already carry the version, and the symbol lists exist — what is missing is a disc |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
@@ -137,31 +137,6 @@ range, so door setup plausibly lives in each map's own module. Hooking that, or
 finding the caller of `evt_door_set_door_descs` in a map that does use it, is the
 next cheap experiment. Two maps is not the game.
 
-### 🟢 A trampoline, so `mode: "before"` and `"after"` can exist
-
-`code.hooks` ships with `mode: "replace"` and refuses the other two by name
-(D95), because keeping the original means relocating its first instruction and
-upstream's `hookFunction` gets that wrong — it copies instruction[0] blindly, so
-it breaks on any function starting with a PC-relative one (D37).
-
-What it needs: decode the displaced instruction well enough to know whether it
-is position-dependent, refuse the ones that cannot be moved, and emit a
-trampoline of `<relocated instruction>; b <original + 4>`. The refusal matters
-more than the coverage — a trampoline that silently mis-relocates is worse than
-none. `bleck/backends/dol.py` already reads the words to decide from.
-
-This is the single largest thing standing between `code.hooks` and being usable
-for anything other than a probe: today, *declaring* a hook means taking over the
-function's entire job.
-
-⚠️ **Partly answered from an unexpected direction (D96).** The *self-healing
-detour* keeps the original running without relocating anything: restore the
-first instruction, call the function, re-install the branch. Measured through
-four map changes on `effMain` — the function D94 says must not be stubbed. So
-"intercept without breaking" is no longer unproven; what a trampoline would add
-is doing it **without two cache flushes per call**, and without the mod having to
-write the handler by hand. Rank it accordingly.
-
 ### 🔴 US (`us0`) support — blocked on a disc
 
 `base` and `code.target` already carry the version, symbol lists exist for every
@@ -183,6 +158,36 @@ install and an SD card settles it.
 
 `plus`, `minus`, `home` and the d-pad. One `button-probe` run each; `a`, `b`,
 `1`, `2` are confirmed (D68).
+
+### 🟡 A trampoline — no longer a blocker, only an optimisation
+
+⛔ **This entry used to read "the single largest thing standing between
+`code.hooks` and being usable for anything other than a probe". D97 retracts
+that ranking**, and it is kept here rather than deleted because the mis-ranking
+is the useful part: the mechanism was never the gap. Down-ranked from 🟢 near
+the top of this list to here.
+
+✅ `code.hooks` now accepts all three modes (D97). `before` and `after` are
+generated as a PowerPC **assembly** wrapper per intercepting hook, over D96's
+self-healing detour — restore the first instruction, call the original,
+re-install the branch. No instruction is relocated, so upstream `hookFunction`'s
+blind instruction[0] copy (D37) is not on this path at all.
+
+⛔ **A real trampoline is still not built.** What it would still add, and the
+only reasons left to want one:
+
+- The detour pays **two cache flushes per call**; a trampoline pays none. D96
+  measured that at 7–10 time-base ticks — ~1.1% on `effMain`, and unbounded
+  relative overhead on a leaf like `GetBasicPlayer`, whose own body measured 0.
+  🔶 Those are Dolphin's cycle counts, not a 750's, and no workload has yet been
+  slowed by it: 26,996 SEQ_GAME frames ran with two hooks installed (D97).
+- No wrapper at all. A trampoline of `<relocated instruction>; b <original + 4>`
+  is reached with a plain branch.
+
+If it is ever built, the refusal matters more than the coverage — a trampoline
+that silently mis-relocates is worse than none. Decode the displaced instruction
+well enough to know whether it is position-dependent and refuse the rest;
+`bleck/backends/dol.py` already reads the words to decide from.
 
 ### 🟡 Speed, only if profiling names it
 
@@ -394,10 +399,12 @@ risky part of this project.
 1. **A GUI over the JSON contract.** The largest remaining step toward the thing
    `vision.md` describes, and it is unblocked: the schema is published and every
    mod in the tree round-trips through it.
-2. **A trampoline**, so `mode: "before"`/`"after"` can stop being refusals.
-   Today, declaring a hook means taking over the function's entire job.
-3. **A save state**, which needs a human once and then unblocks item hooks,
+2. **A save state**, which needs a human once and then unblocks item hooks,
    player state, and anything past the attract demo.
+
+⛔ **"A trampoline, so `mode: \"before\"`/`\"after\"` can stop being refusals" used
+to be item 2 here.** D97 shipped both modes without one; the remaining case for
+a trampoline is two cache flushes per call, and it is 🟡 far down the list above.
 
 Licensing (step 1 of the historical plan) still has to be settled before any
 release, and still blocks nothing else.

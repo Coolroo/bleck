@@ -449,9 +449,13 @@ without writing an install sequence. ✅ Measured through the declarative path
 - **`call`** — a function in the mod's own sources. Checked against what those
   sources define, reusing the same scan `code.patches` uses, so a typo is caught
   before `elf2rel` reports it as a missing *game* symbol.
-- **`mode`** — `"replace"` only. `"before"` and `"after"` are **refused** with a
-  message naming what replace does instead; the field exists now so adding
-  interception later is not a breaking change.
+- **`mode`** — `"replace"`, `"before"` or `"after"`. ✅ All three work (D97).
+  `before` runs the mod's function and then the original; `after` runs the
+  original and then the mod's function. **Both return the original's value**, so
+  a handler cannot change what the caller receives.
+  ⛔ The paragraph that used to sit here said `before` and `after` were refused
+  at build time for want of a trampoline (D95). That refusal is gone; there is
+  still no trampoline — see below.
 
 ### ⚠️ `replace` means the original never runs
 
@@ -462,8 +466,69 @@ whole implementation** — same arguments, same return value, same job. A hook o
 stops the sequence.
 
 Reaching for `before` because you want the original to keep working is exactly
-the case that must not silently get `replace`, which is why the mode is refused
-rather than defaulted.
+the case that must not silently get `replace`, which is why `replace` is written
+out rather than defaulted to. Say `before` or `after` and you get interception.
+
+### ✅ `before` and `after` — interception, still without a trampoline
+
+D97. The generated module carries a **PowerPC assembly wrapper per intercepting
+hook**, emitted by `bleck/script/emit/runtime_intercept.py`. The branch points at
+the wrapper; the wrapper calls the mod's function and the original in the
+declared order, and returns the **original's** `r3`.
+
+Reaching the original is D96's *self-healing detour*, unchanged: restore the
+first instruction, call, re-install the branch. ⛔ **This is not a trampoline and
+one is still not built** — the detour pays two cache flushes per call where a
+trampoline would pay none. `replace` codegen is untouched, and every
+pre-existing code mod builds byte-identical.
+
+**Why assembly rather than a generated C wrapper.** A hook is resolved from a
+symbol *name*, and nothing in the symbol list carries a signature, so a C
+wrapper would have to guess one. ⛔ Guessing `(u32, u32, u32, u32)` was ruled out
+and is not a near miss: the PowerPC EABI passes floats in `f1-f8`, entirely
+separately from `r3-r10`, and C code that never mentions a float may clobber
+them freely — so the original would be called with corrupted arguments,
+silently, and only for functions that happen to take floats. The assembly
+wrapper saves `r3-r10` and `f1-f8`, calls what it needs to, and puts them back.
+Nothing in it interprets an argument.
+
+The original is called through `CTR`, not `bl`: a 26-bit relative branch from
+the module to the DOL can be out of range.
+
+**Interception needs a derived guard**, because the detour restores that word to
+reach the original. So a hook whose address the DOL does not map — a REL address
+— is a build **error** under `before`/`after`, where `replace` merely warns and
+installs unguarded (see below). Left alone it would build cleanly and recurse
+into itself until the stack ran out.
+
+What is still not true:
+
+- ⛔ **More than eight integer arguments cannot be intercepted.** They live in
+  the caller's frame and the wrapper builds its own. **Not checked, and cannot
+  be** without signatures.
+- ⚠️ **The handler's prototype must still match the target.** The wrapper
+  protects the *original* from a wrong handler prototype — every register is
+  restored from the frame before the original is called — but the handler itself
+  reads whatever it declared.
+- 🔶 **Dolphin only.** As with every cache-flush result here (D94, D96), this is
+  Dolphin's cache model and not a real 750's.
+
+✅ **Measured once, 120 s, `mods/intercept-probe`.** The probe was built to tell
+the two modes *apart*, not merely to show a hook installing: the wrapper calls
+`bleck_trace_result` when the original returns, so at handler time `lastResult`
+holds the previous call's value under `before` and this call's under `after`.
+
+| Word | Value | |
+|---|---|---|
+| `beforeSaw` | **0** | the original had not run |
+| `afterSaw` | **0x901D6248** | the original had returned |
+| `afterSaw − arg` | **0xD8** | reproduces D96's `GetBasicPlayer` result |
+| `blind`, `depth` | 0, 0 | |
+| SEQ_GAME frames | 26,996 | two full `aa4_01` → `ls4_12` cycles |
+
+`beforeSaw = 0` is not vacuous: `traces[0].lastResult` reads `0x80402DE4` at
+rest, so the field is written and its being zero means the original genuinely
+had not run — the control D70/D73/D74 went without.
 
 ### The guard is derived, not declared
 
@@ -485,7 +550,9 @@ wrong game version therefore costs a status, not a corrupt branch.
 
 **A guard is never invented.** An address the DOL does not map — a REL address,
 say — gets `guarded = 0`, installs unguarded, and the build warns saying exactly
-why. An address that resolves into the DOL's *data* rather than its text is
+why. ⚠️ Under `before` or `after` that same case is a build **error** instead,
+because interception restores the guard word to reach the original and there is
+nothing to restore (D97). An address that resolves into the DOL's *data* rather than its text is
 guarded but warned about too: eu0's data reaches `0x805B7720`, so a wrong
 address can easily look like code.
 
@@ -509,9 +576,12 @@ final answer.
 
 ### Tracing a function instead of replacing it
 
-✅ Measured, D96. A hook replaces, so a handler can record the arguments and
-never the return value — and disables the function it is studying. The
-**self-healing detour** gets both back without a trampoline:
+✅ Measured, D96. A `replace` hook takes the function over, so a handler can
+record the arguments and never the return value — and disables the function it
+is studying. (`before`/`after` do not have that problem; they are this same
+detour, generated. What follows is the hand-written form, which is what you want
+when the *instrument* is the point.) The **self-healing detour** gets both back
+without a trampoline:
 
 1. record the arguments;
 2. **restore** the original first instruction (write + flush);
@@ -606,12 +676,18 @@ costing ~9 ticks is not credible on a real 750, which has to drain the pipeline.
 
 ### What this does not do yet
 
-- ⛔ **No trampoline.** This is branch *replacement*: the original body never
-  runs, unless the mod restores it around the call itself (see the trace above).
-  Upstream's `hookFunction` is not a drop-in either — it blindly copies
+- ⛔ **No trampoline.** Still literally true, and the reason to want one is
+  unchanged: the detour pays two cache flushes per call where a trampoline pays
+  none (D97). ⚠️ **What is no longer true is "replacement is all this is"** — the
+  branch replaces, but the original is reached by restoring the instruction
+  around the call, whether the mod writes that itself (the trace above) or
+  declares `mode: "before"`/`"after"` and gets it generated. Upstream's
+  `hookFunction` is not a drop-in for a trampoline either — it blindly copies
   instruction[0], so it breaks on any function starting with a PC-relative
   instruction (D37). Nothing here relocates an instruction, which is why a
   function beginning with a branch traces normally.
+- ⛔ **More than eight integer arguments cannot be intercepted** (D97) — they sit
+  in the caller's frame. Not checked, and not checkable without signatures.
 - ⛔ **No build-time range check.** The loader chooses where the module lands, so
   "can this branch be encoded" is only answerable at run time. The encoder
   refuses rather than masking, and the status says which way it failed.
@@ -703,5 +779,9 @@ Needs a decision before any upstream code is copied into this repo.
    `main.dol` instead, so a built disc needs no emulator configuration at all.
 5. ~~**Consider `chainrel`.**~~ ⛔ Superseded by D78: mods merge at compile time.
 
-What is left is in [`roadmap.md`](./roadmap.md), and the largest item is a
-trampoline so `mode: "before"`/`"after"` can exist.
+What is left is in [`roadmap.md`](./roadmap.md).
+
+⛔ **This line used to read "the largest item is a trampoline so
+`mode: \"before\"`/`\"after\"` can exist".** D97 shipped both modes without one
+and explicitly retracts that ranking; a trampoline is now an optimisation worth
+two cache flushes per call, ranked accordingly in `roadmap.md`.

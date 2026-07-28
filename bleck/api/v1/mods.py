@@ -120,16 +120,19 @@ class Hook(BaseModel):
     )
     call: str = Field(
         description=(
-            "A function in the mod's sources. It takes over completely, so it "
-            "must take the same arguments and return what the caller expects."
+            "A function in the mod's sources. It must take the same arguments "
+            "as the function it hooks, in every mode; nothing can check this, "
+            "because a symbol list carries addresses and not signatures."
         )
     )
-    mode: str = Field(
-        default="replace",
+    mode: codespec.HookMode = Field(
+        default=codespec.HookMode.REPLACE,
         description=(
-            "⚠️ Only 'replace' exists, and replace means the original NEVER "
-            "RUNS -- the mod's function does the whole job. 'before' and "
-            "'after' are refused rather than quietly treated as 'replace'."
+            "Which side of the original the mod's function runs on. 'replace' "
+            "means the original NEVER RUNS and the mod's function does the "
+            "whole job. 'before' runs the mod's function then the original; "
+            "'after' runs the original then the mod's function. Under both, "
+            "the caller receives the ORIGINAL's return value."
         ),
     )
 

@@ -12,6 +12,7 @@ import struct
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from bleck.api import v1
 from bleck.backends import dol
@@ -219,7 +220,7 @@ class TestInterception:
             symbol="npcDispMain",
             expect=0x9421FE40,
             guarded=True,
-            mode=mode,
+            mode=emit.HookMode(mode),
         )
         return generated([hook])
 
@@ -294,7 +295,7 @@ class TestInterception:
             symbol="npcDispMain",
             expect=1,
             guarded=True,
-            mode="before",
+            mode=emit.HookMode.BEFORE,
         )
         second = emit.FunctionHook(
             call="b",
@@ -302,7 +303,7 @@ class TestInterception:
             symbol="effMain",
             expect=2,
             guarded=True,
-            mode="after",
+            mode=emit.HookMode.AFTER,
         )
         out = generated([first, second])
         assert "bleck_hook_wrap_0:" in out
@@ -323,7 +324,7 @@ class TestInterception:
             symbol="npcDispMain",
             expect=1,
             guarded=True,
-            mode="before",
+            mode=emit.HookMode.BEFORE,
         )
         out = generated([plain, watched])
         assert "(const void *) &taken_over" in out
@@ -423,6 +424,22 @@ class TestMode:
 
     def test_replace_does_not_intercept(self):
         assert not manifest(WHOLE).code.hooks[0].intercepts
+
+    @pytest.mark.parametrize("mode", ["replace", "before", "after"])
+    def test_the_mode_round_trips_as_a_plain_json_string(self, mode):
+        """`mode` is a wire format. It became an enum for the sake of the code
+        reading it, and a `str` subclass so `mod.json` did not have to change --
+        an `Enum` that is not one would serialize as "HookMode.AFTER"."""
+        written = manifest({**WHOLE, "mode": mode}).to_json()
+        assert f'"mode": "{mode}"' in written
+        assert "HookMode" not in written
+
+    def test_one_definition_decides_whether_the_original_runs(self):
+        """`intercepts` gates two separate things -- whether a wrapper is
+        generated, and whether a guard word is required. They were briefly two
+        expressions that agreed only because there were three modes."""
+        for mode in emit.HookMode:
+            assert mode.intercepts is (mode is not emit.HookMode.REPLACE)
 
     def test_a_nonsense_mode_says_what_each_real_one_does(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:
@@ -598,10 +615,17 @@ class TestApi:
         assert document.hooks[0].mode == "replace"
         assert document.to_manifest().hooks == spec.hooks
 
-    def test_the_contract_rejects_what_the_manifest_rejects(self):
-        bad = v1.Hook(function="npcDispMain", call="f", mode="around")
-        with pytest.raises(mod_manifest.ManifestError, match="not a hook mode"):
-            bad.to_manifest()
+    def test_the_contract_rejects_a_nonsense_mode_at_construction(self):
+        """Earlier than the manifest does, and the error names the real modes --
+        pydantic sees the enum, so an integrator gets them from the schema."""
+        with pytest.raises(ValidationError, match="'replace', 'before' or 'after'"):
+            v1.Hook(function="npcDispMain", call="f", mode="around")
+
+    def test_the_published_schema_lists_the_modes(self):
+        """`bleck mod schema` is the contract other programs integrate against,
+        so the closed set has to be in it rather than a bare string."""
+        schema = v1.ModDocument.model_json_schema()
+        assert schema["$defs"]["HookMode"]["enum"] == ["replace", "before", "after"]
 
     def test_the_contract_carries_an_intercepting_mode_through(self):
         hook = v1.Hook(function="npcDispMain", call="f", mode="after")

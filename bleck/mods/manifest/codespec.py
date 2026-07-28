@@ -154,20 +154,11 @@ class ScriptPatch:
         return int(self.target, 0) if self.kind == "item" else -1
 
 
-#: What `code.hooks[].mode` accepts. `replace` takes the function over; the
-#: other two keep it, by restoring its first instruction around the call rather
-#: than relocating it into a trampoline (D96).
-HOOK_MODES = ("replace", "before", "after")
-
-#: What each mode does, quoted back when one is misspelled.
-HOOK_MODE_MEANS = {
-    "replace": "the mod's function instead of the original, which never runs",
-    "before": "the mod's function first, then the original",
-    "after": "the original first, then the mod's function",
-}
-
-#: Modes that keep the original running, and so need a wrapper and a guard word.
-INTERCEPT_MODES = ("before", "after")
+#: Re-exported so a manifest reader does not have to know the enum lives in the
+#: emitter. `replace` takes the function over; the other two keep it, by
+#: restoring its first instruction around the call rather than relocating it
+#: into a trampoline (D96, D97).
+HookMode = emit.HookMode
 
 
 @dataclass(frozen=True)
@@ -188,13 +179,13 @@ class FunctionHook:
     call: str
     """A function in this mod's own sources, matching what it replaces."""
 
-    mode: str = "replace"
-    """How the mod's function relates to the original: replace, before, after."""
+    mode: HookMode = HookMode.REPLACE
+    """Which side of the original the mod's function runs on."""
 
     @property
     def intercepts(self) -> bool:
         """Whether the original still runs. Needs a guard word to be derivable."""
-        return self.mode in INTERCEPT_MODES
+        return self.mode.intercepts
 
     @property
     def is_address(self) -> bool:
@@ -724,8 +715,9 @@ def build_hook(function: str, call: str, mode: str, where: str) -> FunctionHook:
     The symbol is *not* resolved here: that needs the target's list, which the
     build loads. This checks only what is decidable from the manifest alone.
     """
-    _check_hook_mode(mode, where)
-    hook = FunctionHook(function=function.strip(), call=call, mode=mode)
+    hook = FunctionHook(
+        function=function.strip(), call=call, mode=_parse_hook_mode(mode, where)
+    )
     if not _C_NAME_RE.match(call):
         raise ManifestError(
             f"{where}: 'call' is {call!r}, which is not a C function name.\n"
@@ -745,10 +737,16 @@ def build_hook(function: str, call: str, mode: str, where: str) -> FunctionHook:
     return hook
 
 
-def _check_hook_mode(mode: str, where: str) -> None:
-    if mode in HOOK_MODES:
-        return
-    hint = "".join(f"\n    {name}: runs {why}" for name, why in HOOK_MODE_MEANS.items())
+def _parse_hook_mode(mode: str, where: str) -> HookMode:
+    """The wire value decoded, or an error naming what each real mode does.
+
+    The names alone do not say which order they run in, which is the one thing
+    someone choosing between them needs.
+    """
+    found = HookMode.parse(mode)
+    if found is not None:
+        return found
+    hint = "".join(f"\n    {known}: runs {known.means}" for known in HookMode)
     raise ManifestError(f"{where}: 'mode' is {mode!r}, which is not a hook mode.{hint}")
 
 

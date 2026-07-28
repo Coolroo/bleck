@@ -20,6 +20,7 @@ from bleck.common import env
 from bleck.common.errors import BleckError
 from bleck.mods import registry as mod_registry
 from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
+from bleck.mods.manifest.codespec import FunctionHook
 from bleck.mods.registry import Mod
 from bleck.script import ScriptError, compile_source, emit
 
@@ -104,7 +105,7 @@ class ScriptSource:
 _SUFFIX_LIST = ", ".join(languages.SOURCE_SUFFIXES)
 
 
-def collect_sources(mod: Mod, spec) -> list[Path]:
+def collect_sources(mod: Mod, spec: CodeSpec) -> list[Path]:
     """Resolve `code.sources` to actual C and C++ files.
 
     A directory entry contributes every source beneath it, sorted, so a build
@@ -203,7 +204,9 @@ def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     ]
 
 
-def combo_hooks_for(mod: Mod, spec, settings) -> list[emit.ComboHook]:
+def combo_hooks_for(
+    mod: Mod, spec: CodeSpec, settings: project_config.Config
+) -> list[emit.ComboHook]:
     """Resolve each `code.combos` binding against `bleck.yml`.
 
     Joined here so a mod never contains a button mask.
@@ -255,7 +258,7 @@ def _defined_functions(sources: list[Path]) -> list[str]:
     return names
 
 
-def patches_for(mod: Mod, spec, sources: list[Path]) -> list[emit.ScriptPatch]:
+def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.ScriptPatch]:
     """Resolve `code.patches` for the emitter, checking each `call` exists.
 
     Without this the typo reaches `elf2rel`, which reports it as a missing
@@ -317,7 +320,10 @@ def _base_dol(base: Path) -> dol_reader.Dol | None:
 
 
 def function_hooks_for(
-    mod: Mod, spec, sources: list[Path], table: symbol_tables.SymbolTable
+    mod: Mod,
+    spec: CodeSpec,
+    sources: list[Path],
+    table: symbol_tables.SymbolTable,
 ) -> ResolvedHooks:
     """Resolve `code.hooks`: name to address, and derive each guard word.
 
@@ -358,7 +364,7 @@ def function_hooks_for(
     return ResolvedHooks(hooks=hooks, warnings=warnings)
 
 
-def _check_interception_possible(hook, address: int, where: str) -> None:
+def _check_interception_possible(hook: FunctionHook, address: int, where: str) -> None:
     """`before` and `after` need a guard word; `replace` does not.
 
     Interception reaches the original by restoring the function's first
@@ -385,7 +391,7 @@ def _check_interception_possible(hook, address: int, where: str) -> None:
     )
 
 
-def _check_hook_call(hook, defined: list[str], where: str) -> None:
+def _check_hook_call(hook: FunctionHook, defined: list[str], where: str) -> None:
     """The mod has to define the function it hands the game control to.
 
     Without this the typo reaches `elf2rel`, which reports it as a missing
@@ -404,7 +410,7 @@ def _check_hook_call(hook, defined: list[str], where: str) -> None:
     )
 
 
-def _signature_rule(hook) -> str:
+def _signature_rule(hook: FunctionHook) -> str:
     """Why the mod's function has to match the one it hooks -- which differs by
     mode, and gets the reasoning wrong in both directions if it does not."""
     if not hook.intercepts:
@@ -420,7 +426,9 @@ def _signature_rule(hook) -> str:
     )
 
 
-def _hook_address(hook, table: symbol_tables.SymbolTable, where: str) -> int:
+def _hook_address(
+    hook: FunctionHook, table: symbol_tables.SymbolTable, where: str
+) -> int:
     """The address a hook's `function` names, resolved against the target list."""
     if hook.is_address:
         return hook.address
@@ -440,7 +448,9 @@ def _hook_address(hook, table: symbol_tables.SymbolTable, where: str) -> int:
     )
 
 
-def _section_warning(hook, address: int, dol, where: str) -> list[str]:
+def _section_warning(
+    hook: FunctionHook, address: int, dol: dol_reader.Dol, where: str
+) -> list[str]:
     """A hook aimed at the DOL's *data* is almost certainly a wrong address.
 
     Warned rather than refused: the guard still makes it deterministic, and the
@@ -458,7 +468,13 @@ def _section_warning(hook, address: int, dol, where: str) -> list[str]:
     ]
 
 
-def _no_guard_warning(hook, address: int, base: Path, dol, where: str) -> str:
+def _no_guard_warning(
+    hook: FunctionHook,
+    address: int,
+    base: Path,
+    dol: dol_reader.Dol | None,
+    where: str,
+) -> str:
     """Say exactly why a hook is going in without a derived guard."""
     if dol is None:
         why = f"there is no readable DOL at {base / DOL_PATH}"
@@ -479,7 +495,7 @@ def _no_guard_warning(hook, address: int, base: Path, dol, where: str) -> str:
     )
 
 
-def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
+def banner_for(mod: Mod, spec: CodeSpec | None = None) -> emit.Banner | None:
     """The on-screen label this mod should draw, if any.
 
     The text defaults to the mod's own name. Pass `spec` when the build works
@@ -496,7 +512,7 @@ def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     )
 
 
-def script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
+def script_text(mod: Mod, spec: CodeSpec, boot_map: str) -> ScriptSource:
     """The script source to compile: the mod's own, the boot script, or both.
 
     A boot map is desugared into script source and *appended* rather than made

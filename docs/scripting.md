@@ -282,8 +282,9 @@ Honest scope, because the ceiling is real:
   builtins, all of which take `(EvtEntry *, bool)`, so an ordinary game
   function like `mapDataPtr` is unreachable from a script whatever syntax we
   add. ✅ **A mod can ship C alongside its script** via `code.sources` (D46) —
-  that is what reaches those functions, and `code.hooks` will *replace* one of
-  them by name (D95). Both are C-side features; the language gained nothing.
+  that is what reaches those functions, and `code.hooks` will `replace` one of
+  them by name (D95), or run C `before`/`after` it with the original intact
+  (D97). Both are C-side features; the language gained nothing.
   ✅ Attaching to a **map** no longer needs C at all: `code.maps` does it
   (D51). ✅ A *vanilla* map or item script can be made to call a mod's C with
   `code.patches` (D90, D92) — but the thing it calls is C, so that route does not

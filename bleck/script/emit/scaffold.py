@@ -8,8 +8,72 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from enum import Enum
 
 from bleck.script.errors import Position, ScriptError
+
+
+# Defined here rather than in `bleck.mods.manifest` because both layers need it
+# and this is the lower one -- `codespec` already imports `bleck.script.emit`, so
+# it costs no new import edge.
+#
+# ⚠️ The docstring below is PUBLISHED: pydantic copies it into `bleck mod
+# schema` output as the enum's description. Keep it about what the values mean
+# to someone writing a mod.json, not about where the class lives.
+class HookMode(str, Enum):
+    """Which side of the original a hooked mod function runs on.
+
+    `replace` takes the function over and the original never runs. `before` runs
+    the mod's function and then the original; `after` reverses that. Under both,
+    the caller receives the original's return value.
+
+    ⚠️ The value is the wire format -- `code.hooks[].mode` in `mod.json`.
+    Renaming a member is free; changing a *value* breaks every manifest already
+    written.
+    """
+
+    REPLACE = "replace"
+    BEFORE = "before"
+    AFTER = "after"
+
+    def __str__(self) -> str:
+        # Python 3.10 has no `StrEnum`, and a bare `str, Enum` still inherits
+        # `Enum.__str__` -- which would render every error message and generated
+        # C comment as `HookMode.REPLACE`.
+        return self.value
+
+    @property
+    def intercepts(self) -> bool:
+        """Whether the original still runs.
+
+        One definition, deliberately. This gates two separate things -- whether
+        a wrapper is generated, and whether a derived guard word is required --
+        and they were briefly written as two expressions that agreed only
+        because there happened to be three modes. A fourth mode added to one
+        list and not the other would emit a wrapper for a hook with nothing to
+        restore, which is the recursion `_check_interception_possible` exists to
+        prevent.
+        """
+        return self is not HookMode.REPLACE
+
+    @property
+    def means(self) -> str:
+        """What this mode does, quoted back when one is misspelled."""
+        return _HOOK_MODE_MEANS[self]
+
+    @classmethod
+    def parse(cls, raw: str) -> HookMode | None:
+        """The mode `raw` names, or None. The one place the wire is decoded."""
+        return next((mode for mode in cls if mode.value == raw), None)
+
+
+#: Kept beside the enum rather than as a `means` body, so all three read as one
+#: table. A dict on the class would trip `container-return` as a property.
+_HOOK_MODE_MEANS = {
+    HookMode.REPLACE: "the mod's function instead of the original, which never runs",
+    HookMode.BEFORE: "the mod's function first, then the original",
+    HookMode.AFTER: "the original first, then the mod's function",
+}
 
 #: The script the loader starts, chosen by name so reordering a file cannot
 #: change which script runs.
@@ -178,8 +242,8 @@ class FunctionHook:
     build could not read what is there. The hook then installs unguarded.
     """
 
-    mode: str = "replace"
-    """`replace`, `before` or `after`.
+    mode: HookMode = HookMode.REPLACE
+    """Which side of the original the mod's function runs on.
 
     Anything but `replace` needs a wrapper, and needs `guarded`: the detour
     restores `expect` to reach the original, so a hook with no derived guard
@@ -189,7 +253,7 @@ class FunctionHook:
     @property
     def intercepts(self) -> bool:
         """Whether the original still runs, and so whether a wrapper is needed."""
-        return self.mode != "replace"
+        return self.mode.intercepts
 
     @property
     def named(self) -> str:

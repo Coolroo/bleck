@@ -102,7 +102,7 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | `sources` | native C (`.c`) and C++ (`.cpp`, `.cc`, `.cxx`), compiled into the same module. Files or directories |
 | `maps` | map name → script name; runs on arrival there (D51) |
 | `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>` and `item:<id>` selectors; same-size, any size from two words up (D89, D90, D92). ⛔ `door:` is refused with a reason (D91, D93) |
-| `hooks` | replaces a *game C function*, named from the symbol list, with one of this mod's. The guard word is derived from the base disc's `main.dol` (D95). ⚠️ `mode` is `replace` only — the original never runs; `before`/`after` are refused |
+| `hooks` | intercepts a *game C function*, named from the symbol list, with one of this mod's. The guard word is derived from the base disc's `main.dol` (D95). `mode` is `replace` (the original never runs), `before` or `after` (it does, and its return value is what the caller gets) — all three verified (D97). ⚠️ Under `before`/`after` an address the DOL does not map is a build **error**, not a warning |
 | `combos` | button-combination name → script name; combinations are named in `bleck.yml` (D77) |
 | `boot` | a map to start the game at instead of the attract demo (D64) |
 | `banner` | on-screen confirmation that the module loaded (D49) |
