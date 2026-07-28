@@ -12,8 +12,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from bleck.backends import languages, toolchain
 from bleck.backends import symbols as symbol_tables
-from bleck.backends import toolchain
 from bleck.common import config as project_config
 from bleck.common import env
 from bleck.common.errors import BleckError
@@ -95,20 +95,30 @@ class ScriptSource:
         return str(self.path) if self.path is not None else self.origin
 
 
-def collect_sources(mod: Mod, spec) -> list[Path]:
-    """Resolve `code.sources` to actual `.c` files.
+#: What `code.sources` accepts, as a phrase for error messages.
+_SUFFIX_LIST = ", ".join(languages.SOURCE_SUFFIXES)
 
-    A directory entry contributes every `.c` beneath it, sorted, so a build
+
+def collect_sources(mod: Mod, spec) -> list[Path]:
+    """Resolve `code.sources` to actual C and C++ files.
+
+    A directory entry contributes every source beneath it, sorted, so a build
     does not depend on filesystem ordering.
     """
     found: list[Path] = []
     for entry in spec.sources:
         path = mod.root / entry
         if path.is_dir():
-            matched = sorted(path.rglob("*.c"))
-            if not matched:
-                raise CodeError(f"{mod.name}: no .c files under {path}")
-            found += matched
+            # A set first: Windows globs case-insensitively, so `*.c` and `*.cc`
+            # can both match the same file.
+            seen = {
+                match
+                for suffix in languages.SOURCE_SUFFIXES
+                for match in path.rglob(f"*{suffix}")
+            }
+            if not seen:
+                raise CodeError(f"{mod.name}: no {_SUFFIX_LIST} files under {path}")
+            found += sorted(seen)
         elif path.exists():
             found.append(path)
         else:
@@ -116,7 +126,13 @@ def collect_sources(mod: Mod, spec) -> list[Path]:
                 f"{mod.name}: no source at {path}\n"
                 f"  mod.json lists {entry!r} in 'code.sources'"
             )
+    _check_cxx_prolog(mod, found)
     return found
+
+
+def needs_ctor_walk(sources: list[Path]) -> bool:
+    """Whether these sources oblige `_prolog` to walk `.ctors`."""
+    return any(language.needs_ctor_walk for language in languages.used_by(sources))
 
 
 #: Comments, stripped first: mods quote "define `mod_prolog`" from the docs in
@@ -129,7 +145,7 @@ _MOD_PROLOG_DEFINITION = re.compile(r"\bvoid\s+mod_prolog\s*\([^)]*\)\s*\{")
 
 
 def defines_mod_prolog(source: Path) -> bool:
-    """Whether a C file supplies its own `mod_prolog`.
+    """Whether a source file supplies its own `mod_prolog`.
 
     `bleck` emits a *weak* one (see `runtime_c.MOD_HOOK`), so one mod may
     override it; two is a duplicate symbol.
@@ -139,6 +155,28 @@ def defines_mod_prolog(source: Path) -> bool:
     except OSError:
         return False
     return bool(_MOD_PROLOG_DEFINITION.search(_C_COMMENT.sub(" ", text)))
+
+
+def _check_cxx_prolog(mod: Mod, sources: list[Path]) -> None:
+    """A C++ `mod_prolog` must have C linkage, or it is never called.
+
+    `bleck`'s weak definition has C linkage, so a mangled `mod_prolog` does not
+    override it: the module links, loads, and silently runs nothing.
+    """
+    for source in sources:
+        if languages.for_source(source) is not languages.CXX:
+            continue
+        if not defines_mod_prolog(source):
+            continue
+        text = source.read_text(encoding="utf-8", errors="replace")
+        if 'extern "C"' in _C_COMMENT.sub(" ", text):
+            continue
+        raise CodeError(
+            f"{mod.name}: {source} defines `mod_prolog` with C++ linkage, so "
+            f"its name is mangled and bleck's own definition wins.\n"
+            f'  Write `extern "C" void mod_prolog(void)` instead -- otherwise '
+            f"the module loads and does nothing."
+        )
 
 
 def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:

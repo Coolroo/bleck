@@ -321,3 +321,53 @@ class TestGeneratedHandoff:
     def test_a_sources_only_module_still_calls_the_mod(self):
 
         assert "mod_prolog();" in emit.generate_bare().text
+
+
+class TestCxxConstructorWalk:
+    """`.ctors` is emitted for C++ globals and nothing else walks it in a REL."""
+
+    def _armed(self, **kwargs) -> str:
+        return compile_source(
+            SIMPLE, scaffolding=emit.Scaffolding(run_cxx_ctors=True, **kwargs)
+        ).generated.text
+
+    def test_a_c_only_module_gains_nothing(self):
+        """C-only output has to stay byte-identical to before C++ existed."""
+        out = compile_source(SIMPLE).generated.text
+        assert "bleck_run_ctors" not in out
+        assert ".ctors" not in out
+
+    def test_the_markers_bracket_the_table(self):
+        out = self._armed()
+        # Plain `.ctors` first in link order, `.ctors.*` sorted after it.
+        assert 'section(".ctors")' in out
+        assert out.index('section(".ctors")') < out.index('section(".ctors.')
+
+    def test_constructors_run_before_the_mod_takes_over(self):
+        """Globals must be built before any of a mod's own code sees them."""
+        prolog = self._armed().split("void _prolog(void)")[1]
+        assert prolog.index("bleck_run_ctors()") < prolog.index("mod_prolog()")
+
+    def test_null_entries_are_skipped(self):
+        """Alignment padding between contributions is not a function pointer."""
+        assert "if (*entry != 0)" in self._armed()
+
+    def test_the_bounds_are_hidden_from_the_optimiser(self):
+        """The markers are separate objects, so a folded compare could legally
+        delete the whole loop; only the linker makes them one table."""
+        assert self._armed().count("__asm__") == 2
+
+    def test_a_sources_only_module_can_arm_it_too(self):
+        """A mod with C++ and no script still needs its globals constructed."""
+        out = emit.generate_bare(run_cxx_ctors=True).text
+        assert "bleck_run_ctors();" in out
+        assert "seq_data" not in out
+
+    def test_a_merged_module_walks_one_table(self):
+        parts = [
+            emit.ModPart(name=name, program=compile_source(SIMPLE).program)
+            for name in ("alpha", "beta")
+        ]
+        out = emit.generate_merged(parts, run_cxx_ctors=True).text
+        assert out.count("bleck_run_ctors(void)") == 1
+        assert out.count('section(".ctors")') == 1

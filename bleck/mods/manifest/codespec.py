@@ -83,7 +83,7 @@ class MapHook:
 
 @dataclass(frozen=True)
 class CodeSpec:
-    """A mod's compiled-code half: a script, native C sources, or both.
+    """A mod's compiled-code half: a script, native C/C++ sources, or both.
 
     Scripts cover event logic; native sources reach what a script cannot, such
     as calling ordinary game functions. Both compile into one `mod.rel`.
@@ -93,7 +93,10 @@ class CodeSpec:
     """Path to the script source, relative to the mod directory."""
 
     sources: list[str] = field(default_factory=list)
-    """Native C sources, relative to the mod directory. Files or directories."""
+    """Native sources, relative to the mod directory. Files or directories.
+
+    `.c` compiles with gcc; `.cpp`, `.cc` and `.cxx` with the matching g++.
+    """
 
     target: str = "eu0"
     """Game version whose symbol list resolves the functions this script calls.

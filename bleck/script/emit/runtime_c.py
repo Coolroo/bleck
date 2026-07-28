@@ -51,6 +51,67 @@ __attribute__((weak)) void mod_prolog(void)
 """
 
 
+#: Running C++ global constructors. Emitted only for a mod with C++ sources, so
+#: a C-only module's generated source is unchanged.
+CTOR_BLOCK = """
+/*
+    C++ global constructors.
+
+    A global object's constructor is not something anything calls: the compiler
+    puts a pointer to it in `.ctors` and expects a runtime to walk that table.
+    A REL has no such runtime, so `_prolog` walks it and the markers below give
+    it bounds -- a partially-linked object has no `__CTOR_LIST__`.
+
+    Why the bracketing holds: devkitPPC links through `libogc_common.ld`, whose
+    `.ctors` output takes plain `.ctors` inputs in link order and then
+    `SORT_BY_NAME(.ctors.*)`, so the end marker lands last however many sources
+    contributed. The `KEEP()` there is also what stops --gc-sections dropping
+    the table. `toolchain._check_ctor_walk` re-measures this on the linked ELF
+    rather than trusting it.
+
+    Order across translation units is unspecified, exactly as in any C++
+    program. Within one, GCC emits a single initialiser that calls them in
+    declaration order.
+*/
+
+typedef void (*BleckCtor)(void);
+
+__attribute__((section(".ctors"), used, aligned(4)))
+static BleckCtor bleck_ctors_start[1] = {0};
+
+__attribute__((section(".ctors.zzz_bleck_end"), used, aligned(4)))
+static BleckCtor bleck_ctors_end[1] = {0};
+
+static void bleck_run_ctors(void)
+{
+    BleckCtor *entry;
+    BleckCtor *end;
+
+    /*
+        Laundered through empty asm so the optimiser cannot fold the comparison.
+        These are two distinct objects to the compiler; only the linker makes
+        them the ends of one table, so a constant-folded `start + 1 >= end`
+        would legally delete the whole loop.
+    */
+    __asm__("" : "=r"(entry) : "0"(bleck_ctors_start + 1));
+    __asm__("" : "=r"(end) : "0"(bleck_ctors_end));
+
+    /* Zeroes are alignment padding between contributions, not initialisers. */
+    for (; entry < end; entry++)
+        if (*entry != 0)
+            (*entry)();
+}
+"""
+
+#: `PLAIN_PROLOG` for a C++ mod with nothing to schedule.
+PLAIN_CTOR_PROLOG = """
+void _prolog(void)
+{
+    bleck_run_ctors();
+    mod_prolog();
+}
+"""
+
 #: Running a script when a named map is reached.
 #: ⛔ Patching `MapData.initScript` deadlocks the map loader (D51); the sequence
 #: hook watches the destination instead.

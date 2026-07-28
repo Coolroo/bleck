@@ -4906,3 +4906,126 @@ not fall through, so the useful case for it is thin.
 `CASE_BETWEEN` (0x2F), `CASE_AND` (0x2C) and `CASE_FLAG` (0x2D). Nothing needs
 them yet, and each wants syntax of its own. Floats and strings are rejected as
 subjects and case values: `evt` has no `CASE_*` for either.
+
+---
+
+## D85 — C++ code mods, and the constructor table nothing was walking (2026-07-28)
+
+`spm-lunatic-pit` and the other capable SPM mods are C++ against `spm-headers`'
+C++ framework. `bleck` globbed `*.c` only, so a mod of that shape could not be
+built at all.
+
+### ✅ The compiler is a table, not a branch
+
+Rejected the obvious shape — an `is_cxx()` check at each of the three places
+that care (globbing, compiling, linking). It puts the C++ path nowhere in
+particular, which is the same complaint that produced `bleck/platforms/`.
+
+Instead `bleck/backends/languages.py` holds one `Language` value per language:
+its suffixes, the driver name that replaces `gcc`, its extra flags, its
+`link_priority`, and whether it obliges a constructor walk. `build_rel` asks
+`used_by(units)` and then treats every unit identically. Adding a language is a
+value there.
+
+`Toolchain.driver(language)` derives the compiler from whichever `gcc` was
+located — same directory, same prefix — as `platforms.PPC_GCC`'s docstring
+already said it should. Every driver is resolved before the first compile, so a
+missing `g++` is reported instead of surfacing halfway through a build. An
+unknown suffix falls back to C, so a hand-written `.S` keeps working.
+
+### ✅ Flags: `-fno-exceptions -fno-rtti -std=gnu++17`
+
+Taken from `spm-headers`' own `configure.py`, not guessed. `gnu++17` rather than
+`c++17` is load-bearing: `mod/evt_cmd.h` uses `##__VA_ARGS__`. Three constructs
+in that tree pin C++17 — a nested namespace in `ogc/gxinlines.h`, a
+single-argument `static_assert` in `evt_cmd.h`, and a namespace-scope
+`constexpr`. Everything else there is C++98-shaped.
+
+`-fno-asynchronous-unwind-tables` was considered and dropped: the C path already
+emits `.eh_frame`, so C++ is not adding anything new.
+
+### ✅ g++ leads the link; a C-only mod is byte-identical
+
+`Language.link_priority` picks the driver, so a module holding any C++ links
+with g++ and a C-only one still links with gcc. With `-nostdlib` this adds no
+libraries either way, but it is the driver the toolchain expects for C++
+objects.
+
+Checked rather than asserted: all nine C-only code mods in `mods/` were built in
+a `git worktree` at the previous commit and in the working tree, and both the
+generated `mod.c` and the resulting `mod.rel` hash identically.
+
+### ✅ `.ctors` survives, and now something walks it
+
+The trap. A global object's constructor is called by nothing — GCC emits a
+per-translation-unit initialiser pointer into `.ctors` (devkitPPC uses the
+old-style section, not `.init_array`) and expects a C runtime to walk it. A REL
+has no such runtime, so global objects would sit zero-initialised.
+
+Measured on devkitPPC 16.1.0 / binutils 2.46, all by direct observation:
+
+- `.ctors` **survives `-r --gc-sections`**. devkitPPC applies
+  `libogc_common.ld` even for `-r`, and it wraps `.ctors` in `KEEP()`.
+- It **survives `elf2rel`** — `pyelf2rel`'s section filter takes `.ctors` by
+  name under its ttyd behaviour and by `SHF_ALLOC` under its own.
+- There is **no `__CTOR_LIST__`** in a partially-linked object, so bounds must
+  be supplied.
+
+`runtime_c.CTOR_BLOCK` supplies them: a start marker in plain `.ctors` in the
+generated `mod.c` (always first on the link line) and an end marker in
+`.ctors.zzz_bleck_end`. The script's `KEEP(*(EXCLUDE_FILE(...) .ctors))`
+followed by `KEEP(*(SORT_BY_NAME(.ctors.*)))` puts every contributor between
+them **regardless of link order** — confirmed with the end marker in the first
+object on the command line and two later objects contributing.
+
+The bounds are laundered through empty `__asm__`. They are two distinct objects
+to the compiler; only the linker makes them one table, and a constant-folded
+`start + 1 >= end` could legally delete the loop. GCC 16.1.0 did *not* fold it
+when tested, which is exactly the kind of "works today" this repo has been
+burned by.
+
+### ✅ The check that makes the negative believable
+
+`toolchain._check_ctor_walk` re-reads the linked ELF and refuses the build
+unless there is exactly one `.ctors` output section and the markers sit at its
+first and last words. It **caught a real bug during development**: the first
+version compared section-relative symbol values against `sh_addr`, because `nm`
+had been displaying `st_value + sh_addr` and a partially-linked object numbers
+symbols from their section's start. Without the check that would have shipped as
+a build that "worked".
+
+A verified build: `.ctors` is 12 bytes — start marker, one `R_PPC_ADDR32` to
+`_GLOBAL__sub_I_*`, end marker.
+
+### 🔶 None of this has run in-game
+
+Every claim above is about the ELF and the REL on disk. Whether the constructed
+objects behave once the loader links the module is untested. `scripts/ingame.py`
+is the way to settle it, and until then a mod relying on a global object should
+verify it.
+
+### ✅ A C++ `mod_prolog` without `extern "C"` is refused
+
+`bleck`'s weak `mod_prolog` has C linkage. A C++ definition without `extern "C"`
+is mangled, does not override it, and the module loads and runs nothing —
+a silent no-op of exactly the shape D51 warned about. Caught at source
+collection with a message naming the fix.
+
+### ✅ The negative was produced, not assumed
+
+A check that has only passed has not been tested. Three failures were forced:
+
+1. A C++ source calling an undeclared function → `compiling thing.cpp failed:
+   error: 'this_is_not_declared' was not declared in this scope`.
+2. `char *c = p;` from a `void *` — **legal C, illegal C++**. It fails with
+   `error: invalid conversion from 'void*' to 'char*'`, which is what proves the
+   file reaches g++ rather than being quietly handed to gcc.
+3. A `Toolchain` pointed at a non-existent `gcc` → an error naming
+   `/nowhere/powerpc-eabi-g++` and what to install.
+
+### Environment note
+
+devkitPPC 16.1.0 is installed on the Windows host at `C:\devkitPro\devkitPPC\bin`
+and the Windows profile already listed that directory, so no platform change was
+needed. The project instructions' line about `g++-powerpc-linux-gnu` being missing described
+the Linux dev host only, and has been corrected.

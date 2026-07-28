@@ -7,17 +7,23 @@ the host OS, so it is a `Toolchain` value rather than a conditional. devkitPPC's
 `powerpc-linux-gnu-gcc` targets SysV, rejects `-mgcn`, and requires
 `-fno-pic -fno-PIE` or it emits `R_PPC_REL16_HA` relocations `pyelf2rel` cannot
 represent (D26).
+
+Which languages exist, and what each needs, is `backends.languages` — this
+module drives whatever that table describes. `_check_ctor_walk` then verifies
+any language that needs a constructor walk actually got one (D80).
 """
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck import platforms
-from bleck.backends import symbols
+from bleck.backends import languages, symbols
 from bleck.backends.disc import DiscError, find_tool
+from bleck.backends.languages import Language
 from bleck.common import env
 
 PPC_GCC = platforms.PPC_GCC
@@ -61,8 +67,43 @@ class Toolchain:
     def is_devkitppc(self) -> bool:
         return self.name == "devkitPPC"
 
-    def compile_flags(self) -> list[str]:
-        return [*_COMMON_FLAGS, *self.extra_flags]
+    def derive_driver(self, language: Language) -> str:
+        """Where this language's compiler would be, beside the located one.
+
+        Same directory, same prefix, `gcc` swapped for the language's driver —
+        so both halves always come from one toolchain. Empty when the located
+        compiler's name holds no `gcc` to swap.
+        """
+        if not language.driver_name:
+            return self.compiler
+        path = Path(self.compiler)
+        head, matched, tail = path.stem.rpartition("gcc")
+        if not matched:
+            return ""
+        return str(path.with_name(f"{head}{language.driver_name}{tail}{path.suffix}"))
+
+    def driver(self, language: Language) -> str:
+        """This language's compiler, or an error naming where it was sought."""
+        found = self.derive_driver(language)
+        if found and (Path(found).exists() or shutil.which(found)):
+            return found
+        where = found or (
+            f"(no 'gcc' in {Path(self.compiler).name} to swap for "
+            f"{language.driver_name!r})"
+        )
+        hint = f"\n  {language.install_hint}." if language.install_hint else ""
+        raise ToolchainError(
+            f"this mod has {language.name} sources, but no {language.name} "
+            f"compiler is installed at\n"
+            f"  {where}\n"
+            f"  bleck derives it from the C compiler it found "
+            f"({self.compiler}) so both come from one toolchain.\n"
+            f"  Install that toolchain's {language.name} half:  "
+            f"bleck toolchain install{hint}"
+        )
+
+    def compile_flags(self, language: Language = languages.C) -> list[str]:
+        return [*_COMMON_FLAGS, *self.extra_flags, *language.extra_flags]
 
     def link_flags(self) -> list[str]:
         # `-r` produces the relocatable object `pyelf2rel` consumes. The `-u`
@@ -191,15 +232,22 @@ def build_rel(request: BuildRequest) -> BuildResult:
     csource.write_text(request.source, encoding="ascii", newline="")
 
     includes = [f"-I{path}" for path in request.include_dirs]
+    units = [csource, *request.extra_sources]
+    used = languages.used_by(units)
+    # Every driver is resolved before any compile runs, so a missing one is
+    # reported instead of surfacing after half the module has been built.
+    drivers = {language: chain.driver(language) for language in used}
+
     objects: list[Path] = []
-    for index, unit in enumerate([csource, *request.extra_sources]):
+    for index, unit in enumerate(units):
         # Index-prefixed so two sources named `main.c` in different directories
         # cannot overwrite each other's object file.
         output = workdir / f"{index:02d}-{unit.stem}.o"
+        language = languages.for_source(unit)
         _run(
             [
-                chain.compiler,
-                *chain.compile_flags(),
+                drivers[language],
+                *chain.compile_flags(language),
                 *includes,
                 "-c",
                 str(unit),
@@ -210,9 +258,12 @@ def build_rel(request: BuildRequest) -> BuildResult:
         )
         objects.append(output)
 
+    # The highest `link_priority` present drives the link: g++ for a module
+    # holding any C++, and `-nostdlib` keeps it from adding libraries.
+    lead = max(used, key=lambda language: language.link_priority)
     _run(
         [
-            chain.compiler,
+            drivers[lead],
             *chain.link_flags(),
             *[str(path) for path in objects],
             "-o",
@@ -221,10 +272,74 @@ def build_rel(request: BuildRequest) -> BuildResult:
         "linking the module",
     )
 
+    if any(language.needs_ctor_walk for language in used):
+        _check_ctor_walk(elf)
+
     rel = _to_rel(elf, lst, request.module_id)
     return BuildResult(
         rel=rel, toolchain=chain.name, module_id=request.module_id, symbols_file=lst
     )
+
+
+#: The markers `runtime_c.CTOR_BLOCK` puts at either end of `.ctors`.
+CTOR_MARKERS = ("bleck_ctors_start", "bleck_ctors_end")
+
+#: What to say when the walk cannot be trusted. Silent unconstructed globals are
+#: the failure being avoided, so this refuses the build rather than warning.
+_CTOR_ADVICE = (
+    "  Global C++ objects would be left unconstructed, which fails silently "
+    "in-game.\n"
+    "  See docs/code-mods.md, 'C++ static constructors'."
+)
+
+
+def _check_ctor_walk(elf: Path) -> None:
+    """Verify `_prolog`'s markers bracket every `.ctors` entry.
+
+    The bracketing depends on the linker script's `.ctors` ordering, so it is
+    measured on the linked ELF rather than assumed (see `runtime_c.CTOR_BLOCK`).
+    """
+    # Imported here for the same reason as pyelf2rel, which supplies it.
+    from elftools.elf.elffile import ELFFile  # pylint: disable=import-outside-toplevel
+
+    with elf.open("rb") as handle:
+        image = ELFFile(handle)
+        tables = [
+            index
+            for index, section in enumerate(image.iter_sections())
+            if section.name.startswith(".ctors")
+        ]
+        section = image.get_section_by_name(".ctors")
+        if section is None:
+            return
+        index = tables[0] if len(tables) == 1 else -1
+        # A partially-linked object numbers symbols from their section's start,
+        # so these are offsets into `.ctors`, not addresses.
+        marks = {
+            symbol.name: symbol["st_value"]
+            for symbol in image.get_section_by_name(".symtab").iter_symbols()
+            if symbol.name in CTOR_MARKERS and symbol["st_shndx"] == index
+        }
+        size = section["sh_size"]
+
+    missing = [name for name in CTOR_MARKERS if name not in marks]
+    if len(tables) > 1:
+        raise ToolchainError(
+            f"the linker kept {len(tables)} constructor tables rather than one, "
+            f"so the walk would skip some.\n" + _CTOR_ADVICE
+        )
+    if missing:
+        raise ToolchainError(
+            f"the module has a .ctors table but no constructor walk over it "
+            f"(missing {', '.join(missing)}).\n" + _CTOR_ADVICE
+        )
+
+    start, end = (marks[name] for name in CTOR_MARKERS)
+    if start != 0 or end != size - 4:
+        raise ToolchainError(
+            f"the constructor walk does not bracket .ctors: markers at "
+            f"+0x{start:X} and +0x{end:X} in a {size}-byte table.\n" + _CTOR_ADVICE
+        )
 
 
 def _to_rel(elf: Path, lst: Path, module_id: int) -> bytes:

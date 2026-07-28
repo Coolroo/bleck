@@ -123,12 +123,100 @@ EABI conventions, but differences around small-data registers and struct passing
 could still produce code that builds cleanly and misbehaves when run. **This must
 be proven by booting it**, exactly as the asset pipeline was (D25).
 
-**`g++-powerpc-linux-gnu` is a separate package** and is not installed. Upstream
-uses C++17, so it will be needed for anything beyond C.
-
 **Fallback if the ABI gamble fails:** build RELs on Windows with real devkitPPC
 and package with `bleck` here. The split is clean — the REL is just a file the
 overlay places.
+
+---
+
+## C++ — ✅ builds, 🔶 unproven in-game (D85)
+
+`code.sources` accepts `.c`, `.cpp`, `.cc` and `.cxx`. Which language owns which
+suffix, and what each needs, is one table: **`bleck/backends/languages.py`**.
+Adding a language means adding a `Language` value there, not a branch in
+`toolchain.py`.
+
+`Toolchain.driver(language)` derives the compiler from whichever `gcc` was
+located — same directory, same prefix, `gcc` → the language's driver name — so
+two installed toolchains can never be mixed. A missing driver is resolved
+*before* any unit compiles, and the error names the path it looked for.
+
+### The exact C++ invocation
+
+The shared machine flags, then `Language.extra_flags`:
+
+```
+powerpc-eabi-g++ -nostdlib -ffreestanding -ffunction-sections -fdata-sections \
+  -mno-sdata -DGEKKO -mcpu=750 -meabi -mhard-float -O2 -Wall -mgcn \
+  -fno-exceptions -fno-rtti -std=gnu++17 -I<headers> -c thing.cpp -o 02-thing.o
+```
+
+`gnu++17`, not `c++17`: spm-headers' `mod/evt_cmd.h` uses the GNU comma-paste
+extension `##__VA_ARGS__`. The three extra flags are exactly what that
+repository's own `configure.py` compiles with. `-fno-exceptions -fno-rtti`
+because a REL links `-nostdlib` — there is no unwinder and no type-info support
+to call into.
+
+The **link driver becomes g++** when any unit is C++ (`Language.link_priority`).
+With `-nostdlib` this adds no libraries; it is the driver the toolchain expects
+for C++ objects. A C-only mod still links with gcc and its `mod.rel` is
+byte-identical to before C++ existed — checked against a worktree at the previous
+commit for all nine C-only code mods in `mods/`.
+
+### ⚠️ `mod_prolog` from C++ needs `extern "C"`
+
+`bleck`'s weak `mod_prolog` has C linkage. A C++ definition without
+`extern "C"` is mangled, does not override it, and the module loads and does
+nothing. `bleck` refuses that at collection time rather than letting it link.
+
+### ✅ C++ static constructors — walked by `_prolog`
+
+A global object's constructor is not called by anything: the compiler emits a
+pointer to a per-translation-unit initialiser into **`.ctors`** (devkitPPC uses
+the old-style section, not `.init_array`) and expects a C runtime to walk it.
+A REL has no such runtime. Left alone, global objects stay zero-initialised —
+which looks fine until it does not.
+
+What was measured, on devkitPPC 16.1.0 / binutils 2.46:
+
+- `.ctors` **survives** the `-r --gc-sections` link. `libogc_common.ld` wraps it
+  in `KEEP()`, and that script is applied even for `-r`.
+- It **survives `elf2rel`**: `pyelf2rel`'s section filter takes `.ctors` by name
+  under its ttyd behaviour and by `SHF_ALLOC` under its own.
+- There is **no `__CTOR_LIST__`** in a partially-linked object, so bounds have to
+  be supplied.
+
+So `runtime_c.CTOR_BLOCK` emits two markers. The start is a plain `.ctors`
+object in the generated `mod.c`, which is always first on the link line; the end
+is in `.ctors.zzz_bleck_end`, and the script's
+`KEEP(*(EXCLUDE_FILE(...) .ctors))` followed by `KEEP(*(SORT_BY_NAME(.ctors.*)))`
+puts every contributor's table between them regardless of link order.
+
+The bounds are laundered through empty `__asm__` before the loop. They are two
+distinct objects to the compiler; only the linker makes them the ends of one
+table, so a constant-folded `start + 1 >= end` could legally delete the loop.
+
+**None of that is trusted.** `toolchain._check_ctor_walk` re-reads the linked ELF
+and refuses the build unless there is exactly one `.ctors` output section and the
+markers sit at its first and last words. A verified build: `.ctors` is 12 bytes —
+start marker, one `R_PPC_ADDR32` to `_GLOBAL__sub_I_*`, end marker.
+
+🔶 **The walk has not run in-game.** Every claim above is about the ELF and the
+REL on disk. Whether the constructed objects behave once the loader links the
+module is untested — `scripts/ingame.py` is the way to settle it.
+
+Order across translation units is unspecified, as in any C++ program. Within one,
+GCC emits a single initialiser calling them in declaration order, so that part is
+not left to the linker.
+
+### Not covered
+
+- ⛔ No `.dtors` walk. `_epilog` is empty and a mod's REL is never unloaded.
+- 🔶 nw4r's `.hpp` headers. Upstream's README says they are "probably unsafe to
+  use with GCC", and its own CI never compiles them.
+- No `operator new`/`delete`. The game's allocators are declared as raw mangled
+  symbols (`__nw__FUl`, `__dl__FPv`) in `spm/memory.h`; nothing wires them to the
+  C++ operators.
 
 ---
 

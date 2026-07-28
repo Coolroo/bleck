@@ -145,6 +145,9 @@ class Scaffolding:
     require_entry: bool = True
     """Whether a script called `main` must exist. Off for `bleck script check`."""
 
+    run_cxx_ctors: bool = False
+    """Whether `_prolog` walks `.ctors`. Set when the mod has C++ sources."""
+
     @property
     def needs_entry_script(self) -> bool:
         """A mod needs `main` only when nothing else can start a script."""

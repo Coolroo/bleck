@@ -31,6 +31,7 @@ from bleck.mods.code.parts import (  # noqa: F401
     link_module,
     map_hooks_for,
     mods_defining_mod_prolog,
+    needs_ctor_walk,
     prepare,
     script_text,
 )
@@ -133,6 +134,7 @@ def build_merged(
             origin=f"{len(contributions)} mods: "
             + ", ".join(part.name for part in contributions),
             banner=banner,
+            run_cxx_ctors=any(needs_ctor_walk(part.sources) for part in parts),
         )
     except ScriptError as exc:
         raise CodeError(f"merging {len(mods)} code mods:\n{exc}") from exc
@@ -175,6 +177,7 @@ def build_mod(
                     banner=banner,
                     combos=combos,
                     boot_script=emit.BOOT_SCRIPT if boot_map else "",
+                    run_cxx_ctors=needs_ctor_walk(sources),
                 ),
                 symbol_table=table,
             )
@@ -184,7 +187,9 @@ def build_mod(
     else:
         # Native-only: still needs the REL entry points and `mod_prolog`.
         generated_c = emit.generate_bare(
-            origin=f"{mod.name} native sources", banner=banner
+            origin=f"{mod.name} native sources",
+            banner=banner,
+            run_cxx_ctors=needs_ctor_walk(sources),
         ).text
 
     headers = env.path(env.HEADERS_DIR)

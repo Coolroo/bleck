@@ -216,33 +216,47 @@ def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
     )
 
 
-def _footer(
-    entries: list[str],
-    hooks: list[BoundHook],
-    *,
-    banner: Banner | None = None,
-    boot: str = "",
-    combos: list[BoundCombo] | None = None,
-    namespace: str = _PREFIX,
-) -> str:
+@dataclass(frozen=True)
+class Runtime:
+    """The shared runtime block's contents, resolved to C identifiers.
+
+    One value rather than a handful of arguments, because all three `generate*`
+    entry points fill in the same set.
+    """
+
+    banner: Banner | None = None
+    boot: str = ""
+    """The boot script's C identifier, if the module has one."""
+
+    combos: list[BoundCombo] = field(default_factory=list)
+    namespace: str = _PREFIX
+    run_cxx_ctors: bool = False
+    """Whether `_prolog` walks `.ctors`. See `runtime_c.CTOR_BLOCK`."""
+
+
+def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
     """Assemble the shared runtime, from the pieces the module needs.
 
     Emitted **once** however many mods contributed: a second `_prolog` would be
     a second set of installs fighting over `seq_data`. Everything that needs a
     per-frame hook shares the one set installed here.
     """
-    combos = list(combos or [])
+    banner, boot, combos = runtime.banner, runtime.boot, list(runtime.combos)
     if not entries and not hooks and banner is None and not boot and not combos:
-        return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
+        if not runtime.run_cxx_ctors:
+            return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
+        return runtime_c.CTOR_BLOCK + runtime_c.PLAIN_CTOR_PROLOG + runtime_c.ENTRY_POINTS
 
     parts = [runtime_c.SEQ_TABLE]
     body = ""
+    if runtime.run_cxx_ctors:
+        parts.append(runtime_c.CTOR_BLOCK)
 
     if banner is not None:
         parts.append(_banner_block(banner))
         body += "    if (bleck_banner_on[seq])\n        bleck_draw_banner();\n"
     if hooks:
-        parts.append(_map_block(hooks, namespace))
+        parts.append(_map_block(hooks, runtime.namespace))
         body += "    bleck_maps_on_seq(seq);\n"
     if combos:
         parts.append(_combo_block(combos))
@@ -274,8 +288,11 @@ def _footer(
         "}\n"
     )
     parts.append(runtime_c.SEQ_STUBS)
+    # Constructors run before `mod_prolog`, as statics do before `main`.
+    run_ctors = "    bleck_run_ctors();\n" if runtime.run_cxx_ctors else ""
     parts.append(
-        f"\nvoid _prolog(void)\n{{\n{runtime_c.SEQ_INSTALL}    mod_prolog();\n}}\n"
+        f"\nvoid _prolog(void)\n{{\n{runtime_c.SEQ_INSTALL}"
+        f"{run_ctors}    mod_prolog();\n}}\n"
     )
     parts.append(runtime_c.ENTRY_POINTS)
     return "".join(parts)
@@ -308,9 +325,11 @@ def _program_section(program: CompiledProgram, prefix: str) -> list[str]:
 
 
 def generate_bare(
-    origin: str = "native sources", banner: Banner | None = None
+    origin: str = "native sources",
+    banner: Banner | None = None,
+    run_cxx_ctors: bool = False,
 ) -> GeneratedSource:
-    """Scaffolding for a mod that ships only native C.
+    """Scaffolding for a mod that ships only native sources.
 
     The REL format still needs its three entry points; there is just no script
     to schedule.
@@ -319,7 +338,7 @@ def generate_bare(
         runtime_c.HEADER.format(origin=origin)
         + "\n"
         + runtime_c.MOD_HOOK
-        + _footer([], [], banner=banner)
+        + _footer([], [], Runtime(banner=banner, run_cxx_ctors=run_cxx_ctors))
     )
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
@@ -357,10 +376,15 @@ def generate(
         _footer(
             [f"{plan.prefix}script_{entry}"] if entry else [],
             _bind_maps(hooks, plan.prefix),
-            banner=plan.banner,
-            boot=(f"{plan.prefix}script_{plan.boot_script}" if plan.boot_script else ""),
-            combos=_bind_combos(plan.combos, plan.prefix),
-            namespace=plan.prefix,
+            Runtime(
+                banner=plan.banner,
+                boot=(
+                    f"{plan.prefix}script_{plan.boot_script}" if plan.boot_script else ""
+                ),
+                combos=_bind_combos(plan.combos, plan.prefix),
+                namespace=plan.prefix,
+                run_cxx_ctors=plan.run_cxx_ctors,
+            ),
         )
     )
 
@@ -418,6 +442,7 @@ def generate_merged(
     parts: list[ModPart],
     origin: str = "several mods",
     banner: Banner | None = None,
+    run_cxx_ctors: bool = False,
 ) -> GeneratedSource:
     """Render several mods' programs as one C translation unit.
 
@@ -477,7 +502,11 @@ def generate_merged(
     )
     head.append(runtime_c.MOD_HOOK)
 
-    footer = _footer(entries, hooks, banner=banner, boot=boot, combos=combos)
+    footer = _footer(
+        entries,
+        hooks,
+        Runtime(banner=banner, boot=boot, combos=combos, run_cxx_ctors=run_cxx_ctors),
+    )
     text = "\n\n".join(head + sections + [footer])
     _require_ascii(text)
     return GeneratedSource(

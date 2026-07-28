@@ -98,6 +98,51 @@ void mod_prolog(void)
 Function names are resolved by `elf2rel` against the symbol list, exactly like
 a script's builtin calls, so no addresses appear in your source.
 
+## C++
+
+`code.sources` takes `.cpp`, `.cc` and `.cxx` as well as `.c`, and a mod may mix
+both in one build. C++ units compile with the `g++` beside whichever `gcc`
+`bleck` found — never a separately located one, so the two halves always come
+from the same toolchain.
+
+The environment is freestanding: **no libstdc++, no exceptions, no RTTI.** Units
+build with `-fno-exceptions -fno-rtti -std=gnu++17`, matching what
+[spm-headers](https://github.com/SeekyCt/spm-headers) itself uses.
+
+```cpp title="src/thing.cpp"
+#include <spm/seqdrv.h>
+
+class Counter {
+public:
+    Counter() : value_(0) {}
+    unsigned int bump() { return ++value_; }
+private:
+    unsigned int value_;
+};
+
+static Counter g_counter;
+
+extern "C" void mod_prolog(void)
+{
+    g_counter.bump();
+}
+```
+
+!!! warning "A C++ `mod_prolog` needs C linkage"
+
+    Without it the name is mangled, `bleck`'s own definition wins, and your code
+    never runs. `bleck` refuses the build rather than letting that happen.
+
+!!! note "Global objects"
+
+    Nothing in a REL walks the constructor table on its own, so `bleck` emits a
+    walk into `_prolog` and checks after linking that it covers every entry.
+    Constructor order *across* source files is unspecified, as in any C++
+    program; within one file it follows declaration order.
+
+    This has not been exercised in a running game. If a global object matters to
+    your mod, confirm it is what you expect before relying on it.
+
 !!! note
 
     `BLECK_HEADERS_DIR` supplies `-I` for your sources — point it at
@@ -108,7 +153,7 @@ a script's builtin calls, so no addresses appear in your source.
 
 | | |
 |---|---|
-| PowerPC cross-compiler | `gcc-powerpc-linux-gnu`, or devkitPPC |
+| PowerPC cross-compiler | `gcc-powerpc-linux-gnu`, or devkitPPC. C++ also needs that toolchain's `g++` |
 | `pyelf2rel` | ELF → REL conversion (pure Python, on PyPI) |
 | [`spm-headers`](https://github.com/SeekyCt/spm-headers) | Symbol lists and struct definitions |
 | [`spm-rel-loader`](https://github.com/SeekyCt/spm-rel-loader) | The Gecko loader code |

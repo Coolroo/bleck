@@ -99,7 +99,7 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | Key | What |
 |---|---|
 | `script` | evt source, compiled to the game's own VM |
-| `sources` | native C, compiled into the same module. Files or directories |
+| `sources` | native C (`.c`) and C++ (`.cpp`, `.cc`, `.cxx`), compiled into the same module. Files or directories |
 | `maps` | map name → script name; runs on arrival there (D51) |
 | `target` | which version's symbol list resolves game functions. Default `eu0` |
 | `module_id` | REL module id. The game's own REL is 1, so mods start at 2 |
