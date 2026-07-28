@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "boot-combo",
+  "version": "0.1.0",
+  "description": "Does the generated boot block still fire with a combo block present?",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "boot": "mac_01",
+    "combos": { "start_map": "unused" }
+  }
+}

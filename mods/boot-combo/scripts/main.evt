@@ -1,0 +1,13 @@
+-- Narrowing D72's remaining question: combo block + generated boot block.
+--
+-- Nothing here changes maps. `main` only proves it is running, so the only
+-- thing that can move the game to mac_01 is the generated boot script -- which
+-- makes "did the boot fire?" readable straight off the `map=` field.
+
+script main {
+    gw[30] = 1
+}
+
+script unused {
+    gw[29] = 1
+}

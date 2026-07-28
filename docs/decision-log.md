@@ -4251,3 +4251,55 @@ and which took one run to overturn everything.
 **Reach for the two-line test before the new tool.** `check_binding.py` is
 genuinely useful and answered its question correctly; it just was not the
 question that mattered.
+
+---
+
+## D73 — The combo/boot interaction, narrowed and still open (2026-07-27)
+
+🔶 **Confirmed and reproduced: a module containing both the combination watcher
+and the generated boot block never fires the boot map.** Not combos, not map
+changes -- the two blocks together.
+
+| Build | blocks | boot map |
+|---|---|---|
+| `tex-koopa --map he1_01` | banner + boot | ✅ fires t+48s |
+| `warp-combo` | banner + combo + boot | ⛔ never |
+| `boot-combo` | banner + combo + entry + boot | ⛔ never |
+| `mapchange-probe` | banner + combo + entry | n/a -- its own map change ✅ works |
+
+`boot-combo` is the clean one: `main` runs (`gw[30]=1` at t+45s) so the module
+loaded and the sequence hook is live, and the boot map still never fires.
+
+### What has been eliminated
+
+- ⛔ **Relocation of the called function.** `evt_seq_mapchange` binds to
+  `0x8010D0F0` in the live module (D71), checked again here against the *boot*
+  script specifically: `0x80F6601C -> 0x8010D0F0 MATCHES`.
+- ⛔ **The script data not being loaded.** The boot script's bytecode is present
+  in MEM1, correctly relocated.
+- ⛔ **The generated C being wrong.** `bleck_after_seq` calls all three watchers
+  in order, and `bleck_boot_on_seq` is byte-for-byte what works in `tex-koopa`.
+- ⛔ **`evt_seq_mapchange` being unusable alongside combos** (D72) -- a `main`
+  script does it happily in the same module.
+
+So the boot script is loaded, correct, and reachable, and `evtEntry` is simply
+never called for it -- or is called and does nothing.
+
+### 🔶 The one gate left
+
+`bleck_boot_pending`, a `static u32 = 1`. If it does not read as 1 at runtime
+the watcher returns immediately every frame and the symptom is exactly this.
+
+⚠️ **Do not assume that is it.** `bleck_needs_start` is the same shape -- a
+`static u32 = 1` in the same module -- and it plainly works, because `main`
+starts. Any theory has to explain why one works and the other does not.
+
+### Next test
+
+Make the boot script *observable* rather than inferring from its side effect.
+Today "did the boot fire?" is answered only by whether the map changed, which
+conflates "never started" with "started and its call did nothing". A `gw` write
+as the boot script's first statement separates them in one run.
+
+That is the same two-line-test lesson as D71/D72, and it is being written down
+before the next run rather than after it.
