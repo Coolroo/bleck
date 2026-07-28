@@ -17,12 +17,23 @@ convention is `docs/diagnostics/probe.h`.
 
 Dolphin is always stopped at the end, including on failure or Ctrl-C.
 
-⚠️ Input injection does not work here. Dolphin reads a DirectInput keyboard,
-which polls device state rather than the window message queue, so `SendKeys`
-and `PostMessage` are invisible to it — and driver-level injection still needs
-the session to be unlocked and Dolphin focused. On a locked machine there is no
-foreground window to give it to. Anything needing a button press has to be
-tested by a human, or reached some other way. See D48.
+Button presses
+--------------
+`--press a b 1 2` sends keystrokes to Dolphin once gameplay starts, so a
+button-triggered feature can be checked without a person tapping keys on cue.
+
+⚠️ **Attended only.** D48 measured `SendKeys` and `PostMessage`, which post to
+a message queue Dolphin never reads — that finding stands. `scripts/keys.py`
+uses `SendInput`, which injects below DirectInput's polling and does work, but
+still needs an unlocked session with Dolphin in the foreground. On a locked
+machine there is no foreground window to give it to, so the unattended limit in
+D48 is unchanged.
+
+⚠️ It lives in `scripts/`, **not** in the `bleck` package, and must stay there.
+Synthesising input is a reasonable thing for a test harness to do on the
+machine of the person running it, and not something a modding toolkit should
+ship to other people's computers. `tests/test_boundaries.py` enforces the
+split.
 """
 
 from __future__ import annotations
@@ -41,6 +52,8 @@ from bleck.backends.disc import DiscError, find_tool  # noqa: E402
 from bleck.mods import registry  # noqa: E402
 from bleck import platforms  # noqa: E402
 
+import keys  # noqa: E402  -- scripts/, deliberately not part of the bleck package
+
 #: Unused TRK interrupt vector table. Free, and at the same address in every
 #: region -- which is why `spm-loaders` reserves this range too. The Gecko
 #: loader parks a memcpy at 0x80004000, well below it.
@@ -53,6 +66,7 @@ SEQ_WORK = 0x80512360
 EVT_WORK = 0x8050C990
 
 SEQUENCES = ["LOGO", "TITLE", "GAME", "MAPCHANGE", "GAMEOVER", "LOAD"]
+SEQ_GAME = 2
 
 
 @dataclass(frozen=True)
@@ -341,6 +355,14 @@ def main() -> int:
         "to the wrong one, and report nothing at all)",
     )
     parser.add_argument(
+        "--press",
+        nargs="*",
+        default=[],
+        metavar="BUTTON",
+        help="press these buttons once gameplay starts, one at a time "
+        "(Windows only, needs an unlocked session -- see scripts/keys.py)",
+    )
+    parser.add_argument(
         "--log", help="where to write the full transcript (default: work/build/ingame.log)"
     )
     parser.add_argument(
@@ -401,6 +423,7 @@ def main() -> int:
     seen = ""
     quiet = 0
     searched = False
+    pressed = False
     with Session(
         image,
         dolphin,
@@ -443,6 +466,19 @@ def main() -> int:
                     say(f"[t+{elapsed:>3}s] ... still: {result.problem}")
                     quiet = elapsed
                 continue
+            # Buttons are pressed once gameplay is actually up, not on a timer:
+            # the game reaching SEQ_GAME is the only reliable signal that it is
+            # listening, and a timer would drift with load times.
+            if args.press and not pressed and result.snapshot.sequence == SEQ_GAME:
+                pressed = True
+                say(f"[t+{elapsed:>3}s] pressing {' '.join(args.press)} ...")
+                if not keys.focus(session.process.pid):
+                    say("    could not focus Dolphin -- keys would go elsewhere")
+                else:
+                    for button in args.press:
+                        outcome = keys.press(button)
+                        say(f"    {button}: {'sent' if outcome.sent else outcome.problem}")
+
             line = result.snapshot.render()
             # A heartbeat, because "no output" otherwise means both "nothing
             # changed" and "the game froze" -- and telling those apart is
