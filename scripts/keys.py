@@ -65,12 +65,53 @@ class _KeyboardInput(ctypes.Structure):
     ]
 
 
+class _MouseInput(ctypes.Structure):
+    """Unused, but it is the largest arm of the union and so sets its size.
+
+    ⚠️ Do not replace this with a hand-counted padding array. The first version
+    did, guessed 24 bytes from `KEYBDINPUT`, and produced a 32-byte `INPUT`
+    where Windows wants 40 on x64 — `SendInput` then rejected every call with
+    `ERROR_INVALID_PARAMETER` (87). That looked exactly like the OS refusing to
+    inject input for security reasons, and very nearly got recorded as one.
+    Declaring the real fields lets ctypes size the union on any architecture.
+    """
+
+    _fields_ = [
+        ("dx", wintypes.LONG),
+        ("dy", wintypes.LONG),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ctypes.POINTER(ctypes.c_ulong)),
+    ]
+
+
+class _HardwareInput(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", wintypes.DWORD),
+        ("wParamL", wintypes.WORD),
+        ("wParamH", wintypes.WORD),
+    ]
+
+
 class _InputUnion(ctypes.Union):
-    _fields_ = [("ki", _KeyboardInput), ("padding", ctypes.c_ubyte * 24)]
+    _fields_ = [("mi", _MouseInput), ("ki", _KeyboardInput), ("hi", _HardwareInput)]
 
 
 class _Input(ctypes.Structure):
     _fields_ = [("type", wintypes.DWORD), ("union", _InputUnion)]
+
+
+#: What `SendInput` expects `cbSize` to be: 40 on x64, 28 on x86.
+EXPECTED_INPUT_SIZE = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
+
+if IS_WINDOWS and ctypes.sizeof(_Input) != EXPECTED_INPUT_SIZE:
+    # Loud, at import, because the symptom of getting this wrong is
+    # `SendInput` failing in a way that reads as a security refusal.
+    raise RuntimeError(
+        f"INPUT is {ctypes.sizeof(_Input)} bytes, but SendInput wants "
+        f"{EXPECTED_INPUT_SIZE}; the struct definitions above are wrong"
+    )
 
 
 @dataclass(frozen=True)

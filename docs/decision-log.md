@@ -3977,3 +3977,64 @@ Stopping the *game* does not close the *process*. Two fixes, both landed:
 
 `handoff.md` had warned about this for weeks. **A warning nobody is shown at the
 moment it matters is not a control.**
+
+---
+
+## D68 — The four face buttons are verified individually (2026-07-27)
+
+✅ **a=0x0800, b=0x0400, 1=0x0200, 2=0x0100.** Four separate presses, four
+separate readings, in a running game. Not inferred and not a group total.
+
+```
+press order: b 1 2 a
+probe: ... 00000004 00000400 00000200 00000100 00000800
+           ^count   ^b       ^1       ^2       ^a
+```
+
+D67 confirmed the four bits as a *set* — holding all four gave `0x0F00` — but
+that is the same total under any permutation. This settles the assignment.
+
+🔶 `plus`, `minus`, `home` and the d-pad remain unverified, and the method for
+settling them is now routine: `mods/button-probe` plus `scripts/decode_buttons.py`.
+
+### ✅ Keystrokes can be injected after all — D48 was scoped, twice over
+
+`scripts/keys.py` drives Dolphin with `SendInput`. D48 measured `SendKeys` and
+`PostMessage`, which post to a message queue Dolphin never reads; that finding
+stands and is unrelated. D48 also named the real blocker — "driver-level
+injection still needs the session to be unlocked and Dolphin focused" — and the
+session is now unlocked.
+
+⚠️ **Still attended.** Windows refuses `SetForegroundWindow` to a background
+process, by design, and `AttachThreadInput` did not get around it here
+(measured: accepted, foreground unmoved). Rather than zeroing
+`SPI_SETFOREGROUNDLOCKTIMEOUT` and disabling focus-stealing protection
+system-wide, the script prints a prompt and waits for a click. Disabling an OS
+defence would persist after the process exits, which a synthesised keystroke
+does not.
+
+⚠️ **`scripts/` only, never the `bleck` package.** Synthesising input is
+reasonable for a harness driving an emulator on the machine of the person who
+launched it; shipping that capability to other people's computers is a
+different program. `tests/test_boundaries.py` enforces it.
+
+### ⚠️ Two self-inflicted failures worth not repeating
+
+**A wrong struct size looked exactly like a security refusal.** `SendInput`
+returned 0 for every key. The cause was `INPUT` being 32 bytes where x64 wants
+40 — the union has to fit `MOUSEINPUT` (32), not just `KEYBDINPUT` (24), and
+the padding had been hand-counted. `GetLastError` said 87,
+`ERROR_INVALID_PARAMETER`, which is unambiguous and was not checked until the
+third attempt. The near-miss: this was one step from being recorded as "Windows
+blocks input injection", a *wrong* ⛔ that would have closed the area again.
+`keys.py` now declares the real union arms and raises at import if the size is
+wrong.
+
+**The probe only recorded during `SEQ_GAME`.** Pressing A on the attract demo
+starts the game, so the sequence became `SEQ_LOAD` and the next three presses
+were never seen. One of four survived and the gap read as the input failing
+rather than the probe looking away. Nothing in the reading depends on gameplay
+being live, so it now records in every sequence.
+
+Both failures produced the same shape of wrong conclusion: **an instrument
+looking away, mistaken for the thing not happening.**

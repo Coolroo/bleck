@@ -39,18 +39,16 @@ class ConfigError(BleckError):
 
 #: Wii remote button masks.
 #:
-#: ✅ **The four face bits are confirmed** (D67). Holding A+B+1+2 in the running
-#: game reports `0x0F00`, exactly the OR of the four values below, so those four
-#: bits are the four buttons.
+#: ✅ **`a`, `b`, `1` and `2` are verified individually** (D68). Each was pressed
+#: on its own in the running game and reported exactly the value below:
+#: a=0x0800, b=0x0400, 1=0x0200, 2=0x0100. Not inferred, not a group total --
+#: four separate presses, four separate readings.
 #:
-#: 🔶 **Which bit is which within that group is not confirmed.** Holding all
-#: four at once gives the same total whatever the assignment, so a combo of two
-#: of them is right either way -- but a combo mixing one of them with `plus`
-#: would not be. Settled by pressing them one at a time.
-#:
-#: 🔶 **`plus`, `minus`, `home` and the d-pad are entirely unverified.** They are
-#: the published Revolution SDK values and nothing in `spm-headers` defines
-#: them -- `wii/kpad.h` documents `buttonsHeld` and stops there.
+#: 🔶 **`plus`, `minus`, `home` and the d-pad are unverified.** They are the
+#: published Revolution SDK values and nothing in `spm-headers` defines them --
+#: `wii/kpad.h` documents `buttonsHeld` and stops there. Confirm them the same
+#: way before relying on them: `mods/button-probe` plus
+#: `scripts/decode_buttons.py`.
 #:
 #: ⚠️ Bit 31 of `buttonsHeld` is **not** a button. It flips between frames while
 #: the controller is untouched, so a combo must test `(held & mask) == mask` and

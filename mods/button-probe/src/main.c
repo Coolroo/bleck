@@ -125,33 +125,41 @@ static void onSequenceFrame(u32 seq, void *work)
     u32 held;
 
     if (seq == SEQ_GAME)
-    {
         FRAMES += 1;
 
-        held = buttonsHeld();
-        CURRENT = held;
-        SEEN |= held;
+    /*
+        Buttons are read in EVERY sequence, not just gameplay.
 
-        /* Everything below judges buttons only -- see BUTTON_BITS. */
-        held &= BUTTON_BITS;
+        Measured the hard way: pressing A during the attract demo starts the
+        game, so the sequence became SEQ_LOAD and the three presses that
+        followed were never recorded. Only one of four survived, and the gap
+        looked like the input failing rather than the probe looking away.
 
-        /*
-            Record a value only when it changes, so holding a button for a
-            second does not fill the ring with sixty copies of itself. A
-            release reads 0 and is skipped, which is what separates one press
-            from the next.
-        */
-        if (held != 0 && held != lastRecorded)
-        {
-            lastRecorded = held;
-            if (COUNT < RING_SLOTS)
-                RING(COUNT) = held;
-            COUNT += 1;
-        }
-        else if (held == 0)
-        {
-            lastRecorded = 0;
-        }
+        Nothing here depends on gameplay being live -- `wpadGetWork` is up long
+        before the first map -- so there is no reason to be selective.
+    */
+    held = buttonsHeld();
+    CURRENT = held;
+    SEEN |= held;
+
+    /* Everything below judges buttons only -- see BUTTON_BITS. */
+    held &= BUTTON_BITS;
+
+    /*
+        Record a value only when it changes, so holding a button for a second
+        does not fill the ring with sixty copies of itself. A release reads 0
+        and is skipped, which is what separates one press from the next.
+    */
+    if (held != 0 && held != lastRecorded)
+    {
+        lastRecorded = held;
+        if (COUNT < RING_SLOTS)
+            RING(COUNT) = held;
+        COUNT += 1;
+    }
+    else if (held == 0)
+    {
+        lastRecorded = 0;
     }
 
     if (realMain[seq] != 0)
