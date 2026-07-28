@@ -2,7 +2,7 @@
 name = "spm-modkit"
 version = "0.1.0"
 description = "Modding toolkit for Super Paper Mario (Wii)"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     # The one runtime dependency, spent on `bleck.yml` (see docs/plan-config.md).
     # YAML is not a format worth hand-rolling: `.env`'s parser is safe because
@@ -55,7 +55,7 @@ docs = [
 
 [tool.ruff]
 line-length = 90
-target-version = "py310"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = [

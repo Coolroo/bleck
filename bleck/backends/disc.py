@@ -14,40 +14,24 @@ from pathlib import Path
 
 from bleck import platforms
 from bleck.common import env
-
-# Re-exported so callers keep using disc.WIT / disc.DOLPHIN_TOOL.
-WIT = platforms.WIT
-DOLPHIN_TOOL = platforms.DOLPHIN_TOOL
-DOLPHIN = platforms.DOLPHIN
-WSTRT = platforms.WSTRT
+from bleck.platforms import ToolKey
 
 
 class DiscError(Exception):
     pass
 
 
-# Declared overrides, checked before PATH.
-_OVERRIDES = {
-    WIT: env.WIT,
-    DOLPHIN_TOOL: env.DOLPHIN_TOOL,
-    DOLPHIN: env.DOLPHIN,
-    WSTRT: env.WSTRT,
-    platforms.PPC_GCC: env.PPC_GCC,
-}
-
-
-def find_tool(name: str) -> str:
+def find_tool(key: ToolKey) -> str:
     """Locate an external tool: explicit override, then PATH, then known dirs.
 
-    Where to look is platform data (`bleck/platforms/`), not logic here.
+    Where to look is platform data (`bleck/platforms/`), not logic here, and so
+    is which variable overrides it (`ToolKey.override`).
     """
-    override = _OVERRIDES.get(name)
-    if override is not None:
-        configured = env.path(override)
-        if configured is not None:
-            return str(configured)
+    configured = env.path(key.override)
+    if configured is not None:
+        return str(configured)
 
-    location = platforms.current().tool(name)
+    location = platforms.current().tool(key)
 
     for candidate in location.names:
         found = shutil.which(candidate)
@@ -62,7 +46,7 @@ def find_tool(name: str) -> str:
 
     tried = ", ".join(location.names)
     raise DiscError(
-        f"{name} not found (looked for: {tried})"
+        f"{key} not found (looked for: {tried})"
         + (f"\n  {location.hint}" if location.hint else "")
     )
 
@@ -89,7 +73,7 @@ def is_rvz(path: Path) -> bool:
 
 def convert_rvz(src: Path, dest: Path) -> Path:
     """RVZ -> ISO. wit cannot read RVZ, so this must happen first."""
-    tool = find_tool(DOLPHIN_TOOL)
+    tool = find_tool(ToolKey.DOLPHIN_TOOL)
     _ensure_parent(dest)
     _run([tool, "convert", "-f", "iso", "-i", str(src), "-o", str(dest)])
     return dest
@@ -97,7 +81,7 @@ def convert_rvz(src: Path, dest: Path) -> Path:
 
 def extract(image: Path, dest: Path, keep_iso: bool = False) -> None:
     """Extract a disc image's data partition to a directory."""
-    wit = find_tool(WIT)
+    wit = find_tool(ToolKey.WIT)
 
     source = image
     temp_iso: Path | None = None
@@ -142,7 +126,7 @@ def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
     passed unconditionally. `--overwrite` likewise: `guard_overwrite` has
     already decided whether clobbering is allowed.
     """
-    wit = find_tool(WIT)
+    wit = find_tool(ToolKey.WIT)
     _ensure_parent(out)
     _run(
         [
@@ -166,7 +150,7 @@ RVZ_LEVEL = "5"
 
 def convert_to_rvz(src: Path, dest: Path) -> None:
     """ISO -> RVZ. Roughly a 14x size reduction; Dolphin reads it natively."""
-    tool = find_tool(DOLPHIN_TOOL)
+    tool = find_tool(ToolKey.DOLPHIN_TOOL)
     _ensure_parent(dest)
     _run(
         [
@@ -271,7 +255,7 @@ def identify(image: Path) -> DiscInfo:
     if is_rvz(image):
         return _identify_rvz(image)
     try:
-        wit = find_tool(WIT)
+        wit = find_tool(ToolKey.WIT)
     except DiscError:
         return DiscInfo()
     result = subprocess.run(
@@ -294,7 +278,7 @@ def identify(image: Path) -> DiscInfo:
 def _identify_rvz(image: Path) -> DiscInfo:
     """RVZ headers come from dolphin-tool; wit cannot read the format."""
     try:
-        tool = find_tool(DOLPHIN_TOOL)
+        tool = find_tool(ToolKey.DOLPHIN_TOOL)
     except DiscError:
         return DiscInfo()
     result = subprocess.run(

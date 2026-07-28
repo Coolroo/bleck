@@ -5,15 +5,7 @@ sidecars) must never reach a rebuilt image.
 
 from __future__ import annotations
 
-from .base import (
-    DOLPHIN,
-    DOLPHIN_TOOL,
-    PPC_GCC,
-    WIT,
-    WSTRT,
-    PlatformProfile,
-    ToolLocation,
-)
+from .base import PlatformProfile, ToolKey, ToolLocation
 
 # Apple Silicon first; /usr/local exists there too but is not Homebrew's.
 HOMEBREW_PREFIXES = ["/opt/homebrew", "/usr/local"]
@@ -27,7 +19,7 @@ PROFILE = PlatformProfile(
     name="macOS",
     venv_bin="bin",
     tools={
-        WIT: ToolLocation(
+        ToolKey.WIT: ToolLocation(
             names=["wit"],
             directories=[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
             hint=(
@@ -36,7 +28,7 @@ PROFILE = PlatformProfile(
                 "BLECK_WIT to its full path"
             ),
         ),
-        DOLPHIN_TOOL: ToolLocation(
+        ToolKey.DOLPHIN_TOOL: ToolLocation(
             # The bundle ships DolphinTool without an extension.
             names=["dolphin-tool", "DolphinTool"],
             directories=[
@@ -50,7 +42,7 @@ PROFILE = PlatformProfile(
                 "BLECK_DOLPHIN_TOOL to its full path"
             ),
         ),
-        DOLPHIN: ToolLocation(
+        ToolKey.DOLPHIN: ToolLocation(
             # `Dolphin` in the bundle; `dolphin-emu` when Homebrew-built.
             names=["Dolphin", "dolphin-emu"],
             directories=[
@@ -64,7 +56,7 @@ PROFILE = PlatformProfile(
                 "BLECK_DOLPHIN to its full path"
             ),
         ),
-        WSTRT: ToolLocation(
+        ToolKey.WSTRT: ToolLocation(
             # No Homebrew formula; the prefixes are where hand-installs land.
             names=["wstrt"],
             directories=[
@@ -82,7 +74,7 @@ PROFILE = PlatformProfile(
                 "under Rosetta 2"
             ),
         ),
-        PPC_GCC: ToolLocation(
+        ToolKey.PPC_GCC: ToolLocation(
             # No Homebrew cask; devkitPPC uses the same prefix as on Linux.
             names=["powerpc-eabi-gcc"],
             directories=[

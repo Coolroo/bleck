@@ -71,7 +71,7 @@ def main() -> int:
     if not image.exists():
         raise SystemExit(f"no image at {image}; build one first")
     try:
-        dolphin = find_tool(platforms.DOLPHIN)
+        dolphin = find_tool(platforms.ToolKey.DOLPHIN)
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 

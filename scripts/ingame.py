@@ -482,7 +482,7 @@ def main() -> int:
         raise SystemExit(f"nothing to boot at {image}")
 
     try:
-        dolphin = find_tool(platforms.DOLPHIN)
+        dolphin = find_tool(platforms.ToolKey.DOLPHIN)
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 

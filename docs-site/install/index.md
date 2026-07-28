@@ -56,14 +56,14 @@ a change before it is released.
 ## The Python package
 
 Needed if you want to work *on* `bleck` rather than with it, or if your platform
-has no published build. Python 3.10+, and two small runtime dependencies
+has no published build. Python 3.13+, and two small runtime dependencies
 (`pydantic` for the JSON API, `pyyaml` for `bleck.yml`).
 
 ## Requirements
 
 | | Needed for |
 |---|---|
-| **Python 3.10+** | `bleck` itself — *not needed for the binary* |
+| **Python 3.13+** | `bleck` itself — *not needed for the binary* |
 | **`wit`** (Wiimms ISO Tools) | `extract`, `build` |
 | **`dolphin-tool`** | Reading and writing RVZ |
 | A Super Paper Mario disc image | Everything. Not distributed with `bleck`. |

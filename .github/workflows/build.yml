@@ -40,6 +40,13 @@ jobs:
       - name: Install
         run: uv sync --extra build
 
+      # The interpreter is baked into the binary, so it is part of the release.
+      # `.python-version` pins it and uv installs that exact version -- this
+      # prints it so a released artifact's Python is in its own build log,
+      # rather than being whatever the runner image happened to ship.
+      - name: Record the interpreter
+        run: uv run python -VV
+
       - name: Build
         run: uv run pyinstaller bleck.spec --noconfirm --distpath dist --workpath build
 

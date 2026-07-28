@@ -10,10 +10,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from bleck import platforms
 from bleck.backends.disc import DiscError, find_tool
-
-DOLPHIN = platforms.DOLPHIN
+from bleck.platforms import ToolKey
 
 
 @dataclass(frozen=True)
@@ -57,7 +55,7 @@ def launch(
     if not image.exists():
         raise DiscError(f"no such image: {image}")
 
-    dolphin = find_tool(DOLPHIN)
+    dolphin = find_tool(ToolKey.DOLPHIN)
     args = [dolphin]
     if batch:
         args.append("-b")

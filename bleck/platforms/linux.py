@@ -2,21 +2,13 @@
 
 from __future__ import annotations
 
-from .base import (
-    DOLPHIN,
-    DOLPHIN_TOOL,
-    PPC_GCC,
-    WIT,
-    WSTRT,
-    PlatformProfile,
-    ToolLocation,
-)
+from .base import PlatformProfile, ToolKey, ToolLocation
 
 PROFILE = PlatformProfile(
     name="Linux",
     venv_bin="bin",
     tools={
-        WIT: ToolLocation(
+        ToolKey.WIT: ToolLocation(
             names=["wit"],
             directories=["/usr/bin", "/usr/local/bin"],
             hint=(
@@ -24,7 +16,7 @@ PROFILE = PlatformProfile(
                 "  or set BLECK_WIT to its full path"
             ),
         ),
-        DOLPHIN_TOOL: ToolLocation(
+        ToolKey.DOLPHIN_TOOL: ToolLocation(
             names=["dolphin-tool"],
             # Debian installs here, which is not always on PATH.
             directories=["/usr/games", "/usr/local/games", "/usr/bin"],
@@ -33,7 +25,7 @@ PROFILE = PlatformProfile(
                 "  or set BLECK_DOLPHIN_TOOL to its full path"
             ),
         ),
-        DOLPHIN: ToolLocation(
+        ToolKey.DOLPHIN: ToolLocation(
             # `dolphin` alone is KDE's file manager, not the emulator — never
             # search for it by that name here.
             names=["dolphin-emu", "dolphin-emu-qt2", "dolphin-emu-wx"],
@@ -43,7 +35,7 @@ PROFILE = PlatformProfile(
                 "  or set BLECK_DOLPHIN to its full path"
             ),
         ),
-        WSTRT: ToolLocation(
+        ToolKey.WSTRT: ToolLocation(
             # install.sh puts binaries in /usr/local/bin; the tarball also works
             # unpacked in place.
             names=["wstrt"],
@@ -61,7 +53,7 @@ PROFILE = PlatformProfile(
                 "  or unpack it anywhere and set BLECK_WSTRT to the wstrt binary"
             ),
         ),
-        PPC_GCC: ToolLocation(
+        ToolKey.PPC_GCC: ToolLocation(
             # devkitPPC's `powerpc-eabi-gcc` first: same ABI as the game.
             # Debian's works too but needs different flags (see toolchain.py).
             names=["powerpc-eabi-gcc", "powerpc-linux-gnu-gcc"],

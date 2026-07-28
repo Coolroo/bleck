@@ -12,8 +12,10 @@ import pytest
 
 from bleck import platforms
 from bleck.backends import disc
+from bleck.common import env
 from bleck.formats import u8
 from bleck.mods import builder, manifest, registry, resolver
+from bleck.platforms import PlatformProfile, ToolKey, ToolLocation
 from tests.test_mods import ModSpec, make_mod
 
 ALL_PROFILES = [
@@ -23,37 +25,47 @@ ALL_PROFILES = [
 ]
 
 
-#: Taken from the platform package, not restated: a hardcoded list silently
-#: stopped covering `powerpc-gcc` and `wstrt` when those were added.
-ALL_TOOLS = platforms.ALL_TOOLS
-
-
 class TestProfiles:
+    def test_every_profile_describes_every_tool_key(self):
+        """No profile may omit a member.
+
+        The list this walks is the enum itself, so adding a tool without
+        describing it everywhere fails here. Its predecessor was a hand-written
+        `ALL_TOOLS`, which silently stopped covering `powerpc-gcc` and `wstrt`.
+        """
+        for profile in ALL_PROFILES:
+            for key in ToolKey:
+                assert key in profile.tools, f"{profile.name} never mentions {key}"
+
     def test_every_profile_covers_every_tool(self):
         for profile in ALL_PROFILES:
-            for key in ALL_TOOLS:
+            for key in ToolKey:
                 location = profile.tool(key)
                 assert location.names, f"{profile.name} has no names for {key}"
                 assert location.hint, f"{profile.name} has no hint for {key}"
 
+    def test_every_tool_key_names_its_override(self):
+        """`find_tool` reads `key.override` unconditionally, so a missing entry
+        would be a KeyError on the first lookup rather than a fallback."""
+        for key in ToolKey:
+            assert key.override in env.DECLARED, key
+
     def test_executable_names_differ_where_they_should(self):
         """Dolphin ships different executable names per platform."""
-        assert (
-            "dolphin-tool" in platforms.linux.PROFILE.tool(platforms.DOLPHIN_TOOL).names
-        )
+        assert "dolphin-tool" in platforms.linux.PROFILE.tool(ToolKey.DOLPHIN_TOOL).names
         assert (
             "DolphinTool.exe"
-            in platforms.windows.PROFILE.tool(platforms.DOLPHIN_TOOL).names
+            in platforms.windows.PROFILE.tool(ToolKey.DOLPHIN_TOOL).names
         )
-        assert "DolphinTool" in platforms.macos.PROFILE.tool(platforms.DOLPHIN_TOOL).names
+        assert "DolphinTool" in platforms.macos.PROFILE.tool(ToolKey.DOLPHIN_TOOL).names
 
     def test_search_dirs_are_platform_appropriate(self):
-        windows_dirs = str(platforms.windows.PROFILE.tool(platforms.WIT).directories)
+        windows_dirs = str(platforms.windows.PROFILE.tool(ToolKey.WIT).directories)
         assert "Program Files" in windows_dirs
         assert "/usr" not in windows_dirs
 
         for profile in (platforms.linux.PROFILE, platforms.macos.PROFILE):
-            posix_dirs = str(profile.tool(platforms.WIT).directories)
+            posix_dirs = str(profile.tool(ToolKey.WIT).directories)
             assert "Program Files" not in posix_dirs
 
     def test_venv_layout(self):
@@ -63,12 +75,16 @@ class TestProfiles:
 
     def test_hints_name_the_env_override(self):
         for profile in ALL_PROFILES:
-            assert "BLECK_WIT" in profile.tool(platforms.WIT).hint
-            assert "BLECK_DOLPHIN_TOOL" in profile.tool(platforms.DOLPHIN_TOOL).hint
-            assert "BLECK_DOLPHIN" in profile.tool(platforms.DOLPHIN).hint
+            assert "BLECK_WIT" in profile.tool(ToolKey.WIT).hint
+            assert "BLECK_DOLPHIN_TOOL" in profile.tool(ToolKey.DOLPHIN_TOOL).hint
+            assert "BLECK_DOLPHIN" in profile.tool(ToolKey.DOLPHIN).hint
 
-    def test_unknown_tool_falls_back_to_its_own_name(self):
-        assert platforms.linux.PROFILE.tool("ghost").names == ["ghost"]
+    def test_undescribed_tool_falls_back_to_its_own_value(self):
+        """A `ToolKey`'s value doubles as the executable name to search for, so
+        changing one would change what a bare profile runs."""
+        bare = PlatformProfile(name="bare", venv_bin="bin", tools={})
+        for key in ToolKey:
+            assert bare.tool(key).names == [key.value]
 
 
 class TestDolphinIsNotDolphinTool:
@@ -77,30 +93,30 @@ class TestDolphinIsNotDolphinTool:
 
     def test_no_platform_shares_a_name_between_them(self):
         for profile in ALL_PROFILES:
-            emulator_names = set(profile.tool(platforms.DOLPHIN).names)
-            tool_names = set(profile.tool(platforms.DOLPHIN_TOOL).names)
+            emulator_names = set(profile.tool(ToolKey.DOLPHIN).names)
+            tool_names = set(profile.tool(ToolKey.DOLPHIN_TOOL).names)
             assert not emulator_names & tool_names, profile.name
 
     def test_linux_never_searches_for_bare_dolphin(self):
         """`dolphin` on Linux is KDE's file manager, and is often installed."""
-        assert "dolphin" not in platforms.linux.PROFILE.tool(platforms.DOLPHIN).names
+        assert "dolphin" not in platforms.linux.PROFILE.tool(ToolKey.DOLPHIN).names
 
     def test_each_platform_names_its_emulator_binary(self):
-        assert "Dolphin.exe" in platforms.windows.PROFILE.tool(platforms.DOLPHIN).names
-        assert "dolphin-emu" in platforms.linux.PROFILE.tool(platforms.DOLPHIN).names
-        assert "Dolphin" in platforms.macos.PROFILE.tool(platforms.DOLPHIN).names
+        assert "Dolphin.exe" in platforms.windows.PROFILE.tool(ToolKey.DOLPHIN).names
+        assert "dolphin-emu" in platforms.linux.PROFILE.tool(ToolKey.DOLPHIN).names
+        assert "Dolphin" in platforms.macos.PROFILE.tool(ToolKey.DOLPHIN).names
 
 
 class TestMacOS:
     """macOS differs in ways that are easy to miss from a Linux box."""
 
     def test_dolphin_is_found_inside_the_app_bundle(self):
-        dirs = platforms.macos.PROFILE.tool(platforms.DOLPHIN_TOOL).directories
+        dirs = platforms.macos.PROFILE.tool(ToolKey.DOLPHIN_TOOL).directories
         assert any("Dolphin.app/Contents/MacOS" in d for d in dirs)
 
     def test_both_homebrew_prefixes_are_searched(self):
         """Apple Silicon uses /opt/homebrew, Intel uses /usr/local."""
-        dirs = platforms.macos.PROFILE.tool(platforms.WIT).directories
+        dirs = platforms.macos.PROFILE.tool(ToolKey.WIT).directories
         assert any("/opt/homebrew" in d for d in dirs)
         assert any("/usr/local" in d for d in dirs)
 
@@ -120,15 +136,31 @@ class TestMacOS:
 
 class TestToolDiscovery:
     def test_missing_tool_lists_what_it_tried(self, monkeypatch):
+        """The profile is replaced rather than a bogus key passed: every key is
+        now a real one, so the failure has to come from a tool nothing has."""
+        monkeypatch.delenv(env.WIT.name, raising=False)
         monkeypatch.setattr(disc.shutil, "which", lambda _name: None)
-        with pytest.raises(disc.DiscError, match="looked for"):
-            disc.find_tool("ghost")
+        monkeypatch.setattr(
+            disc.platforms,
+            "current",
+            lambda: PlatformProfile(
+                name="test",
+                venv_bin="bin",
+                tools={ToolKey.WIT: ToolLocation(names=["ghost"])},
+            ),
+        )
+        with pytest.raises(disc.DiscError, match="looked for: ghost"):
+            disc.find_tool(ToolKey.WIT)
+
+    def test_missing_tool_is_named_by_its_value(self):
+        """`str, Enum` inherits `Enum.__str__`, which would say `ToolKey.WIT`."""
+        assert f"{ToolKey.WIT} not found" == "wit not found"
 
     def test_env_override_wins_over_path(self, monkeypatch, tmp_path: Path):
         fake = tmp_path / "my-wit"
         fake.write_text("")
         monkeypatch.setenv("BLECK_WIT", str(fake))
-        assert disc.find_tool(disc.WIT) == str(fake)
+        assert disc.find_tool(ToolKey.WIT) == str(fake)
 
 
 class TestPathHandling:
@@ -249,38 +281,38 @@ class TestWstrtIsNotWit:
 
     def test_no_platform_shares_a_name_between_wit_and_wstrt(self):
         for profile in ALL_PROFILES:
-            wit = set(profile.tool(platforms.WIT).names)
-            wstrt = set(profile.tool(platforms.WSTRT).names)
+            wit = set(profile.tool(ToolKey.WIT).names)
+            wstrt = set(profile.tool(ToolKey.WSTRT).names)
             assert not wit & wstrt, f"{profile.name} confuses wit with wstrt"
 
     def test_every_platform_names_the_wstrt_binary(self):
         for profile in ALL_PROFILES:
-            assert any("wstrt" in name for name in profile.tool(platforms.WSTRT).names), (
+            assert any("wstrt" in name for name in profile.tool(ToolKey.WSTRT).names), (
                 profile.name
             )
 
     def test_hints_say_it_is_a_separate_package(self):
         """It ships in the SZS toolset, not with wit — the usual confusion."""
         for profile in ALL_PROFILES:
-            hint = profile.tool(platforms.WSTRT).hint
+            hint = profile.tool(ToolKey.WSTRT).hint
             assert "SZS" in hint, profile.name
             assert "separate" in hint, profile.name
 
     def test_only_windows_expects_an_exe_suffix(self):
-        assert "wstrt.exe" in platforms.windows.PROFILE.tool(platforms.WSTRT).names
+        assert "wstrt.exe" in platforms.windows.PROFILE.tool(ToolKey.WSTRT).names
         for profile in (platforms.linux.PROFILE, platforms.macos.PROFILE):
-            names = profile.tool(platforms.WSTRT).names
+            names = profile.tool(ToolKey.WSTRT).names
             assert not any(name.endswith(".exe") for name in names), profile.name
 
 
 class TestToolchainNamesPerPlatform:
     def test_windows_expects_devkitppc_only(self):
         # There is no distro cross-compiler to fall back on there.
-        names = platforms.windows.PROFILE.tool(platforms.PPC_GCC).names
+        names = platforms.windows.PROFILE.tool(ToolKey.PPC_GCC).names
         assert all("eabi" in name for name in names)
 
     def test_linux_prefers_devkitppc_over_the_distro_compiler(self):
         """devkitPPC targets the game's ABI; the distro compiler needs -fno-pic
         -fno-PIE and rejects -mgcn, so order decides which one a mixed host picks."""
-        names = platforms.linux.PROFILE.tool(platforms.PPC_GCC).names
+        names = platforms.linux.PROFILE.tool(ToolKey.PPC_GCC).names
         assert names.index("powerpc-eabi-gcc") < names.index("powerpc-linux-gnu-gcc")

@@ -6,7 +6,7 @@ language means adding a value here rather than a branch there — the same shape
 as `platforms/`.
 
 Drivers are *derived* from whichever `gcc` was located, never looked up
-separately, so two installed toolchains cannot be mixed (`platforms.PPC_GCC`).
+separately, so two installed toolchains cannot be mixed (`ToolKey.PPC_GCC`).
 """
 
 from __future__ import annotations

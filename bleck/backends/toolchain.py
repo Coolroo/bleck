@@ -20,13 +20,11 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bleck import platforms
 from bleck.backends import languages, symbols
 from bleck.backends.disc import DiscError, find_tool
 from bleck.backends.languages import Language
 from bleck.common import env
-
-PPC_GCC = platforms.PPC_GCC
+from bleck.platforms import ToolKey
 
 #: The symbols the REL entry-points table refers to. They must survive
 #: `--gc-sections`, hence the `-u` flags in `link_flags`.
@@ -117,7 +115,7 @@ class Toolchain:
 
 def detect(compiler: str | None = None) -> Toolchain:
     """Find a PowerPC cross-compiler and work out how to drive it."""
-    found = compiler or find_tool(PPC_GCC)
+    found = compiler or find_tool(ToolKey.PPC_GCC)
     stem = Path(found).stem.lower()
 
     if "eabi" in stem:

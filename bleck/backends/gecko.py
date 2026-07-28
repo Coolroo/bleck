@@ -18,11 +18,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from bleck import platforms
 from bleck.backends.disc import DiscError, find_tool
 from bleck.common import env
-
-WSTRT = platforms.WSTRT
+from bleck.platforms import ToolKey
 
 #: A GCT is a trivial container: two magic words, the code words, a terminator.
 GCT_HEADER = bytes.fromhex("00D0C0DE00D0C0DE")
@@ -122,7 +120,7 @@ def embed(dol: Path, gct: bytes, workdir: Path) -> Embedding:
     dol.unlink()
     shutil.copyfile(detached, dol)
 
-    tool = find_tool(WSTRT)
+    tool = find_tool(ToolKey.WSTRT)
     result = subprocess.run(
         [tool, "patch", str(dol), "--add-sect", str(gct_path)],
         capture_output=True,

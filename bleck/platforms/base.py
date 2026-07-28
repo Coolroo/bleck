@@ -5,33 +5,77 @@ each supported OS supplies one `PlatformProfile`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
-WIT = "wit"
-DOLPHIN_TOOL = "dolphin-tool"
-DOLPHIN = "dolphin"
-"""The emulator itself — a separate binary from `dolphin-tool`, easy to conflate
-because they ship into the same directory. Only one of them boots a game.
-"""
-
-WSTRT = "wstrt"
-"""Wiimms StaticR Tool, from the SZS toolset (a different package from `wit`).
-
-Embeds the Gecko loader into the game's DOL, using its own code handler.
-"""
-
-PPC_GCC = "powerpc-gcc"
-"""The cross-compiler that builds code mods for the Wii's PowerPC CPU.
-
-Only the C compiler is looked up; `g++`, `ld` and `objcopy` are derived from its
-directory and prefix, so two installed toolchains cannot be mixed.
-"""
+from bleck.common import env
 
 
-ALL_TOOLS = [WIT, DOLPHIN_TOOL, DOLPHIN, WSTRT, PPC_GCC]
-"""Every external tool `bleck` knows how to find. The completeness test walks
-this list, so a key no platform describes fails everywhere, not just there.
-"""
+# An enum rather than five bare strings so the set is enumerable: `list(ToolKey)`
+# is what `ALL_TOOLS` used to be, and cannot drift out of step with the members.
+# Nothing here is serialised -- no manifest, no `bleck/api/` payload, nothing on
+# disk names a tool -- so the members are free to be renamed.
+#
+# ⚠️ The *values* are not. `PlatformProfile.tool` falls back to
+# `ToolLocation(names=[key])`, so a value is the executable name searched for
+# when a profile does not describe the tool. Changing one changes what gets run.
+#
+# `StrEnum` rather than `str, Enum`: the latter still inherits `Enum.__str__`,
+# which would turn "wit not found" into "ToolKey.WIT not found" in the one
+# message users actually read. `StrEnum.__str__` is `str.__str__`, so the
+# requirement is met by the base class instead of by an override (D99).
+class ToolKey(StrEnum):
+    """An external program `bleck` shells out to, and looks up per platform.
+
+    ⚠️ Each value doubles as the executable name to search for, used when a
+    platform profile has nothing to say about the tool.
+    """
+
+    WIT = "wit"
+    """Wiimms ISO Tool: extracts and rebuilds disc images."""
+
+    DOLPHIN_TOOL = "dolphin-tool"
+    """Dolphin's headless converter, the only thing here that reads RVZ."""
+
+    DOLPHIN = "dolphin"
+    """The emulator itself — a separate binary from `dolphin-tool`, easy to
+    conflate because they ship into the same directory. Only one boots a game.
+    """
+
+    WSTRT = "wstrt"
+    """Wiimms StaticR Tool, from the SZS toolset (a different package from `wit`).
+
+    Embeds the Gecko loader into the game's DOL, using its own code handler.
+    """
+
+    PPC_GCC = "powerpc-gcc"
+    """The cross-compiler that builds code mods for the Wii's PowerPC CPU.
+
+    Only the C compiler is looked up; `g++`, `ld` and `objcopy` are derived from
+    its directory and prefix, so two installed toolchains cannot be mixed.
+    """
+
+    @property
+    def override(self) -> env.EnvVar:
+        """The variable that names this tool's path outright, checked before PATH.
+
+        Belongs to the tool, not to a platform: `BLECK_WIT` means the same
+        everywhere, so it would be repeated once per OS if it lived on
+        `ToolLocation`.
+        """
+        return _TOOL_OVERRIDES[self]
+
+
+#: Kept beside the enum rather than in its body, where the Enum metaclass would
+#: read a dict as another member. Complete by test, which the dict this replaced
+#: in `backends.disc` never was.
+_TOOL_OVERRIDES = {
+    ToolKey.WIT: env.WIT,
+    ToolKey.DOLPHIN_TOOL: env.DOLPHIN_TOOL,
+    ToolKey.DOLPHIN: env.DOLPHIN,
+    ToolKey.WSTRT: env.WSTRT,
+    ToolKey.PPC_GCC: env.PPC_GCC,
+}
 
 
 @dataclass(frozen=True)
@@ -60,7 +104,7 @@ class PlatformProfile:
     venv_bin: str
     """Subdirectory holding venv executables: `bin` or `Scripts`."""
 
-    tools: dict[str, ToolLocation]
+    tools: dict[ToolKey, ToolLocation]
 
     ignored_filenames: frozenset[str] = frozenset()
     """Files the OS creates that must never reach a built disc."""
@@ -71,8 +115,9 @@ class PlatformProfile:
     strip_readonly_on_delete: bool = False
     """Whether deleting a read-only file needs the bit cleared first."""
 
-    def tool(self, key: str) -> ToolLocation:
-        return self.tools.get(key, ToolLocation(names=[key]))
+    def tool(self, key: ToolKey) -> ToolLocation:
+        """How to find `key` here. Undescribed tools are searched for by value."""
+        return self.tools.get(key, ToolLocation(names=[key.value]))
 
     def is_ignored(self, filename: str) -> bool:
         """Whether a filename is OS clutter rather than game content."""

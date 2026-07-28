@@ -2,15 +2,7 @@
 
 from __future__ import annotations
 
-from .base import (
-    DOLPHIN,
-    DOLPHIN_TOOL,
-    PPC_GCC,
-    WIT,
-    WSTRT,
-    PlatformProfile,
-    ToolLocation,
-)
+from .base import PlatformProfile, ToolKey, ToolLocation
 
 # Dolphin ships as a portable folder, so there is no canonical install path —
 # these are conventional. Elsewhere, set BLECK_DOLPHIN.
@@ -24,7 +16,7 @@ PROFILE = PlatformProfile(
     name="Windows",
     venv_bin="Scripts",
     tools={
-        WIT: ToolLocation(
+        ToolKey.WIT: ToolLocation(
             names=["wit.exe", "wit"],
             directories=[
                 r"C:\Program Files\Wiimm\wit\bin",
@@ -36,7 +28,7 @@ PROFILE = PlatformProfile(
                 "to PATH, or set BLECK_WIT to wit.exe"
             ),
         ),
-        DOLPHIN_TOOL: ToolLocation(
+        ToolKey.DOLPHIN_TOOL: ToolLocation(
             # Windows ships it beside the emulator, with different casing.
             names=["DolphinTool.exe", "dolphin-tool.exe", "DolphinTool"],
             directories=DOLPHIN_DIRECTORIES,
@@ -45,7 +37,7 @@ PROFILE = PlatformProfile(
                 "set BLECK_DOLPHIN_TOOL to its full path"
             ),
         ),
-        DOLPHIN: ToolLocation(
+        ToolKey.DOLPHIN: ToolLocation(
             names=["Dolphin.exe", "dolphin"],
             directories=DOLPHIN_DIRECTORIES,
             hint=(
@@ -55,7 +47,7 @@ PROFILE = PlatformProfile(
                 "which ships the 2016 release"
             ),
         ),
-        WSTRT: ToolLocation(
+        ToolKey.WSTRT: ToolLocation(
             names=["wstrt.exe", "wstrt"],
             directories=[
                 r"~\tools\szs\bin",
@@ -69,7 +61,7 @@ PROFILE = PlatformProfile(
                 "wstrt.exe is usually easier than adding it to PATH"
             ),
         ),
-        PPC_GCC: ToolLocation(
+        ToolKey.PPC_GCC: ToolLocation(
             # devkitPPC is the only realistic source on Windows.
             names=["powerpc-eabi-gcc.exe", "powerpc-eabi-gcc"],
             directories=[

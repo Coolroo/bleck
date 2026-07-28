@@ -6708,3 +6708,70 @@ Still queued: `ToolKey` (no serialization at all, three parallel structures),
 serializes as a number and `code.banner.sequences` is written as names.
 
 779 tests (775 before), pylint 10.00/10.
+
+---
+
+## D99 — ✅ Pin Python 3.13, and the release-reproducibility bug that found (2026-07-28)
+
+D98 worked around `enum.StrEnum` being 3.11+ by hand-rolling `str, Enum` with a
+`__str__` override. The workaround was sound; **the constraint it respected was
+not**, and questioning it turned up something worse than the inconvenience.
+
+### ⛔ The floor was never tested, and the ceiling was never pinned
+
+`pyproject.toml` said `requires-python = ">=3.10"`. There is **no Python version
+matrix in CI**, so nothing has ever run on 3.10. The floor was an assertion with
+no evidence — the same shape as the smoke test in D83 that could only pass.
+
+Worse, and independent of any version choice: `.github/workflows/build.yml`
+never called `setup-python`, and there was no `.python-version`. `uv` therefore
+resolved against **whatever interpreter the runner image happened to ship**. The
+interpreter is baked into a PyInstaller binary, so:
+
+⛔ **The released executable's Python version could change between builds
+without a single line of this repository changing.** That is a reproducibility
+bug in the artifact users actually download, and it had nothing to do with
+`StrEnum`.
+
+### What changed
+
+- `.python-version` → `3.13`. `uv` installs exactly that, so the binary's
+  interpreter is now a property of the repo rather than of the runner image.
+- `requires-python = ">=3.13"`, ruff `target-version = "py313"`.
+- A `Record the interpreter` step running `python -VV` before the build, so a
+  release's interpreter is in its own build log rather than being implicit.
+
+✅ **Measured side effect: `uv.lock` lost 254 lines.** `exceptiongroup` and
+`tomli` are pure `<3.11` backports and resolved away entirely — two fewer
+dependencies inside the shipped binary, which is the opposite of what "raise the
+requirement" usually costs.
+
+### Why 3.13 and not 3.11 or 3.14
+
+Rejected alternatives, since a version floor is exactly the kind of decision
+that gets re-litigated:
+
+- **3.11** — the minimum that gets `StrEnum` and drops both backports. Rejected
+  because its only advantage is reaching distro Pythons (Debian stable, Ubuntu
+  24.04), and this project **ships a binary**: the from-source path is for
+  contributors, who can install an interpreter.
+- **3.14** — stable since October 2025. Rejected for now: it buys nothing this
+  codebase uses, and adds PyInstaller-hook risk. 🔶 Untested here.
+- **Keeping `>=3.10`** — rejected as the status quo that hid the real bug.
+
+3.13 is what the dev host already runs and what the lockfile had already
+resolved against, so the pin records reality instead of imposing a new one.
+
+⚠️ **This narrows the from-source path**, and that is the deliberate trade: a
+contributor on a distro Python may have to install 3.13. Binary users are
+unaffected. `docs-site/install/index.md` says 3.13+ rather than leaving the old
+number to rot.
+
+### Consequence for D98
+
+The `__str__` override and its "Python 3.10 has no `StrEnum`" comment become
+dead weight; both enums move to real `StrEnum`. ⚠️ The *reason* for the override
+does not disappear — `StrEnum.__str__` is `str.__str__`, so the generated C
+comments and error messages still depend on `str(mode)` being `"replace"`. The
+mechanism changed, not the requirement, so the test asserting the wire format
+stays exactly as it is.

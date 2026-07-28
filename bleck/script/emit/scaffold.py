@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 
 from bleck.script.errors import Position, ScriptError
 
@@ -20,7 +20,11 @@ from bleck.script.errors import Position, ScriptError
 # ⚠️ The docstring below is PUBLISHED: pydantic copies it into `bleck mod
 # schema` output as the enum's description. Keep it about what the values mean
 # to someone writing a mod.json, not about where the class lives.
-class HookMode(str, Enum):
+#
+# `StrEnum` rather than `str, Enum`: the latter still inherits `Enum.__str__`,
+# so every error message and every generated C comment would read
+# `HookMode.REPLACE`. `StrEnum.__str__` is `str.__str__` (D99).
+class HookMode(StrEnum):
     """Which side of the original a hooked mod function runs on.
 
     `replace` takes the function over and the original never runs. `before` runs
@@ -35,12 +39,6 @@ class HookMode(str, Enum):
     REPLACE = "replace"
     BEFORE = "before"
     AFTER = "after"
-
-    def __str__(self) -> str:
-        # Python 3.10 has no `StrEnum`, and a bare `str, Enum` still inherits
-        # `Enum.__str__` -- which would render every error message and generated
-        # C comment as `HookMode.REPLACE`.
-        return self.value
 
     @property
     def intercepts(self) -> bool:
