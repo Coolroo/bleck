@@ -146,6 +146,30 @@ loop {
 `and`, `or` and `not` work, spelled either way (`&&`, `||`). Comparisons are
 `== != < > <= >=`.
 
+### Switching on a value
+
+```text
+switch enemy_type {
+    case 1 {
+        evt_msg_print(0, "goomba", 0, 0)
+    }
+    case 2, 3 {          -- a comma list matches any of them
+        evt_msg_print(0, "koopa", 0, 0)
+    }
+    case > 10 {          -- any comparison works
+        evt_msg_print(0, "boss", 0, 0)
+    }
+    else {               -- optional, at most one, and last
+        return
+    }
+}
+```
+
+Cases do not fall through, so no `break` is needed — and `break` inside a case
+is rejected rather than quietly breaking an enclosing loop. The value you switch
+on can be any expression; the values in each `case` must be a number, a variable
+or a slot, so work out anything more involved beforehand. Integers only.
+
 ### Finding what you can call
 
 The game has **443 script builtins**. `bleck` knows all of them:

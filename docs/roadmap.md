@@ -31,7 +31,8 @@ this file is forward-looking only.
 | **Several code mods on one disc** | ✅ Merged at compile time; both run (D78). The loader's one-REL limit is untouched |
 | **Enemy placement editing** | ✅ Declared in `mod.json`, verified in game (D80) |
 | **A JSON API** | ✅ `bleck mod export/import`, `setup show/apply`, versioned, schema-published |
-| **A single-file binary** | ✅ `pyinstaller bleck.spec`; CI builds three platforms. 🔶 The workflow has never run |
+| **A single-file binary** | ✅ `pyinstaller bleck.spec`; CI builds and smoke-tests three platforms, green on all (D83). 🔶 The tag-triggered release job has never run |
+| **Published docs** | ✅ MkDocs → GitHub Pages, live at `coolroo.github.io/bleck` |
 | Map geometry / archive contents | ⛔ **Not decoded.** The prize, and a research problem before an editing one |
 | **Reaching any map unattended** | ✅ `evt_seq_mapchange` from a map hook — no controller needed (D52) |
 | **Setup files: which copy the game reads** | ✅ **Settled** — the **standalone** `files/setup/*.dat`. ⚠️ D53 concluded the opposite and was wrong; D62 measured it |
@@ -83,9 +84,9 @@ play far enough once and press F1.
 
 ### 🟢 The rest of the scripting language
 
-`SETI` for ambiguous literals, `switch`, `IF_FLAG`, detached `spawn`,
-`SET_PRI`/`SET_SPD`, and `peek`/`poke` for `SET_RAM`/`GET_RAM`. The language
-reaches 39 of the VM's 120 opcodes.
+`SETI` for ambiguous literals, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`,
+and `peek`/`poke` for `SET_RAM`/`GET_RAM`. `switch` landed in D84. The language
+reaches 50 of the VM's 120 opcodes.
 
 ⚠️ Raw memory access is what would let a script write an `EvtScriptCode *` into
 a **door, NPC or item** — but expect D51's trap: patching a pointer the game

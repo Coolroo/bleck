@@ -317,8 +317,8 @@ In rough order of value:
    `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
    the lst's 976 — **11×** — and carries sizes and types, so `user_func` targets
    can be validated rather than just resolved. One regex parses it.
-4. **`switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten,
-   not blocked.
+4. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+   `switch` is done (D84), though nothing has run it in-game yet.
    ⚠️ `RUN_EVT`/`RUN_CHILD_EVT` are *emitted* nowhere now — the map-hook design
    that used them was ruled out (D51) — so `spawn` starts from scratch.
 5. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++

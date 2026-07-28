@@ -9,6 +9,7 @@ local-work slots for intermediates and returning them afterwards.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, auto
 
 from bleck.script import catalog as builtin_catalog
 from bleck.script import evt
@@ -16,6 +17,7 @@ from bleck.script import evt
 # Re-exported: callers reach these through `compiler`.
 from bleck.script.compiler.ir import (
     ARITHMETIC,
+    CASE_OPCODES,
     COMPARISONS,
     LOCAL_SLOTS,
     CompiledProgram,
@@ -43,6 +45,13 @@ class _Variable:
     type: ValueType
 
 
+class _Block(Enum):
+    """An open construct `break`/`continue` would have to jump out of."""
+
+    LOOP = auto()
+    SWITCH = auto()
+
+
 class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     """Compiles one `script` block."""
 
@@ -53,7 +62,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         self.variables: dict[str, _Variable] = {}
         self.next_slot = 0
         self.scratch_low = LOCAL_SLOTS
-        self.loop_depth = 0
+        #: Innermost-last, so `break` can tell a loop from a switch arm.
+        self.blocks: list[_Block] = []
 
     # --- emission --------------------------------------------------------
 
@@ -353,16 +363,16 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             self.compile_while(node)
         elif isinstance(node, tree.Loop):
             self.compile_loop(node)
+        elif isinstance(node, tree.Switch):
+            self.compile_switch(node)
         elif isinstance(node, tree.Wait):
             self.compile_wait(node)
         elif isinstance(node, tree.Spawn):
             self.compile_spawn(node)
         elif isinstance(node, tree.ExpressionStatement):
             self.compile_call_statement(node)
-        elif isinstance(node, tree.Break):
-            self.compile_loop_jump(node, evt.Opcode.DO_BREAK, "break")
-        elif isinstance(node, tree.Continue):
-            self.compile_loop_jump(node, evt.Opcode.DO_CONTINUE, "continue")
+        elif isinstance(node, (tree.Break, tree.Continue)):
+            self.compile_loop_jump(node)
         elif isinstance(node, tree.Return):
             self.emit(evt.Opcode.END_EVT)
         else:
@@ -430,7 +440,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         """
         assert node.condition is not None
         self.emit(evt.Opcode.DO, Literal(0))
-        self.loop_depth += 1
+        self.blocks.append(_Block.LOOP)
 
         high_water = self.scratch_low
         self.branch_if(node.condition, invert=True)
@@ -439,7 +449,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         self.scratch_low = high_water
 
         self.compile_body(node.body)
-        self.loop_depth -= 1
+        self.blocks.pop()
         self.emit(evt.Opcode.WHILE)
 
     def compile_loop(self, node: tree.Loop) -> None:
@@ -454,15 +464,77 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
                 )
             count = value.word
         self.emit(evt.Opcode.DO, count)
-        self.loop_depth += 1
+        self.blocks.append(_Block.LOOP)
         self.compile_body(node.body)
-        self.loop_depth -= 1
+        self.blocks.pop()
         self.emit(evt.Opcode.WHILE)
 
-    def compile_loop_jump(
-        self, node: tree.Statement, opcode: evt.Opcode, spelling: str
-    ) -> None:
-        if self.loop_depth == 0:
+    def compile_switch(self, node: tree.Switch) -> None:
+        assert node.subject is not None
+        subject = self.evaluate(node.subject)
+        if subject.type is not ValueType.INT:
+            raise self.fail(
+                f"a switch subject must be an integer, not {subject.type}; "
+                "evt has no float or string form of SWITCH",
+                node.position,
+            )
+        # Always SWITCH, never SWITCHI: the subject is usually a slot, and only
+        # SWITCH resolves an operand through evt's storage windows.
+        self.emit(evt.Opcode.SWITCH, subject.word)
+        self.blocks.append(_Block.SWITCH)
+        for case in node.cases:
+            self.compile_case(case)
+        if node.has_else:
+            self.emit(evt.Opcode.CASE_ETC)
+            self.compile_body(node.else_body)
+        self.blocks.pop()
+        # No SWITCH_BREAK per arm: the next CASE_* ends the previous body.
+        self.emit(evt.Opcode.END_SWITCH)
+
+    def compile_case(self, case: tree.SwitchCase) -> None:
+        if len(case.alternatives) > 1:
+            for alternative in case.alternatives:
+                self.emit(evt.Opcode.CASE_OR, self.case_operand(alternative))
+            self.compile_body(case.body)
+            self.emit(evt.Opcode.CASE_END)
+            return
+        opcode = CASE_OPCODES[case.operator]
+        self.emit(opcode, self.case_operand(case.alternatives[0]))
+        self.compile_body(case.body)
+
+    def case_operand(self, node: tree.Expression) -> Word:
+        """A case value, which must need no code to produce.
+
+        Anything computed would emit its instructions between the arms, where
+        they would run as part of the previous case's body.
+        """
+        value = self.direct_value(node)
+        if value is None:
+            raise self.fail(
+                "a case value must be a literal, a variable or a slot; "
+                "compute it into a variable before the switch",
+                node.position,
+            )
+        if value.type is not ValueType.INT:
+            raise self.fail(
+                f"a case value must be an integer, not {value.type}; "
+                "evt has no float or string form of CASE_*",
+                node.position,
+            )
+        return value.word
+
+    def compile_loop_jump(self, node: tree.Break | tree.Continue) -> None:
+        breaking = isinstance(node, tree.Break)
+        opcode = evt.Opcode.DO_BREAK if breaking else evt.Opcode.DO_CONTINUE
+        spelling = "break" if breaking else "continue"
+        if self.blocks and self.blocks[-1] is _Block.SWITCH:
+            raise self.fail(
+                f"'{spelling}' cannot cross a switch; it would jump past the "
+                "END_SWITCH and leave the switch open. Cases do not fall "
+                "through, so a plain 'break' is never needed here",
+                node.position,
+            )
+        if _Block.LOOP not in self.blocks:
             raise self.fail(f"'{spelling}' is only valid inside a loop", node.position)
         self.emit(opcode)
 

@@ -314,6 +314,160 @@ class TestControlFlow:
         assert result.count(int(evt.Opcode.END_IF)) == 2
 
 
+class TestSwitch:
+    def test_simple_equality_case(self):
+        source = "script main {\n var a = 1\n switch a {\n case 1 {\n wait(1)\n }\n }\n}"
+        result = values(source)
+        assert header(evt.Opcode.SWITCH, 1) in result
+        assert header(evt.Opcode.CASE_EQUAL, 1) in result
+        assert int(evt.Opcode.END_SWITCH) in result
+
+    @pytest.mark.parametrize(
+        ("operator", "opcode"),
+        [
+            ("==", evt.Opcode.CASE_EQUAL),
+            ("!=", evt.Opcode.CASE_NOT_EQUAL),
+            ("<", evt.Opcode.CASE_SMALL),
+            (">", evt.Opcode.CASE_LARGE),
+            ("<=", evt.Opcode.CASE_SMALL_EQUAL),
+            (">=", evt.Opcode.CASE_LARGE_EQUAL),
+        ],
+    )
+    def test_comparison_cases(self, operator, opcode):
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            f" case {operator} 10 {{\n wait(1)\n }}\n }}\n}}"
+        )
+        assert header(opcode, 1) in values(source)
+
+    def test_or_list_becomes_case_or_and_case_end(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n case 2, 3 {\n wait(1)\n }\n }\n}"
+        )
+        result = values(source)
+        assert result.count(header(evt.Opcode.CASE_OR, 1)) == 2
+        assert int(evt.Opcode.CASE_END) in result
+        # The group closes after the body, not before it.
+        assert result.index(header(evt.Opcode.WAIT_FRM, 1)) < result.index(
+            int(evt.Opcode.CASE_END)
+        )
+
+    def test_else_becomes_case_etc(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            " case 1 {\n wait(1)\n }\n else {\n wait(2)\n }\n }\n}"
+        )
+        assert int(evt.Opcode.CASE_ETC) in values(source)
+
+    def test_empty_else_still_emits_case_etc(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n case 1 {\n }\n else {\n }\n }\n}"
+        )
+        assert int(evt.Opcode.CASE_ETC) in values(source)
+
+    def test_no_switch_break_is_emitted(self):
+        # Cases do not fall through, so the next CASE_* ends the previous body.
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            " case 1 {\n wait(1)\n }\n case 2 {\n wait(2)\n }\n }\n}"
+        )
+        assert int(evt.Opcode.SWITCH_BREAK) not in values(source)
+
+    def test_exact_word_sequence(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            " case 1 {\n wait(1)\n }\n else {\n wait(2)\n }\n }\n}"
+        )
+        assert values(source) == [
+            header(evt.Opcode.SET, 2),
+            evt.LW.encode(0),
+            1,
+            header(evt.Opcode.SWITCH, 1),
+            evt.LW.encode(0),
+            header(evt.Opcode.CASE_EQUAL, 1),
+            1,
+            header(evt.Opcode.WAIT_FRM, 1),
+            1,
+            int(evt.Opcode.CASE_ETC),
+            header(evt.Opcode.WAIT_FRM, 1),
+            2,
+            int(evt.Opcode.END_SWITCH),
+            int(evt.Opcode.END_SCRIPT),
+        ]
+
+    def test_subject_may_be_computed(self):
+        # The subject is evaluated before SWITCH, so arithmetic is fine there.
+        source = (
+            "script main {\n var a = 1\n switch a + 1 {\n case 2 {\n wait(1)\n }\n }\n}"
+        )
+        result = values(source)
+        assert result.index(header(evt.Opcode.ADD, 2)) < result.index(
+            header(evt.Opcode.SWITCH, 1)
+        )
+
+    def test_computed_case_value_is_rejected(self):
+        # Its instructions would land inside the previous case's body.
+        source = (
+            "script main {\n var a = 1\n switch a {\n case a + 1 {\n wait(1)\n }\n }\n}"
+        )
+        with pytest.raises(ScriptError, match=r"case value must be a literal"):
+            words(source)
+
+    def test_float_subject_is_rejected(self):
+        source = "script main {\n var a = 1.0\n switch a {\n case 1 {\n }\n }\n}"
+        with pytest.raises(ScriptError, match=r"switch subject must be an integer"):
+            words(source)
+
+    def test_second_else_is_rejected(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            " case 1 {\n }\n else {\n }\n else {\n }\n }\n}"
+        )
+        with pytest.raises(ScriptError, match=r"already has an 'else'"):
+            words(source)
+
+    def test_else_before_a_case_is_rejected(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n else {\n }\n case 1 {\n }\n }\n}"
+        )
+        with pytest.raises(ScriptError, match=r"must be the last arm"):
+            words(source)
+
+    def test_comparison_case_cannot_take_a_comma_list(self):
+        source = "script main {\n var a = 1\n switch a {\n case > 1, 2 {\n }\n }\n}"
+        with pytest.raises(ScriptError, match=r"cannot\s+take a comma list"):
+            words(source)
+
+    def test_a_statement_in_the_switch_body_is_rejected(self):
+        source = "script main {\n var a = 1\n switch a {\n wait(1)\n }\n}"
+        with pytest.raises(ScriptError, match=r"expected 'case' or 'else'"):
+            words(source)
+
+    def test_break_inside_a_switch_is_rejected(self):
+        source = (
+            "script main {\n var a = 1\n loop 2 {\n switch a {\n"
+            " case 1 {\n break\n }\n }\n }\n}"
+        )
+        with pytest.raises(ScriptError, match=r"cannot cross a switch"):
+            words(source)
+
+    def test_break_in_a_loop_inside_a_case_still_works(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n"
+            " case 1 {\n loop 2 {\n break\n }\n }\n }\n}"
+        )
+        assert int(evt.Opcode.DO_BREAK) in values(source)
+
+    def test_nested_switches(self):
+        source = (
+            "script main {\n var a = 1\n switch a {\n case 1 {\n"
+            " switch a {\n case 2 {\n wait(1)\n }\n }\n }\n }\n}"
+        )
+        result = values(source)
+        assert result.count(header(evt.Opcode.SWITCH, 1)) == 2
+        assert result.count(int(evt.Opcode.END_SWITCH)) == 2
+
+
 class TestCalls:
     def test_user_func_takes_the_pointer_as_first_argument(self):
         result = words("script main {\n evt_mario_set_pos(1.0, 2.0, 3.0)\n}")

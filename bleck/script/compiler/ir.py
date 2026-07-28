@@ -123,6 +123,17 @@ COMPARISONS = {
 }
 
 
+#: `case` arm comparisons. Integer-only: `evt` has no float or string CASE_*.
+CASE_OPCODES = {
+    "==": evt.Opcode.CASE_EQUAL,
+    "!=": evt.Opcode.CASE_NOT_EQUAL,
+    "<": evt.Opcode.CASE_SMALL,
+    ">": evt.Opcode.CASE_LARGE,
+    "<=": evt.Opcode.CASE_SMALL_EQUAL,
+    ">=": evt.Opcode.CASE_LARGE_EQUAL,
+}
+
+
 @dataclass(frozen=True)
 class Arithmetic:
     """The `evt` opcodes implementing one arithmetic operator."""

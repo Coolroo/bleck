@@ -5,6 +5,7 @@
 
 from bleck.script.compiler.ir import (
     ARITHMETIC,
+    CASE_OPCODES,
     COMPARISONS,
     LOCAL_SLOTS,
     Arithmetic,
@@ -23,6 +24,7 @@ from bleck.script.compiler.lower import compile_program
 
 __all__ = [
     "ARITHMETIC",
+    "CASE_OPCODES",
     "COMPARISONS",
     "LOCAL_SLOTS",
     "Arithmetic",

@@ -29,6 +29,8 @@ KEYWORDS = frozenset(
         "else",
         "while",
         "loop",
+        "switch",
+        "case",
         "break",
         "continue",
         "return",

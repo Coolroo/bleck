@@ -32,6 +32,9 @@ _PRECEDENCE = {
 
 _STORAGE_NAMES = {storage.name.lower() for storage in STORAGE_CLASSES}
 
+#: Comparisons a `case` arm may lead with; bare `case v` means `==`.
+_CASE_OPERATORS = ("==", "!=", "<=", ">=", "<", ">")
+
 #: Statements that are a single keyword and nothing else.
 _KEYWORD_ONLY_STATEMENTS = {
     "break": tree.Break,
@@ -53,6 +56,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
             "if": self.parse_if,
             "while": self.parse_while,
             "loop": self.parse_loop,
+            "switch": self.parse_switch,
             "wait": self.parse_wait,
             "wait_ms": self.parse_wait,
             "spawn": self.parse_spawn,
@@ -223,6 +227,79 @@ class _Parser:  # pylint: disable=too-many-public-methods
             count = self.parse_expression()
         body = self.parse_block()
         return tree.Loop(position=keyword.position, count=count, body=body)
+
+    def parse_switch(self) -> tree.Switch:
+        keyword = self.advance()
+        subject = self.parse_expression()
+        self.skip_newlines()
+        self.expect_op("{")
+
+        cases: list[tree.SwitchCase] = []
+        else_body: list[tree.Statement] = []
+        else_at: Position | None = None
+
+        self.skip_newlines()
+        while not self.current.is_op("}"):
+            token = self.current
+            if token.kind is TokenKind.END:
+                raise self.fail("unclosed '{'")
+            if token.is_keyword("else"):
+                if else_at is not None:
+                    raise self.fail(
+                        "this switch already has an 'else'; "
+                        "merge the two into one 'else' block",
+                        token,
+                    )
+                self.advance()
+                else_at = token.position
+                else_body = self.parse_block()
+            elif token.is_keyword("case"):
+                if else_at is not None:
+                    raise self.fail(
+                        "'else' must be the last arm of a switch; "
+                        "move this 'case' above it",
+                        token,
+                    )
+                cases.append(self.parse_case())
+            else:
+                raise self.fail(
+                    f"expected 'case' or 'else', found {token}; "
+                    "a switch body holds only case arms",
+                    token,
+                )
+            self.skip_newlines()
+
+        self.expect_op("}")
+        if not cases and else_at is None:
+            raise self.fail("this switch has no cases", keyword)
+        return tree.Switch(
+            position=keyword.position,
+            subject=subject,
+            cases=cases,
+            else_body=else_body,
+            has_else=else_at is not None,
+        )
+
+    def parse_case(self) -> tree.SwitchCase:
+        keyword = self.advance()
+        operator = self.accept_op(*_CASE_OPERATORS)
+        alternatives = [self.parse_expression()]
+        while self.accept_op(","):
+            self.skip_newlines()
+            alternatives.append(self.parse_expression())
+        if operator is not None and len(alternatives) > 1:
+            raise self.fail(
+                f"'case {operator.text} ...' compares one value, so it cannot "
+                "take a comma list; write each comparison as its own case",
+                operator,
+            )
+        body = self.parse_block()
+        return tree.SwitchCase(
+            position=keyword.position,
+            operator=operator.text if operator is not None else "==",
+            alternatives=alternatives,
+            body=body,
+        )
 
     def parse_wait(self) -> tree.Wait:
         keyword = self.advance()

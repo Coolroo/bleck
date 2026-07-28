@@ -131,6 +131,26 @@ class Loop(Statement):
 
 
 @dataclass(frozen=True)
+class SwitchCase(Node):
+    """One `case` arm. Several `alternatives` mean a comma-separated OR list."""
+
+    operator: str = "=="
+    alternatives: list[Expression] = field(default_factory=list)
+    body: list[Statement] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class Switch(Statement):
+    """A `switch` over one subject. `has_else` distinguishes an empty `else`
+    body from no `else` at all."""
+
+    subject: Expression | None = None
+    cases: list[SwitchCase] = field(default_factory=list)
+    else_body: list[Statement] = field(default_factory=list)
+    has_else: bool = False
+
+
+@dataclass(frozen=True)
 class Break(Statement):
     pass
 

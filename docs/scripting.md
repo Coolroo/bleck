@@ -107,6 +107,11 @@ cannot silently change which script starts.
 | `if …` with float operands | `IFF_EQUAL` … |
 | `while cond { }` | `DO 0` + inverted test + `DO_BREAK` … `WHILE` |
 | `loop n { }` | `DO n` … `WHILE` |
+| `switch x { }` | `SWITCH x` … `END_SWITCH` |
+| `case 1 { }` | `CASE_EQUAL 1` + body |
+| `case > 10 { }` | `CASE_LARGE 10` + body |
+| `case 2, 3 { }` | `CASE_OR 2`, `CASE_OR 3` + body + `CASE_END` |
+| `else { }` (in a switch) | `CASE_ETC` + body |
 | `return` | `END_EVT` (ends the script, not the array) |
 | `f(a, b)` | `USER_FUNC &f, a, b` |
 | `spawn s` | `RUN_CHILD_EVT &s` |
@@ -116,6 +121,31 @@ cannot silently change which script starts.
 is therefore an unbounded `DO 0` whose first act is to test the negated
 condition and `DO_BREAK`. That is why the emitted opcode for `while i < 3` is
 `IF_LARGE_EQUAL`, not `IF_SMALL`.
+
+`switch` maps almost one-to-one, because `evt` has the construct natively:
+
+```
+switch enemy_type {
+    case 1        { evt_msg_print(0, "goomba", 0, 0) }
+    case 2, 3     { evt_msg_print(0, "koopa or paratroopa", 0, 0) }
+    case > 10     { evt_msg_print(0, "boss", 0, 0) }
+    else          { evt_msg_print(0, "something else", 0, 0) }
+}
+```
+
+Three things the VM decides for us. **Cases do not fall through** — the next
+`CASE_*` ends the previous body — so nothing emits `SWITCH_BREAK` and no `break`
+is needed. **`else` is `CASE_ETC`**, at most one and last; anything else is a
+parse error. **Case values must be direct** (a literal, a variable or a slot):
+a computed value would emit its `SET`/`ADD` between the arms, where they would
+run as part of the previous case's body. The subject has no such limit — it is
+evaluated before `SWITCH`.
+
+`break` and `continue` are rejected when the innermost enclosing block is a
+switch: `DO_BREAK` would jump past `END_SWITCH` and leave the switch open.
+Only the subject-holding `SWITCH` is emitted, never `SWITCHI`, which takes its
+operand raw and so cannot name a slot. Integers only — `evt` has no float or
+string `CASE_*`. `CASE_BETWEEN`, `CASE_AND` and `CASE_FLAG` are not exposed.
 
 ### Two things the encoding forces
 

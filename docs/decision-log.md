@@ -4839,3 +4839,70 @@ has only ever passed has not been tested.** Run it somewhere it should fail.
 
 Reproducing CI locally is one `git clone` into a temp directory plus `uv sync`,
 and it is now the thing to do before pushing a workflow change.
+
+---
+
+## D84 — `switch` lowers onto evt's own switch, with three deliberate limits (2026-07-28)
+
+The script language gained `switch` / `case` / `else`. `evt` has the construct
+natively (`SWITCH` 0x22 … `END_SWITCH` 0x31), so unlike `while` — which had to
+be faked out of a counted `DO` (see `docs/scripting.md`) — this is close to a
+one-to-one mapping. Parser, AST and lowering only; no new opcode research.
+
+### ✅ What it emits
+
+`switch a { case 1 {…} case 2,3 {…} case > 10 {…} else {…} }` over `var a`
+compiles to, in order: `SWITCH lw[0]`, `CASE_EQUAL 1` + body, `CASE_OR 2`
+`CASE_OR 3` + body + `CASE_END`, `CASE_LARGE 10` + body, `CASE_ETC` + body,
+`END_SWITCH`. Asserted word-for-word in `tests/test_script.py::TestSwitch`;
+593 tests pass and pylint is clean.
+
+### 🔶 No `SWITCH_BREAK` is emitted, and that is an inference
+
+`evtmgr_cmd.h` declares `evtSearchCase` — *"a pointer to the next case or end
+switch on the current switch depth"* — and `evtSearchEndSwitch`, alongside
+`EvtEntry.switchStates[8]`. That is the Paper Mario shape: a case body is
+terminated by the *next* `CASE_*` opcode, which sees the "already matched" state
+and jumps to `END_SWITCH`. So a trailing `SWITCH_BREAK` per arm is redundant.
+
+⚠️ **This is read off the header declarations, not off the VM's code.** No
+`evtmgr_cmd.cpp` is vendored here and nothing has been run in-game. If a case
+turns out to fall through on hardware, the fix is one `SWITCH_BREAK` before each
+subsequent `CASE_*` and the tests pin the current sequence exactly, so the
+change would be visible.
+
+### ✅ `SWITCH`, never `SWITCHI`
+
+`SWITCHI` (0x23) is the immediate form. Subjects here are usually a local slot,
+and `evt` recovers storage class from an operand's numeric range — an immediate
+opcode by definition skips that decode. `SWITCH` is emitted unconditionally.
+Rejected alternative: picking `SWITCHI` for literal subjects. It would save
+nothing, and `switch 3 { … }` is a constant-folding exercise, not a use case.
+
+### ✅ Case values must be direct; the subject need not be
+
+A case value goes through `direct_value` (literal, variable or slot) rather than
+`evaluate`. A computed value like `case a + 1` would emit its `SET`/`ADD`
+*between the arms* — which is inside the previous case's body, where it would
+run only when that case matched. Rejected with "compute it into a variable
+before the switch". The subject is evaluated before `SWITCH` is emitted, so it
+takes any expression.
+
+### ✅ `break` inside a switch is rejected, not translated
+
+`break` already meant `DO_BREAK`. Inside a switch arm that would jump past
+`END_SWITCH` and leave the switch depth pushed. `loop_depth` was replaced with a
+`_Block` stack so the compiler can see which construct is innermost: a `break`
+whose innermost block is a switch is an error, one inside a loop nested in a
+case still emits `DO_BREAK`.
+
+Rejected alternative: mapping `break` onto `SWITCH_BREAK`. It is the obvious
+move, but it would silently change what `break` means depending on context, and
+`SWITCH_BREAK`'s exact behaviour is 🔶 for the same reason as above. Cases do
+not fall through, so the useful case for it is thin.
+
+### Deliberately not implemented
+
+`CASE_BETWEEN` (0x2F), `CASE_AND` (0x2C) and `CASE_FLAG` (0x2D). Nothing needs
+them yet, and each wants syntax of its own. Floats and strings are rejected as
+subjects and case values: `evt` has no `CASE_*` for either.
