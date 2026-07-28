@@ -4404,3 +4404,66 @@ failure with a different face: **the rig cannot see a state it only samples**.
 An instrument that looks away is not evidence of absence, and this is the second
 time in one session that a human glance overturned a confident memory-read
 conclusion.
+
+---
+
+## D76 — ⛔ D70, D73 and D74 were all one broken instrument (2026-07-27)
+
+⛔ **Retract D70, D73 and D74 entirely.** There was never a bug. The combo block
+does not interfere with anything, the boot map always fired, and
+`evt_seq_mapchange` always worked.
+
+With the rig reading `seq_mapchange_wp->mapName` instead of `seqWork.p0`, the
+same disc that produced four entries' worth of investigation:
+
+```
+[t+45s] seq=GAME  map=aa4_01  gw[28]=1   <- attract demo, script starts
+[t+48s] seq=GAME  map=mac_01  gw[28]=2   <- Flipside. three seconds later.
+```
+
+Unattended, nobody at the keyboard. `mac_01` is exactly what the script asked
+for, and it arrived on the first poll after the call.
+
+### What actually happened
+
+`seqWork.p0` is a *parameter to the map-change sequence*. It means something
+while a change is running and holds stale rubbish afterwards. The rig printed
+`map=` only when it happened to contain a plausible name, so:
+
+- a run that changed maps looked identical to one that did not
+- the absence of a `map=` field read as "no map change happened"
+
+Everything from D70 onward was built on that inference:
+
+| Entry | Claimed | Actually |
+|---|---|---|
+| D70 | the combo block breaks `evt_seq_mapchange` | ⛔ it does not |
+| D73 | combo + boot never fires the boot map | ⛔ it fires |
+| D74 | the call executes and has no effect | ⛔ it has the intended effect |
+
+D71 and D72 survive: they measured things directly (the bound address, a `gw`
+write) rather than inferring from a missing field. D72's finding that the
+120-frame settle is load-bearing also stands -- that hang was real and was
+observed as a stuck `stage=11`, not as an absent `map=`.
+
+### ⚠️ The actual lesson, and it is expensive
+
+Six runs and four decision-log entries went into investigating a bug that did
+not exist. Every one of them was internally consistent, had controls, and
+bisected cleanly -- **because the instrument was wrong in the same direction
+every time.** Controls do not help when the control is measured with the same
+broken ruler.
+
+Two things would have caught it much earlier:
+
+1. **The very first `--map` test never showed `map=he1_01` in the rig either.**
+   It was confirmed by a human looking at the screen (D64). That discrepancy --
+   works by eye, invisible to the rig -- was visible from the beginning and
+   went unremarked.
+2. **A positive control.** Every run asked "did the map change?" and none asked
+   "can this rig see a map change it knows happened?" The attract demo moves
+   from `aa4_01` to `ls4_12` unaided; that transition should have been the
+   first thing checked.
+
+⚠️ **Before trusting a negative result, show the instrument can produce a
+positive one.** Nothing in this project's rules said that yet. It does now.

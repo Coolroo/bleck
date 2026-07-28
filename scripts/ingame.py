@@ -68,6 +68,14 @@ EVT_WORK = 0x8050C990
 SEQUENCES = ["LOGO", "TITLE", "GAME", "MAPCHANGE", "GAMEOVER", "LOAD"]
 SEQ_GAME = 2
 
+#: `seq_mapchange_wp` (eu0) -- a pointer to the map-change sequence's work.
+#: Unlike `seqWork.p0` this survives the transition, so it says which map the
+#: game is *in* rather than which one it is on its way to. See D75.
+SEQ_MAPCHANGE_WP = 0x805AE0A8
+
+#: `SeqMapChangeWork.mapName`, from `spm/seq_mapchange.h`.
+SEQ_MAPCHANGE_MAP_NAME = 0x20
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -170,29 +178,33 @@ class Session:
 
     @staticmethod
     def _destination(dme) -> str:
-        """Where the game says it is going, from `seqWork.p0`.
+        """Which map the game is in, from `seq_mapchange_wp->mapName`.
 
-        This is the same field the map-hook machinery watches, and reading it
-        here is what turns "the game is in SEQ_GAME" into "the game is in
-        Lineland". Without it, a boot map that quietly did nothing and one that
-        worked produce identical output — both just say `seq=GAME`.
+        ⚠️ This used to read `seqWork.p0`, and that was wrong in a way that
+        produced four wrong conclusions (D75). `p0` is a *parameter to the
+        map-change sequence* and only means anything while one is running.
+        Between changes it holds whatever was left there, so the field went
+        blank and a run that had changed maps looked exactly like one that had
+        not. D70, D73 and D74 all rest on that mistake.
 
-        `p0` is only meaningful during a map change; the game leaves the old
-        pointer in place afterwards, which is useful rather than stale, because
-        the last destination *is* where you are.
+        `SeqMapChangeWork` is the map-change sequence's own work struct and
+        keeps `mapName` after the change completes, so this answers "where is
+        the game" rather than "is a transition in flight right now".
+
+        Layout from `spm/seq_mapchange.h`: `areaName[32]` at 0x00,
+        `mapName[32]` at 0x20, `beroName[32]` (the door) at 0x40.
         """
-        pointer = dme.read_word(SEQ_WORK + 8)
-        if not 0x80000000 <= pointer < 0x94000000:
-            return ""
         try:
-            raw = dme.read_bytes(pointer, 16)
+            work = dme.read_word(SEQ_MAPCHANGE_WP)
+            if not 0x80000000 <= work < 0x94000000:
+                return ""
+            raw = dme.read_bytes(work + SEQ_MAPCHANGE_MAP_NAME, 32)
         except RuntimeError:
             return ""
         end = raw.find(b"\0")
-        name = raw[: end if end >= 0 else 16]
-        # Map names are lowercase ASCII with digits and underscores. Anything
-        # else means the pointer is not pointing at a name right now.
-        text = name.decode("ascii", "replace")
+        text = raw[: end if end >= 0 else 32].decode("ascii", "replace")
+        # Map names are lowercase ASCII, digits and underscores. Anything else
+        # means the struct is not populated yet.
         return text if text and all(c.isalnum() or c == "_" for c in text) else ""
 
     def read(self, probe: int, words: int, watch_gw: list[int]) -> ReadResult:
