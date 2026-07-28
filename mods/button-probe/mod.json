@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "button-probe",
+  "version": "0.1.0",
+  "description": "Reads the controller from inside the game, to settle the button masks",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": { "sequences": ["title", "game"] }
+  }
+}
