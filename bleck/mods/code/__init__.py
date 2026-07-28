@@ -28,6 +28,7 @@ from bleck.mods.code.parts import (  # noqa: F401
     banner_for,
     collect_sources,
     combo_hooks_for,
+    function_hooks_for,
     link_module,
     map_hooks_for,
     mods_defining_mod_prolog,
@@ -139,6 +140,7 @@ def build_merged(
             # Every mod's, not just the ones with a script: patches name C
             # functions, so a native-only mod contributes them too.
             patches=[patch for part in parts for patch in part.patches],
+            function_hooks=[hook for part in parts for hook in part.function_hooks.hooks],
         )
     except ScriptError as exc:
         raise CodeError(f"merging {len(mods)} code mods:\n{exc}") from exc
@@ -169,6 +171,7 @@ def build_mod(
     banner = banner_for(mod, spec)
     combos = combo_hooks_for(mod, spec, project_config.load())
     patches = patches_for(mod, spec, sources)
+    hooks = function_hooks_for(mod, spec, sources, table)
     source = script_text(mod, spec, boot_map)
     compiled = None
 
@@ -184,6 +187,7 @@ def build_mod(
                     boot_script=emit.BOOT_SCRIPT if boot_map else "",
                     run_cxx_ctors=needs_ctor_walk(sources),
                     patches=patches,
+                    function_hooks=hooks.hooks,
                 ),
                 symbol_table=table,
             )
@@ -197,6 +201,7 @@ def build_mod(
             banner=banner,
             run_cxx_ctors=needs_ctor_walk(sources),
             patches=patches,
+            function_hooks=hooks.hooks,
         ).text
 
     headers = env.path(env.HEADERS_DIR)
@@ -225,4 +230,5 @@ def build_mod(
         scripts=compiled.script_names if compiled else [],
         called_symbols=list(compiled.program.called_symbols) if compiled else [],
         sources=sources,
+        warnings=list(hooks.warnings),
     )

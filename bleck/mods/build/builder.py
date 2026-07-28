@@ -235,6 +235,7 @@ def check(
     """
     report = BuildReport(staged=Path())
     report.code_builds = compile_code(chain, override)
+    report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
@@ -252,6 +253,7 @@ def build(
     """Stage the base, apply the chain, and report what happened."""
     report = BuildReport(staged=staged)
     report.code_builds = compile_code(chain, override)
+    report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)

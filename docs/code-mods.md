@@ -425,14 +425,97 @@ in practice a hook from a mod into game code is ~15 MB and comfortably in range
 — but check the status, because nothing guarantees where the loader puts the
 module.
 
+### `code.hooks` — the declarative form
+
+The helpers above are the mechanism; `code.hooks` is how a mod asks for one
+without writing an install sequence. ✅ Measured through the declarative path
+(D95).
+
+```json
+"code": {
+  "sources": ["src"],
+  "hooks": [
+    { "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }
+  ]
+}
+```
+
+- **`function`** — a symbol name resolved against the target's list **at build
+  time**, or a raw address (`"0x801adef0"`). Resolving by name is the point: no
+  addresses in a manifest, and a rename or the wrong `target` fails the build
+  rather than branching into unrelated code. The generated C emits
+  `extern void npcDispMain(void);` and `&npcDispMain`, so `elf2rel` still binds
+  the address and the symbol list stays the single source of truth.
+- **`call`** — a function in the mod's own sources. Checked against what those
+  sources define, reusing the same scan `code.patches` uses, so a typo is caught
+  before `elf2rel` reports it as a missing *game* symbol.
+- **`mode`** — `"replace"` only. `"before"` and `"after"` are **refused** with a
+  message naming what replace does instead; the field exists now so adding
+  interception later is not a breaking change.
+
+### ⚠️ `replace` means the original never runs
+
+There is no trampoline. The function's first instruction becomes a branch and
+its body is gone for the rest of the session, so **the mod's function is the
+whole implementation** — same arguments, same return value, same job. A hook on
+`npcDispMain` stops NPCs being drawn; a hook on anything a sequence waits for
+stops the sequence.
+
+Reaching for `before` because you want the original to keep working is exactly
+the case that must not silently get `replace`, which is why the mode is refused
+rather than defaulted.
+
+### The guard is derived, not declared
+
+`code.patches` makes you write `expect`. A hook cannot: nobody knows the
+instruction word at a function's entry off-hand. So `bleck` reads it out of the
+base disc's `main.dol` at build time — mapping the address through the DOL's
+section table (`bleck/backends/dol.py`) — and generates that word into the
+runtime guard.
+
+```c
+static const BleckFunctionHook bleck_function_hooks[BLECK_HOOK_COUNT] = {
+    {(void *) &npcDispMain, 0x9421FE40u, 1u, (const void *) &count_npcs},
+};
+```
+
+At run time the word at the address must equal `0x9421FE40` — `npcDispMain`'s
+`stwu r1,-0x1C0(r1)` prologue — or nothing is written. A wrong address or the
+wrong game version therefore costs a status, not a corrupt branch.
+
+**A guard is never invented.** An address the DOL does not map — a REL address,
+say — gets `guarded = 0`, installs unguarded, and the build warns saying exactly
+why. An address that resolves into the DOL's *data* rather than its text is
+guarded but warned about too: eu0's data reaches `0x805B7720`, so a wrong
+address can easily look like code.
+
+### Reading the outcome
+
+```c
+extern unsigned int bleck_hook_status[];   /* one per declared hook */
+extern const unsigned int bleck_hook_count;
+```
+
+| Value | Meaning |
+|---|---|
+| 1 | pending — `bleck_install_hooks` has not run |
+| 2 | installed |
+| 3 | refused: the word there is not what the build read |
+| 4 | misaligned |
+| 5 | out of range — the branch cannot be encoded |
+
+Hooks install from `_prolog`, **before** `mod_prolog`, so a mod's own C reads a
+final answer.
+
 ### What this does not do yet
 
 - ⛔ **No trampoline.** This is branch *replacement*: the original body never
   runs. Intercepting a function *without* breaking it is unproven, and upstream's
   `hookFunction` is not a drop-in — it blindly copies instruction[0], so it
   breaks on any function starting with a PC-relative instruction (D37).
-- ⛔ **No manifest surface.** Nothing in `mod.json` declares an instruction
-  patch; it is C-only until there is a target worth declaring.
+- ⛔ **No build-time range check.** The loader chooses where the module lands, so
+  "can this branch be encoded" is only answerable at run time. The encoder
+  refuses rather than masking, and the status says which way it failed.
 - ⛔ **`evt_door_set_door_descs` is not the way in to doors.** It was hooked
   successfully and entered **zero** times while Flipside loaded and ran for 90 s,
   with a control hook on `npcDispMain` firing 62,480 times in the same window

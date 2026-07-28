@@ -167,10 +167,71 @@ extern unsigned int bleck_patch_shared[];
 
 Full field reference: [`code.patches`](../reference/manifest.md).
 
-## Patching the game's own code
+## Replacing one of the game's own functions
 
-`code.patches` reaches the game's *scripts*. To redirect one of the game's C
-functions you write the branch yourself, using helpers every module carries:
+`code.patches` reaches the game's *scripts*. `code.hooks` reaches its **C
+functions**: name one, name yours, and the module points the game at yours when
+it loads.
+
+```json
+"code": {
+  "sources": ["src"],
+  "hooks": [
+    { "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }
+  ]
+}
+```
+
+```c
+/* Your function takes over completely, so it matches what it replaces. */
+void count_npcs(void) { ... }
+```
+
+- `function` — a game symbol by name, resolved against your `target`'s symbol
+  list while the mod builds. A name that is not there fails the build, with a
+  suggestion. A raw address (`"0x801adef0"`) works too, for something unnamed.
+- `call` — a function in your own `code.sources`.
+- `mode` — `"replace"`. That is the only one that exists.
+
+!!! danger "`replace` means the original never runs"
+
+    The function's first instruction becomes a branch into your code, and its
+    body is gone for the rest of the session. **Your function is now the whole
+    implementation** — same arguments, same return value, same responsibilities.
+    Hooking `npcDispMain` stops NPCs being drawn; hooking something a sequence
+    waits on stops the game.
+
+    `"before"` and `"after"` are **refused** at build time rather than quietly
+    treated as `"replace"`. If you want the original to keep running, that is
+    the thing `bleck` cannot do yet, and it will say so.
+
+You do not write a guard. `bleck` reads the instruction word actually at that
+address out of the base disc's `main.dol` while building, and the hook refuses
+to install unless the running game has the same word — so a wrong address, or a
+mod built against a different game version, is a clean refusal rather than a
+branch into the middle of something else. If the address is not in the DOL at
+all, the build **warns** that the hook is going in unguarded rather than
+inventing a guard.
+
+Your C can read what happened:
+
+```c
+extern unsigned int bleck_hook_status[];
+/* 1 pending, 2 installed, 3 refused by the guard,
+   4 misaligned, 5 out of range */
+
+extern const unsigned int bleck_hook_count;
+```
+
+Hooks install before your `mod_prolog`, so that read is final.
+
+Full field reference: [`code.hooks`](../reference/manifest.md).
+
+## Writing the branch yourself
+
+`code.hooks` covers the declarative case. The same helpers are available
+directly, for a hook you want to install conditionally or somewhere the
+manifest cannot name:
 
 ```c
 extern int  bleck_code_hook(void *at, const void *to);   /* encode, write, flush */
@@ -190,11 +251,9 @@ The branch is a plain `b`, so its reach is about ±32 MB. Out of range is
 **refused**, never truncated — a masked displacement would be a valid branch to
 the wrong place.
 
-!!! warning "This replaces the function; it does not wrap it"
-
-    The original body never runs. There is no trampoline yet, so anything the
-    game relied on that function for stops happening. Useful for probes and for
-    functions you fully reimplement; not yet a general hook.
+Written this way there is **no guard** — nothing checks what was at the address
+before overwriting it. `code.hooks` derives one for you, which is the reason to
+prefer it.
 
 !!! warning "Never store an instruction without flushing"
 

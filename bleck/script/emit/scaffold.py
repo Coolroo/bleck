@@ -149,6 +149,45 @@ class ScriptPatch:
 
 
 @dataclass(frozen=True)
+class FunctionHook:
+    """A game function branch-replaced by one of the mod's own.
+
+    Everything is resolved: the manifest's symbol name has become an address,
+    and the guard word has been read out of the base disc's `main.dol`.
+
+    ⚠️ Replacement, not interception. The original body never runs.
+    """
+
+    call: str
+    """The C function in the mod's sources that takes over."""
+
+    address: int
+    """Where the branch is written. -1 when the symbol is left to the linker."""
+
+    symbol: str = ""
+    """The game symbol, when the manifest named one. Empty for a raw address."""
+
+    expect: int = 0
+    """The instruction word `main.dol` actually has there."""
+
+    guarded: bool = False
+    """Whether `expect` was derived. ⚠️ Never set for a guard that was guessed.
+
+    False means the address is not in the DOL -- a REL address, say -- so the
+    build could not read what is there. The hook then installs unguarded.
+    """
+
+    @property
+    def named(self) -> str:
+        return self.symbol or f"0x{self.address:08X}"
+
+    @property
+    def comment(self) -> str:
+        guard = f"expect {self.expect:08X}" if self.guarded else "UNGUARDED"
+        return f"/* {self.named} -> {self.call}, replace, {guard} */"
+
+
+@dataclass(frozen=True)
 class Scaffolding:
     """Everything the generated module does besides run its entry script.
 
@@ -169,6 +208,9 @@ class Scaffolding:
 
     patches: list[ScriptPatch] = field(default_factory=list)
     """Instructions replaced in the game's own scripts, applied at `_prolog`."""
+
+    function_hooks: list[FunctionHook] = field(default_factory=list)
+    """Game functions branch-replaced by the mod's own, installed at `_prolog`."""
 
     prefix: str = _PREFIX
     """Namespace for per-program identifiers, so merged mods do not collide.
@@ -192,4 +234,5 @@ class Scaffolding:
             and not self.boot_script
             and not self.combos
             and not self.patches
+            and not self.function_hooks
         )

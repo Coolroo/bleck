@@ -706,6 +706,109 @@ static void bleck_apply_patches(void)
 }}
 """
 
+#: Replacing a game function outright with one of the mod's own. ✅ The
+#: mechanism is measured (D94): a branch written over `npcDispMain` at
+#: `mod_prolog` fired 62,480 times across 90 s of gameplay.
+HOOK_BLOCK = """
+/*
+    Function hooks.
+
+    A game function's first instruction is overwritten with `b <mod function>`,
+    so every call into it lands in the mod instead. `bleck_code_hook` encodes,
+    writes and flushes; the flush is not a formality, and D94 measured a patch
+    without one doing nothing at all while looking correct in memory.
+
+    REPLACEMENT, NOT INTERCEPTION. The original body never runs again for the
+    rest of the session. The mod's function is now the whole implementation, and
+    must return whatever the caller expects. `mode` exists so `before` and
+    `after` can be added later; both are refused at build time today rather than
+    silently becoming this.
+
+    THE GUARD IS DERIVED, NOT DECLARED. Nobody can reasonably know the
+    instruction word at a function's entry, so `bleck` reads it out of the base
+    disc's `main.dol` at build time and generates it here. If the running game
+    does not have that word, nothing is written -- which turns a wrong address
+    or the wrong game version into a clean refusal instead of a branch into the
+    middle of something else.
+
+    An address the DOL does not map -- a REL address, say -- has no derived
+    guard. Those rows carry `guarded = 0` and install unguarded; the build warns
+    and says why. Nothing here is ever guarded against a word bleck did not
+    actually read.
+
+    NOTE: Installed once, at `_prolog`, before `mod_prolog`. The DOL's text is
+    resident for the whole session, so the branch lasts it too.
+
+    A mod reads the outcome with:
+
+        extern unsigned int bleck_hook_status[];
+*/
+
+/* bleck_hook_status[] values. */
+#define BLECK_HOOK_PENDING 1
+#define BLECK_HOOK_INSTALLED 2
+#define BLECK_HOOK_REFUSED 3
+#define BLECK_HOOK_MISALIGNED 4
+#define BLECK_HOOK_OUT_OF_RANGE 5
+
+#define BLECK_HOOK_COUNT {count}
+
+typedef struct
+{{
+    void *at;
+    u32 expect;
+    u32 guarded;
+    const void *call;
+}} BleckFunctionHook;
+{decls}
+static const BleckFunctionHook bleck_function_hooks[BLECK_HOOK_COUNT] = {{
+{rows}}};
+
+/*
+    Not static: a mod's own C reads this to tell installed from refused without
+    a debugger. Initialised to PENDING rather than 0 so it lands in .data -- the
+    loader allocates this module's bss but does not document zeroing it.
+*/
+u32 bleck_hook_status[BLECK_HOOK_COUNT] = {{
+{pending}}};
+
+const u32 bleck_hook_count = BLECK_HOOK_COUNT;
+
+static void bleck_install_hooks(void)
+{{
+    u32 i;
+    s32 status;
+    const BleckFunctionHook *hook;
+
+    for (i = 0; i < BLECK_HOOK_COUNT; i++)
+    {{
+        hook = &bleck_function_hooks[i];
+        if (hook->guarded && *(volatile u32 *) hook->at != hook->expect)
+        {{
+            bleck_hook_status[i] = BLECK_HOOK_REFUSED;
+            continue;
+        }}
+        /* Encodes first and writes nothing on a bad encoding, so an
+           out-of-range branch costs a status rather than a wild jump. */
+        status = bleck_code_hook(hook->at, hook->call);
+        if (status == BLECK_CODE_ALIGN)
+            bleck_hook_status[i] = BLECK_HOOK_MISALIGNED;
+        else if (status == BLECK_CODE_RANGE)
+            bleck_hook_status[i] = BLECK_HOOK_OUT_OF_RANGE;
+        else
+            bleck_hook_status[i] = BLECK_HOOK_INSTALLED;
+    }}
+}}
+"""
+
+#: The hooked game function, declared for its address only -- exactly as game
+#: functions called by USER_FUNC are. No address is written for a named symbol;
+#: `elf2rel` binds it, so the symbol list stays the one source of truth.
+HOOK_TARGET = "extern void {name}(void);"
+
+#: The mod's own replacement, declared for its address only.
+HOOK_CALL = "extern void {name}(void);"
+
 #: Resolving `map:<name>`. Emitted only when a map patch is declared, so an
 #: item-only module leaves `mapDataPtr` unreferenced.
 PATCH_MAP_RESOLVER = """

@@ -784,7 +784,18 @@ What to know before extending it:
 - ⛔ **Branch replacement only.** The original body is destroyed. A trampoline
   is the next increment, and upstream's `hookFunction` is not a drop-in — it
   blindly copies instruction[0] (D37).
-- ⛔ **No manifest surface**, deliberately. Nothing in `mod.json` yet.
+- ✅ **`code.hooks` is the manifest surface** (D95). D94 shipped none on purpose;
+  this is it, with the guard *derived* from the base disc's `main.dol` so a user
+  never types an instruction word:
+
+  ```json
+  "hooks": [{ "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }]
+  ```
+
+  Positive and negative both measured: 63,644 entries in `mac_01`, and a second
+  hook on the same function refused by the guard with `0` entries and the
+  instruction still pointing at the first. ⚠️ `mode` is `replace` **only**;
+  `before`/`after` are refused rather than silently becoming it.
 - ⛔ **Doors are still not reachable.** `evt_door_set_door_descs` was hooked
   successfully and entered **zero** times while Flipside loaded and ran 90 s,
   with a control hook firing 62,480 times in the same window. 🔶 Two maps only.
@@ -792,8 +803,10 @@ What to know before extending it:
   `npcDispMain` as a hot-function control; it is a draw pass.
 - ✅ Existing mods are byte-identical: `--gc-sections` drops the helpers unless
   a module calls one.
-- `mods/code-patch-probe` (the mechanism, with the no-flush control) and
-  `mods/door-hook-probe` (live game code) are the worked examples.
+- `mods/code-patch-probe` (the mechanism, with the no-flush control),
+  `mods/door-hook-probe` (live game code, by hand), `mods/fn-hook-probe` (the
+  declaration) and `mods/fn-hook-guard` (its negative control) are the worked
+  examples.
 
 ---
 

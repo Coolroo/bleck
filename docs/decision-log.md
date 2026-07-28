@@ -6011,3 +6011,167 @@ evidence for it did not exist until now.
 - 704 tests pass (699 before). ruff clean, pylint 10.00/10.
 - One existing test needed narrowing: it counted `__asm__` across the whole
   generated file, and the flush block adds one.
+
+---
+
+## D95 — ✅ `code.hooks`: function replacement as a declaration, with a guard nobody had to type (2026-07-28)
+
+D94 built the mechanism and deliberately shipped **no** manifest surface,
+because what a declaration should say depended on what stage 2 showed. This is
+that surface, re-proven through the declarative path — positive and negative,
+two runs.
+
+### The shape
+
+```json
+"code": {
+  "sources": ["src"],
+  "hooks": [
+    { "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }
+  ]
+}
+```
+
+`function` is a symbol name resolved against the target's list at build time, or
+a raw address. `call` is a function in the mod's own sources, checked against
+what they define by reusing `code.patches`' existing scan — no second C parser.
+`mode` is `"replace"` only; `"before"` and `"after"` are named and refused, the
+same reasoning as D90's `<kind>:<name>` selector.
+
+⛔ **Rejected: a flat `"replace": {"npcDispMain": "count_npcs"}` map.** It reads
+better and makes `mode` inexpressible, which is the one thing that must stay
+expressible — a user reaching for `before` has to hit an error, not a shorter
+spelling of `replace`.
+
+### ✅ The guard is derived from `main.dol`
+
+`code.patches` requires `expect` because a wrong offset corrupts a script
+silently. The same hazard is here, but nobody knows the instruction word at a
+function's entry — so the build reads it.
+
+`bleck/backends/dol.py` parses the DOL's fixed header: 18 sections (7 text, 11
+data), three parallel tables of file offset (`0x00`), load address (`0x48`) and
+size (`0x90`). eu0's `main.dol` loads **ten** of them, spanning
+`80004000..805B7720`. Mapping `npcDispMain` (`801adef0`, from `spm.eu0.lst`)
+gives file offset `0x1922F0` in text1, holding **`9421FE40`** —
+`stwu r1,-0x1C0(r1)`. That word is generated into the table:
+
+```c
+static const BleckFunctionHook bleck_function_hooks[BLECK_HOOK_COUNT] = {
+    {(void *) &npcDispMain, 0x9421FE40u, 1u, (const void *) &count_npcs},
+};
+```
+
+⚠️ **The address is still `&npcDispMain`, not a number.** `elf2rel` binds it, so
+the symbol list stays the single source of truth even though the guard beside it
+is baked. Only a raw-address hook writes a literal.
+
+⚠️ **A guard is never invented.** An address the DOL does not map carries
+`guarded = 0`, installs unchecked, and the build warns naming the span it
+searched. A second warning covers a subtler case: eu0's *data* reaches
+`805B7720`, so `0x804a0000` looks like code, resolves cleanly and lands in
+`data12` — guarded, but almost certainly a mistake, so it is said out loud.
+
+### ✅ Positive — `mods/fn-hook-probe`, 90 s in `mac_01`
+
+`uv run python scripts/ingame.py fn-hook-probe --map mac_01 --words 16 --seconds 90`
+
+| Report field | Value |
+|---|---|
+| `bleck_hook_count` | `1` |
+| `bleck_hook_status[0]` | **`2` installed** |
+| **entries into `countNpcs`** | **`0xF89C` = 63,644** |
+| word at `npcDispMain`, read back | `48DB8090` = `b 0x80F65F80` |
+| `&countNpcs` | `80F65F80` — *the same address* |
+| SEQ_GAME frames | `0xF008` = 61,448 |
+| map changes completed | `2` |
+| sentinel | `B1ECB1EC` |
+
+`npcDispMain` was chosen because D94 measured it (62,480 entries there) and
+because it only ticks once a map is *live* — so a non-zero count also proves
+gameplay in `mac_01` was reached, which is exactly the truncation-versus-absence
+distinction D94's first stage-2 run got wrong. ⛔ Not `effMain`: D94 recorded
+that stubbing it wedges `SEQ_MAPCHANGE`.
+
+### ✅ Negative — `mods/fn-hook-guard`, the guard refusing on demand
+
+**Two hooks on the same function**, so the guard fails without editing anything
+`bleck` generated. Both carry the same derived `9421FE40`; hook 0 installs and
+writes the branch, and hook 1 then reads that branch instead of the prologue.
+
+| Report field | Value |
+|---|---|
+| `bleck_hook_count` | `2` |
+| `bleck_hook_status[0]` | `2` installed |
+| **`bleck_hook_status[1]`** | **`3` refused** |
+| entries into `countNpcs` | `0xF94D` = 63,821 |
+| **entries into `neverRuns`** | **`0`** |
+| word at `npcDispMain`, read back | `48DB80B0` = `b 0x80F65FA0` |
+| `&countNpcs` / `&neverRuns` | `80F65FA0` / `80F65FB8` |
+| map, 90 s | `mac_01`, SEQ_GAME frames `0xF0B9`, 2 map changes |
+
+The two hook functions are 24 bytes apart, which is what makes this readable:
+the branch points at `countNpcs`, so hook 1 wrote **nothing** — "refused" and
+"wrote something harmless" are distinguishable rather than assumed apart. A
+guard that cannot fail where it runs proves nothing (D83); this one fails on
+demand and leaves the instruction alone.
+
+⚠️ **What this does not show.** The refused hook shares an address with an
+applied one, so "the instruction is untouched" holds only for hook 1's write.
+A stale guard on an *unhooked* function — the genuine version-mismatch case — is
+🔶 inferred from the same code path, not separately measured; producing one would
+need a build whose DOL differs from the disc it ships, which nothing can
+currently express.
+
+### What the two-hook build also settled
+
+The one-hook module optimises the table away entirely: GCC folds a single row
+into `_prolog` as `lis r9,0x9421; ori r9,r9,0xfe40; cmpw`, checked with
+`powerpc-eabi-objdump` before the run so a folded-away guard could not pass for a
+working one. **Two** hooks materialise the table, and its `.rodata` relocations
+are `R_PPC_ADDR32 npcDispMain` and `R_PPC_ADDR32 countNpcs` against *undefined*
+symbols. `pyelf2rel` accepts that — a REL import into a data section — which was
+the one unproven assumption in emitting `&symbol` rather than a baked address.
+Now exercised, not assumed.
+
+### Build-time errors added
+
+- **unknown symbol**, with a `difflib` suggestion: *"names 'npcDispMainn', which
+  is not in the symbol list for this target (work\symbols\spm.eu0.lst, 927 named
+  symbols). Did you mean 'npcDispMain'? … Resolving by name is the point: a
+  wrong name fails the build rather than branching into unrelated code."*
+- **`mode: before` / `after`**: *"which bleck cannot do yet — it would run the
+  mod's function first, then the original. 'replace' is not that: it overwrites
+  the function's first instruction with a branch, so **THE ORIGINAL NEVER RUNS**
+  … Keeping the original needs a trampoline, which bleck does not have (D94) …
+  So 'before' is refused rather than quietly given you 'replace', which would
+  delete the behaviour you asked to keep."*
+- **a `call` the sources do not define**, reusing `_defined_functions`.
+- **a misaligned or out-of-RAM raw address**, at parse time.
+
+⛔ **No build-time range check.** The loader chooses where the module lands, so
+"can this branch be encoded" is not knowable while building. The runtime encoder
+already refuses rather than masking (D94), and the status distinguishes
+misaligned from out of range.
+
+### Still ⛔, and this is the important one
+
+- **No trampoline, so `replace` is the whole feature.** Hooking a function means
+  taking over its entire job. This is now the largest thing between `code.hooks`
+  and being useful for more than a probe, and it is on the roadmap with what it
+  needs: decide whether the displaced instruction is position-dependent, refuse
+  the ones that cannot move, and emit `<relocated>; b <original + 4>`. D37 is why
+  blind copying is not an option.
+- 🔶 **Hardware.** Unchanged from D94. Dolphin only.
+
+### Housekeeping
+
+- ✅ **Byte-identical for every existing mod.** SHA-256 of the generated
+  translation unit for all 24 code mods, current tree versus a `git worktree` at
+  HEAD: **all 24 unchanged**. `door-hook-probe`'s `mod.rel` rebuilt to the same
+  `DD412935…` from both trees, so a hash that differed from the artifact left on
+  disk by D94's session was a stale artifact, not a regression.
+- 746 tests pass (704 before, 42 new in `tests/test_hooks.py`). ruff clean,
+  pylint 10.00/10.
+- `generate_merged`'s optional arguments became keyword-only; it had reached six
+  positional.

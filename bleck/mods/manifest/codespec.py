@@ -154,6 +154,61 @@ class ScriptPatch:
         return int(self.target, 0) if self.kind == "item" else -1
 
 
+#: What `code.hooks[].mode` accepts today. The field exists so interception can
+#: be added without reshaping the declaration -- same reasoning as the
+#: `<kind>:<name>` selector in D90.
+HOOK_MODES = ("replace",)
+
+#: Modes known to be wanted that have no mechanism yet. Named separately so
+#: asking for one gets the reason, and gets told what `replace` does instead.
+DEFERRED_HOOK_MODES = {
+    "before": "run the mod's function first, then the original",
+    "after": "run the original first, then the mod's function",
+}
+
+#: Said once, quoted by every mode error. ⚠️ The loudest thing here: `replace`
+#: destroys the original body, so a user reaching for `before` must not get it.
+_REPLACE_MEANS = (
+    "  'replace' is not that: it overwrites the function's first instruction "
+    "with a branch, so THE ORIGINAL NEVER RUNS and the mod's function must do "
+    "the whole job.\n"
+    "  Keeping the original needs a trampoline, which bleck does not have "
+    "(D94): the first instruction has to be relocated, and copying it blindly "
+    "breaks any function starting with a PC-relative instruction (D37)."
+)
+
+
+@dataclass(frozen=True)
+class FunctionHook:
+    """A game function whose first instruction becomes a branch into the mod.
+
+    ⚠️ `replace` only. The original body is destroyed for the session, so the
+    mod's function is now the whole implementation.
+    """
+
+    function: str
+    """A symbol name resolved against the target's symbol list, or `0x...`.
+
+    Resolved at **build time**, so a rename or the wrong `target` fails the
+    build rather than branching into unrelated code.
+    """
+
+    call: str
+    """A function in this mod's own sources, matching what it replaces."""
+
+    mode: str = "replace"
+    """How the mod's function relates to the original. Only `replace` exists."""
+
+    @property
+    def is_address(self) -> bool:
+        return self.function.lower().startswith("0x")
+
+    @property
+    def address(self) -> int:
+        """The address `function` names outright, or -1 when it is a symbol."""
+        return int(self.function, 16) if self.is_address else -1
+
+
 @dataclass(frozen=True)
 class CodeSpec:
     """A mod's compiled-code half: a script, native C/C++ sources, or both.
@@ -190,6 +245,9 @@ class CodeSpec:
     patches: list[ScriptPatch] = field(default_factory=list)
     """Instructions replaced in the game's own scripts, in place."""
 
+    hooks: list[FunctionHook] = field(default_factory=list)
+    """Game functions branch-replaced by functions in this mod."""
+
     banner: BannerSpec = field(default_factory=BannerSpec)
     """The on-screen label naming this mod."""
 
@@ -206,6 +264,10 @@ class CodeSpec:
     @property
     def has_combos(self) -> bool:
         return bool(self.combos)
+
+    @property
+    def has_hooks(self) -> bool:
+        return bool(self.hooks)
 
     @property
     def has_patches(self) -> bool:
@@ -245,6 +307,11 @@ class CodeSpec:
                 }
                 for patch in self.patches
             ]
+        if self.hooks:
+            body["hooks"] = [
+                {"function": hook.function, "call": hook.call, "mode": hook.mode}
+                for hook in self.hooks
+            ]
         if self.boot_map:
             body["boot"] = self.boot_map
         # Written only when it differs from the default.
@@ -270,6 +337,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     boot = _parse_boot(raw.get("boot"), source)
     combos = _parse_combos(raw.get("combos"), source)
     patches = _parse_patches(raw.get("patches"), source)
+    hooks = _parse_hooks(raw.get("hooks"), source)
 
     if not script and not sources and not boot:
         raise ManifestError(
@@ -295,6 +363,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         maps=_parse_maps(raw.get("maps"), source),
         combos=combos,
         patches=patches,
+        hooks=hooks,
         banner=_parse_banner(raw.get("banner"), source),
         boot_map=boot,
     )
@@ -617,6 +686,104 @@ def _unknown_opcode(name: str, raw: str, where: str) -> str:
         f'  Write an opcode name, optionally with its argument count ("USER_FUNC '
         f'4"), or the header word directly ("0x00010072").'
     )
+
+
+def _parse_hooks(raw: object, source: str) -> list[FunctionHook]:
+    """Read `code.hooks`, a list of functions replaced by the mod's own."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ManifestError(
+            f"{source}: 'code.hooks' must be a list of hook objects, e.g. "
+            f'[{{"function": "npcDispMain", "call": "count_npcs", '
+            f'"mode": "replace"}}]'
+        )
+    return [
+        _parse_hook(entry, f"{source}: 'code.hooks[{i}]'") for i, entry in enumerate(raw)
+    ]
+
+
+def _parse_hook(raw: object, where: str) -> FunctionHook:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where} must be an object")
+    unknown = sorted(set(raw) - {"function", "call", "mode"})
+    if unknown:
+        raise ManifestError(
+            f"{where} has unknown field(s): {', '.join(unknown)}\n"
+            f"  A hook takes 'function', 'call' and 'mode'."
+        )
+    for name in ("function", "call"):
+        if not isinstance(raw.get(name), str) or not raw[name]:
+            raise ManifestError(f"{where} needs a non-empty {name!r} string")
+    mode = raw.get("mode", "replace")
+    if not isinstance(mode, str):
+        raise ManifestError(f"{where}: 'mode' must be a string")
+    return build_hook(str(raw["function"]), str(raw["call"]), mode, where)
+
+
+def build_hook(function: str, call: str, mode: str, where: str) -> FunctionHook:
+    """Validate one hook's three fields. Shared with the JSON API.
+
+    The symbol is *not* resolved here: that needs the target's list, which the
+    build loads. This checks only what is decidable from the manifest alone.
+    """
+    _check_hook_mode(mode, where)
+    hook = FunctionHook(function=function.strip(), call=call, mode=mode)
+    if not _C_NAME_RE.match(call):
+        raise ManifestError(
+            f"{where}: 'call' is {call!r}, which is not a C function name.\n"
+            f"  It names a function in this mod's own sources, e.g. 'count_npcs'."
+        )
+    if hook.is_address:
+        _check_hook_address(hook.function, where)
+    elif not _C_NAME_RE.match(hook.function):
+        raise ManifestError(
+            f"{where}: 'function' is {function!r}, which is neither a symbol "
+            f"name nor an address.\n"
+            f"  Write the game function's name -- 'npcDispMain' -- so bleck "
+            f"resolves it against the target's symbol list, or an address like "
+            f"'0x801adef0' when it has no name.\n"
+            f"  `bleck symbols search <text>` lists what the list holds."
+        )
+    return hook
+
+
+def _check_hook_mode(mode: str, where: str) -> None:
+    if mode in HOOK_MODES:
+        return
+    if mode in DEFERRED_HOOK_MODES:
+        raise ManifestError(
+            f"{where}: 'mode' is {mode!r}, which bleck cannot do yet -- it "
+            f"would {DEFERRED_HOOK_MODES[mode]}.\n{_REPLACE_MEANS}\n"
+            f"  So {mode!r} is refused rather than quietly given you "
+            f"'replace', which would delete the behaviour you asked to keep."
+        )
+    known = ", ".join(sorted(set(HOOK_MODES) | set(DEFERRED_HOOK_MODES)))
+    raise ManifestError(
+        f"{where}: 'mode' is {mode!r}, which is not a hook mode.\n"
+        f"  Known modes: {known}. Only 'replace' is implemented."
+    )
+
+
+def _check_hook_address(text: str, where: str) -> None:
+    try:
+        value = int(text, 16)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: 'function' is {text!r}, which starts like an address but "
+            f"is not hexadecimal. Write it as '0x801adef0'."
+        ) from None
+    if not 0x80000000 <= value <= 0x8FFFFFFF:
+        raise ManifestError(
+            f"{where}: 'function' is {text!r}, which is not a game address.\n"
+            f"  The Wii's cached MEM1 window is 0x80000000..0x817FFFFF; code "
+            f"lives there."
+        )
+    if value % 4:
+        raise ManifestError(
+            f"{where}: 'function' is {text!r}, which is not 4-byte aligned, so "
+            f"no instruction begins there."
+        )
 
 
 def _check_room_for_pointer(argc: int, raw: str, where: str) -> None:

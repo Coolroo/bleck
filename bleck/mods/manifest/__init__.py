@@ -20,6 +20,7 @@ from bleck.mods.manifest.codespec import (  # noqa: F401
     BannerSpec,
     CodeSpec,
     ComboBinding,
+    FunctionHook,
     MapHook,
     ScriptPatch,
     _parse_code,

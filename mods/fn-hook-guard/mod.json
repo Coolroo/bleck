@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "fn-hook-guard",
+  "version": "0.1.0",
+  "description": "Negative control for code.hooks: a second hook on the same function must be refused by the derived guard (D95)",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "hooks": [
+      { "function": "npcDispMain", "call": "countNpcs", "mode": "replace" },
+      { "function": "npcDispMain", "call": "neverRuns", "mode": "replace" }
+    ]
+  }
+}

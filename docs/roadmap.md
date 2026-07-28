@@ -26,7 +26,7 @@ this file is forward-looking only.
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
-| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ⛔ Branch *replacement* only — no trampoline, and no manifest surface |
+| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ⛔ Branch *replacement* only — no trampoline, so the original never runs |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -123,6 +123,23 @@ function is not on the path for `mac_01` or `aa4_01` at all.
 range, so door setup plausibly lives in each map's own module. Hooking that, or
 finding the caller of `evt_door_set_door_descs` in a map that does use it, is the
 next cheap experiment. Two maps is not the game.
+
+### 🟢 A trampoline, so `mode: "before"` and `"after"` can exist
+
+`code.hooks` ships with `mode: "replace"` and refuses the other two by name
+(D95), because keeping the original means relocating its first instruction and
+upstream's `hookFunction` gets that wrong — it copies instruction[0] blindly, so
+it breaks on any function starting with a PC-relative one (D37).
+
+What it needs: decode the displaced instruction well enough to know whether it
+is position-dependent, refuse the ones that cannot be moved, and emit a
+trampoline of `<relocated instruction>; b <original + 4>`. The refusal matters
+more than the coverage — a trampoline that silently mis-relocates is worse than
+none. `bleck/backends/dol.py` already reads the words to decide from.
+
+This is the single largest thing standing between `code.hooks` and being usable
+for anything other than a probe: today, hooking a function means taking over its
+entire job.
 
 ### 🔶 Remaining button masks
 

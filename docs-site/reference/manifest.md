@@ -207,6 +207,70 @@ Every mod has a `mod.json` at its root.
             /* 0xFFFFFFFF where nothing counted, e.g. every map patch */
             ```
 
+        `code.hooks` <span class="pf-type">list of objects</span>
+
+        :   Replaces one of the game's **C functions** with one of yours, so
+            every call into it lands in your mod instead:
+
+            ```json
+            "hooks": [
+              {
+                "function": "npcDispMain",
+                "call": "count_npcs",
+                "mode": "replace"
+              }
+            ]
+            ```
+
+            - `function` — the game function to replace. A symbol name,
+              resolved against your `code.target`'s symbol list **while the mod
+              builds**; a name that is not in the list fails the build, with a
+              suggestion. A raw address (`"0x801adef0"`) is accepted for
+              something the list does not name.
+            - `call` — a function in your own `code.sources`. It has to match
+              what it replaces: same arguments, same return value.
+            - `mode` — `"replace"`. Optional; it is the default and the only
+              value.
+
+            !!! danger "`replace` means the original never runs"
+
+                The function's first instruction becomes a branch into your
+                code and its body is gone for the rest of the session, so
+                **your function is now the whole implementation**. Hooking a
+                drawing function stops that thing being drawn; hooking
+                something a game sequence waits on stops the game.
+
+                `"before"` and `"after"` are **refused** at build time, naming
+                what `replace` does instead. They exist as names so that
+                wrapping a function can be added later without changing this
+                field — but asking for one today is an error, never a silent
+                `replace`.
+
+            You do not write a guard. `bleck` reads the instruction word
+            actually at that address out of the base disc's `main.dol` while
+            building, and the hook refuses to install unless the running game
+            has the same word. A wrong address, or a mod built against a
+            different game version, is then a refusal rather than a corrupted
+            instruction.
+
+            !!! warning "An address outside the DOL cannot be guarded"
+
+                `bleck` only has the base disc's `main.dol` to read from, so an
+                address that is not in it — a REL address, for instance — gets
+                no guard. The build **warns** and the hook installs unchecked.
+                A guard is never invented for one.
+
+            Hooks install when the module loads, before your `mod_prolog`, so
+            your C can read a final answer:
+
+            ```c
+            extern unsigned int bleck_hook_status[];
+            /* 1 pending, 2 installed, 3 refused by the guard,
+               4 misaligned, 5 out of range */
+
+            extern const unsigned int bleck_hook_count;
+            ```
+
         `code.boot` <span class="pf-type">string</span>
 
         :   A map to start the game at, instead of the attract demo:

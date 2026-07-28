@@ -56,6 +56,18 @@ behaved differently — the unflushed one did nothing at all while looking
 perfectly applied. Use `bleck_code_write` / `bleck_code_hook`, which every
 generated module carries; see [`code-mods.md`](./code-mods.md).
 
+✅ **A mod declares this rather than writing it** (D95). `code.hooks` installs
+from `_prolog`, before `mod_prolog`, with a guard word `bleck` derived from the
+base disc's `main.dol`:
+
+```json
+"hooks": [{ "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }]
+```
+
+⚠️ **`replace` means the original never runs**, so the hooked function's whole
+job moves into the mod. `before` and `after` are refused at build time rather
+than quietly becoming `replace`.
+
 ⛔ **Do not stub `effMain`** from a hook. Replacing it counts entries fine and
 hangs the map-change sequence: the game sat in `SEQ_MAPCHANGE` for 90 s and never
 reached gameplay (D94). 🔶 Something in the transition appears to wait on the

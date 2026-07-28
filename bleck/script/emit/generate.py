@@ -33,6 +33,7 @@ from bleck.script.emit.scaffold import (  # noqa: F401
     SEQUENCE_NAMES,
     Banner,
     ComboHook,
+    FunctionHook,
     MapHook,
     Scaffolding,
     ScriptPatch,
@@ -246,6 +247,44 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
     )
 
 
+def _hook_block(hooks: list[FunctionHook]) -> str:
+    """The hook table, its derived guards, and the status a mod's C can read."""
+    decls: list[str] = []
+    seen: set[str] = set()
+    for hook in hooks:
+        for name, template in (
+            (hook.symbol, runtime_c.HOOK_TARGET),
+            (hook.call, runtime_c.HOOK_CALL),
+        ):
+            if name and name not in seen:
+                seen.add(name)
+                decls.append(template.format(name=name))
+
+    rows = "".join(
+        f"    {{{_hook_address(hook)}, 0x{hook.expect:08X}u, "
+        f"{1 if hook.guarded else 0}u, (const void *) &{hook.call}}},"
+        f"  {hook.comment}\n"
+        for hook in hooks
+    )
+    return runtime_c.HOOK_BLOCK.format(
+        count=len(hooks),
+        decls="\n" + "\n".join(decls) + "\n",
+        rows=rows,
+        pending="".join("    BLECK_HOOK_PENDING,\n" for _ in hooks),
+    )
+
+
+def _hook_address(hook: FunctionHook) -> str:
+    """Where the branch goes: the symbol if there is one, else the address.
+
+    A named function is left to `elf2rel`, so the symbol list stays the single
+    source of truth for addresses even though the guard beside it is baked.
+    """
+    if hook.symbol:
+        return f"(void *) &{hook.symbol}"
+    return f"(void *) 0x{hook.address:08X}u"
+
+
 def _banner_block(banner: Banner) -> str:
     return runtime_c.BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
@@ -306,6 +345,9 @@ class Runtime:
     patches: list[ScriptPatch] = field(default_factory=list)
     """In-place edits to the game's own scripts, applied from `_prolog`."""
 
+    function_hooks: list[FunctionHook] = field(default_factory=list)
+    """Game functions branch-replaced by the mod's own, from `_prolog`."""
+
 
 def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
     """Assemble the shared runtime, from the pieces the module needs.
@@ -316,18 +358,21 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     """
     banner, boot, combos = runtime.banner, runtime.boot, list(runtime.combos)
     patches = list(runtime.patches)
+    functions = list(runtime.function_hooks)
     # Before `mod_prolog`, so a mod's own C can read `bleck_patch_status[]`.
     apply_patches = "    bleck_apply_patches();\n" if patches else ""
+    install_hooks = "    bleck_install_hooks();\n" if functions else ""
     run_ctors = "    bleck_run_ctors();\n" if runtime.run_cxx_ctors else ""
 
     if not entries and not hooks and banner is None and not boot and not combos:
-        if not runtime.run_cxx_ctors and not patches:
+        if not runtime.run_cxx_ctors and not patches and not functions:
             return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
         head = runtime_c.CTOR_BLOCK if runtime.run_cxx_ctors else ""
         head += _patch_block(patches) if patches else ""
+        head += _hook_block(functions) if functions else ""
         return (
             head + f"\nvoid _prolog(void)\n{{\n{run_ctors}{apply_patches}"
-            f"    mod_prolog();\n}}\n" + runtime_c.ENTRY_POINTS
+            f"{install_hooks}    mod_prolog();\n}}\n" + runtime_c.ENTRY_POINTS
         )
 
     parts = [runtime_c.SEQ_TABLE]
@@ -336,6 +381,8 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
         parts.append(runtime_c.CTOR_BLOCK)
     if patches:
         parts.append(_patch_block(patches))
+    if functions:
+        parts.append(_hook_block(functions))
 
     if banner is not None:
         parts.append(_banner_block(banner))
@@ -376,7 +423,7 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     # Constructors run before `mod_prolog`, as statics do before `main`.
     parts.append(
         f"\nvoid _prolog(void)\n{{\n{runtime_c.SEQ_INSTALL}"
-        f"{run_ctors}{apply_patches}    mod_prolog();\n}}\n"
+        f"{run_ctors}{apply_patches}{install_hooks}    mod_prolog();\n}}\n"
     )
     parts.append(runtime_c.ENTRY_POINTS)
     return "".join(parts)
@@ -413,6 +460,7 @@ def generate_bare(
     banner: Banner | None = None,
     run_cxx_ctors: bool = False,
     patches: list[ScriptPatch] | None = None,
+    function_hooks: list[FunctionHook] | None = None,
 ) -> GeneratedSource:
     """Scaffolding for a mod that ships only native sources.
 
@@ -432,6 +480,7 @@ def generate_bare(
                 banner=banner,
                 run_cxx_ctors=run_cxx_ctors,
                 patches=list(patches or []),
+                function_hooks=list(function_hooks or []),
             ),
         )
     )
@@ -481,6 +530,7 @@ def generate(
                 namespace=plan.prefix,
                 run_cxx_ctors=plan.run_cxx_ctors,
                 patches=list(plan.patches),
+                function_hooks=list(plan.function_hooks),
             ),
         )
     )
@@ -538,9 +588,11 @@ def _check_slugs(parts: list[ModPart]) -> None:
 def generate_merged(
     parts: list[ModPart],
     origin: str = "several mods",
+    *,
     banner: Banner | None = None,
     run_cxx_ctors: bool = False,
     patches: list[ScriptPatch] | None = None,
+    function_hooks: list[FunctionHook] | None = None,
 ) -> GeneratedSource:
     """Render several mods' programs as one C translation unit.
 
@@ -558,9 +610,9 @@ def generate_merged(
 
     booting = [part for part in parts if part.boot_script]
     if len(booting) > 1:
-        names = ", ".join(part.name for part in booting)
         raise ScriptError(
-            f"{len(booting)} mods declare a boot map ({names}), but a disc "
+            f"{len(booting)} mods declare a boot map "
+            f"({', '.join(part.name for part in booting)}), but a disc "
             f"starts in one place.\n"
             f"  Keep it on one of them, or pass --map to override for a build.",
             Position(),
@@ -604,18 +656,15 @@ def generate_merged(
     head.append(runtime_c.MOD_HOOK)
     head.append(runtime_c.CODE_PATCH)
 
-    footer = _footer(
-        entries,
-        hooks,
-        Runtime(
-            banner=banner,
-            boot=boot,
-            combos=combos,
-            run_cxx_ctors=run_cxx_ctors,
-            patches=list(patches or []),
-        ),
+    runtime = Runtime(
+        banner=banner,
+        boot=boot,
+        combos=combos,
+        run_cxx_ctors=run_cxx_ctors,
+        patches=list(patches or []),
+        function_hooks=list(function_hooks or []),
     )
-    text = "\n\n".join(head + sections + [footer])
+    text = "\n\n".join(head + sections + [_footer(entries, hooks, runtime)])
     _require_ascii(text)
     return GeneratedSource(
         text=text,

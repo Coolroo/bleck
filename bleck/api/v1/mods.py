@@ -106,6 +106,41 @@ class Patch(BaseModel):
         )
 
 
+class Hook(BaseModel):
+    """A game function branch-replaced by one of the mod's own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    function: str = Field(
+        description=(
+            "The game function to replace: a symbol name ('npcDispMain'), "
+            "resolved against the target's symbol list at build time, or a raw "
+            "address ('0x801adef0'). An unknown name fails the build."
+        )
+    )
+    call: str = Field(
+        description=(
+            "A function in the mod's sources. It takes over completely, so it "
+            "must take the same arguments and return what the caller expects."
+        )
+    )
+    mode: str = Field(
+        default="replace",
+        description=(
+            "⚠️ Only 'replace' exists, and replace means the original NEVER "
+            "RUNS -- the mod's function does the whole job. 'before' and "
+            "'after' are refused rather than quietly treated as 'replace'."
+        ),
+    )
+
+    @classmethod
+    def of(cls, hook: codespec.FunctionHook) -> Hook:
+        return cls(function=hook.function, call=hook.call, mode=hook.mode)
+
+    def to_manifest(self) -> codespec.FunctionHook:
+        return codespec.build_hook(self.function, self.call, self.mode, "code.hooks[]")
+
+
 class Code(BaseModel):
     """A mod's compiled half: what it builds and what the module then does."""
 
@@ -136,6 +171,10 @@ class Code(BaseModel):
         default_factory=list,
         description="In-place replacements in the game's own evt scripts.",
     )
+    hooks: list[Hook] = Field(
+        default_factory=list,
+        description="Game functions replaced by functions in this mod.",
+    )
     boot: str = Field(
         default="",
         description="A map to start the game at instead of the attract demo.",
@@ -152,6 +191,7 @@ class Code(BaseModel):
             maps={hook.map_name: hook.script for hook in spec.maps},
             combos={binding.combo: binding.script for binding in spec.combos},
             patches=[Patch.of(patch) for patch in spec.patches],
+            hooks=[Hook.of(hook) for hook in spec.hooks],
             boot=spec.boot_map,
             banner=Banner.of(spec.banner),
         )
@@ -171,6 +211,7 @@ class Code(BaseModel):
                 for name, script in self.combos.items()
             ],
             patches=[patch.to_manifest() for patch in self.patches],
+            hooks=[hook.to_manifest() for hook in self.hooks],
             boot_map=self.boot,
             banner=self.banner.to_manifest(),
         )

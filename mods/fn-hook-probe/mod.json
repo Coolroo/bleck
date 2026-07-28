@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "fn-hook-probe",
+  "version": "0.1.0",
+  "description": "Declarative code.hooks: replace npcDispMain and count the entries (D95)",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "hooks": [
+      { "function": "npcDispMain", "call": "countNpcs", "mode": "replace" }
+    ]
+  }
+}
