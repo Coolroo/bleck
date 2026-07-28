@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "door-argc",
+  "version": "0.1.0",
+  "description": "What argument count do the door setter calls declare? D92's replacement must match it exactly",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2
+  }
+}

@@ -6945,3 +6945,77 @@ distinction the project instructions' rule is about and which I did not apply he
 still refuses it**, and `DEFERRED_PATCH_KINDS` still cites D91 — that stays
 until the argc question above is answered, because a patch written at the wrong
 size corrupts the script rather than failing.
+
+---
+
+## D102 — ✅ The door setters take argc 3, and the header's macro is wrong (2026-07-28)
+
+`mods/door-argc`, one 75 s run. The measurement D101 left open, and it also
+fixes D101's own gap — which map each call came from.
+
+| | header | map | arg0 | arg1 |
+|---|---|---|---|---|
+| `evt_door_set_door_descs` | **`0x0003005C`** | `he1_01` | `0x80D2FBB0` | **1** |
+| `evt_door_set_map_door_descs` | **`0x0003005C`** | `he1_01` | `0x80D2F940` | **3** |
+| `evt_door_set_dokan_descs` | **`0x0003005C`** | `mac_01` | — | — |
+| control `evt_hitobj_attr_onoff` | **`0x0005005C`** | — | — | 8 hits |
+
+✅ **All three take argc 3**: the `USER_FUNC` header, the function pointer, then
+`(descs, count)`.
+
+### ⚠️ The instrument was checked before the result was read
+
+The control's *header word* is the check that matters here, not its hit count.
+D88 recorded that call at argc 5, so `0x0005005C` is a value known in advance
+from an unrelated run. Reading it back proves header words are being decoded
+from the right offset — independently of anything about doors. Had it read
+anything else, every door number in the table would have been void.
+
+That is the distinction D93 and D94 both missed: their controls proved the
+instrument *worked*, not that it was *aimed correctly*. A control whose expected
+value is known beforehand tests both.
+
+### ⛔ `evt_door.h`'s macro is wrong, and it cost two entries
+
+```c
+// evt_door_set_door_descs(DoorDesc * descs, s32 count)
+EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)     // -> argc 2
+```
+
+The comment says two arguments; the macro says one. **The game says three
+words: pointer plus two arguments — the comment.** D93 took the macro, searched
+for argc 2, and found nothing. Everything after that followed.
+
+⚠️ **`spm-headers` is a reference, not ground truth.** It is hand-maintained
+against a 2.34%-matched decomp, and this is the first case recorded here where
+one of its declarations is simply incorrect. Where a header's claim is
+load-bearing — an argc, an offset, a size — measure it. Reading it is a
+hypothesis 🔶, not a finding.
+
+### What the run also established
+
+- ✅ `he1_01` registers **1** door and **3** loading zones; `mac_01` registers
+  dokan (pipes). So the two maps D94 loaded genuinely have no `DoorDesc` call —
+  its zero was honest, and about map coverage.
+- ✅ `DoorDesc[0]`'s three script pointers are all non-null:
+  `interactScript 0x80D2FB78`, `initScript 0x80D2F9E0`, `moveScript 0x80D2FB70`.
+- ✅ `MapDoorDesc[0]` spells `destMapName` **`he1_02`** and `destDoorName`
+  **`doa1_l`** — both readable, so the struct offsets (+0x14, +0x18) are right.
+- ✅ All of it read at `mod_prolog`, so the descriptor arrays are resident
+  before gameplay — consistent with D88, and what makes a build-time-declared
+  patch possible at all.
+
+### What this unblocks, and what it does not
+
+`door:` can now be built: the instruction is a known size, so D92's same-size
+replacement applies. ⛔ **Still not built**, and the design question is real —
+a door patch has two plausible meanings and they are not the same feature:
+
+- **Redirect the registration**: patch the `set_door_descs` instruction in the
+  map's init script. Reachable with exactly what `map:` already does.
+- **Patch a door's own script**: follow `descs[i].interactScript` and replace an
+  instruction inside it. Closer to what D91 originally wanted, and needs a
+  two-part selector naming the map *and* the door index.
+
+🔶 Still five maps, and 🔶 the count argument was read as a literal — a script
+that computes it would not be handled.
