@@ -20,6 +20,7 @@ from bleck.formats import lz77, u8
 
 from .code import CodeBuild, build_chain
 from .conflicts import Conflict, detect, effective_edits, merge_three_way
+from .edits import PlacementBuild, apply_chain
 from .overlay import Plan, build_plan
 from .resolver import Chain, check_bases
 
@@ -54,6 +55,7 @@ class BuildReport:
     warnings: list[str] = field(default_factory=list)
     conflicts: list[Conflict] = field(default_factory=list)
     code_builds: list[CodeBuild] = field(default_factory=list)
+    placement_builds: list[PlacementBuild] = field(default_factory=list)
 
     @property
     def is_clean(self) -> bool:
@@ -262,6 +264,7 @@ def check(chain: Chain, base: Path, allow_binary: bool) -> BuildReport:
     """
     report = BuildReport(staged=Path())
     report.code_builds = compile_code(chain)
+    report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan)
@@ -272,6 +275,7 @@ def build(chain: Chain, base: Path, staged: Path, allow_binary: bool) -> BuildRe
     """Stage the base, apply the chain, and report what happened."""
     report = BuildReport(staged=staged)
     report.code_builds = compile_code(chain)
+    report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan)

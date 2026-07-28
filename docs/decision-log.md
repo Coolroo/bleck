@@ -3108,3 +3108,70 @@ byte-identical (D17).
 ⚠️ The general shape, again: **two things that look interchangeable and are not.**
 `arc/x` and `./dvd/x` are both "a member path"; only one of them survives a
 round trip through a directory name.
+
+---
+
+## D58 — Enemy placement is editable, declaratively (2026-07-27)
+
+✅ **A mod changes what a map spawns by saying so in `mod.json`:**
+
+```json
+"setup": {
+  "he1_01": [
+    { "slot": 0, "template": 148 },
+    { "slot": 2, "template": 144, "position": [-75, 0, -75] },
+    { "slot": 1, "clear": true }
+  ]
+}
+```
+
+```
+base:         Goomba, Squiglet, Goomba
+after edits:  Squig, Sproing Oing        (slot 1 cleared)
+```
+
+This is the first time `bleck` changes what the *game does* through data rather
+than through code, and it completes the roadmap's top item.
+
+### Declared, not baked
+
+The alternative was letting a mod ship a patched `setup/he1_01.dat` as a binary
+blob. It works, and `vision.md` rules it out: a blob cannot be reviewed, undone,
+re-applied to a corrected base, or opened in an editor. The manifest holds
+*intent*; `bleck/mods/edits.py` derives the bytes at build time, in the same
+seam as compiled code.
+
+Validation is deliberately strict, because the failure mode in this area is
+silence:
+
+- ⛔ a slot outside 0–99 — the array is a fixed 100
+- ⛔ an edit that sets nothing
+- ⛔ `clear` together with `template`/`position`, which would discard the rest
+
+### ✅ Verified end to end, on disc
+
+The generated file goes to `overlay/files/map/he1_01.bin/dvd/setup/he1_01.dat` —
+**inside the map archive**, because that is the copy the game reads (D53). Reading
+the base also comes from the archive rather than `files/setup/`, so an edit
+applies to what actually runs even if the two ever diverge.
+
+A built disc was inspected rather than assumed:
+
+| Check | Result |
+|---|---|
+| Members named `*setup*.dat` in the shipped archive | **exactly one**, `./dvd/setup/he1_01.dat` |
+| Its contents | the edited placements |
+| File size | 11,204 — unchanged |
+
+The "exactly one" is the point: before D57 this would have produced *two* nodes
+of the same name, with the original still winning.
+
+🔶 **Nobody has seen a Squig standing in Lineland Road.** Every link in the chain
+is verified — the game loads this member (D53), and this member holds our edit
+(above) — but the visual confirmation needs eyes, like the banner.
+
+### Reading the base costs nothing surprising
+
+Decompressing a map archive to read one member takes ~0.4 s. It is *compression*
+that is slow (~12 s/MB, D16), and that cost is paid by the overlay merge, which
+a mod touching an archive already pays.

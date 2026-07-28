@@ -132,6 +132,31 @@ Every mod has a `mod.json` at its root.
             `main` is what runs continuously during gameplay, and a map hook has
             its own way to start.
 
+`setup` <span class="pf-type">object</span>
+
+:   Changes to a map's enemy placement, as map name → a list of slot edits.
+    `bleck` derives the file at build time, so the change stays reviewable in
+    the manifest rather than hidden in a binary.
+
+    ```json
+    "setup": {
+      "he1_01": [
+        { "slot": 0, "template": 148 },
+        { "slot": 2, "position": [-75, 0, -75] },
+        { "slot": 1, "clear": true }
+      ]
+    }
+    ```
+
+    Each edit needs a `slot` (0–99) and at least one of `template`, `position`
+    or `clear`. See what a map currently places with
+    [`bleck setup show`](cli.md#bleck-setup).
+
+    !!! note
+
+        The generated file goes **inside the map archive**, which is the copy
+        the game actually reads — editing `files/setup/<map>.dat` does nothing.
+
 ```json
 {
   "schema": 1,

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck.common.errors import BleckError
+from bleck.formats import setup
 
 MANIFEST_NAME = "mod.json"
 # Named `overlay`, not `files`: the disc's own data partition is `files/`,
@@ -85,6 +86,49 @@ class Requirement:
 #: this path, so it is fixed rather than configurable — and it is why two code
 #: mods cannot currently coexist (see `conflicts.py`).
 REL_DISC_PATH = "files/mod/mod.rel"
+
+
+@dataclass(frozen=True)
+class PlacementEdit:
+    """One change to one enemy slot, as declared rather than as bytes.
+
+    Declared so the change stays reviewable, undoable and re-appliable — see
+    `docs/vision.md`. `bleck` derives the file at build time.
+    """
+
+    slot: int
+    template: int | None = None
+    position: setup.Position | None = None
+    clear: bool = False
+    """Empty the slot. Mutually exclusive with the others."""
+
+    def describe(self) -> str:
+        if self.clear:
+            return f"slot {self.slot}: cleared"
+        parts = []
+        if self.template is not None:
+            parts.append(f"template {self.template}")
+        if self.position is not None:
+            parts.append(f"at {self.position.describe()}")
+        return f"slot {self.slot}: {', '.join(parts)}"
+
+    def to_json(self) -> dict[str, object]:  # pylint: disable=container-return
+        body: dict[str, object] = {"slot": self.slot}
+        if self.clear:
+            body["clear"] = True
+        if self.template is not None:
+            body["template"] = self.template
+        if self.position is not None:
+            body["position"] = list(self.position.as_tuple())
+        return body
+
+
+@dataclass(frozen=True)
+class MapPlacements:
+    """Every declared change to one map's placements."""
+
+    map_name: str
+    edits: list[PlacementEdit]
 
 
 @dataclass(frozen=True)
@@ -175,6 +219,12 @@ class Manifest:
     exclusive: list[str] = field(default_factory=list)
     remove: list[str] = field(default_factory=list)
     code: CodeSpec | None = None
+    setup: list[MapPlacements] = field(default_factory=list)
+    """Declared changes to enemy placement, applied at build time."""
+
+    @property
+    def has_placements(self) -> bool:
+        return bool(self.setup)
 
     @property
     def has_code(self) -> bool:
@@ -198,6 +248,11 @@ class Manifest:
             "exclusive": self.exclusive,
             "remove": self.remove,
         }
+        if self.setup:
+            body["setup"] = {
+                placement.map_name: [edit.to_json() for edit in placement.edits]
+                for placement in self.setup
+            }
         # Omitted rather than written as null: most mods ship no code, and an
         # always-present empty block invites people to fill it in.
         if self.code is not None:
@@ -235,6 +290,7 @@ class Manifest:
             exclusive=list(raw.get("exclusive", [])),
             remove=list(raw.get("remove", [])),
             code=_parse_code(raw.get("code"), source),
+            setup=_parse_setup(raw.get("setup"), source),
         )
 
 
@@ -276,6 +332,78 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         module_id=module_id,
         maps=_parse_maps(raw.get("maps"), source),
     )
+
+
+def _parse_setup(raw: object, source: str) -> list[MapPlacements]:
+    """Read the `setup` block: map name -> a list of slot edits."""
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise ManifestError(
+            f"{source}: 'setup' must be an object of map name -> list of edits"
+        )
+
+    placements = []
+    for map_name, edits in raw.items():
+        if not isinstance(edits, list):
+            raise ManifestError(f"{source}: 'setup.{map_name}' must be a list of edits")
+        placements.append(
+            MapPlacements(
+                map_name=map_name,
+                edits=[_parse_edit(e, f"{source}: setup.{map_name}") for e in edits],
+            )
+        )
+    return placements
+
+
+def _parse_edit(raw: object, where: str) -> PlacementEdit:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where}: each edit must be an object")
+
+    slot = raw.get("slot")
+    if not isinstance(slot, int) or isinstance(slot, bool):
+        raise ManifestError(f"{where}: every edit needs a numeric 'slot'")
+    if not 0 <= slot < setup.ENEMY_SLOTS:
+        raise ManifestError(
+            f"{where}: slot {slot} is out of range "
+            f"(a setup file has exactly {setup.ENEMY_SLOTS} slots, 0-"
+            f"{setup.ENEMY_SLOTS - 1})"
+        )
+
+    clear = raw.get("clear", False)
+    if not isinstance(clear, bool):
+        raise ManifestError(f"{where}: 'clear' must be true or false")
+
+    template = raw.get("template")
+    if template is not None and (
+        not isinstance(template, int) or isinstance(template, bool)
+    ):
+        raise ManifestError(f"{where}: 'template' must be a whole number")
+
+    position = _parse_position(raw.get("position"), where)
+
+    if clear and (template is not None or position is not None):
+        raise ManifestError(
+            f"{where}: slot {slot} both clears and sets something. "
+            f"Clearing empties the slot, so the rest would be discarded"
+        )
+    if not clear and template is None and position is None:
+        raise ManifestError(
+            f"{where}: slot {slot} changes nothing. "
+            f"Give 'template', 'position', or 'clear'"
+        )
+    return PlacementEdit(slot=slot, template=template, position=position, clear=clear)
+
+
+def _parse_position(raw: object, where: str) -> setup.Position | None:
+    if raw is None:
+        return None
+    numbers = isinstance(raw, list) and len(raw) == 3
+    if not numbers or not all(isinstance(v, (int, float)) for v in raw):
+        raise ManifestError(
+            f"{where}: 'position' must be three numbers, e.g. [100, 0, -50]"
+        )
+    return setup.Position(float(raw[0]), float(raw[1]), float(raw[2]))
 
 
 def _parse_maps(raw: object, source: str) -> list[MapHook]:

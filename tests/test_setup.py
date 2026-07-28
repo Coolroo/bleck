@@ -8,12 +8,16 @@ in service of "changing one thing changes exactly one thing".
 
 from __future__ import annotations
 
+import json
 import struct
 from pathlib import Path
 
 import pytest
 
 from bleck.formats import setup
+from bleck.mods import edits as mod_edits
+from bleck.mods import manifest as mod_manifest
+from bleck.mods.manifest import ManifestError, PlacementEdit
 
 DISC_SETUP = Path("work/extracted/eu0/files/setup")
 
@@ -213,3 +217,89 @@ class TestTheCommittedNpcCatalog:
         """`npcdrv.h` has several `NPC_` enums, and `NPCMoveMode` also starts at
         0. Parsing them all named tribe 0 "Move Walk No Hit"."""
         assert setup.load_names().lookup(2).describe() == "Goomba (e_kuribo)"
+
+
+class TestDeclaredEdits:
+    """Edits live in `mod.json` and the bytes are derived at build time.
+
+    A mod could ship a patched `.dat` instead. It would work and be a dead end:
+    a blob cannot be reviewed, undone, or re-applied to a corrected base. See
+    `docs/vision.md`.
+    """
+
+    def parse(self, body: dict):
+
+        return mod_manifest.Manifest.from_json(
+            json.dumps({"schema": 1, "name": "m", **body}), source="test"
+        )
+
+    def test_edits_round_trip_through_the_manifest(self):
+        original = self.parse(
+            {
+                "setup": {
+                    "he1_01": [
+                        {"slot": 0, "template": 42},
+                        {"slot": 1, "position": [100, 0, -50]},
+                        {"slot": 2, "clear": True},
+                    ]
+                }
+            }
+        )
+        again = self.parse(json.loads(original.to_json()))
+        assert again.setup == original.setup
+        assert again.setup[0].map_name == "he1_01"
+
+    def test_a_slot_outside_the_array_is_rejected(self):
+
+        with pytest.raises(ManifestError, match="out of range"):
+            self.parse({"setup": {"he1_01": [{"slot": 100, "template": 1}]}})
+
+    def test_an_edit_that_changes_nothing_is_rejected(self):
+        # Silently doing nothing is the failure mode this whole area has.
+
+        with pytest.raises(ManifestError, match="changes nothing"):
+            self.parse({"setup": {"he1_01": [{"slot": 0}]}})
+
+    def test_clearing_and_setting_at_once_is_rejected(self):
+
+        with pytest.raises(ManifestError, match="both clears and sets"):
+            self.parse({"setup": {"he1_01": [{"slot": 0, "clear": True, "template": 5}]}})
+
+    def test_a_malformed_position_says_the_shape(self):
+
+        with pytest.raises(ManifestError, match="three numbers"):
+            self.parse({"setup": {"he1_01": [{"slot": 0, "position": [1, 2]}]}})
+
+
+class TestApplyingEdits:
+    def test_each_kind_of_edit_lands(self):
+
+        base = setup.parse(build(6, slots={0: entry(5), 1: entry(9)}))
+
+        retyped = mod_edits._apply_edit(  # pylint: disable=protected-access
+            base.enemies[0], PlacementEdit(slot=0, template=77), "m"
+        )
+        assert retyped.template == 77
+
+        moved = mod_edits._apply_edit(  # pylint: disable=protected-access
+            base.enemies[1],
+            PlacementEdit(slot=1, position=setup.Position(1, 2, 3)),
+            "m",
+        )
+        assert moved.position.as_tuple() == (1.0, 2.0, 3.0)
+        assert moved.template == 9  # untouched
+
+        gone = mod_edits._apply_edit(  # pylint: disable=protected-access
+            base.enemies[0], PlacementEdit(slot=0, clear=True), "m"
+        )
+        assert gone.is_empty
+        assert len(gone.raw) == len(base.enemies[0].raw)
+
+    def test_the_generated_file_is_the_same_size_as_the_original(self):
+        # The array is fixed at 100 slots; an edit must not resize anything.
+        raw = build(6, slots={0: entry(5)})
+        data = setup.parse(raw)
+        slots = list(data.enemies)
+        slots[0] = slots[0].with_template(99)
+        rebuilt = setup.SetupFile(version=6, enemies=slots, items=[])
+        assert len(rebuilt.to_bytes()) == len(raw)

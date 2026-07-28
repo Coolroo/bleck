@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "hard-lineland",
+  "version": "0.1.0",
+  "description": "Turns Lineland Road's Goombas into something less friendly",
+  "base": "eu0",
+  "setup": {
+    "he1_01": [
+      { "slot": 0, "template": 148 },
+      { "slot": 2, "template": 144, "position": [-75, 0, -75] },
+      { "slot": 1, "clear": true }
+    ]
+  }
+}
