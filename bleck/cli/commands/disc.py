@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import disc
+from bleck.cli.types import AddCommand
 from bleck.common import env
 from bleck.common.fsio import guard_overwrite, require_dir
 
@@ -58,7 +59,7 @@ def add_format_flags(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     p = add("extract", help="disc image -> extracted filesystem")
     p.add_argument("disc")
     p.add_argument("dest", nargs="?")

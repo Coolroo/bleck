@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import toolchain
+from bleck.cli.types import AddCommand
 from bleck.common.errors import BleckError
 from bleck.script import ScriptError, compile_source, emit
 from bleck.script import catalog as builtin_catalog
@@ -140,7 +141,7 @@ def cmd_index(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     parser = add("script", help="compile scripts into game code")
     sub = parser.add_subparsers(dest="script_command", required=True)
 

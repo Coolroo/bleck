@@ -13,6 +13,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import symbols, toolchain
+from bleck.cli.types import AddCommand
 from bleck.common import env
 from bleck.common.errors import BleckError
 
@@ -111,7 +112,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     parser = add("symbols", help="the game's function names and addresses")
     sub = parser.add_subparsers(dest="symbols_command", required=True)
 

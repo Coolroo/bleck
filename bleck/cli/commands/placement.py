@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from bleck import api
 from bleck.backends import maps
+from bleck.cli.types import AddCommand
 from bleck.common.errors import BleckError
 from bleck.formats import setup
 from bleck.mods import manifest, registry
@@ -96,7 +97,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     parser = add("setup", help="what enemies and items a map places")
     sub = parser.add_subparsers(dest="setup_command", required=True)
 

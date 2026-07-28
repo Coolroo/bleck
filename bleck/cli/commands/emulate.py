@@ -8,6 +8,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import emulator
+from bleck.cli.types import AddCommand
 
 CATEGORY = "emulation"
 
@@ -27,7 +28,7 @@ def cmd_launch(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     p = add("launch", help="boot a disc image in Dolphin")
     p.add_argument("image")
     p.add_argument(

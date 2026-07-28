@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from bleck.cli.types import AddCommand
 from bleck.common.fsio import guard_overwrite, read_bytes
 from bleck.formats import lz77
 
@@ -30,7 +31,7 @@ def cmd_lz(args: argparse.Namespace) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     p = add("lz", help="raw LZ77 compression")
     p.add_argument("action", choices=["compress", "decompress"])
     p.add_argument("input")

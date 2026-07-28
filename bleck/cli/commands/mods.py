@@ -14,6 +14,7 @@ from pydantic import ValidationError
 
 from bleck import api
 from bleck.backends import emulator, gecko, maps
+from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
@@ -277,7 +278,7 @@ def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     parser = add("mod", help="create, inspect and build mods")
     sub = parser.add_subparsers(dest="mod_command", required=True, metavar="<action>")
 

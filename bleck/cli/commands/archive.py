@@ -7,6 +7,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from bleck.cli.types import AddCommand
 from bleck.common import manifest
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite, read_bytes, require_dir
@@ -149,7 +150,7 @@ def _walk(root: Path) -> DirectoryListing:
     return DirectoryListing(order, dirs)
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     p = add("ls", help="list an archive's contents")
     p.add_argument("archive")
     p.set_defaults(func=cmd_ls)

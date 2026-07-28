@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import disc, maps
+from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import read_bytes
 from bleck.formats import detect, u8
@@ -93,7 +94,7 @@ def cmd_maps(args) -> int:
     return 0
 
 
-def register(add) -> None:
+def register(add: AddCommand) -> None:
     p = add("info", help="identify a file and its nested formats")
     p.add_argument("file")
     p.set_defaults(func=cmd_info)
