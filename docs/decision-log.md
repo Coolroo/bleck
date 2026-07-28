@@ -2925,3 +2925,73 @@ designed around and this audit confirms still holds.
 assumption**: a repository with no `LICENSE` file that *is* licensed, and a
 sibling repository from the same author that is not licensed at all. "Same
 author, same terms" would have been wrong in both directions.
+
+---
+
+## D55 — Setup files are readable and writable (2026-07-27)
+
+✅ **`bleck` reads and writes `setup/*.dat`**, the files that decide which
+enemies and items a map places.
+
+```
+$ bleck setup show he1_01
+he1_01: version 6, 3/100 enemies
+  [  0] template 2    at (-675, 0, 0)
+  [  1] template 250  at (662.5, -0, 125)
+  [  2] template 2    at (-75, 0, -75)
+```
+
+### The layout was already decoded — upstream
+
+⚠️ **Check before reverse-engineering.** An empirical analysis of all 227 files
+was run first, and only afterwards did `spm-headers/include/spm/setup_data.h`
+turn out to document the whole structure. The analysis was not wasted — it
+became an independent confirmation — but it was avoidable work, and the same
+lesson as the "verify no tool exists" rule in the project instructions.
+
+Every empirical finding matched their struct exactly:
+
+| Measured across 6,438 slots | `SetupEnemyV6` |
+|---|---|
+| floats at 0, 4, 8 | `Vec3 pos` |
+| 141 distinct ints at 12 | `s32 type` — index into `npcEnemyTemplates` |
+| `0x10000001`-style values at 16 | `s32 instanceId` ("ignored if 0") |
+| **always zero at 40–92** | inside `s32 unitWork[16]` |
+| rare float at 108 | `f32 gravityRotation`, degrees anti-clockwise about z |
+
+### ⚠️ `type` is a template index, not an `NPC_*` value
+
+The obvious reading — that `type` is one of `npcdrv.h`'s 423 `NPC_*` constants —
+is wrong, and the counts prove it: `NPCTEMPLATE_MAX` is **435** while the `NPC_*`
+enum runs to 534, matching `NPCTRIBE_MAX` (**535**). So `NPC_*` are *tribe* ids.
+A setup entry names a **template**, and the template names its tribe separately
+(`NPCEnemyTemplate.tribeId` at +0x14).
+
+🔶 Names are therefore not available offline. `npcEnemyTemplates` (`0x80449888`)
+and `npcTribes` (`0x8043bf30`) are both in the symbol list, and the template
+carries `instanceName` and `japaneseName` pointers — so dumping them from a
+running game, exactly as `mapcatalog.json` was produced (D51), would turn
+`template 250` into a name. Not done yet; the clearest next step here.
+
+### Everything unknown is preserved verbatim
+
+Roughly 70 of an entry's 112 bytes are undocumented. A writer that rebuilt an
+entry from understood fields would silently discard them, so `Enemy` keeps the
+whole entry as `raw` and edits patch bytes in place.
+
+✅ **All 227 files round-trip byte-exactly**, and the item total across the 14
+files carrying one is **299**, matching the per-file counts recorded in D42
+independently.
+
+⛔ Versions 1–5 (29 files) have no documented entry layout. They parse as opaque
+entries of the correct stride — so they still round-trip — and both reading a
+field and editing one raise rather than guess.
+
+### 🔶 What makes a slot "empty"
+
+Judged by `type == 0`, and this is a hypothesis worth flagging. The obvious test
+— is the entry all zeroes — **does not work**: unused slots are not blank. They
+carry a default in an undocumented field (offset 24, usually `300`), so a
+whole-entry test counts 6,438 slots where only ~1,328 place anything.
+
+Template 0 is presumably a sentinel. Untested against the game.

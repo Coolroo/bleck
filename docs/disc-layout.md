@@ -284,8 +284,29 @@ and the table above is the quantification. `spm-docs` says items exist in v5 and
 v6; on this disc **no v5 file carries one**.
 
 The 100-entry array is fixed regardless of how many enemies a map actually
-uses — unused slots are zero-filled, which is why a nearly-empty map still
-produces an 11 KB file.
+uses, which is why a nearly-empty map still produces an 11 KB file.
+
+⚠️ **Unused slots are not zero-filled.** They carry a default in an
+undocumented field (offset 24, usually `300`), so an any-non-zero test counts
+6,438 slots where only ~1,328 place anything. 🔶 `type == 0` is the working
+test — template 0 appears to be a sentinel (D55).
+
+### ✅ Entry layout (version 6) — `bleck setup show`
+
+Documented upstream in `spm-headers/include/spm/setup_data.h` and confirmed
+independently here by measuring all 227 files:
+
+| Offset | Field | Notes |
+|---|---|---|
+| 0x00 | `Vec3 pos` | |
+| 0x0C | `s32 type` | Index into `npcEnemyTemplates`. **Not** an `NPC_*` value — those are *tribe* ids (535 of them, against 435 templates) |
+| 0x10 | `s32 instanceId` | Ignored if 0 |
+| 0x20–0x5F | `s32 unitWork[16]` | Always zero across all 6,438 slots |
+| 0x6C | `f32 gravityRotation` | Degrees anti-clockwise about the z-axis |
+
+Roughly 70 of the 112 bytes remain undocumented, so `bleck` preserves whole
+entries verbatim and patches fields in place. All 227 files round-trip
+byte-exactly.
 
 ## us0 vs eu0 — tree comparison ✅
 
