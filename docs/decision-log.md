@@ -3898,3 +3898,82 @@ Re-read the entry before letting it rule something out.
   ⚠️ It surfaces a live latent bug: `bleck_map_pending` is a `u32` bitmask with
   one bit per map hook, so the 33rd hook shifts past the end. Unreachable with
   one mod, plausible once mods merge, and silent today.
+
+---
+
+## D67 — A mod can read the controller, and the masks are (mostly) right (2026-07-27)
+
+✅ **Reading the Wii remote from inside the game works.** Measured, not inferred.
+
+```
+[t+27s] seq=GAME(2) probe: 57504144 00000001 00000090 00000F00 80000F00 ...
+                           ^magic   ^hooks   ^frames  ^held    ^seen
+```
+
+`mods/button-probe` reads `wpadGetWork()->statuses[0][0].buttonsHeld` from the
+per-frame sequence hook. With A+B+1+2 held it reports `0x00000F00`.
+
+### ✅ The four face-button bits are confirmed
+
+`0x0F00` is exactly `0x0800 | 0x0400 | 0x0200 | 0x0100` — the OR of the four
+values `config.py` predicted for `a`, `b`, `1`, `2`. Four predicted bits, four
+observed bits, no others.
+
+🔶 **Which bit is which inside that group is still open.** Holding all four at
+once produces the same total under any permutation of the four. A combo of two
+of them is therefore correct either way; a combo mixing one of them with `plus`
+would not be. One-at-a-time presses settle it.
+
+🔶 `plus`, `minus`, `home` and the d-pad remain entirely unverified.
+
+### ✅ Bit 31 is not a button
+
+`SEEN` accumulated `0x80000F00`, and the recorded ring alternated
+`0x00000F00` / `0x80000F00` on successive frames **while the controller was held
+completely still**. The low bits never wavered.
+
+So something in the high half is a status flag, not input — `KPADRead` samples
+faster than the 60Hz game loop, and `WpadWork` keeps 16 statuses per controller
+for exactly that reason.
+
+⚠️ **Consequence for the combo design:** test `(held & mask) == mask`. Never
+compare the whole word for equality; it would match on only half the frames.
+
+The probe now masks to `0x0000FFFF` before recording, because the flag flipping
+drove the "distinct value" counter to 0x1A8 and filled the ring with noise.
+
+### ⚠️ D47's "SEQ_TITLE is never entered" is scoped, like D48 was
+
+The run reached `seq=TITLE(1)`, then `MAPCHANGE -> mac_02` — Flipside, from a
+**save file**. D47 is true of an *unattended* boot, which is what it measured.
+With a person holding a controller the title screen is reachable, and this
+machine has a save after all.
+
+That is the second entry in two days to be read wider than it was written (D48
+was the first, corrected in D66). **A recorded ⛔ is scoped to what was actually
+tested.** Both were about unattended automation and neither says anything about
+what a human can do.
+
+Also worth having: a save exists, so the "Mario is invisible" problem from D63
+has a solution on this machine whenever someone makes a state.
+
+### ⚠️ An idle Dolphin blocks attachment entirely
+
+Three runs reported nothing at all. The cause was a leftover Dolphin process
+sitting at the game list: `dolphin-memory-engine` attaches to *a* Dolphin, and
+hooking one with no emulation running simply fails.
+
+The tell was visible and missed twice: the process sat at ~200,400 K across
+several minutes. **An emulating Dolphin's memory moves; an idle one's does not.**
+
+Stopping the *game* does not close the *process*. Two fixes, both landed:
+
+- `Session.read` now returns a `ReadResult` carrying either a snapshot or the
+  reason there is not one, and the loop prints it. Silence used to cover four
+  distinct situations — no Dolphin, wrong Dolphin, game not up, game hung.
+- `scripts/ingame.py` refuses to start when another Dolphin is running, names
+  the PIDs and prints the `Stop-Process` line. `--allow-other-dolphins`
+  overrides.
+
+`handoff.md` had warned about this for weeks. **A warning nobody is shown at the
+moment it matters is not a control.**

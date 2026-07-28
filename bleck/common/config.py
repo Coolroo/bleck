@@ -37,20 +37,24 @@ class ConfigError(BleckError):
 
 # --- buttons ---------------------------------------------------------------
 
-#: 🔶 **UNVERIFIED.** These are the published Revolution SDK / libogc masks for
-#: the Wii remote, and they have **not** been confirmed against Super Paper
-#: Mario. Nothing in `spm-headers` defines them — `wii/kpad.h` documents the
-#: `buttonsHeld` field and stops there.
+#: Wii remote button masks.
 #:
-#: ⚠️ Do not let these ship as fact. D65 is a very recent, very expensive
-#: reminder: `seqSetSeq`'s signature was read from the header and the subsystem
-#: was fully understood, and calling it still hung the game. An address being
-#: plausible is not an address being right.
+#: ✅ **The four face bits are confirmed** (D67). Holding A+B+1+2 in the running
+#: game reports `0x0F00`, exactly the OR of the four values below, so those four
+#: bits are the four buttons.
 #:
-#: The check is cheap and the rig can genuinely answer it, unlike D65's: write
-#: `buttonsHeld` into the probe block, have a human press each button in turn,
-#: read the bits back. One run settles the whole table. Until then every value
-#: here is a hypothesis.
+#: 🔶 **Which bit is which within that group is not confirmed.** Holding all
+#: four at once gives the same total whatever the assignment, so a combo of two
+#: of them is right either way -- but a combo mixing one of them with `plus`
+#: would not be. Settled by pressing them one at a time.
+#:
+#: 🔶 **`plus`, `minus`, `home` and the d-pad are entirely unverified.** They are
+#: the published Revolution SDK values and nothing in `spm-headers` defines
+#: them -- `wii/kpad.h` documents `buttonsHeld` and stops there.
+#:
+#: ⚠️ Bit 31 of `buttonsHeld` is **not** a button. It flips between frames while
+#: the controller is untouched, so a combo must test `(held & mask) == mask` and
+#: never compare the whole word for equality. See D67.
 BUTTON_MASKS = {
     "left": 0x0001,
     "right": 0x0002,

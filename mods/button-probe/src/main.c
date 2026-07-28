@@ -61,6 +61,20 @@ typedef unsigned char u8;
 /* Enough to walk the face buttons and the d-pad without wrapping. */
 #define RING_SLOTS 8
 
+/*
+    Bit 31 is not a button.
+
+    Measured: holding A+B+1+2 steady reports 0x00000F00 and 0x80000F00 on
+    alternating frames. The low bits are rock solid, bit 31 flips while nothing
+    on the controller changes -- KPAD samples faster than the 60Hz game loop, so
+    something in the high half is a status flag, not input.
+
+    Left out of the ring so a steady press records once instead of sixty times a
+    second. `SEEN` keeps the raw value, so the flag stays visible rather than
+    being quietly discarded.
+*/
+#define BUTTON_BITS 0x0000FFFFU
+
 typedef void(SeqFunc)(void *);
 
 typedef struct
@@ -117,6 +131,9 @@ static void onSequenceFrame(u32 seq, void *work)
         held = buttonsHeld();
         CURRENT = held;
         SEEN |= held;
+
+        /* Everything below judges buttons only -- see BUTTON_BITS. */
+        held &= BUTTON_BITS;
 
         /*
             Record a value only when it changes, so holding a button for a
