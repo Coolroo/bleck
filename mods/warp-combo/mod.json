@@ -2,12 +2,15 @@
   "schema": 1,
   "name": "warp-combo",
   "version": "0.1.0",
-  "description": "Press a button combination to warp to a map",
+  "description": "Boot into a real map, then warp again on a button combination",
   "base": "eu0",
   "code": {
     "script": "scripts/main.evt",
     "target": "eu0",
     "module_id": 2,
-    "combos": { "start_map": "warp_home" }
+    "boot": "he1_01",
+    "combos": {
+      "start_map": "warp_home"
+    }
   }
 }

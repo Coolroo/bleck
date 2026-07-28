@@ -359,8 +359,26 @@ def main() -> int:
         nargs="*",
         default=[],
         metavar="BUTTON",
-        help="press these buttons once gameplay starts, one at a time "
+        help="press these buttons once gameplay starts, one at a time; "
+        "join with + to hold together, e.g. 1+2 "
         "(Windows only, needs an unlocked session -- see scripts/keys.py)",
+    )
+    parser.add_argument(
+        "--press-at",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help="wait until this many seconds elapsed before pressing, instead of "
+        "pressing the moment gameplay starts. Use it when a boot map means the "
+        "first gameplay frame is not the map you want to press in",
+    )
+    parser.add_argument(
+        "--press-gap",
+        type=float,
+        default=0.9,
+        metavar="SECONDS",
+        help="pause between presses. Raise it above the 3s poll interval to "
+        "see the state each press lands in, rather than only the last one",
     )
     parser.add_argument(
         "--log", help="where to write the full transcript (default: work/build/ingame.log)"
@@ -469,7 +487,12 @@ def main() -> int:
             # Buttons are pressed once gameplay is actually up, not on a timer:
             # the game reaching SEQ_GAME is the only reliable signal that it is
             # listening, and a timer would drift with load times.
-            if args.press and not pressed and result.snapshot.sequence == SEQ_GAME:
+            if (
+                args.press
+                and not pressed
+                and result.snapshot.sequence == SEQ_GAME
+                and elapsed >= args.press_at
+            ):
                 pressed = True
                 say(f"[t+{elapsed:>3}s] ready to press {' '.join(args.press)}")
                 # Politely first; Windows usually refuses a background process,
@@ -484,7 +507,7 @@ def main() -> int:
                         say("    Dolphin never came to the front; sent nothing")
                         continue
                 for button in args.press:
-                    outcome = keys.press(button)
+                    outcome = keys.press(button, gap=args.press_gap)
                     say(f"    {button}: {'sent' if outcome.sent else outcome.problem}")
 
             line = result.snapshot.render()

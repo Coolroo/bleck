@@ -4087,3 +4087,56 @@ which needs a save state -- the outstanding item from D63.
 than pressing them in sequence. That distinction is the feature: a mod tests
 `(held & mask) == mask` within a single frame, so a fast sequence of individual
 presses would exercise nothing and pass for the wrong reason.
+
+---
+
+## D70 — ⛔ The combo block breaks `evt_seq_mapchange` (2026-07-27)
+
+⛔ **A module containing the button-combination watcher cannot change maps.**
+Both the boot map and the combination's own script stop working, silently.
+
+Isolated by bisection, three runs, one variable:
+
+| Build | boot map | combo | `evt_seq_mapchange` |
+|---|---|---|---|
+| `tex-koopa --map he1_01` | fires t+48s | none | ✅ works |
+| `warp-combo` (boot + combo) | never fires | fires | ⛔ **neither works** |
+| `warp-combo` (boot, combo removed) | fires t+48s | none | ✅ works |
+
+Same mod, same script file, same boot map in runs 2 and 3 -- only `code.combos`
+differs. That is the cause.
+
+### What is *not* broken
+
+- ✅ The combination is detected. `gw[31]` goes 0 -> 1 within four seconds of
+  the press, with a control run confirming it stays 0 otherwise (D69).
+- ✅ `evtEntry` works from the combo watcher -- the script starts and its first
+  statement executes.
+- ✅ The generated C is correct by inspection: `bleck_boot_on_seq` is present
+  and calls `evtEntry(bleck_script_bleck_boot, 0, 0)`, and both scripts'
+  bytecode is well-formed with the right string-table pointers.
+
+So the script runs and then its `evt_seq_mapchange` does nothing, in *both*
+scripts, only when the combo block is compiled in.
+
+### 🔶 Candidate causes, none tested
+
+1. **A relocation problem.** The combo block adds one extern, `wpadGetWork`.
+   `elf2rel` binds each undefined symbol against the lst; if adding a symbol
+   perturbs that, `evt_seq_mapchange` could be bound to the wrong address. The
+   script would then call something harmless and continue. **This is the
+   suspicion, because it explains why *both* scripts fail rather than the one
+   the combo started.**
+2. Something the per-frame `wpadGetWork()` read does to engine state.
+3. Module size: 1884 bytes with the combo, 1644 without.
+
+⚠️ Do not guess between these. The test that separates (1) from the others is
+reading the bound address out of the running game: `bleck_script_warp_home[4]`
+holds `&evt_seq_mapchange`, which should be `0x8010D0F0` on eu0. If it is not,
+it is a link bug and nothing to do with controllers.
+
+### Status of the feature
+
+`code.combos` **detects presses correctly and must not be relied on for
+anything else yet.** The chain from `bleck.yml` through the manifest to a
+firing script is proven (D69); what a fired script can then *do* is not.
