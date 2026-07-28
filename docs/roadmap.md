@@ -1,5 +1,8 @@
 # Roadmap
 
+The destination is in [`vision.md`](./vision.md) — a full editor, GUI
+included. This is the order of getting there.
+
 What to build next, why in this order, and what is blocking what.
 
 Reasoning behind past choices lives in [`decision-log.md`](./decision-log.md);
