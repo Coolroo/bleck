@@ -22,11 +22,16 @@ this file is forward-looking only.
 | **Asset pipeline end to end** | ✅ **A built disc boots and renders mods** — on Linux (D25) and Windows (D36) |
 | PowerPC toolchain | ✅ Proven — builds a valid REL (D26) |
 | **Custom code runs in-game** | ✅ **Confirmed** (D38) — a `bleck`-built REL loads and executes |
-| **Scripting language** | ✅ **Working end to end** — compiles, links, and runs in-game at 60 iterations/sec, surviving map changes (D37, D43) |
+| **Scripting language** | ✅ **Working end to end** — compiles, links, and runs in-game at 60 iterations/sec, surviving map changes (D37, D43). `switch`/`case` lowers onto evt's own `SWITCH`…`END_SWITCH` (D84); 🔶 no switch has been run in-game |
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
+| **C++ code mods** | ✅ Builds — `.cpp`/`.cc`/`.cxx` alongside C, `-fno-exceptions -fno-rtti -std=gnu++17`, static constructors walked from `_prolog` and the `.ctors` table checked at link (D85). 🔶 **Nothing C++ has run in-game** |
+| **Riivolution output** | ✅ `--output riivolution` writes an XML plus only the changed files — 5.3 MB and 3.2 s against minutes for an image (D86). The loader travels inside the patched `main.dol`, so nothing has to be configured in the emulator. 🔶 **Dolphin only; never run on a Wii** |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
 | **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ⛔ Branch *replacement* only — no trampoline. ✅ A mod can still keep the original by restoring it around the call: the self-healing detour records arguments **and** return values, and traced `mapDataPtr` and `effMain` live (D96) |
+| **Tracing a game function** | ✅ The self-healing detour records arguments **and** return values while the original still runs — `mapDataPtr`, `effMain` and `GetBasicPlayer` measured live (D96). A pattern over `code.hooks`, deliberately **not** a manifest field. ⚠️ Floats are invisible to it |
+| **Doors** | ⛔ **Unreachable, with a reason.** `DoorDesc` has no lookup by name; descriptors are registered per map by `evt_door_set_door_descs`. That call is absent from all five map init scripts walked (D93, positive control 8 hits), and a branch installed over the function itself was entered **zero** times across 90 s in Flipside while a control hook fired 62,480 times (D94). `door:` is refused by the manifest. 🔶 Two maps is not the game; `door_init_evt` sits in the REL range, so door setup plausibly lives in each map's own module |
+| **US (`us0`) support** | 🔴 **Blocked on a US disc image.** `work/extracted/` holds `eu0` only, so nothing US-targeted can be extracted, built or booted here. `base`/`code.target` already carry the version, and the symbol lists exist — what is missing is a disc |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -43,13 +48,19 @@ this file is forward-looking only.
 
 ---
 
-## Nothing is blocking
+## What is blocking what
 
-The scripting track is proven end to end (D43). Work can proceed on any of the
-items below in whatever order is most useful.
+Nothing on the list below is blocked by another item on it — work can proceed in
+whatever order is most useful. Two things are blocked by something outside the
+repository:
 
-⚠️ One caveat worth carrying: **only `eu0` has been booted.** Other versions
-compile but nothing has run on them.
+- 🔴 **US (`us0`) support needs a US disc image.** Only `eu0` is extracted here.
+- 🔵 **Seeing a patched item hook run needs a human** — a save state plus
+  attended input (D48, D92).
+
+⚠️ One caveat worth carrying: **only `eu0` has been booted**, and every runtime
+claim in this repository is Dolphin's behaviour. **Nothing has ever run on a
+real Wii**, including the Riivolution output built for it.
 
 ---
 
@@ -60,7 +71,8 @@ compile but nothing has run on them.
 game-version support are explicitly deferred — nothing is shared until there is
 an application worth sharing.
 
-**Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent
+**Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent ·
+🔴 blocked on something outside the repository
 
 ### 🟢 More editing surfaces through the API
 
@@ -87,8 +99,9 @@ play far enough once and press F1.
 ### 🟢 The rest of the scripting language
 
 `SETI` for ambiguous literals, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`,
-and `peek`/`poke` for `SET_RAM`/`GET_RAM`. `switch` landed in D84. The language
-reaches 50 of the VM's 120 opcodes.
+and `peek`/`poke` for `SET_RAM`/`GET_RAM`. `switch` landed in D84, though 🔶
+nothing has run one in-game. The language lowers to 50 of the VM's 120 opcodes;
+this is the one place that number is written down, so update it here.
 
 ⚠️ Raw memory access is what would let a script write an `EvtScriptCode *` into
 a **door, NPC or item** — but expect D51's trap: patching a pointer the game
@@ -149,6 +162,23 @@ four map changes on `effMain` — the function D94 says must not be stubbed. So
 is doing it **without two cache flushes per call**, and without the mod having to
 write the handler by hand. Rank it accordingly.
 
+### 🔴 US (`us0`) support — blocked on a disc
+
+`base` and `code.target` already carry the version, symbol lists exist for every
+region, and a mismatched base is already an error rather than a silent
+misapplication. What is missing is a **US disc image**: `work/extracted/` holds
+`eu0` and nothing else, so nothing US-targeted can be extracted, built, or
+booted here. Until one exists this is not work that can be started, let alone
+verified. Anchor everything address-dependent to `eu0` meanwhile.
+
+### 🔵 Hardware — never tested
+
+Every Riivolution result on record is Dolphin's implementation of Riivolution
+(D86), and every cache-flush result is Dolphin's cache model (D94, D96). The XML
+is written against the documented format and Dolphin's parser agrees with it;
+that is not the same as an SD card in a Wii. One person with a Wii, a Riivolution
+install and an SD card settles it.
+
 ### 🔶 Remaining button masks
 
 `plus`, `minus`, `home` and the d-pad. One `button-probe` run each; `a`, `b`,
@@ -204,14 +234,17 @@ Three options:
 scratchpad precisely so this stays open. **This decision should come first**,
 because unwinding a licensing mistake later is far worse than making it now.
 
-### 2. 🟢 Install `g++-powerpc-linux-gnu`
+### 2. ✅ ~~Install `g++-powerpc-linux-gnu`~~ — *done (D85)*
+
+D26 proved the C toolchain and this step was about the C++ one. `code.sources`
+now compiles `.cpp`/`.cc`/`.cxx` beside C, with the driver derived from whichever
+`gcc` was located rather than hardcoded, so the Linux package name below is only
+one of the ways to satisfy it — devkitPPC's `powerpc-eabi-g++` is what is used on
+the Windows host.
 
 ```
 sudo apt install -y g++-powerpc-linux-gnu
 ```
-
-D26 proved the C toolchain. Upstream's framework is C++17, so anything beyond a
-trivial hook needs the C++ compiler. Cheap and unblocking.
 
 ### 3. ✅ ~~Get one hook actually running~~ — *done (D38, D43, D46)*
 
@@ -342,7 +375,7 @@ code worth porting. After the code track lands.
 - **LZ77 lazy matching.** Our encoder is +0.25% vs Nintendo; lazy matching would
   likely close most of that. Zero urgency — D25 proved bit-exactness is not
   required.
-- ~~**Run the test suite on Windows.**~~ ✅ Done (D33, D35, D36) — 164 tests, the
+- ~~**Run the test suite on Windows.**~~ ✅ Done (D33, D35, D36) — the suite, the
   linters, `extract`, `verify`, `mod build` and `launch` all pass there against
   real game data, and a disc built on Windows boots with modified textures.
 - **`bleck info` for `/a` container files** — the paired `name` / `name-` format
@@ -354,11 +387,17 @@ code worth porting. After the code track lands.
 
 ## Suggested next session
 
-1. Make the licensing call (step 1) — it gates the rest.
-2. `sudo apt install -y g++-powerpc-linux-gnu` (step 2).
-3. Build the smallest observable hook and boot it (step 3).
+⚠️ The three steps that used to sit here — licensing, installing a C++ compiler,
+booting the first hook — are done or deferred. The code track is no longer the
+risky part of this project.
 
-Step 3 is the one that matters. Until a REL we built demonstrably *runs*, the
-code track rests on the same kind of untested assumption the asset track carried
-before D25 — and that assumption is riskier here, because the ABI mismatch is a
-real and specific hazard rather than a general worry.
+1. **A GUI over the JSON contract.** The largest remaining step toward the thing
+   `vision.md` describes, and it is unblocked: the schema is published and every
+   mod in the tree round-trips through it.
+2. **A trampoline**, so `mode: "before"`/`"after"` can stop being refusals.
+   Today, declaring a hook means taking over the function's entire job.
+3. **A save state**, which needs a human once and then unblocks item hooks,
+   player state, and anything past the attract demo.
+
+Licensing (step 1 of the historical plan) still has to be settled before any
+release, and still blocks nothing else.

@@ -282,27 +282,36 @@ Honest scope, because the ceiling is real:
   builtins, all of which take `(EvtEntry *, bool)`, so an ordinary game
   function like `mapDataPtr` is unreachable from a script whatever syntax we
   add. ✅ **A mod can ship C alongside its script** via `code.sources` (D46) —
-  that is what reaches those functions.
+  that is what reaches those functions, and `code.hooks` will *replace* one of
+  them by name (D95). Both are C-side features; the language gained nothing.
   ✅ Attaching to a **map** no longer needs C at all: `code.maps` does it
-  (D51). Doors, items and NPCs still do.
+  (D51). ✅ A *vanilla* map or item script can be made to call a mod's C with
+  `code.patches` (D90, D92) — but the thing it calls is C, so that route does not
+  remove the requirement, it only removes the hand-written patch. ⛔ Doors are
+  not reachable by either route (D91, D93, D94); NPCs are untested.
 - **`USER_FUNC` is the only escape hatch today.** Whatever the game's builtins
   can do, a script can do; nothing else. ⚠️ The VM *also* has `SET_RAM`/`GET_RAM`
   for arbitrary memory, but **the language exposes no syntax for them** — an
   earlier draft of this document claimed otherwise and was wrong.
-- **The language reaches 39 of the VM's 120 opcodes.** Not yet lowered to:
-  `SET_RAM`/`GET_RAM` (raw memory), `SWITCH`/`CASE*`, `IF_FLAG`/`IF_NOT_FLAG`,
-  `RUN_EVT` (detached spawn), `SET_PRI`/`SET_SPD`, `CHK_EVT`, the `READ` array
-  family, `CLAMP_INT`, and the six `DEBUG_*` opcodes. None are blocked by the
-  design; they are simply unwritten.
+- **Most of the VM is still unreached.** Not yet lowered to: `SET_RAM`/`GET_RAM`
+  and the `SETR`/`GETR` family (raw memory), `SETI`/`SWITCHI` (immediate forms),
+  `IF_FLAG`/`IF_NOT_FLAG`, `GOTO`/`LBL`, `RUN_EVT` (detached spawn),
+  `SET_PRI`/`SET_SPD`, `CHK_EVT`, the `INLINE_EVT` and `BROTHER_EVT` families,
+  the `READ` array family, `CLAMP_INT`, and the six `DEBUG_*` opcodes. None are
+  blocked by the design; they are simply unwritten. The running count lives in
+  [`roadmap.md`](./roadmap.md) so it rots in one place.
+  ⚠️ An earlier version of this list named `SWITCH`/`CASE*` as unreached; they
+  have been emitted since D84.
 - **Calls are statements, not expressions.** `evt` user funcs return results
   through output slots rather than a return value, so `var x = f()` is rejected
   with an explanation.
-- **One code mod per build.** The Gecko loader opens exactly one
-  `/mod/mod.rel`. A chain containing two code mods fails loudly rather than
-  silently dropping one.
+- **One `mod.rel` per disc, but not one mod per disc.** The Gecko loader opens
+  exactly one `/mod/mod.rel` and that is unchanged — ✅ several script mods are
+  **merged into it at compile time** and all of their `main`s run (D78).
+  🔶 Two mods that both ship `code.sources` still collide on `mod_prolog`.
   ⚠️ **`chainrel` is not the answer** — D39 found it to be a three-commit stub
-  with its loader body wrapped in `#if 0`. Nobody in this scene has solved
-  multi-mod loading, which makes it the clearest unclaimed problem available.
+  with its loader body wrapped in `#if 0`. Nobody has solved runtime chaining;
+  merging sidesteps it rather than solving it.
 
 ## Symbol lists are not shipped
 

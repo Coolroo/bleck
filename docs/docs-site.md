@@ -7,6 +7,24 @@ The `docs/` directory at the repo root is different and stays put: it holds the
 living design record — decision log, roadmap, handoff notes — written for
 maintainers, not users.
 
+## The two trees have different jobs (D82)
+
+`docs/` records **why, and what is true**: journal tone, decision citations,
+confidence markers (✅ 🔶 ⛔), retractions kept in place.
+
+`docs-site/` is an **overview of how to install and use `bleck`**. Present tense,
+describing what the tool does. It carries **none** of the above:
+
+- ⛔ Never "verified", "proven", "works today", "confirmed in game".
+- ⛔ Never a decision-log citation, a run transcript, or a date.
+- ⛔ Never project history — no "used to", no "was wrong", no retractions.
+
+⚠️ That is not licence to overstate. Where a capability is real but thinly
+exercised, say so plainly and without the vocabulary above — *"an item's use
+script runs only when a player uses that item, which no automated test here can
+do"* rather than *"🔶 unproven (D92)"*. A user-visible behaviour change should
+update both trees, in each one's own voice.
+
 ## Working on it
 
 ```bash

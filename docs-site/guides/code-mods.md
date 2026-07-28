@@ -155,6 +155,14 @@ name.
     patching one item id can change other items too. `bleck_patch_shared[]`
     tells you how many entries point at the script you hit.
 
+!!! note "Item patches are less exercised than map patches"
+
+    A map's init script runs the moment the map loads, so a map patch shows its
+    effect on any boot. An item's use script runs only when a player *uses* that
+    item, which no automated test here can do — so an item patch is checked as
+    far as "resolved the right script and wrote into it", and no further. Read
+    `bleck_patch_status[]`, then try it by hand.
+
 Your code can read what happened:
 
 ```c

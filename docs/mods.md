@@ -101,7 +101,11 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | `script` | evt source, compiled to the game's own VM |
 | `sources` | native C (`.c`) and C++ (`.cpp`, `.cc`, `.cxx`), compiled into the same module. Files or directories |
 | `maps` | map name → script name; runs on arrival there (D51) |
-| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>` and `item:<id>` selectors; same-size, any size (D89, D90, D92) |
+| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>` and `item:<id>` selectors; same-size, any size from two words up (D89, D90, D92). ⛔ `door:` is refused with a reason (D91, D93) |
+| `hooks` | replaces a *game C function*, named from the symbol list, with one of this mod's. The guard word is derived from the base disc's `main.dol` (D95). ⚠️ `mode` is `replace` only — the original never runs; `before`/`after` are refused |
+| `combos` | button-combination name → script name; combinations are named in `bleck.yml` (D77) |
+| `boot` | a map to start the game at instead of the attract demo (D64) |
+| `banner` | on-screen confirmation that the module loaded (D49) |
 | `target` | which version's symbol list resolves game functions. Default `eu0` |
 | `module_id` | REL module id. The game's own REL is 1, so mods start at 2 |
 
@@ -109,9 +113,15 @@ All of it compiles into a single `overlay/files/mod/mod.rel`, which the ordinary
 overlay machinery then carries — **a code mod is still just a mod**, and nothing
 downstream knows it was generated.
 
-⚠️ **Only one code mod per build.** The Gecko loader opens exactly that one path,
-so a chain containing two fails loudly rather than silently dropping one. See
-*Known hazards*.
+✅ **Several code mods merge into that one module** (D78). The Gecko loader still
+opens exactly one path — that limit is unchanged — but merging happens at
+*compile* time, so a chain of code mods produces one `mod.rel` and every mod's
+`main`, map hooks, combos, patches and hooks are unioned into it. Identifiers are
+namespaced per mod so two mods can both declare `script main`.
+
+🔶 **The exception is `code.sources`.** Two mods each defining `mod_prolog` would
+collide at link time; scripts merge cleanly, C does not yet. See
+[`plan-merging.md`](./plan-merging.md).
 
 Map names are the disc's own; `bleck maps --chapter 5` lists them with the
 chapter each belongs to.

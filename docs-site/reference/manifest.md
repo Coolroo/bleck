@@ -194,6 +194,10 @@ Every mod has a `mod.json` at its root.
                 scripts, so several ids share one. `bleck_patch_shared[]`
                 reports how many entries point at the script your patch hit.
 
+                An item's use script runs only when a player uses that item, so
+                an `item:` patch is checked as far as "resolved the right script
+                and wrote into it". Confirm the rest by hand.
+
             A patch is applied when the module loads and stays applied for the
             rest of the session, including maps you enter later. Your C can
             read what happened:

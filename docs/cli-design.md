@@ -67,6 +67,17 @@ Flags added during implementation, beyond the original design:
 - `--launch` on `mod build` — boot the result immediately. The design goal above
   is "the common path is one command", and while the last step of testing lived
   outside `bleck` that was not true of the loop people actually run.
+- `--output` on `mod build` — what to leave behind: `iso`, `wbfs`, `rvz`,
+  `riivolution` or `none` (D86). These are a **table**
+  (`bleck/mods/build/outputs.py`), not a chain of branches, and the flag's
+  choices and help text are generated from it, so a fourth delivery route is a
+  value rather than a new flag. `--no-image` is `--output none` internally.
+- `--map` on `mod build` — boot the built disc straight into a named map,
+  without editing the manifest (D64).
+
+The command surface above also grew `bleck mod` (vendor, build, export, import,
+schema), `bleck setup` (show, edits, apply) and `bleck mods`. The verbs stayed
+flat; only the *object* families are grouped.
 
 ### `maps` exists so `code.maps` is usable (D51)
 
@@ -164,12 +175,16 @@ images and produce large artifacts; a silent clobber is expensive.
 
 ---
 
-## Open questions
+## Open questions — all three answered
 
-- Should `build` handle the Gecko loader code and `/mod/mod.rel` placement, or
-  stay purely a disc-level tool? Leaning toward a separate `bleck mod` verb once
-  the REL workflow is actually exercised.
-- Does `pack` need to reproduce Nintendo's LZ77 exactly to be useful? Probably
-  not — see D16 — but this is untested against a running game.
-- Where does the setup-file ambiguity (D13, two byte-identical copies) surface in
-  the CLI? A user editing a setup file needs to be told both copies exist.
+- ~~Should `build` handle the Gecko loader code and `/mod/mod.rel` placement?~~
+  ✅ **`bleck mod build` does**, and the loader is baked into `main.dol` with
+  `wstrt --add-sect` rather than left to the emulator's cheat manager (D44).
+  `bleck build` stayed a disc-level tool.
+- ~~Does `pack` need to reproduce Nintendo's LZ77 exactly?~~ ⛔ **No** — D25
+  booted a disc built with our ~0.25%-larger encoding and it rendered correctly.
+  This was the untested part at the time; it is not any more.
+- ~~Where does the setup-file ambiguity surface in the CLI?~~ ✅ `bleck mod
+  build` warns when an overlay touches either copy and **names the one that
+  matters** — the standalone `files/setup/<map>.dat` (D62). Better still,
+  declare the change under `setup` in `mod.json` and let `bleck` write both.

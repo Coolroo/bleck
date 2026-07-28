@@ -1,14 +1,16 @@
 # Handoff — picking this up fresh
 
-Last updated 2026-07-27. The scripting language landed (D37) and now **runs**
-(D43), after three failed entry points and an unattended memory-readback rig
-that finally settled it. Also: an ecosystem survey (D39) and the setup file
-format (D42).
+Last updated 2026-07-28. A mod can now change the game's **own** content: one
+instruction of a vanilla `evt` script (D89–D92) or a game C function by name
+(D94–D96), both declared in `mod.json` and both refused rather than written when
+the target is not what the build expected. Code mods build C++ (D85), and
+`--output riivolution` produces a patch for real hardware instead of a 4.3 GB
+image (D86).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D78)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D96)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -22,23 +24,31 @@ For anything else:
 
 ## Start here
 
-**The scripting track works, and mods can now react to the world.** ✅ A script
-compiled by `bleck` runs inside the game, and ✅ can be attached to a named map
-so it starts on arrival (D51) — both verified by reading the running game's
-memory, not by looking at the screen.
+**Four things a mod can do, in rough order of how recently they stopped being
+impossible.** Every one was verified by reading the running game's memory, and
+every one has a *negative* run on record where the guard refused and the game
+was left untouched.
 
-```
-[t+45s] seq=GAME   gw[31]=4660 gw[30]=126     *** on_arrive RAN at aa4_01 ***
-[t+93s] seq=GAME   gw[31]=4660 gw[30]=3004    *** 60/sec, still alive ***
-[t+99s] seq=GAME   gw[31]=4660 gw[30]=3156    *** froze: next map is not hooked ***
-```
+| | Declared as | Proven by |
+|---|---|---|
+| Run its own script or C, on a loop, on arrival at a map, or on a button combo | `code.script`, `code.maps`, `code.combos` | D43, D46, D51, D77 |
+| Make a **vanilla** script call into it — a map's init script, an item's use script | `code.patches` | D89, D90, D92 |
+| Replace a **game C function** by name | `code.hooks` | D94, D95 |
+| **Trace** a game function without breaking it — arguments, return value, original still runs | a pattern, not a manifest key | D96 |
 
-That last line is the point. The counter *stopping* is what proves the hook is
-map-specific rather than firing on any gameplay — evidence from a stopped
-counter, not from nothing happening.
+⚠️ **Two of those have a hole worth knowing.** An item patch has been *applied*
+and never *entered* — using an item needs menu navigation and input cannot be
+injected (D92). And `code.hooks` has only `mode: "replace"`, which destroys the
+function it hooks; `before` and `after` are refused by name because there is no
+trampoline (D95).
+
+⛔ **Nothing has ever run on a real Wii.** Riivolution output exists (D86) and
+Dolphin runs it, but hardware is untested, and so is Dolphin's cache model
+against a real 750 (D94, D96).
 
 There is no longer a single blocking question. Pick from
-[next steps](#next-steps) below.
+[next steps](#next-steps) below, or from
+[`roadmap.md`](./roadmap.md).
 
 ### You can test without a human
 
@@ -122,10 +132,16 @@ native builtins. No interpreter is shipped. See [`scripting.md`](./scripting.md)
 ✅ **Event mods work** (D51). `code.maps` runs a script on arrival at a named
 map — the difference between a mod that loops and a mod that *reacts*. It
 needs no C, and `bleck maps` lists every map with the chapter it belongs to.
-⛔ Patching `MapData.initScript` deadlocks the map loader; read D51 before
-trying it.
+⛔ **Repointing** `MapData.initScript` at a wrapper deadlocks the map loader;
+read D51 before trying it. ✅ **Mutating the bytecode that pointer already
+refers to is a different mechanism and it works** (D89) — that is what
+`code.patches` does.
 
-326 tests, pylint 10.00/10.
+✅ **Code mods build C++** (D85), with static constructors walked from `_prolog`
+and the `.ctors` table checked at link time. 🔶 Nothing C++ has run in-game.
+
+pylint 10.00/10. The test count moves every session; run `uv run pytest` rather
+than trusting a number written here.
 
 ### What is verified, and what is not
 
@@ -143,11 +159,24 @@ trying it.
 | ✅ **Native C runs in-game** | `code.sources` module executes, measured per frame (D46, D47) |
 | ✅ **Every disc names itself on screen** | `mod_loaded: <name>` on the title screen, confirmed by eye (D49) |
 | ✅ **A script runs on arrival at a named map** | map-specific, verified by a frozen counter elsewhere (D51) |
-| ⛔ **`MapData.initScript` cannot be patched** | installs fine, then deadlocks the map load (D51) |
+| ⛔ **`MapData.initScript` cannot be *repointed*** | a wrapper installs fine, then deadlocks the map load (D51) |
+| ✅ **A vanilla script can call into `mod.rel`** | one instruction of `he1_01`'s init script replaced in place, map ran 90 s (D89, D90) |
+| ✅ **Any instruction of two words or more is patchable** | replacement carries the original's argc and arguments through (D92) |
+| ✅ **Item use scripts are reachable** | `itemEventDataTable` walked, `item:0x41` resolved and written (D92) |
+| 🔶 **A patched *item* hook has never been entered** | using an item needs menu input, which cannot be injected (D48, D92) |
+| ✅ **A game C function can be replaced by name** | `code.hooks`, guard derived from `main.dol`, 63,644 entries (D95) |
+| ✅ **The instruction-cache flush is necessary, not ceremonial** | a no-flush control read back the new word and ran the old body (D94) |
+| ⛔ **No trampoline; `replace` destroys the original** | `before`/`after` refused at build time (D95) |
+| ✅ **A function can be traced with the original still running** | restore, call, re-arm — `effMain` through four map changes (D96) |
+| ⛔ **Doors are not reachable at all** | absent from five maps' init scripts, and a hook on `evt_door_set_door_descs` fired zero times (D93, D94) |
+| ✅ **C++ code mods build** | `.ctors` survives `-r --gc-sections` and elf2rel; markers checked at link (D85) |
+| 🔶 **No C++ code mod has run in-game** | every D85 claim is about the ELF and REL on disk |
+| ✅ **Riivolution output boots in Dolphin** | loader travels in the patched `main.dol`; negative isolates one XML element (D86) |
+| ⛔ **Nothing has run on real hardware** | every runtime claim here is Dolphin's (D86, D94, D96) |
 | ✅ **`.env` is loaded automatically** | tool paths survive between shells; real env still wins |
 | ⛔ `SEQ_TITLE` is never entered | zero frames unattended; there is no menu to hook (D47) |
 | ⛔ Input cannot be injected | DirectInput plus a locked session (D48) |
-| ✅ **The game reads the *embedded* setup copy** | control run: swapping markers left both addresses unchanged (D53) |
+| ✅ **The game reads the *standalone* `files/setup/*.dat`** | ⚠️ D53 concluded the opposite; D62 settled it by giving each copy a different enemy and seeing which spawned |
 | ✅ **Any map is reachable unattended** | `evt_seq_mapchange` from a map hook (D52) |
 | ✅ **A disc can start itself in any map** | `--map` / `code.boot`, confirmed in game (D64) |
 | ✅ **A button combination runs a script** | `bleck.yml` + `code.combos`, played by hand (D77) |
@@ -194,8 +223,9 @@ not vendor it, deliberately — see "Licensing" below.
 ✅ It now lives at `work/symbols/spm.eu0.lst`, which is where
 `BLECK_SYMBOLS_DIR` defaults to, so no environment variable is needed for it.
 
-Anchor to **eu0**. Coverage varies sharply: eu0 documents ~976 symbols, `kr0`
-only 456.
+Anchor to **eu0**. Coverage varies sharply: `spm.eu0.lst` carries 1,111 entries,
+`kr0` only 456. ⚠️ `code.hooks` resolves its `function` against this same list,
+so it is now load-bearing for more than scripts.
 
 ⚠️ **There is a much better source** (D39), though it **cannot be vendored** —
 `spm-decomp` states no licence (D54), so read a user-supplied clone:
@@ -263,7 +293,7 @@ bleck mod vendor tex-koopa    lyt/title.bin.uk/arc/timg/koopa.tpl
 ```
 
 Then invert pixel data from `0x40` to the end of each — script in
-[`../docs-site/guides/first-mod.mdx`](../docs-site/guides/first-mod.mdx).
+[`../docs-site/guides/first-mod.md`](../docs-site/guides/first-mod.md).
 
 **Script mods are different**: `mods/speedrun` and `mods/coin-tick` commit their
 `scripts/*.evt` source, and the compiled `mod.rel` is regenerated by
@@ -311,50 +341,46 @@ Then invert pixel data from `0x40` to the end of each — script in
 
 ---
 
-## Next steps after the open question closes
+## Next steps
 
-In rough order of value:
+⚠️ **Most of what used to be on this list is done.** Baking the loader into the
+DOL (D44), native C and C++ sources (D46, D85), several code mods in one REL
+(D78), a setup reader/writer (D80), and the setup-duplication question (D62) all
+closed. What remains, in rough order of value:
 
-0. ✅ ~~Bake the Gecko loader into the DOL.~~ **Done** (D44).
-1. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
+1. **A trampoline**, so `code.hooks` can offer `mode: "before"`/`"after"`.
+   Today `replace` destroys the function, which is why every hook so far is a
+   probe. It needs the displaced instruction decoded well enough to know whether
+   it is position-dependent, the ones that cannot move refused, and
+   `<relocated>; b <original + 4>` emitted. ⚠️ Upstream's `hookFunction` copies
+   instruction[0] blindly and breaks on a PC-relative one (D37). ⚠️ D96's
+   self-healing detour already keeps the original running without relocating
+   anything, at the cost of two cache flushes per call — so the trampoline is a
+   performance and ergonomics story now, not a capability one.
+2. **A save state**, which needs a human once (D63). It unblocks the item hook
+   nobody has seen fire, player state, and anything past the attract demo.
+3. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** Raw memory access is the biggest
+   remaining gap in the language.
+   ⚠️ **Maps did *not* need it** (D51): `code.maps` watches the map-change work
+   instead, because repointing a pointer the game owns deadlocked it. Expect the
+   same trap for NPCs — read D51 first. ⛔ It does not open doors either: D93 and
+   D94 showed the descriptor registration is not reachable at all.
+4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need
    not be. Small, and removes a papercut the language shipped with.
-2. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The language reaches 39 of the
-   VM's 120 opcodes. Raw memory access is the biggest remaining gap — it is what
-   would let a script write an `EvtScriptCode *` into an **NPC, door or item**.
-   ⚠️ **Maps are already done and did *not* need it** (D51): `code.maps` watches
-   `seqWork.p0` instead, because patching the pointer the game owns deadlocked
-   it. Expect the same trap for doors and NPCs — read D51 first.
-3. **Switch to the decomp's symbol table** (D39).
+5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+   `switch` is done (D84), though nothing has run one in-game yet.
+   ⚠️ `RUN_EVT` is *emitted* nowhere — the map-hook design that used it was
+   ruled out (D51) — so `spawn` starts from scratch.
+6. **Switch to the decomp's symbol table** (D39).
    `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
-   the lst's 976 — **11×** — and carries sizes and types, so `user_func` targets
-   can be validated rather than just resolved. One regex parses it.
-4. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
-   `switch` is done (D84), though nothing has run it in-game yet.
-   ⚠️ `RUN_EVT`/`RUN_CHILD_EVT` are *emitted* nowhere now — the map-hook design
-   that used them was ruled out (D51) — so `spawn` starts from scratch.
-5. **Native hooks in `bleck mod build`** — a `code.sources` block for C/C++
-   alongside `code.script`. Design in [`code-mods.md`](./code-mods.md);
-   D38 proves the technique works.
-6. **Multiple code mods — an unclaimed problem** (D39). Nobody in this scene
-   has solved it: `chainrel` is a three-commit stub with its loader body wrapped
-   in `#if 0`, and both major mod distributions tell users to enable one REL mod
-   at a time. This is the clearest differentiator available to `bleck`.
-   ⚠️ The known gotcha, from `relloader3/util.cpp`: allocate a second REL from
-   the *tail* of `HEAP_MAIN` (negative alignment) so `relF.rel` does not shift.
-7. ✅ ~~**Settle D13**~~ — **Done** (D53). The game reads the copy **embedded
-   in the map archive**; the standalone `files/setup/*.dat` is loaded but never
-   used. Proven with a control run — swapping which copy carried which marker
-   left both buffer addresses unchanged. `bleck` now names the copy to edit.
-8. **A `setup` reader/writer — the clearest next feature.** The container is
-   fully specified in [`disc-layout.md`](./disc-layout.md): a fixed 100-entry
-   array with a version-dependent stride, and D53 settled which copy to write.
-   Enemy placement is the most obviously moddable thing on the disc after
-   textures, and no `bleck` code touches it yet.
-   ⚠️ Individual entry *fields* are still undocumented beyond position and enemy
-   ID; **that is the remaining work, not the container**. `he1_01` is a good
-   subject: 3 used entries out of 100, and reachable unattended (D52).
+   `spm.eu0.lst`'s 1,111 — and carries sizes and types, so `user_func` targets
+   and `code.hooks` targets could be validated rather than just resolved. One
+   regex parses it. ⚠️ It states no licence (D54), so it must stay a
+   user-supplied clone.
+7. **Run something on a real Wii.** The Riivolution output is built for it and
+   has never touched one.
 
 ---
 
@@ -403,11 +429,13 @@ In rough order of value:
   it as "not a GC/Wii ISO", which reads like corruption and is not.
 - **Record expensive results rather than re-running them.** The LZ77 compressor
   is ~12 s/MB; baselines are in D16.
-- **Setup files exist in two byte-identical copies** and we still do not know
-  which the game reads (D13). Now that booting works, this is directly testable —
-  and ✅ **the format is fully decoded** (D42), so the experiment can *generate*
-  a valid file rather than hand-patch bytes. Structure and the version→stride
-  table are in [`disc-layout.md`](./disc-layout.md).
+- **Setup files exist in two byte-identical copies** (D13), and ✅ **the game
+  reads the standalone `files/setup/<map>.dat`** — settled in D62 by giving each
+  copy a different enemy and seeing which spawned. ⚠️ D53 concluded the opposite
+  and several docs said so for a month; its measurement (the *embedded* copy is
+  the one in MEM1) was sound, but "in MEM1" is not "in use". The format is fully
+  decoded (D42); structure and the version→stride table are in
+  [`disc-layout.md`](./disc-layout.md).
 - **Check claims against the disc before recording them** (D42). A widely-linked
   Google Doc says setup files are "consistently 11,204 bytes"; that is true of
   184 of 227 and false of the rest. Fifteen lines of Python against data already
@@ -692,9 +720,11 @@ artifact, each covering a different way packaging breaks rather than a different
 feature, and needs no extracted disc — so it runs on a machine that has never
 seen the game.
 
-🔶 **The workflow has never actually run.** The YAML parses and the matrix is
-right, but a runner-specific problem would only show on the first push.
-`macos-latest` is arm64, so that artifact is Apple Silicon only.
+✅ **The build workflow runs and is green on all three platforms** (D83) — which
+also caught that the smoke test could never have failed where it was originally
+run. 🔶 **The tag-triggered *release* job has still never run**, and
+`upload-artifact` drops the exec bit (D81). `macos-latest` is arm64, so that
+artifact is Apple Silicon only.
 
 ---
 
@@ -728,6 +758,14 @@ stopped being true. If a third is ever added, check that page.
   exactly that distinction.
 - 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
   REL-relative addresses, 33 have no known address anywhere.
+- ⛔ **Hardware.** Riivolution output is built for a Wii and has only ever run in
+  Dolphin (D86), as has every cache-flush result (D94, D96).
+- 🔶 **No C++ code mod has run in-game** (D85). Every claim there is about the
+  ELF and the REL on disk.
+- 🔶 **No `switch` has run in-game** (D84), and the absence of `SWITCH_BREAK` is
+  read off header declarations rather than off the VM's code.
+- 🔴 **US (`us0`) support is blocked on a US disc image.** `work/extracted/`
+  holds `eu0` only.
 
 ## ✅ Done: patching the game's own scripts (D89, D90)
 
@@ -750,16 +788,25 @@ left the script byte-for-byte intact, and the map ran anyway.
 
 What to know before extending it:
 
-- **Same-size replacement only.** `USER_FUNC f` is two words, so `expect` must
-  take exactly one argument. `bleck` refuses anything else at build time, from
-  the arity table in `evt.ARGUMENT_COUNTS`.
+- **Same-size replacement, but *any* size from two words up** (D92, superseding
+  D90's fixed two-word rule). The replacement is a `USER_FUNC` declaring the
+  **same argc** as the instruction it overwrites — argc is masked out of the
+  header the guard just matched — so the size cannot diverge by construction and
+  the original's remaining arguments are carried through untouched. Only a
+  one-word instruction is refused, because the function pointer would not fit.
 - ⛔ Pointer swapping is still ruled out (D51 froze the map loader). This
   mutates the bytecode the pointer already refers to.
 - ⚠️ A patch lasts the **whole session** — applied once at load, never
   re-applied per arrival.
-- 🔶 Only `map:` selectors exist. `item:` and `door:` are one run each; the
-  selector prefix is there so they need no field change.
-- `mods/evt-patch` is the worked example, and the mod both D90 runs used.
+- ✅ **Two selectors: `map:<name>` and `item:<id>`** (D92). ⛔ `door:` is refused
+  with a reason, not merely unimplemented — see the code section below.
+- ⚠️ **Item scripts are shared.** 33 table entries, 22 distinct scripts, so
+  patching one id can change others. The generated code counts them into
+  `bleck_patch_shared[]` rather than pretending an id is a unique target.
+- 🔶 **An item hook has been applied and never *entered*.** Using an item needs
+  menu navigation and input cannot be injected (D48). `hook entries` reading `0`
+  is the expected value for a working hook and a broken one alike.
+- `mods/evt-patch` and `mods/item-patch` are the worked examples.
 
 ---
 

@@ -34,9 +34,20 @@ one texture without thinking about compression, archives, or disc layout.
 -   **Custom behaviour**
 
     Write event logic in a [scripting language](guides/scripting.md) that
-    compiles to the game's own VM, or native
-    [PowerPC hooks](guides/code-mods.md) in C. `bleck mod build` compiles both
-    into the `mod.rel` the disc carries.
+    compiles to the game's own VM, or native code in
+    [C or C++](guides/code-mods.md). `bleck mod build` compiles both into the
+    `mod.rel` the disc carries.
+
+-   **Change the game's own content**
+
+    Point one of the game's existing event scripts at your code, or replace a
+    game function by name. Both are declared in the manifest — no addresses,
+    and a mismatch is refused rather than written.
+
+-   **Run it on a Wii**
+
+    Build a [Riivolution patch](guides/hardware.md) instead of a disc image:
+    only the files that changed, in seconds rather than minutes.
 
 -   **Change where the game starts**
 
@@ -51,6 +62,10 @@ one texture without thinking about compression, archives, or disc layout.
 **Level editing** is deliberately deferred. The map data format is only partly
 decoded, so editing it means changing bytes without a visualiser to check them
 against.
+
+**A patched function replaces the original.** You can point a game function at
+your own code, but the original does not also run — so your version has to do
+the whole job.
 
 ## Requirements
 

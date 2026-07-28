@@ -409,11 +409,21 @@ scripts rather than competing with it.
   `getItemUseEvt(87)` — so hooking an existing map or item needs no file
   surgery at all.
 
+> ⚠️ **Correction, 2026-07-28.** That last point turned out to be the important
+> one, and `bleck` now uses it: `code.patches` replaces one instruction of a
+> vanilla map or item script in place with a `USER_FUNC` into `mod.rel` (D89,
+> D90, D92). ⛔ It does **not** do the rest of what `evtpatch` does — no
+> dispatcher changes, no new opcodes, no insertion or deletion. The jump-table
+> constraint above is precisely why: same-size replacement is the one mutation
+> that moves no label. ⚠️ `bleck` walks `itemEventDataTable` directly rather
+> than calling `getItemUseEvt`, which returns a fallback for an unknown id and
+> would silently patch a shared script (D92).
+
 ## Symbols: the decomp is 11× richer than the lst
 
 | Source | Symbols (eu0) | Sizes/types? |
 |---|---|---|
-| `spm-headers/linker/spm.eu0.lst` — what `bleck` uses | **976** | no |
+| `spm-headers/linker/spm.eu0.lst` — what `bleck` uses | **1,111** ⚠️ *(this table said 976; the file has 1,111 `addr:name` entries)* | no |
 | `spm-decomp/config/EU0/symbols.txt` | **43,944 total, ~9,566 human-named** | **yes** |
 
 One regex parses it:
@@ -543,3 +553,10 @@ Nothing found supersedes the D37 decision to compile to `evt` rather than ship a
 VM. **No one else has a script compiler** — `evt-assembler` was the closest and
 it is archived and far weaker. `bleck` compiles *new* scripts; the scene patches
 *existing* ones at runtime. Those are complementary.
+
+> ⚠️ **Correction, 2026-07-28.** "Complementary" understated it: `bleck` now
+> does both. `code.patches` mutates existing scripts (D89–D92) and `code.hooks`
+> replaces a game C function by name (D94, D95), each declared in `mod.json`
+> with a guard that refuses rather than writes on a mismatch. ⛔ What is still
+> not done is the dispatcher surgery `evtpatch` performs, and there is no
+> trampoline — a hooked function's original body never runs.

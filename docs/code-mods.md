@@ -623,25 +623,33 @@ costing ~9 ticks is not credible on a real 750, which has to drain the pipeline.
 - 🔶 **Hardware.** Dolphin reproduced the stale instruction fetch, which is the
   interesting direction, but its cache emulation is not the Wii's.
 
-## ⚠️ The single-slot problem — this needs a decision
+## ✅ The single-slot problem — answered by merging (D78)
 
-**The Gecko loader loads exactly one file: `/mod/mod.rel`.** Our mod system
-supports chains, so two mods in one chain both wanting code would collide — and
-unlike an asset conflict, the second one simply would not exist.
+**The Gecko loader loads exactly one file: `/mod/mod.rel`.** That limit is real
+and unchanged. Our mod system supports chains, so two mods in one chain both
+wanting code would collide — and unlike an asset conflict, the second one simply
+would not exist.
 
-Three ways out:
+Three ways out were on the table:
 
 1. **Treat `files/mod/mod.rel` as implicitly exclusive.** Simple, honest, and
-   restrictive: one code mod per build. Detected by existing machinery.
-2. **Use [`chainrel`](https://github.com/SeekyCt/chainrel)** (same author, active
-   2026-02), which chain-loads `./mod/chain.rel`. Proper multi-module support,
-   more moving parts.
-3. **Link all code mods into one REL** at build time. Best result, hardest —
-   symbol collisions and initialisation order become our problem.
+   restrictive: one code mod per build.
+2. **Use [`chainrel`](https://github.com/SeekyCt/chainrel)**, which chain-loads
+   `./mod/chain.rel`. ⛔ **Ruled out** (D39): it is a three-commit stub with its
+   loader body wrapped in `#if 0`. Nobody in this scene has solved runtime
+   chaining.
+3. **Link all code mods into one REL** at build time.
 
-**Recommendation: start with (1)**, and treat `chainrel` as the follow-up once a
-single code mod demonstrably works. Shipping a broken multi-mod story is worse
-than declining to support it.
+✅ **(3) is what shipped**, and it is verified in game: two mods each declaring
+`script main` both ran to completion, each writing its own `gw[]` slot (D78).
+Because merging happens at *compile* time, the loader still sees one module and
+`chainrel`'s unsolved runtime chaining is not on this path at all. Identifiers
+are namespaced per mod (`bleck_<slug>_`); a handful are per-*disc* and must not
+be — `_prolog`, `mod_prolog` and the sequence-hook machinery.
+
+🔶 **One gap remains**: two mods that both ship `code.sources` would collide on
+`mod_prolog` at link time. Scripts merge cleanly; C does not yet. See
+[`plan-merging.md`](./plan-merging.md).
 
 ---
 
@@ -685,13 +693,15 @@ Needs a decision before any upstream code is copied into this repo.
 
 ---
 
-## Proposed order of work
+## Order of work — all of it done
 
-1. ~~**Prove the toolchain.**~~ ✅ **Done** — see above and D26.
-2. **Get one hook running.** Simplest observable effect, verified by booting.
-3. **Wire into `bleck mod build`** — compile step, `mod.rel` into the overlay.
-4. **Emit the Dolphin INI** so testing needs no manual steps.
-5. **Then** consider `chainrel` for multiple code mods.
+1. ~~**Prove the toolchain.**~~ ✅ D26. The ABI gamble did not fail.
+2. ~~**Get one hook running.**~~ ✅ D38, after three wrong entry points — see
+   [`hook-points.md`](./hook-points.md).
+3. ~~**Wire into `bleck mod build`.**~~ ✅ D46, D47. C++ followed in D85.
+4. ~~**Emit the Dolphin INI.**~~ ⛔ Superseded by D44: the loader is baked into
+   `main.dol` instead, so a built disc needs no emulator configuration at all.
+5. ~~**Consider `chainrel`.**~~ ⛔ Superseded by D78: mods merge at compile time.
 
-Step 1 is the gate. If the Debian compiler produces bad code, everything shifts
-to building on Windows and the design here is unaffected — only where it runs.
+What is left is in [`roadmap.md`](./roadmap.md), and the largest item is a
+trampoline so `mode: "before"`/`"after"` can exist.

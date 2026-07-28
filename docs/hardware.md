@@ -3,6 +3,12 @@
 **Status: built** (D86). `bleck mod build <mod> --output riivolution` writes a
 patch instead of a disc image.
 
+⛔ **No part of this has ever run on a Wii.** Every result on record — the boot,
+the isolating negative, the loader travelling in the patched DOL — is Dolphin's
+implementation of Riivolution. The XML is written against the documented format
+and Dolphin's parser agrees with it, which is not the same thing as an SD card in
+a console. Treat hardware as 🔶 until somebody boots one.
+
 An image costs a 4.3 GB write per iteration. A Riivolution patch costs the size
 of what changed — for a code-only mod, the REL plus the patched DOL. Measured on
 `scripttest`: **5.3 MB, 3.2 s**, against minutes for a `wit` rebuild.

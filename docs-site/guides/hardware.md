@@ -33,6 +33,13 @@ The patch replaces `main.dol` as well as adding your module, and the code that
 loads the module travels inside that executable — so there is no Gecko code
 list, `.gct` or cheat manager to set up separately.
 
+!!! warning "The console path is untested"
+
+    `bleck`'s Riivolution output is written against the documented patch format
+    and is exercised in Dolphin, which has its own Riivolution support. Nobody
+    has yet run it from an SD card on a Wii. If you do, expect to be the first —
+    and please say how it went.
+
 ## Trying it in Dolphin
 
 Dolphin has built-in Riivolution support (Tools → Start with Riivolution

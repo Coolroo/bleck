@@ -100,7 +100,8 @@ Worth stating so it does not get re-litigated:
 | `map.dat` is opaque | Geometry must be readable to draw a map at all |
 | Textures are files | An asset browser needs thumbnails and references |
 | Build takes ~2 minutes | Incremental builds, or preview without a full disc |
-| One code mod per disc | An editor cannot tell users "only one mod" |
+| ✅ ~~One code mod per disc~~ — solved by merging at compile time (D78), except that two mods shipping `code.sources` still collide on `mod_prolog` | An editor cannot tell users "only one mod" |
+| A hooked game function is *replaced*; the original never runs | An editor offering "add behaviour here" needs a trampoline, or it is offering "delete behaviour here" |
 
 ⛔ **`map.dat` is the real wall.** It is 300–600 KB per map and undecoded, and
 nothing draws a map without it. That is the single largest piece of work between

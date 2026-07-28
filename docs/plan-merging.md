@@ -1,17 +1,21 @@
 # Plan — merging several mods into one REL
 
-Status: **proposed**, not built. Written 2026-07-27.
+Status: ✅ **BUILT** and confirmed in game (D78). Written 2026-07-27.
 
-⬅️ **This is the next piece of work.** `plan-config.md` is done (D77), so
-this is what follows. Step 1 -- parameterising the emitter prefix -- is
-landable on its own and invisible to existing behaviour.
+Every step in *Rollout* below is marked done. Two mods each declaring
+`script main` both ran to completion, each writing its own `gw[]` slot — each
+slot the other's positive control.
 
-One thing changed since this was written: `emit.MAX_COMBOS` already refuses
-more than 32 button combinations with a clear error. **Map hooks still do
-not**, and that is the latent `1 << i` overflow described below.
+🔶 **One gap remains**: two mods that both ship `code.sources` would collide on
+`mod_prolog` at link time. `bleck` detects and refuses that, naming both mods.
+Scripts merge cleanly; C does not yet.
 
-Today `bleck` refuses a chain containing more than one code mod
-(`bleck/mods/code.py:131`). This plan removes that limit.
+⚠️ The latent `1 << i` overflow described below was real and is fixed:
+`MAX_MAP_HOOKS` now refuses the 33rd map hook, as `emit.MAX_COMBOS` already did
+for combinations.
+
+Before this, `bleck` refused a chain containing more than one code mod. That
+limit is gone; the Gecko loader's one-REL limit is untouched.
 
 ---
 
@@ -163,12 +167,9 @@ perfectly by every mechanical check and still froze.
    place.
 5. ✅ **The 32-hook cap.** Done -- `MAX_MAP_HOOKS` refuses the 33rd with an
    error saying *why*, so nobody just raises the number.
-6. ⬅️ **Verify in game with two real mods.** NOT DONE, and the only step
-   that matters now. `mods/merge-a` and `mods/merge-b` both loop and write
-   different `gw` slots, so a run can tell "both ran" from "one ran".
-   No unit test can show that, and D51 installed perfectly by every
-   mechanical check and still froze.
+6. ✅ **Verified in game with two real mods** (D78) — the step that mattered.
+   `mods/merge-a` writes `gw[28]`, `mods/merge-b` writes `gw[29]`, both declare
+   `script main`, and a single run read `gw[28]=2 gw[29]=2` at `aa4_01`. Each
+   slot is the other's positive control. No unit test could have shown that, and
+   D51 installed perfectly by every mechanical check and still froze.
 7. ✅ `docs-site` + decision-log entries (D77, D78).
-
-Step 1 is worth landing on its own: it is invisible, it is covered by existing
-tests, and it is the only part that touches every emitted identifier.
