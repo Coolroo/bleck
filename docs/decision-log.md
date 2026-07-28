@@ -4303,3 +4303,55 @@ as the boot script's first statement separates them in one run.
 
 That is the same two-line-test lesson as D71/D72, and it is being written down
 before the next run rather than after it.
+
+---
+
+## D74 — The boot script runs fine; the call is what does nothing (2026-07-27)
+
+⛔ **D73's remaining candidate is dead.** `bleck_boot_pending`'s twin reads
+correctly, `evtEntry` is called, and the script runs to completion of everything
+*except* the map change.
+
+`mods/boot-observe` replicates the generated boot watcher in a mod's own C -- a
+`static u32 = 1` gate, one shot on the first gameplay frame -- and reports each
+step instead of inferring from whether the map changed.
+
+```
+[t+45s] gw[28]=1  probe: 'BOOT' frames=0x69 reached=0x69 gate=0 called=1 returned=1 result=807E7AA0
+[t+48s] gw[28]=2
+[t+51s] gw[28]=2   ... and 2 for the rest of the run
+```
+
+| Reported | Meaning |
+|---|---|
+| `called=1` | the gate was open and `evtEntry` was reached |
+| `returned=1` | it returned rather than hanging |
+| `result=0x807E7AA0` | a plausible `EvtEntry *`, not null -- the script was scheduled |
+| `gw[28]=1` | the script's first statement ran |
+| `gw[28]=2` | it survived `wait(120)` and reached the line **before** the call |
+| never `3` | correct -- a map change tears the script down (D43) |
+
+So everything up to and including the instruction before
+`evt_seq_mapchange` executes, and the map does not change.
+
+**Every mechanical explanation is now eliminated**: the gate, `evtEntry`, the
+scheduling, the script's execution, the binding (D71), the script data in
+memory (D73), and the generated C (D73).
+
+### 🔶 What that leaves
+
+`evt_seq_mapchange` executes and has no effect, in a module containing the
+combo block, when called from a script started by a one-shot watcher -- but the
+*same call* works from `main` started by `bleck_start_entry` (D72).
+
+That difference is now the whole question, and nothing about it is understood.
+
+### ⚠️ This run had a human at the keyboard
+
+A map change to `mac_02` appeared at t+93s, 45 seconds after the script reached
+its call, and `mac_02` is where this machine's save file lives. That is very
+likely the observer, not the mod. **Treat the t+93 transition as contaminated**
+and do not build on it.
+
+The clean part of the run -- probe words and `gw[28]`, from t+45 to t+51 -- is
+unaffected, because the module reports those itself.
