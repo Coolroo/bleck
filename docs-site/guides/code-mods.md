@@ -56,10 +56,13 @@ rather than picking for you:
     exactly as before; the merging happens at compile time, where there is
     nothing to go wrong at runtime.
 
-!!! warning "Native sources are the one gap"
+!!! note "One `mod_prolog` per disc"
 
-    Two mods that both ship `code.sources` and both define `mod_prolog` will
-    collide when they link. Scripts merge cleanly; C does not yet.
+    `bleck` calls `mod_prolog` when the module loads, so a merged disc has
+    exactly one. If two mods define it you get an error naming both, rather
+    than a linker message about a symbol you did not write.
+
+    Move the extra work into a sequence hook, or combine the two mods.
 
 ## Writing a hook
 

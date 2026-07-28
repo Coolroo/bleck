@@ -13,6 +13,7 @@ under three hundred lines of shared machinery.
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -128,6 +129,43 @@ def collect_sources(mod: Mod, spec) -> list[Path]:
     return found
 
 
+#: Comments, stripped before looking for a definition.
+#:
+#: Necessary rather than fastidious: `docs-site` tells mod authors to "define
+#: `mod_prolog`", and several existing mods quote that line in a comment above
+#: the function. Matching the prose would report a collision between a mod that
+#: defines it and one that merely mentions it.
+_C_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
+
+#: A *definition*, not a declaration: the body brace is what makes it one.
+#: `extern void mod_prolog(void);` collides with nothing.
+_MOD_PROLOG_DEFINITION = re.compile(r"\bvoid\s+mod_prolog\s*\([^)]*\)\s*\{")
+
+
+def defines_mod_prolog(source: Path) -> bool:
+    """Whether a C file supplies its own `mod_prolog`.
+
+    `bleck` emits a *weak* one, so a single mod overriding it is the intended
+    design (see `runtime_c.MOD_HOOK`). Two mods overriding it is a duplicate
+    symbol, and the linker reports that as a clash between two object files
+    nobody wrote by hand.
+    """
+    try:
+        text = source.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return bool(_MOD_PROLOG_DEFINITION.search(_C_COMMENT.sub(" ", text)))
+
+
+def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:
+    """Which mods in a merge supply their own `mod_prolog`, by name."""
+    return [
+        part.mod.name
+        for part in parts
+        if any(defines_mod_prolog(source) for source in part.sources)
+    ]
+
+
 def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     """The map attachments this mod declares, as the emitter wants them.
 
@@ -193,7 +231,7 @@ def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     )
 
 
-def _script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
+def script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
     """The script source to compile: the mod's own, the boot script, or both.
 
     A boot map is desugared into script source and appended, so a mod that
@@ -244,7 +282,7 @@ class Part:
         return [s.name for s in self.program.scripts] if self.program else []
 
 
-def _prepare(mod: Mod, override: CodeOverride | None) -> Part:
+def prepare(mod: Mod, override: CodeOverride | None) -> Part:
     """Everything up to but not including emitting C.
 
     Split from emission so one mod and several take the same path to a compiled
@@ -265,7 +303,7 @@ def _prepare(mod: Mod, override: CodeOverride | None) -> Part:
     table = symbol_tables.best_available(
         toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
     )
-    source = _script_text(mod, spec, boot_map)
+    source = script_text(mod, spec, boot_map)
     program = None
     if source.text:
         try:
@@ -292,7 +330,9 @@ def _prepare(mod: Mod, override: CodeOverride | None) -> Part:
     )
 
 
-def _link(generated_c: str, parts: list[Part], owner: Mod, workroot: Path) -> CodeBuild:
+def link_module(
+    generated_c: str, parts: list[Part], owner: Mod, workroot: Path
+) -> CodeBuild:
     """Compile the generated C plus every part's native sources into one REL."""
     headers = env.path(env.HEADERS_DIR)
     spec = parts[-1].spec

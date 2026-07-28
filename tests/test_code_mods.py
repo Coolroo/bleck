@@ -362,3 +362,38 @@ class TestCodeIntermediates:
         staged = workroot / mod.name
         assert staged not in seen["workdir"].parents
         assert seen["workdir"] == workroot / code.CODE_WORKDIR / mod.name
+
+
+class TestMergedModProlog:
+    """Exactly one mod in a merge may define `mod_prolog`."""
+
+    def _mod(self, tmp_path: Path, name: str, defines: bool) -> registry.Mod:
+        root = tmp_path / name
+        (root / "src").mkdir(parents=True)
+        body = "void mod_prolog(void)\n{\n}\n" if defines else "void helper(void)\n{\n}\n"
+        (root / "src" / "main.c").write_text(body, encoding="utf-8")
+        spec = mod_manifest.CodeSpec(sources=["src"])
+        return registry.Mod(
+            manifest=mod_manifest.Manifest(name=name, code=spec), root=root
+        )
+
+    def test_two_definitions_are_refused_naming_both(self, tmp_path: Path):
+        mods = [
+            self._mod(tmp_path, "alpha", True),
+            self._mod(tmp_path, "beta", True),
+        ]
+        with pytest.raises(code.CodeError) as caught:
+            code.build_merged(mods, mods[-1], tmp_path / "work")
+        message = str(caught.value)
+        assert "alpha" in message and "beta" in message
+        # And says what to do, not just that it went wrong.
+        assert "sequence hook" in message
+
+    def test_one_definition_alongside_another_mod_is_fine(self, tmp_path: Path):
+        """The intended design: bleck's own is weak, so one override wins."""
+        mods = [
+            self._mod(tmp_path, "alpha", True),
+            self._mod(tmp_path, "beta", False),
+        ]
+        prepared = [code.prepare(mod, None) for mod in mods]
+        assert code.mods_defining_mod_prolog(prepared) == ["alpha"]

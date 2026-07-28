@@ -28,13 +28,14 @@ from bleck.mods.code.parts import (  # noqa: F401
     CodeOverride,
     Part,
     ScriptSource,
-    _link,
-    _prepare,
-    _script_text,
     banner_for,
     collect_sources,
     combo_hooks_for,
+    link_module,
     map_hooks_for,
+    mods_defining_mod_prolog,
+    prepare,
+    script_text,
 )
 from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
 from bleck.mods.registry import Mod
@@ -84,7 +85,7 @@ def build_merged(
     module holding one mod built against `eu0` and another against `us0` would
     link half its calls to the wrong places — and would do it silently.
     """
-    parts = [_prepare(mod, override) for mod in mods]
+    parts = [prepare(mod, override) for mod in mods]
 
     targets = {part.spec.target for part in parts}
     if len(targets) > 1:
@@ -94,6 +95,20 @@ def build_merged(
             f"cannot share one module.\n"
             f"  Addresses differ per version; a merged build would bind half "
             f"its calls wrongly."
+        )
+
+    # `bleck` emits a weak `mod_prolog`, so one mod overriding it is the design.
+    # Two is a duplicate symbol, and the linker reports it as a clash between
+    # object files nobody wrote by hand -- naming the mods here instead.
+    overriding = mods_defining_mod_prolog(parts)
+    if len(overriding) > 1:
+        listed = ", ".join(overriding)
+        raise CodeError(
+            f"{len(overriding)} mods define `mod_prolog` ({listed}), and only "
+            f"one can.\n"
+            f"  It is the hand-off `bleck` calls when the module loads, so a "
+            f"merged disc has exactly one.\n"
+            f"  Move the extra work into a sequence hook, or combine those mods."
         )
 
     contributions = [
@@ -131,7 +146,7 @@ def build_merged(
     except ScriptError as exc:
         raise CodeError(f"merging {len(mods)} code mods:\n{exc}") from exc
 
-    return _link(generated.text, parts, target, workroot)
+    return link_module(generated.text, parts, target, workroot)
 
 
 def build_mod(
@@ -156,7 +171,7 @@ def build_mod(
     sources = collect_sources(mod, spec)
     banner = banner_for(mod, spec)
     combos = combo_hooks_for(mod, spec, project_config.load())
-    source = _script_text(mod, spec, boot_map)
+    source = script_text(mod, spec, boot_map)
     compiled = None
 
     if source.text:

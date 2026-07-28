@@ -92,9 +92,19 @@ hand.
 Rejected: rewriting each mod's C to rename it (source rewriting), or renaming
 the convention (breaks existing mods).
 
-**Recommendation: detect and refuse, with a clear message naming both mods.**
-Only `code.sources` mods can hit it, which is currently a small set, and a good
-error beats a clever mechanism until someone actually needs several.
+✅ **Done: detect and refuse, naming both mods.**
+
+```
+2 mods define `mod_prolog` (hard-mode, extra-enemies), and only one can.
+  It is the hand-off `bleck` calls when the module loads, so a merged disc
+  has exactly one.
+  Move the extra work into a sequence hook, or combine those mods.
+```
+
+⚠️ Comments are stripped before looking, and a *declaration* does not count.
+`docs-site` tells authors to "define `mod_prolog`" and several existing mods
+quote that line above the function, so matching the prose would report a
+collision between a mod that defines it and one that merely mentions it.
 
 ## Native sources
 
@@ -158,7 +168,7 @@ perfectly by every mechanical check and still froze.
    different `gw` slots, so a run can tell "both ran" from "one ran".
    No unit test can show that, and D51 installed perfectly by every
    mechanical check and still froze.
-7. `docs-site` + decision-log entry.
+7. ✅ `docs-site` + decision-log entries (D77, D78).
 
 Step 1 is worth landing on its own: it is invisible, it is covered by existing
 tests, and it is the only part that touches every emitted identifier.

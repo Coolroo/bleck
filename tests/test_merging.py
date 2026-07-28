@@ -14,7 +14,9 @@ from __future__ import annotations
 
 import pytest
 
+from bleck.mods.code import parts
 from bleck.script import compile_source, emit
+from bleck.script.emit import runtime_c
 from bleck.script.errors import ScriptError
 
 LOOPER = "script main {\n wait(1)\n}"
@@ -175,3 +177,50 @@ class TestGeneratedCIsValid:
         assert out.index("const s32 bleck_alpha_script_greet[]") < out.index(
             "bleck_map_scripts"
         )
+
+
+class TestModPrologCollision:
+    """`bleck` emits a weak `mod_prolog`; exactly one mod may override it.
+
+    Two overriding it is a duplicate symbol, which the linker reports as a
+    clash between object files nobody wrote by hand. This names the mods.
+    """
+
+    def _source(self, tmp_path, name, body):
+        path = tmp_path / f"{name}.c"
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def test_a_definition_is_found(self, tmp_path):
+        source = self._source(
+            tmp_path, "a", "void mod_prolog(void)\n{\n    probe[0] = 1;\n}\n"
+        )
+        assert parts.defines_mod_prolog(source)
+
+    def test_a_declaration_is_not_a_definition(self, tmp_path):
+        # `extern void mod_prolog(void);` collides with nothing.
+        source = self._source(tmp_path, "a", "extern void mod_prolog(void);\n")
+        assert not parts.defines_mod_prolog(source)
+
+    def test_a_block_comment_mentioning_it_does_not_count(self, tmp_path):
+        """docs-site tells authors to "define `mod_prolog`", and several mods
+        quote that line above the function. Matching prose would report a
+        collision between a mod that defines it and one that talks about it."""
+        source = self._source(
+            tmp_path,
+            "a",
+            "/*\n    Your code defines mod_prolog(void) { ... } instead.\n*/\n"
+            "void other(void) {}\n",
+        )
+        assert not parts.defines_mod_prolog(source)
+
+    def test_a_line_comment_mentioning_it_does_not_count(self, tmp_path):
+        source = self._source(
+            tmp_path, "a", "// void mod_prolog(void) { }\nvoid other(void) {}\n"
+        )
+        assert not parts.defines_mod_prolog(source)
+
+    def test_the_weak_definition_bleck_emits_is_still_a_definition(self):
+        """Sanity: the generated one would match too, which is why this is
+        applied to a mod's own sources and not to generated C."""
+        assert "void mod_prolog(void)" in runtime_c.MOD_HOOK
