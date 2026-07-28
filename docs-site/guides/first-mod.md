@@ -1,10 +1,10 @@
 ---
 title: Your first mod
-description: Change the title screen, end to end
+description: Change the title screen and build a bootable disc
 ---
 
-This produces a bootable disc with a visibly modified title screen. It is the
-exact mod used to validate `bleck`'s pipeline.
+This walks you through a complete mod, from an untouched disc image to a
+bootable disc with a visibly modified title screen.
 
 !!! note
 
@@ -42,7 +42,7 @@ title.bin.uk  238,808 bytes
 ```
 
 `mario.tpl` is Mario on the title screen — visible the moment the game boots,
-which makes it ideal for verifying a change landed.
+so you can see at a glance whether your change landed.
 
 ## 3. Create the mod
 

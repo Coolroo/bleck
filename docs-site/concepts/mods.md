@@ -37,8 +37,6 @@ writes only what actually differs.
 
 ## Archive-aware merging
 
-This is the part that makes overlays practical.
-
 Put a **directory** where the base has a **file**, and `bleck` merges into that
 archive instead of replacing it:
 
@@ -46,14 +44,14 @@ archive instead of replacing it:
 overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl
 ```
 
-means *"in `title.bin.uk`, replace `arc/timg/mario.tpl`; leave the other 34
-members alone."*
+means *"in `title.bin.uk`, replace `arc/timg/mario.tpl`; leave every other
+member alone."*
 
 !!! info
 
-    Without this, changing one texture would mean shipping a whole repacked 240 KB
-    archive as an opaque blob — and silently freezing every other file in it at
-    whatever version you happened to extract.
+    The alternative would be shipping a whole repacked archive as an opaque blob,
+    which freezes every other file in it at whatever version you happened to
+    extract.
 
 Node order is preserved, so unchanged members stay byte-identical and a rebuilt
 archive differs only where you intended.
@@ -84,12 +82,15 @@ file, list it in the manifest:
 "remove": ["files/some/unwanted.bin"]
 ```
 
-## A known hazard
+## Setup files exist twice
 
 !!! warning
 
-    **Setup files exist in two byte-identical copies** — standalone in `setup/` and
-    embedded inside some map archives. Which copy the game reads is still
-    unconfirmed, so editing one may silently do nothing.
+    Setup files ship in two byte-identical copies — standalone in `setup/`, and
+    embedded inside the map archive. **The game reads the standalone copy.**
+    Editing only the embedded one does nothing.
+
+    Declaring the change under `setup` in `mod.json` avoids the question
+    entirely: `bleck` writes both copies for you.
 
     `bleck` warns at build time when you touch a path with a known duplicate.

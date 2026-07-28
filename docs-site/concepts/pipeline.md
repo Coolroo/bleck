@@ -31,8 +31,9 @@ disc image  (ISO / RVZ / WBFS)
     A standard Nintendo archive holding a flat file tree. Map files and layout
     files are U8 archives once decompressed.
 
-    Repacking is **byte-exact**: all 383 map archives on the PAL disc survive
-    unpack and repack unchanged.
+    Repacking is **byte-exact**: an archive unpacked and repacked without edits
+    is identical to the original, so a rebuilt archive differs only where you
+    changed it.
 
 ??? note "TPL — textures"
 
@@ -46,9 +47,8 @@ disc image  (ISO / RVZ / WBFS)
 
 !!! tip
 
-    None of these are bespoke. Every format on the disc is a stock Nintendo one,
-    which is why `bleck` is mostly about composing layers rather than reverse
-    engineering them.
+    Every format on the disc is a stock Nintendo one, so once `bleck` has
+    unwrapped a layer, general-purpose Nintendo tools understand what comes out.
 
 ## Seeing it yourself
 
@@ -71,16 +71,12 @@ aa1_01.bin  424,712 bytes
 Those `./dvd/...` paths are the original developer build tree, preserved on the
 retail disc.
 
-## Compression is not bit-exact, and that is fine
+## Compression is not bit-exact
 
 `bleck`'s compressor produces output about **0.25% larger** than Nintendo's,
-with different internal token boundaries.
-
-!!! success
-
-    A disc built this way **boots and renders correctly** — verified in Dolphin.
-    Matching Nintendo's exact output would be satisfying but is not required.
+with different internal token boundaries. The game reads it either way, so there
+is no need to match the original byte for byte.
 
 For fast iteration, `--store` skips the search entirely and encodes everything
-as literals. It is instant, at roughly 1.125× size. On an 89%-empty disc that
-costs nothing.
+as literals. It is instant, at roughly 1.125× size — and since most of a disc is
+padding, that extra size costs you nothing.

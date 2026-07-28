@@ -4726,3 +4726,56 @@ day someone adds a second executable to the archive.
 Neither workflow has ever run. Every version number in them was checked against
 the live GitHub API rather than recalled, but "the action exists" and "the job
 passes" are different claims. The first push is the test.
+
+---
+
+## D82 — The published site is an overview, not this log (2026-07-28)
+
+`docs-site/` had drifted into reading like `docs/`: development status, corrected
+beliefs, and the machine the project happened to be written on. The owner's
+framing, which is the rule now:
+
+> "we don't need to say 'verified' it's assumed if it's in the doc. Make them
+> more of an overview instead of a journal for what we've done. They don't care
+> it was developed on a pi 4."
+
+### The rule
+
+**In `docs-site/`, a documented behaviour is a working behaviour.** Words like
+*verified*, *proven*, *works today* and *not yet proven* say something about the
+project's confidence, not about what the reader should do, and they age badly in
+both directions. `docs/` keeps every one of them — that split is the whole point
+of having two trees.
+
+Removed across 19 pages: development-status claims, superseding notes narrating a
+corrected belief, scene commentary ("elsewhere this is an unsolved problem"), the
+Raspberry Pi development host, and rotting numbers — `expect 164 passed` appeared
+in three install pages against a suite several times that size, and "the decomp is
+~2.3% complete" was load-bearing prose in the code-mods guide.
+
+Kept deliberately: every gotcha that stops a real failure, with its exact error
+text (`-fno-pic -fno-PIE` → `Unsupported relocation type 252`), and the honest
+limitation that level editing is deferred. `contributing/` is exempt — describing
+how the project is developed is that section's job.
+
+### ⛔ The D53 fact escaped again, and cost something this time
+
+D62 superseded D53 a session ago and four documents were corrected then. **The
+correction never reached the project instructions**, whose working notes still read *"edit the
+copy inside the map archive (D53)"*.
+
+A subagent rewriting `concepts/mods.md` read the project instructions, found a page that
+hedged — *"which copy the game reads is unconfirmed"* — and helpfully resolved
+the hedge **the wrong way**, turning an accurate uncertainty into a confident
+error. `docs-site/reference/manifest.md` already had it backwards independently.
+
+The code was never wrong: `_duplicate_warnings` cites D62 and `bleck` writes both
+copies. Only the prose was, in `bleck/formats/setup.py`, the project instructions, and two
+site pages — all now fixed, with the project instructions carrying an explicit warning that
+this is the most-copied wrong fact in the repository.
+
+**What this shows:** correcting the documents that state a fact is not enough
+while the file every agent reads first still asserts the opposite. The project instructions are
+the highest-leverage place a wrong fact can hide, and it was the last place
+checked. A hedge is also not a safe resting place — someone will eventually
+resolve it, and half of them will resolve it wrongly.

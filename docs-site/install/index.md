@@ -26,13 +26,10 @@ and run it — there is nothing to install and no Python needed.
     .\bleck.exe --help
     ```
 
-Builds are produced for Linux x86-64, Windows x86-64 and macOS arm64, and each
-is smoke-tested before it is published: a packaging mistake produces a binary
-that starts happily and then reports an empty catalog, which looks like a
-corrupt install rather than a build bug.
+Builds are produced for Linux x86-64, Windows x86-64 and macOS arm64.
 
-Each release also carries a `SHA256SUMS` file, so a download can be checked
-before it is run:
+Each release also carries a `SHA256SUMS` file, so you can check a download
+before you run it:
 
 === "Linux / macOS"
 
@@ -96,7 +93,7 @@ has no published build. Python 3.10+, and two small runtime dependencies
 
     ---
 
-    Where emulation testing happens. Both tools are plain `.exe` downloads.
+    Both tools are plain `.exe` downloads.
 
 </div>
 

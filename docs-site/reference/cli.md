@@ -262,8 +262,8 @@ Scripts compile to the game's own `evt` bytecode VM. See
 bleck script builtins [--search TEXT]
 ```
 
-List the game functions a script can call — 443 of them, grouped by subsystem,
-with argument counts and documented signatures where upstream provides them.
+List the game functions a script can call, grouped by subsystem, with argument
+counts and documented signatures where upstream provides them.
 
 ### `bleck script index`
 

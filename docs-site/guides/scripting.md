@@ -7,9 +7,9 @@ Super Paper Mario ships its own scripting VM — the game calls it `evt`, and it
 runs cutscenes, NPC behaviour, doors, item pickups and map logic. `bleck`
 compiles a small friendly language down to that VM's bytecode.
 
-That means your script runs on an interpreter Nintendo shipped and tested,
-scheduled cooperatively alongside the game's own scripts. There is no runtime to
-install and nothing extra loaded into memory.
+Your script runs on the game's own interpreter, scheduled cooperatively
+alongside the game's scripts. There is no runtime to install and nothing extra
+loaded into memory.
 
 !!! note
 
@@ -93,8 +93,7 @@ script greeter {
 ### Waiting
 
 `wait` yields the frame rather than blocking it — the game keeps running while
-your script is paused. This is the whole reason scripts are pleasant to write
-for a 60fps game.
+your script is paused.
 
 ```text
 wait(60)        -- 60 frames
@@ -190,9 +189,9 @@ main.evt:3:5: evt_mario_set_pos takes 3 argument(s), but 2 were given
 
 !!! note
 
-    Argument counts are only checked where upstream documents them — about two
-    thirds of builtins. The rest are variadic or simply undocumented, and `bleck`
-    skips them rather than guessing, since a wrong guess would reject working code.
+    Argument counts are only checked for builtins whose signature is documented
+    upstream. The rest are variadic or undocumented, and `bleck` accepts any
+    argument count for them rather than guessing.
 
 !!! note
 
@@ -287,9 +286,9 @@ uv run bleck maps --search mac
 
 ## Limits worth knowing
 
-- **One code mod per build.** The loader opens exactly one `/mod/mod.rel`. A
-  chain with two code mods fails with both named rather than silently dropping
-  one.
+- **One `mod.rel` per disc.** The loader opens exactly one. `bleck` compiles
+  every code mod in a chain into that single module — see
+  [Several code mods on one disc](../guides/code-mods.md#several-code-mods-on-one-disc).
 - **16 local slots per script.** Split into several scripts, or use `gw[]`.
 - **Floats are fixed-point**, about three decimal places, magnitude under
   ~48000.

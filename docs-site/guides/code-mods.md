@@ -1,6 +1,6 @@
 ---
 title: Code mods
-description: Running custom PowerPC code — work in progress
+description: Compile custom PowerPC code into a module the game loads at boot
 ---
 
 !!! note
@@ -28,11 +28,31 @@ Add a `sources` entry to the mod's `code` block:
 Either half is optional; at least one is required. `bleck mod build` compiles
 them into a single `mod.rel`.
 
+## What a code mod is
+
+Not a patched executable. Your code becomes a **separate module** loaded
+alongside the game, hooking existing functions by address:
+
+```
+freestanding PowerPC C/C++
+  → compile (no libc)
+  → link relocatably against a per-version symbol list
+  → ELF → REL
+  → placed on the disc as /mod/mod.rel
+  → a Gecko code loads and runs it at boot
+```
+
+The game itself is never modified. Your code links against **symbol addresses**,
+not against decompiled source, so the community decompilation is a
+documentation source rather than a dependency.
+
 ## Several code mods on one disc
 
 You can install more than one. `bleck` compiles them **together** into the one
 `mod.rel` the disc carries — so a chain like `hard-mode -> extra-enemies` works
-the same as a single mod, and both mods' scripts run.
+the same as a single mod, and both mods' scripts run. The merging happens at
+compile time; the disc still carries exactly one REL, which is all the loader
+opens.
 
 Two mods may both declare `script main`; each gets its own namespace in the
 generated module, and every mod's `main` is started.
@@ -45,16 +65,6 @@ rather than picking for you:
 | both set `code.boot` | an error naming both — a disc starts in one place |
 | set different `code.target` | an error — addresses differ per game version, and a mixed build would call the wrong ones without complaining |
 | have names that reduce to the same identifier, like `hard-mode` and `hard mode` | an error naming both mods |
-
-!!! note "Why this is unusual"
-
-    Elsewhere in the Super Paper Mario scene, running two code mods at once is
-    an unsolved problem — the loader opens exactly one `/mod/mod.rel`, and
-    attempts to chain several at runtime have not worked out.
-
-    That limit is real, and `bleck` does not fight it. It produces **one** REL,
-    exactly as before; the merging happens at compile time, where there is
-    nothing to go wrong at runtime.
 
 !!! note "One `mod_prolog` per disc"
 
@@ -83,8 +93,7 @@ void mod_prolog(void)
 
     `mod_prolog` runs at **load time**, when the game is barely up. Patching
     pointers and reading tables is fine; anything touching live engine state is
-    not — that belongs in a sequence hook. See the timing table in the
-    project's `docs/hook-points.md`.
+    not — that belongs in a sequence hook.
 
 Function names are resolved by `elf2rel` against the symbol list, exactly like
 a script's builtin calls, so no addresses appear in your source.
@@ -95,29 +104,6 @@ a script's builtin calls, so no addresses appear in your source.
     [spm-headers](https://github.com/SeekyCt/spm-headers)' `include`. Without
     it, declare what you use `extern` yourself.
 
-
-## What a code mod is
-
-Not a patched executable. Your code becomes a **separate module** loaded
-alongside the game, hooking existing functions by address:
-
-```
-freestanding PowerPC C/C++
-  → compile (no libc)
-  → link relocatably against a per-version symbol list
-  → ELF → REL
-  → placed on the disc as /mod/mod.rel
-  → a Gecko code loads and runs it at boot
-```
-
-The game itself is never modified.
-
-!!! info
-
-    This is why the community decompilation being ~2.3% complete does not matter.
-    Code mods link against **symbol addresses**, not source, so an incomplete decomp
-    is a documentation source rather than a blocker.
-
 ## Prerequisites
 
 | | |
@@ -127,9 +113,19 @@ The game itself is never modified.
 | [`spm-headers`](https://github.com/SeekyCt/spm-headers) | Symbol lists and struct definitions |
 | [`spm-rel-loader`](https://github.com/SeekyCt/spm-rel-loader) | The Gecko loader code |
 
-## Building a REL by hand
+## The loader
 
-This works today, verified on Debian's cross-compiler:
+Placing `mod.rel` on the disc is not enough. A **Gecko code** is what actually
+executes it, and it ships pre-assembled per region in
+`spm-rel-loader/loader/*.txt`.
+
+For Dolphin, Gecko codes go in `User/GameSettings/R8PP01.ini`.
+
+## Building a REL outside `bleck`
+
+`bleck mod build` does all of this for you. Reach for the raw commands only when
+you are building a REL in your own toolchain and want to package the result with
+`bleck` afterwards.
 
 ```bash
 MACHDEP="-mno-sdata -DGEKKO -mcpu=750 -meabi -mhard-float"
@@ -146,7 +142,7 @@ powerpc-linux-gnu-gcc main.o -o main.elf \
 elf2rel -i main.elf -s spm-headers/linker/spm.eu0.lst -o mod.rel --rel-id 2
 ```
 
-Verify the result with `bleck` itself:
+Inspect the result with `bleck`:
 
 ```bash
 uv run bleck info mod.rel
@@ -172,39 +168,15 @@ mod.rel  264 bytes
 Only `-mgcn` from the upstream flag set is rejected — it is devkitPPC-specific
 and safe to drop.
 
-## The loader
-
-Placing `mod.rel` on the disc is not enough. A **Gecko code** is what actually
-executes it, and it ships pre-assembled per region in
-`spm-rel-loader/loader/*.txt`.
-
-For Dolphin, Gecko codes go in `User/GameSettings/R8PP01.ini`.
-
-## Known limitations
-
-??? success "One code mod per disc — no longer a limitation"
-
-    This used to say the loader loads exactly one `/mod/mod.rel`, so two code
-    mods would collide. The first half is still true; the conclusion was not.
-
-    `bleck` compiles several mods into that one file, so the loader's limit is
-    satisfied without loading anything extra at runtime. See
-    [Several code mods on one disc](#several-code-mods-on-one-disc).
-
-    [`chainrel`](https://github.com/SeekyCt/chainrel) tries to chain several
-    RELs at *load* time instead, which is a harder problem and is not needed
-    here.
-
-??? note "ABI risk with a distro compiler"
+??? note "ABI differences between cross-compilers"
 
     devkitPPC targets `powerpc-eabi`; Debian's targets `powerpc-linux-gnu`
     (SysV). `-meabi` asks for EABI conventions, but differences around
-    small-data registers and struct passing could produce code that builds
+    small-data registers and struct passing can produce code that builds
     cleanly and misbehaves at runtime.
 
-    **This has not been proven by running it yet.** If it fails, the fallback is
-    building on Windows with real devkitPPC and packaging with `bleck` — the
-    REL is just a file the overlay places.
+    If you hit that, build with devkitPPC and package the resulting REL with
+    `bleck` — it is just a file the overlay places.
 
 ??? note "Licensing"
 

@@ -3,8 +3,8 @@ title: Testing your build
 description: Running a modded disc, per platform
 ---
 
-`bleck` verifies structure — that archives repack correctly and the base stays
-clean. Only running the game verifies that it *works*.
+`bleck` checks structure — that archives repack correctly and the base stays
+clean. Only running the game shows whether your change does what you meant.
 
 ## Choosing a format
 
@@ -83,12 +83,14 @@ flag every time:
     gameplay included, and there is no way to restore the cap part-way
     through — so it is for unattended runs, not for playing.
 
+## Per-platform notes
+
   === "Windows"
 
       `bleck launch` works here, or drag the `.wbfs` onto Dolphin.
 
-      This is the best platform for visual testing — Dolphin runs Super Paper
-      Mario at full speed on typical desktop hardware.
+      Dolphin runs Super Paper Mario at full speed on typical desktop hardware,
+      which makes this a good platform for visual testing.
 
       !!! warning
 
@@ -121,15 +123,8 @@ flag every time:
           The emulator is `dolphin-emu`. Plain `dolphin` is KDE's **file manager**,
           which is installed on many desktops — running it will open a file browser.
 
-      On a desktop this is fine. On ARM single-board computers, see below.
-
-  === "Raspberry Pi"
-
-      Dolphin **will** boot a Wii disc on a Pi 4, but nowhere near fast enough to
-      reach the title screen in reasonable time.
-
-      It is still useful as a smoke test — it proves the disc is valid and
-      readable:
+      For a headless smoke test that the disc is valid and readable, run Dolphin
+      with no window and no video backend:
 
       ```bash
       timeout -k 15 90 dolphin-emu-nogui \
@@ -164,12 +159,11 @@ line separates two failures which otherwise look identical:
 - **No label at all.** The module never loaded, so nothing it contains could
   have run. Look at the build and the loader, not at your code.
 
-Without it, "nothing happened" is ambiguous — and that ambiguity has cost real
-debugging time on this project more than once.
+Without it, "nothing happened" is ambiguous.
 
 ??? note "Your change appears"
 
-    The pipeline worked end to end, including recompression.
+    Nothing to do — the whole pipeline ran, including recompression.
 
 ??? note "Everything looks normal"
 

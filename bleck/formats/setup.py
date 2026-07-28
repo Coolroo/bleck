@@ -4,9 +4,13 @@ One file per map, named after it. After textures, this is the most obviously
 moddable thing on the disc: it is what decides which enemies exist and where
 they stand.
 
-⚠️ **The game reads the copy embedded in the map archive** (D53). The standalone
-`files/setup/<map>.dat` is loaded into MEM2 and never used, so editing it alone
-does nothing. `bleck mod build` warns about this.
+⚠️ **The game reads the standalone `files/setup/<map>.dat`** (D62). The copy
+embedded in the map archive is ignored, so editing only that one does nothing.
+`bleck mod build` warns about this, and writes both when it generates a file.
+
+⛔ D53 concluded the opposite and is superseded. Its measurement was sound —
+the embedded copy is the one that reaches MEM1 — but the inference from "in
+fast RAM" to "in use" was wrong.
 
 The layout is documented upstream in `spm-headers`
 (`include/spm/setup_data.h`, MIT) and independently confirmed here by parsing

@@ -31,7 +31,7 @@ description: Installing bleck on Linux
 1.  **Verify**
 
     ```bash
-    uv run pytest          # expect 164 passed
+    uv run pytest
     uv run bleck --help
     ```
 { .steps }
@@ -93,12 +93,11 @@ pip install -e ".[dev]"
 Both workflows are supported. With a venv active, drop the `uv run` prefix from
 every command.
 
-## ARM64 and Raspberry Pi
+## Architecture support
 
-`bleck` runs on aarch64 — it was developed on a Raspberry Pi 4.
+`bleck` runs on both x86-64 and aarch64 Linux.
 
-!!! warning
+!!! note
 
-    Dolphin will *boot* a Wii game on a Pi 4, but far too slowly to reach the title
-    screen in reasonable time. Use a desktop for visual testing. See
-    [Testing](../guides/testing.md).
+    Dolphin needs a desktop-class machine to run a Wii game at usable speed, so
+    do your visual testing there. See [Testing](../guides/testing.md).

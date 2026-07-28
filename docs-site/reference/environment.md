@@ -3,8 +3,7 @@ title: Environment variables
 description: Everything bleck can be configured with
 ---
 
-Every variable `bleck` understands is declared in one module,
-`bleck/common/env.py`. This list is complete.
+This is the complete list of variables `bleck` reads.
 
 ## Paths
 

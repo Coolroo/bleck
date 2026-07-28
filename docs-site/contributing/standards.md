@@ -42,10 +42,10 @@ def as_kwargs(self) -> dict[str, str]:  # pylint: disable=container-return
 
 !!! tip
 
-    This rule has repeatedly improved the code rather than obstructing it.
-    `match.is_usable` reads better than comparing an anonymous tuple element, and
-    grouping six positional parameters into a `BuildContext` made the call sites
-    clearer.
+    Treat the rule as a design prompt. A named field like `match.is_usable`
+    reads better than comparing an anonymous tuple element, and grouping a long
+    positional parameter list into a single context object clears up the call
+    sites.
 
 ## Environment access in one place
 
@@ -88,11 +88,10 @@ unused arguments. Line length 90.
 ??? note "Why pylint runs with jobs = 1"
 
     With `jobs > 1`, pylint loads custom plugins once per worker and reports every
-    plugin message **twice**. Verified on pylint 4.0.6. The parallelism is not worth
-    duplicated output.
+    plugin message **twice**. The parallelism is not worth duplicated output.
 
-    This is also why `uv.lock` is committed — silent version drift would resurface
-    issues like this one.
+    Behaviour like this is also why `uv.lock` is committed — silent version drift
+    would resurface it.
 
 ## Recording expensive results
 

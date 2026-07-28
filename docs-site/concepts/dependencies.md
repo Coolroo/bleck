@@ -27,8 +27,8 @@ Dependencies form a graph, and the same mod can be reached by several paths.
 
 > Depth-first post-order, in declaration order, keeping the first occurrence.
 
-Post-order guarantees the property that matters — a mod applies only *after*
-everything it depends on, so later layers can override earlier ones.
+Post-order means a mod applies only *after* everything it depends on, so later
+layers can override earlier ones.
 
 ??? note "Worked example: the diamond"
 
@@ -63,12 +63,12 @@ required what.
 
 Conflicts arise only between mods where **neither depends on the other**.
 
-!!! success
+!!! info
 
     If B depends on A, B overriding A's files is not a conflict — that is what
     depending on something means.
 
-Checks run finest-granularity-first, so most collisions turn out not to be real.
+Checks run finest-granularity-first, so an apparent collision is often not one.
 
 1.  **Archive members**
 

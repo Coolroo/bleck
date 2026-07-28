@@ -38,7 +38,7 @@ Override with `--format {iso,rvz,wbfs}`.
 
 WBFS is only 175 MB larger and Dolphin has read it for years.
 
-## Only 11% of a disc is real
+## Most of a disc is padding
 
 A Super Paper Mario disc is 4.5 GB, of which about 492 MB is actual data. The
 rest is padding filled with deterministic junk.

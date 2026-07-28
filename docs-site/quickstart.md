@@ -3,8 +3,8 @@ title: Quickstart
 description: From a clone to a modified disc
 ---
 
-This walks the whole loop: install, extract a base, change one texture, build a
-bootable disc.
+Install `bleck`, extract a base disc, change one texture, and build a bootable
+disc.
 
 !!! note
 

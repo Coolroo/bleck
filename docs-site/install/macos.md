@@ -3,11 +3,10 @@ title: macOS
 description: Installing bleck on macOS
 ---
 
-!!! warning
+!!! note
 
-    **Not yet verified on macOS.** The platform support is implemented and covered
-    by tests that run on Linux, but nobody has run it on a Mac. If you do, please
-    report back.
+    macOS support is implemented and covered by the test suite, but it sees less
+    real-world use than Linux and Windows. Issue reports are welcome.
 
 1.  **Install uv**
 
@@ -45,7 +44,7 @@ description: Installing bleck on macOS
 1.  **Verify**
 
     ```bash
-    uv run pytest          # expect 164 passed
+    uv run pytest
     uv run bleck --help
     ```
 { .steps }
@@ -110,11 +109,10 @@ either works without configuration.
 ## Finder clutter is filtered automatically
 
 Browsing an extracted disc in Finder creates `.DS_Store` files, and non-native
-volumes collect `._` AppleDouble sidecars.
+volumes collect `._` AppleDouble sidecars. Left alone, they would be staged into
+a rebuilt disc with no error to warn you.
 
 !!! info
 
-    Left alone, that clutter would be staged into a rebuilt disc — files the real
-    game never shipped, with no error to warn you. `bleck` excludes `.DS_Store`,
-    `.localized` and `._*` from staging and overlays **on macOS only**. Filtering
-    them elsewhere would hide genuine mistakes.
+    `bleck` excludes `.DS_Store`, `.localized` and `._*` from staging and overlays
+    **on macOS only**. Filtering them elsewhere would hide genuine mistakes.

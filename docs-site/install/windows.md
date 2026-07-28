@@ -3,11 +3,8 @@ title: Windows
 description: Installing bleck on Windows 11
 ---
 
-!!! note
-
-    **Verified end to end on Windows 11.** Install, the test suite, the linters,
-    `extract`, `mod build` and `launch` all pass — and a disc built there boots in
-    Dolphin with modified textures.
+Windows 11 is fully supported: `extract`, `mod build` and `launch` all work, and
+a disc you build here boots in Dolphin.
 
 1.  **Install uv**
 
@@ -71,7 +68,7 @@ description: Installing bleck on Windows 11
 1.  **Verify**
 
     ```powershell
-    uv run pytest          # expect 164 passed
+    uv run pytest
     uv run bleck --help
     ```
 { .steps }

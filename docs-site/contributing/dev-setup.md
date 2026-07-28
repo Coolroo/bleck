@@ -41,7 +41,7 @@ resolves the same versions.
 ## The loop
 
 ```bash
-uv run pytest                          # 164 tests, ~3s
+uv run pytest                          # the fast test suite
 uv run python scripts/lint.py --fix    # ruff + pylint
 ```
 

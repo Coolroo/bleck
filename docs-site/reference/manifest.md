@@ -154,9 +154,9 @@ Every mod has a `mod.json` at its root.
             "code": { "boot": "he1_01" }
             ```
 
-            The game boots into `aa4_01` and then `ls4_12` and nowhere else
-            without a controller. This makes the disc take itself somewhere
-            else, which is what lets a mod be looked at without playing to it.
+            Without a controller the game boots into `aa4_01`, then `ls4_12`,
+            and nowhere else. `boot` sends the disc straight to the map you
+            name, so you can look at a mod without playing to it.
 
             `bleck` generates the script that does this, so a mod needs no
             `code.script` — and no `code` block at all if `boot` is the only
@@ -224,8 +224,9 @@ Every mod has a `mod.json` at its root.
 
     !!! note
 
-        The generated file goes **inside the map archive**, which is the copy
-        the game actually reads — editing `files/setup/<map>.dat` does nothing.
+        `bleck` writes **both** copies of the setup file — the standalone
+        `files/setup/<map>.dat` the game reads, and the byte-identical one
+        inside the map archive, so nothing stale is left on the disc.
 
 ```json
 {

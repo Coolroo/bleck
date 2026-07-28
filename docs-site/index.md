@@ -3,15 +3,11 @@ title: bleck
 description: A modding toolkit for Super Paper Mario (Wii)
 ---
 
-`bleck` reads, edits and rebuilds Super Paper Mario discs. It handles the
-game's nested container formats so you can change one texture without thinking
-about compression, archives, or disc layout.
+`bleck` is a command-line toolkit that reads, edits and rebuilds Super Paper
+Mario discs. It handles the game's nested container formats so you can change
+one texture without thinking about compression, archives, or disc layout.
 
-!!! note
-
-    Named for Count Bleck. The toolkit is command-line only.
-
-## What it does today
+## What it does
 
 <div class="grid cards" markdown>
 
@@ -22,8 +18,8 @@ about compression, archives, or disc layout.
 
 -   **Build bootable discs**
 
-    Extract, modify and rebuild to ISO, RVZ or WBFS. Verified: a disc built by
-    `bleck` boots and renders modified textures.
+    Extract, modify and rebuild to ISO, RVZ or WBFS, with your modified assets
+    in place.
 
 -   **Mods as overlays**
 
@@ -35,19 +31,26 @@ about compression, archives, or disc layout.
     Mods can depend on other mods, resolved into one install order with
     conflict detection between independent edits.
 
+-   **Custom behaviour**
+
+    Write event logic in a [scripting language](guides/scripting.md) that
+    compiles to the game's own VM, or native
+    [PowerPC hooks](guides/code-mods.md) in C. `bleck mod build` compiles both
+    into the `mod.rel` the disc carries.
+
+-   **Change where the game starts**
+
+    Boot straight into any map, and bind actions to named controller button
+    combos, from the mod manifest.
+
 </div>
 
 
-## What it does not do yet
+## What it does not do
 
-!!! warning
-
-    **Code injection is in progress.** The PowerPC toolchain is proven — `bleck`
-    can build a valid REL module — but compiling code into a mod is not yet wired
-    into the CLI. See [Code mods](guides/code-mods.md).
-
-**Level editing** is deliberately deferred. The map data format is partly
-understood, but editing it without a visualiser means changing bytes and hoping.
+**Level editing** is deliberately deferred. The map data format is only partly
+decoded, so editing it means changing bytes without a visualiser to check them
+against.
 
 ## Requirements
 
@@ -55,9 +58,9 @@ You supply your own disc image. `bleck` does not distribute game data.
 
 !!! info
 
-    Development targets **PAL rev 0** (`R8PP01`), the build every upstream research
-    project documents. It is a strict superset of the US build — no content is
-    lost by working from it.
+    Target **PAL rev 0** (`R8PP01`), the build every upstream research project
+    documents. It is a strict superset of the US build — no content is lost by
+    working from it.
 
 <div class="grid cards" markdown>
 
