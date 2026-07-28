@@ -5782,3 +5782,71 @@ status `5` possible.
 Instruction insertion or deletion, pointer swapping (D51), and adding opcodes to
 the dispatcher as `evtpatch` does. ⚠️ A patch is still applied once at load and
 lasts the whole session.
+
+---
+
+## D93 — ⛔ Door descriptors are not registered from map init scripts (2026-07-28)
+
+D91 recorded that doors need intercepting `evt_door_set_door_descs`, which means
+patching a PowerPC instruction and flushing caches — a capability `bleck` does
+not have. Before building that, a cheaper route was worth testing.
+
+**The hypothesis:** `evt_door_set_door_descs` is an *evt user func*, so a map's
+init script should call it through `USER_FUNC`, putting the descriptor array's
+address in the bytecode as an argument. Reading it would need nothing new —
+only what D89 proved.
+
+**It is wrong.** `mods/door-probe` walked five maps' init scripts and found no
+such call.
+
+### The walk, and why the negative is trustworthy
+
+Instruction by instruction, decoding `argc` from every header rather than
+scanning for a value — a naive search would match any argument that happened to
+hold `0x800E2610`.
+
+| Map | words walked | door setter |
+|---|---|---|
+| `mac_01` (Flipside, door-dense) | 665 | none |
+| `he1_01` | 396 | none |
+| `aa4_01` | 117 | none |
+| `ls4_12` | 192 | none |
+| `he2_01` | 409 | none |
+
+✅ **Positive control: 8 hits.** The same walk counted calls to
+`evt_hitobj_attr_onoff` (`0x800EB72C`, argc 5), which D88 recorded is present in
+`he1_01`. Finding eight proves the walker decodes real instructions, so "no door
+setter" is a fact about the game rather than about the loop.
+
+⚠️ **The first run's negative was not yet trustworthy, and saying so mattered.**
+With `WALK_LIMIT` at 512, `mac_01` stopped at 514 — it hit the ceiling rather
+than `END_SCRIPT`, so its result was *truncated, not conclusive*, exactly where
+doors were most expected. Raising the limit to 4096 let it terminate at 665.
+Only then did all five walks complete. A run that stops early looks identical to
+a run that found nothing.
+
+### What this means
+
+Door descriptors are supplied some other way — the map's own REL calling the
+underlying C directly, rather than through evt. `door_init_evt` at `0x8041a2b0`
+sits in the REL address range, which is consistent with door setup living in map
+modules rather than in the init script.
+
+So D91's conclusion stands, now with evidence rather than inference:
+
+- ⛔ **Reading descriptors out of a map init script does not work.** Ruled out by
+  measurement, not assumed.
+- 🔶 **Interception remains the only known route**, and it needs a capability
+  `bleck` lacks: patching a PowerPC instruction, which unlike evt bytecode
+  requires `dcbst`/`sync`/`icbi` because the write lands in the data cache the
+  instruction fetcher cannot see.
+
+`door:` stays refused by the manifest, and now has a recorded reason a future
+session will not have to re-derive.
+
+### Worth noting for whoever builds instruction patching
+
+It is a bigger capability than doors alone. `evtpatch` needs it too, for the
+dispatcher changes that add `Call`/`ReturnFromCall`. If it is built, doors and
+that both become reachable — which argues for treating it as its own piece of
+work rather than as a door feature.
