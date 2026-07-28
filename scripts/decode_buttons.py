@@ -1,20 +1,15 @@
 """Turn `button-probe`'s report block into a verdict on the mask table.
 
-`bleck/common/config.py` carries button masks taken from the published
-Revolution SDK values, with nothing from the game confirming them. `mods/
-button-probe` reads the real controller and records each distinct value it
-sees; this compares the two.
+Compares the values `mods/button-probe` recorded from the real controller
+against `BUTTON_MASKS` in `bleck/common/config.py`, and prints corrections.
 
     uv run python scripts/decode_buttons.py --press a b 1 2 plus minus \\
         --ring 0800 0400 0200 0100 0010 1000
 
-`--press` is the order the buttons were actually pressed, `--ring` the values
-the probe recorded, in the same order. Anything that disagrees is printed as a
-correction to make to `BUTTON_MASKS`.
+`--press` is the press order, `--ring` the recorded values in the same order.
 
-⚠️ A press that is *missing* from the ring is not the same as a wrong mask — it
-usually means the button was pressed and released between two frames the probe
-saw, or that a combination was held. Re-run rather than guessing.
+⚠️ A press *missing* from the ring is not a wrong mask — it usually means the
+press fell between two frames the probe saw. Re-run rather than guessing.
 """
 
 from __future__ import annotations

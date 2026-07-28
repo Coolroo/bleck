@@ -1,18 +1,13 @@
 """Dump the game's own `mapData[]` table, for map id -> map name.
 
-A map's *name* is its archive filename, which the disc gives us for free. Its
-*id* is only knowable from the game: `mapData` is an array of `MapData *`
-indexed by map id, and nothing on the disc records that ordering.
-
-So this reads it out of a running game, the same way everything else here is
-verified. The result is written as JSON and becomes `bleck`'s map catalog --
-generated once and committed, not recomputed, because it takes a two-minute
-boot and never changes for a given build.
+Nothing on the disc records the id ordering, so it is read from a running game.
+The JSON becomes `bleck`'s map catalog: generated once and committed, not
+recomputed -- a run costs a two-minute boot and the table never changes.
 
     uv run python scripts/dump_maps.py --out bleck/backends/mapcatalog.json
 
-⚠️ `mapData` is populated by the game's own REL prolog, very early -- long
-before gameplay -- so this does not need to wait for a map to load.
+`mapData` is filled by the game's REL prolog, long before gameplay, so this
+does not wait for a map to load.
 """
 
 from __future__ import annotations

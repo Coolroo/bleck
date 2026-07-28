@@ -2,11 +2,8 @@
 
 The two strategies live here; everything they share lives in `parts`.
 
-Compiling runs before the overlay is planned, because the plan comes from a
-walk of `overlay/` and the module has to exist by then. The output goes to
-`overlay/files/mod/mod.rel` and is carried by the ordinary overlay machinery
--- a code mod is still just a mod.
-
+⚠️ Compiling runs before the overlay is planned: the plan comes from walking
+`overlay/`, and the output at `overlay/files/mod/mod.rel` has to exist by then.
 """
 
 from __future__ import annotations
@@ -19,7 +16,7 @@ from bleck.common import config as project_config
 from bleck.common import env
 from bleck.mods import registry as mod_registry
 
-# Re-exported: callers have always reached these through `mods.code`.
+# Re-exported: callers reach these through `mods.code`.
 # pylint: disable=unused-import
 from bleck.mods.code.parts import (  # noqa: F401
     CODE_WORKDIR,
@@ -54,17 +51,13 @@ def build_chain(
 ) -> list[CodeBuild]:
     """Compile the chain's code mods into one `mod.rel`.
 
-    ⚠️ Several code mods used to be refused outright, because the Gecko loader
-    opens exactly one `/mod/mod.rel`. That limit is real and unchanged — but it
-    is about how many RELs the *loader* opens, not how many mods went into one.
-    Merging at compile time satisfies it without any runtime REL chaining, which
-    is the part nobody in this scene has solved (D39). See `plan-merging.md`.
+    The Gecko loader opens exactly one `/mod/mod.rel`, so mods are merged at
+    compile time rather than chained at runtime (D39, `docs/plan-merging.md`).
     """
     coded = mods_with_code(chain)
 
-    # An override can give code to a chain that has none. That is the point:
-    # `--map` has to work on a pure asset or placement mod, which is exactly the
-    # kind of mod someone wants to look at inside a particular level.
+    # An override can give code to a chain that has none, so `--map` works on a
+    # pure asset or placement mod.
     if not coded and override is not None and not override.is_empty:
         coded = [chain.target]
     if not coded:
@@ -81,9 +74,8 @@ def build_merged(
 ) -> CodeBuild:
     """Compile several code mods into one `mod.rel`.
 
-    ⚠️ Every mod's `target` must agree. Addresses differ per game version, so a
-    module holding one mod built against `eu0` and another against `us0` would
-    link half its calls to the wrong places — and would do it silently.
+    ⚠️ Every mod's `target` must agree: addresses differ per game version, so a
+    mixed module would silently bind half its calls wrongly.
     """
     parts = [prepare(mod, override) for mod in mods]
 
@@ -97,9 +89,8 @@ def build_merged(
             f"its calls wrongly."
         )
 
-    # `bleck` emits a weak `mod_prolog`, so one mod overriding it is the design.
-    # Two is a duplicate symbol, and the linker reports it as a clash between
-    # object files nobody wrote by hand -- naming the mods here instead.
+    # `bleck` emits a weak `mod_prolog`, so one mod may override it; two is a
+    # duplicate symbol the linker reports against unreadable object names.
     overriding = mods_defining_mod_prolog(parts)
     if len(overriding) > 1:
         listed = ", ".join(overriding)
@@ -128,8 +119,8 @@ def build_merged(
             "native sources, which cannot yet be combined."
         )
 
-    # One banner for the disc, named for the mod that was asked for, so it is
-    # obvious which build is in the drive rather than which dependency it pulled.
+    # One banner for the disc, named for the mod that was asked for rather than
+    # a dependency it pulled in.
     banner = banner_for(target, target.manifest.code or parts[-1].spec)
     if banner is not None and len(mods) > 1:
         banner = emit.Banner(
@@ -158,13 +149,13 @@ def build_mod(
     if spec is None:
         if not boot_map:
             raise CodeError(f"{mod.name} declares no code to build")
-        # Nothing declared, but a boot map was asked for. Defaults are enough:
-        # they name eu0 and module 2, which is all the generated script needs.
+        # Nothing declared, but a boot map was asked for; defaults (eu0,
+        # module 2) are all the generated script needs.
         spec = CodeSpec()
     boot_map = boot_map or spec.boot_map
 
-    # The same table the link will use, so "that will not link" is said now
-    # rather than after a compile and a toolchain run (D61).
+    # The same table the link will use, so "that will not link" is said before
+    # the toolchain runs (D61).
     table = symbol_tables.best_available(
         toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
     )
@@ -191,8 +182,7 @@ def build_mod(
             raise CodeError(f"{mod.name}:\n{exc.render(source.where)}") from exc
         generated_c = compiled.generated.text
     else:
-        # Native-only: still needs the REL entry points and the `mod_prolog`
-        # hand-off, just nothing to hand to the scheduler.
+        # Native-only: still needs the REL entry points and `mod_prolog`.
         generated_c = emit.generate_bare(
             origin=f"{mod.name} native sources", banner=banner
         ).text

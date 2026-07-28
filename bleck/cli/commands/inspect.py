@@ -63,12 +63,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_maps(args) -> int:
-    """List the maps on the disc, which is where map names come from.
-
-    `code.maps` in a manifest needs these exact strings, and there are 383 of
-    them -- without a way to look them up, attaching a script to a map means
-    guessing or running `ls`.
-    """
+    """List the disc's map names — the exact strings `code.maps` needs."""
     index = maps.load(registry.base_root())
 
     if args.areas:

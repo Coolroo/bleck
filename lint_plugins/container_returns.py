@@ -1,16 +1,7 @@
-"""Pylint plugin: forbid returning bare `dict` or `tuple`.
+"""Pylint plugin: forbid returning bare `dict` or `tuple`; return a dataclass.
 
-A function returning `tuple[int, int]` tells the caller nothing about what the
-two values mean, and a `dict[str, str]` return makes the key set invisible to
-both readers and type checkers. Return a dataclass instead — it names the fields
-and gives them a place to grow.
-
-Containers of named things are fine: `list[Entry]` is clear, so only `dict` and
-`tuple` themselves are rejected.
-
-Escape hatch, for the rare library boundary that demands one:
-
-    def as_kwargs(self) -> dict[str, str]:  # pylint: disable=container-return
+Containers of named things are fine — only `dict` and `tuple` are rejected.
+Escape hatch: `# pylint: disable=container-return`.
 """
 
 from __future__ import annotations
@@ -58,10 +49,8 @@ class ContainerReturnChecker(BaseChecker):
 def _find_forbidden(annotation: nodes.NodeNG) -> str | None:
     """First forbidden type anywhere in an annotation, outermost first.
 
-    Recurses through subscripts so `list[tuple[str, int]]` and
-    `dict[str, list[Thing]]` are caught, not just bare `tuple`/`dict`. Handles
-    `typing.Tuple[...]` and the string form used under
-    `from __future__ import annotations`.
+    Recurses through subscripts, so `list[tuple[str, int]]` is caught too, and
+    handles `typing.Tuple[...]` and stringified annotations.
     """
     match annotation:
         case nodes.Subscript():

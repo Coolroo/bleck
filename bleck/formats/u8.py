@@ -33,8 +33,8 @@ class U8Entry:
 class U8Item:
     """An entry detached from any archive: a path and its contents.
 
-    `data is None` marks a directory. This is what `read_all` yields and `write`
-    consumes, so the two compose without the caller handling raw pairs.
+    `data is None` marks a directory. `read_all` yields these and `write`
+    consumes them.
     """
 
     path: str
@@ -66,11 +66,9 @@ class _OpenDir:
 def member_key(path: str) -> str:
     """A member path in a form both of SPM's archive families agree on.
 
-    `map/*.bin` stores `./dvd/setup/x.dat`; `lyt/*.bin.uk` stores `arc/...`.
-    Callers matching a member by name need the two to compare equal -- an
-    overlay directory cannot contain a `.` component, so the leading `./` is
-    dropped for *matching only*. The archive's own spelling is what should be
-    written back, or a rebuilt archive stops being byte-identical.
+    `map/*.bin` stores `./dvd/setup/x.dat`; `lyt/*.bin.uk` stores `arc/...`, so
+    the leading `./` is dropped for *matching only*. ⚠️ Write back the
+    archive's own spelling, or a rebuilt archive stops being byte-identical.
     """
     return path[2:] if path.startswith("./") else path
 
@@ -133,9 +131,8 @@ def read_all(data: bytes) -> list[U8Item]:
 def write(entries: list[U8Item]) -> bytes:
     """Pack entries into a U8 archive.
 
-    Entry order is preserved exactly as given — the node table is a flat
-    depth-first listing, so callers round-tripping an archive should pass the
-    order `read_all` produced or the result will not match the original.
+    The node table is a flat depth-first listing and entry order is preserved
+    as given, so a round trip must pass the order `read_all` produced.
     """
     # Node 0 is the implicit root; the caller's list supplies nodes 1..n.
     count = len(entries) + 1

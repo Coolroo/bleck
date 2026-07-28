@@ -4,11 +4,8 @@
     python scripts/lint.py          check only
     python scripts/lint.py --fix    apply what can be applied, then check
 
-Runs all checks even when an early one fails, so a single pass shows every
-problem rather than making you re-run after each fix.
-
-This is the cross-platform entry point; `scripts/lint.sh` is a thin wrapper for
-POSIX shells that prefers the project virtualenv.
+Every check runs even when an earlier one fails, so one pass shows every
+problem. This is the real entry point; `lint.sh` / `lint.ps1` are wrappers.
 """
 
 from __future__ import annotations
@@ -39,9 +36,7 @@ class Check:
 def _python() -> str:
     """Locate the interpreter with the dev tools installed.
 
-    The project venv first — `uv sync` and `pip install -e` both populate it —
-    then whatever is running this script. Checked in both layouts so the same
-    code works on POSIX and Windows.
+    Project venv first (both POSIX and Windows layouts), else this interpreter.
     """
     candidates = [
         REPO / ".venv" / "bin" / "python",

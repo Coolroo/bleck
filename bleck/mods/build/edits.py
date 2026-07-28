@@ -1,18 +1,13 @@
 """Turning declared edits into the files a build ships.
 
-A mod says *what it wants* — "slot 3 is template 42 at (100, 0, 0)" — and this
-derives the bytes. See [`vision.md`](../../docs/vision.md): the goal is an
-editor, and an editor needs edits that can be reviewed, undone and re-applied,
-which a pre-baked binary in an overlay cannot be.
+A mod says "slot 3 is template 42 at (100, 0, 0)" and this derives the bytes
+(`docs/vision.md`).
 
-⚠️ **Both copies of a setup file are written.** D53 concluded the game reads the
-one embedded in the map archive, so only that was written -- and in-game the
-enemies did not change (D59). Which copy actually drives spawning is not
-established, so both are written: correct either way, and it stops a stale copy
-sitting on the disc to mislead the next reader.
+⚠️ **Both copies of a setup file are written** — which one drives spawning is
+unestablished (D53, D59), so writing both is correct either way.
 
-This runs before the overlay is planned, for the same reason compiled code does:
-the plan comes from walking `overlay/`, so a generated file has to exist by then.
+⚠️ Runs before the overlay is planned: the plan comes from walking `overlay/`,
+so a generated file must exist by then.
 """
 
 from __future__ import annotations
@@ -30,9 +25,9 @@ class EditError(BleckError):
     """A declared edit could not be applied."""
 
 
-#: Where a map keeps its setup file, inside its own archive. The stored path is
-#: `./dvd/...`; the overlay spells it without the `./`, which `u8.member_key`
-#: reconciles (D57).
+#: Where a map keeps its setup file, inside its own archive. Stored as
+#: `./dvd/...`; the overlay drops the `./`, which `u8.member_key` reconciles
+#: (D57).
 MEMBER = "dvd/setup/{map_name}.dat"
 ARCHIVE = "files/map/{map_name}.bin"
 
@@ -75,9 +70,8 @@ def apply_chain(chain: Chain, base: Path) -> list[PlacementBuild]:
 def _archive_member(base: Path, map_name: str) -> bytes:
     """The map's own setup file, read out of its archive.
 
-    Read from the archive rather than from `files/setup/` because the two are
-    byte-identical on the disc and the archive copy is the one that cannot be
-    stale -- it travels with the map it belongs to.
+    Taken from the archive rather than `files/setup/`: the two are
+    byte-identical on the disc, and this copy travels with its map.
     """
     archive = base / ARCHIVE.format(map_name=map_name)
     if not archive.is_file():
@@ -117,14 +111,8 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
     )
     _refuse_orphans(mod, placement, updated)
 
-    # ⚠️ BOTH copies, and the reason is a correction. D53 concluded from a
-    # memory search that the game reads the copy embedded in the map archive --
-    # that was the only one written, and in-game the enemies did not change
-    # (D59). "Present in MEM1" turned out not to mean "the copy that is used".
-    #
-    # Which one actually drives spawning is still unestablished, so writing both
-    # is the honest answer: it is correct either way, and keeps the two in step
-    # rather than leaving a stale copy on the disc to confuse the next reader.
+    # ⚠️ BOTH copies: which one drives spawning is unestablished (D53, D59),
+    # so writing both is correct either way and leaves no stale copy.
     payload = updated.to_bytes()
     outputs = [
         mod.overlay
@@ -151,17 +139,10 @@ def _refuse_orphans(mod: Mod, placement, updated: setup.SetupFile) -> None:
     """Refuse an edit that leaves a gap with used slots after it.
 
     ⚠️ **The game stops reading setup entries at the first empty one** (D79), so
-    a cleared slot in the middle silently discards everything past it. Measured:
-    two builds differing only in whether slot 1 was cleared spawned one enemy
-    and three.
+    a cleared middle slot silently discards everything past it.
 
-    That was open for a day as "an enemy did not appear", with two plausible and
-    entirely wrong explanations, because the file `bleck` wrote looked fine. It
-    is a footgun the toolkit hands people, so the toolkit refuses it.
-
-    Refusing rather than compacting on purpose: moving later entries down would
-    change the slot numbers a manifest refers to, so `{"slot": 2}` in one mod
-    would quietly mean a different enemy after another mod cleared something.
+    Refused rather than compacted: renumbering would change what `{"slot": 2}`
+    means in another mod's manifest.
     """
     empty = [i for i, enemy in enumerate(updated.enemies) if enemy.is_empty]
     if not empty:

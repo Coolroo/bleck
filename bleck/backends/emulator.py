@@ -1,11 +1,7 @@
 """Booting a built image in Dolphin.
 
-Separate from `disc.py` because the emulator is a different program from the
-disc tools. `Dolphin.exe` and `DolphinTool.exe` ship in the same folder and are
-easy to confuse, but only one of them boots a game.
-
-This closes the edit-build-boot loop: without it, the last step of testing a mod
-is the only one that happens outside `bleck`.
+Separate from `disc.py`: `Dolphin.exe` and `DolphinTool.exe` ship in the same
+folder and are easy to confuse, but only one of them boots a game.
 """
 
 from __future__ import annotations
@@ -45,26 +41,18 @@ def launch(
 ) -> Launch:
     """Boot a disc image in Dolphin.
 
-    Returns as soon as the emulator starts unless `wait` is set — a build-and-
-    boot loop wants its shell back, not a terminal pinned until the game is
-    closed. `wait` exists for scripting, where the exit code is the point.
+    Returns as soon as the emulator starts unless `wait` is set, which exists
+    for scripting where the exit code is the point.
 
-    `batch` adds Dolphin's `-b`, which boots straight into the game instead of
-    opening the game list first.
+    `batch` adds Dolphin's `-b`: boot straight into the game, no game list.
 
-    `unlimited` removes the 100% speed cap. Super Paper Mario spends its first
-    ~2,100 frames on logos, so a cold boot takes about 45 seconds of watching
-    nothing; uncapped it reaches gameplay in about 6 (D63).
+    `unlimited` removes the 100% speed cap, taking a cold boot from ~45 s to
+    ~6 s (D63). ⚠️ It stays uncapped for the whole session — `-C` is a session
+    override that cannot be undone part-way — so it is unusable for anything a
+    human wants to play. Use `code.boot` (`--map`) for that (D64).
 
-    ⚠️ It stays uncapped. Dolphin's `-C` is a session override, so nothing leaks
-    into the user's config — but there is no way to restore the cap part-way
-    through a run, which makes this useless for anything a human wants to play.
-    For that, put the destination in the disc with `code.boot` (`--map`) and
-    leave the speed alone. D64.
-
-    `state` loads a Dolphin save state, which skips the boot altogether and --
-    more usefully -- carries a save with it. Entering a map without one leaves
-    the player character uninitialised and invisible.
+    `state` loads a Dolphin save state, which skips the boot and carries a save
+    with it. Entering a map without one leaves the player invisible.
     """
     if not image.exists():
         raise DiscError(f"no such image: {image}")
@@ -74,11 +62,9 @@ def launch(
     if batch:
         args.append("-b")
 
-    # The two-token `-e <path>` form, never `--exec=<path>`. The joined form has
-    # to be quoted by whoever builds the command line, and a path that arrives
-    # still wrapped in its quotes makes Dolphin report "Could not be opened!
-    # This may happen with improper permissions, or use by another process" —
-    # which blames permissions for what is actually a mangled argument.
+    # ⚠️ The two-token `-e <path>` form, never `--exec=<path>`: the joined form
+    # needs quoting, and a path arriving still quoted makes Dolphin blame
+    # permissions ("Could not be opened!") for a mangled argument.
     args += ["-e", str(image.resolve())]
 
     if unlimited:
@@ -89,8 +75,7 @@ def launch(
         args += ["-s", str(state.resolve())]
 
     try:
-        # Deliberately not a context manager: the emulator has to outlive this
-        # process, so there is nothing to close here.
+        # Not a context manager: the emulator has to outlive this process.
         process = subprocess.Popen(args)  # pylint: disable=consider-using-with
     except OSError as exc:
         raise DiscError(f"could not start {Path(dolphin).name}: {exc}") from exc

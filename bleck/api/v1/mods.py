@@ -1,14 +1,8 @@
-"""A whole mod, as JSON.
+"""A whole mod, as JSON: identity, dependencies, `code` and placements together.
 
-`placements.py` exposes one editing surface; this exposes the mod that holds
-it — identity, dependencies, the `code` block and the placements together, so a
-tool can read a mod, change anything in it, and write it back in one exchange.
-
-⚠️ **Overlay files are not here, and that is deliberate.** A mod's overlay holds
-extracted game assets — textures, archives, a compiled module — which are
-binary, large, and already on disk. Putting them in a JSON document would make
-every read of a mod's name drag megabytes with it. An editor lists them from the
-filesystem; this describes what a mod *declares*.
+⚠️ Overlay files are deliberately absent — they are large binary assets already
+on disk. This describes what a mod *declares*; an editor lists overlay files
+from the filesystem.
 """
 
 from __future__ import annotations

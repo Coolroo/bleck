@@ -1,11 +1,7 @@
 """Namespacing generated identifiers, so several mods can share one module.
 
-Step 1 of `docs/plan-merging.md`. Nothing merges yet — this only makes the
-names *capable* of not colliding, which is the part that touches every emitted
-identifier and is therefore worth landing on its own.
-
-The load-bearing assertion is that a single-mod build is unchanged. Everything
-else here is new surface.
+Step 1 of `docs/plan-merging.md`: names become *capable* of not colliding. The
+load-bearing assertion is that a single-mod build is unchanged.
 """
 
 from __future__ import annotations
@@ -34,13 +30,11 @@ class TestSlug:
         assert emit.mod_slug(name) == expected
 
     def test_a_leading_digit_is_moved_out_of_the_way(self):
-        """Legal inside an identifier, not at the start of one — and mod names
-        are otherwise unrestricted."""
+        """A digit is legal inside an identifier but not at the start of one."""
         assert emit.mod_slug("2fast").startswith("m")
 
     def test_the_prefix_is_readable_not_hashed(self):
-        """A build log, a disassembly and a linker error should all still say
-        which mod a symbol came from."""
+        """A linker error or disassembly must still say which mod a symbol is from."""
         assert emit.prefix_for("hard-mode") == "bleck_hard_mode_"
 
     def test_a_name_with_nothing_usable_is_refused(self):
@@ -48,9 +42,7 @@ class TestSlug:
             emit.prefix_for("!!!")
 
     def test_two_names_can_collide_and_that_is_visible(self):
-        """`hard-mode` and `hard mode` reduce to the same thing. Callers have to
-        detect it; this test pins the fact so the collision check has something
-        to be about."""
+        """Distinct mod names can reduce to one slug, so callers must detect it."""
         assert emit.mod_slug("hard-mode") == emit.mod_slug("hard mode")
 
 
@@ -94,9 +86,8 @@ class TestNamespacedOutput:
 class TestSharedRuntimeIsNotNamespaced:
     """One-per-disc names must stay fixed however many mods contribute.
 
-    The sequence hooks are installed once, in one `_prolog`. Namespacing them
-    would not merely be unnecessary, it would be wrong — there would be several
-    installs fighting over `seq_data`.
+    The sequence hooks install once, in one `_prolog`; namespacing them would
+    leave several installs fighting over `seq_data`.
     """
 
     @pytest.mark.parametrize(
@@ -122,9 +113,8 @@ class TestSharedRuntimeIsNotNamespaced:
 class TestMapHookCap:
     """`bleck_map_pending` is a u32 bitmask, one bit per hook.
 
-    Exceeding it was silent: `1 << i` past bit 31 is undefined behaviour, and
-    hooks would corrupt each other rather than anything failing. Unreachable
-    with one mod; plausible once mods merge.
+    Exceeding it is silent: `1 << i` past bit 31 is undefined behaviour and
+    hooks corrupt each other rather than anything failing.
     """
 
     def _hooks(self, count):

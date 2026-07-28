@@ -1,16 +1,9 @@
 """The intermediate representation a compiled script is made of.
 
-Separated from `compiler.py` because it is what everything downstream actually
-depends on. `emit.py` needs to know what a `Word` is; it has no business
-importing the thing that lowers a syntax tree.
-
-Words, not integers
--------------------
-Three of the values in a finished script are addresses that only exist after
-linking: game functions called by `USER_FUNC`, string constants, and other
-scripts. Those stay symbolic all the way through, and `emit.py` writes them as C
-expressions for the linker to resolve. That is what keeps game addresses out of
-`bleck` entirely, so no symbol list has to be redistributed with it.
+A script is a list of `Word`s rather than integers because three kinds of value
+— game functions, string constants and other scripts — are addresses that only
+exist after linking. They stay symbolic, and `emit` writes them as C
+expressions, so no game address ever appears in `bleck`.
 """
 
 from __future__ import annotations
@@ -21,18 +14,16 @@ from enum import Enum, auto
 from bleck.script import evt
 from bleck.script.errors import Position, ScriptError
 
-#: `evt` gives each script 16 local work slots. Declared variables are handed
-#: out from slot 0 upward and scratch from slot 15 downward; they meet in the
-#: middle, and running out is a compile error rather than silent corruption.
+#: Local work slots per script. Variables allocate upward from 0, scratch
+#: downward from 15; meeting in the middle is a compile error.
 LOCAL_SLOTS = 16
 
 
 class ValueType(Enum):
     """What kind of thing an expression produced.
 
-    `evt` has separate instructions for integer and float arithmetic, and no
-    coercion between them, so this is load-bearing rather than advisory: adding
-    with the wrong opcode reinterprets the operand's bits.
+    `evt` has separate int and float instructions and no coercion, so picking
+    the wrong opcode reinterprets the operand's bits.
     """
 
     INT = auto()

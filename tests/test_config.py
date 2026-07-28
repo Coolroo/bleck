@@ -1,9 +1,7 @@
 """`bleck.yml` — the project config file.
 
-Most of what is asserted here is *error quality*. A config file is edited by
-hand, usually once, months apart, and a bad message costs a debugging session
-where a good one costs nothing. So the tests check that a mistake names the
-file, says what was wrong, and lists what would have been right.
+Most of what is asserted here is *error quality*: a mistake must name the file,
+say what was wrong, and list what would have been right.
 """
 
 from __future__ import annotations
@@ -17,8 +15,7 @@ from bleck.common import config as cfg
 
 class TestDiscovery:
     def test_the_nearest_file_wins(self, tmp_path: Path):
-        """A command run deep inside a checkout behaves like one run at the top,
-        unless something closer overrides it."""
+        """The closest config to the working directory overrides the ones above."""
         (tmp_path / "bleck.yml").write_text("combos:\n  outer: [1, 2]\n")
         nested = tmp_path / "a" / "b"
         nested.mkdir(parents=True)
@@ -34,8 +31,7 @@ class TestDiscovery:
         assert cfg.load(deep).combo_names == ["outer"]
 
     def test_no_file_is_not_an_error(self, tmp_path: Path):
-        """Combos are opt-in. A project without them is the normal case; what
-        fails is *referring* to one that was never declared."""
+        """Combos are opt-in; only *referring* to an undeclared one fails."""
         found = cfg.load(tmp_path)
         assert found.is_empty
         assert found.source is None
@@ -56,8 +52,7 @@ class TestCombos:
         assert found.mask == cfg.BUTTON_MASKS["1"] | cfg.BUTTON_MASKS["2"]
 
     def test_yaml_reads_bare_digits_as_numbers_and_they_still_work(self):
-        """`1` and `2` are button *names* but YAML makes them ints. Left
-        unquoted in the example file because that is how people will write it."""
+        """`1` and `2` are button *names*, but YAML parses them as ints."""
         assert cfg.parse("combos:\n  c: [1, 2]\n").combo("c").buttons == ("1", "2")
 
     def test_names_are_case_insensitive(self):
@@ -73,8 +68,7 @@ class TestCombos:
         assert "minus" in message  # the list of valid names
 
     def test_a_nunchuk_button_explains_itself(self):
-        """ "Unknown button" would be a lie -- `c` exists, it is just in a
-        different struct that bleck does not read."""
+        """`c` exists, in a struct bleck does not read — so not "unknown button"."""
         with pytest.raises(cfg.ConfigError, match="nunchuk"):
             cfg.parse("combos:\n  c: [1, z]\n")
 
@@ -132,8 +126,7 @@ class TestMalformed:
 
 
 class TestReturnedTypes:
-    """C9001 forbids returning dicts. These guard against a well-meant
-    'simplification' back to one."""
+    """C9001 forbids returning dicts; guard against a 'simplification' back."""
 
     def test_lookups_return_named_values(self):
         found = cfg.parse("combos:\n  c: [1, 2]\n")

@@ -1,11 +1,7 @@
 """The abstract syntax tree.
 
-Named `syntax` rather than `ast` so it can never be confused with the standard
-library module of that name.
-
-Every node is a frozen dataclass carrying its `Position`, because a compile
-error found three passes later still has to point at the source the author
-wrote.
+Every node is a frozen dataclass carrying its `Position`, so an error found
+passes later can still point at the source.
 """
 
 from __future__ import annotations
@@ -74,11 +70,10 @@ class Unary(Expression):
 
 @dataclass(frozen=True)
 class Call(Expression):
-    """A call to a game function.
+    """A call to a game function, resolved by name at REL-link time.
 
-    Resolved by name at REL-link time, never by address here: the compiler emits
-    a C reference to `callee` and lets `elf2rel` bind it through the symbol list.
-    That is what keeps game addresses out of `bleck` entirely.
+    The compiler emits a C reference to `callee`; `elf2rel` binds it through the
+    symbol list, so no game address ever appears in `bleck`.
     """
 
     callee: str = ""
@@ -87,11 +82,8 @@ class Call(Expression):
 
 @dataclass(frozen=True)
 class SlotRef(Expression):
-    """An explicit storage slot, e.g. `gw[3]` or `gsw[120]`.
-
-    The escape hatch for talking to the game's own variables, which is how a
-    script observes progression state it did not set itself.
-    """
+    """An explicit storage slot, e.g. `gw[3]` or `gsw[120]` — the escape hatch
+    for reading and writing the game's own variables."""
 
     storage: str = ""
     index: int = 0
@@ -155,12 +147,7 @@ class Return(Statement):
 
 @dataclass(frozen=True)
 class Wait(Statement):
-    """Yield for a duration. `milliseconds` picks WAIT_MSEC over WAIT_FRM.
-
-    This is the whole reason scripts are pleasant to write for a 60fps game:
-    the VM resumes the script where it left off, so waiting does not block the
-    frame the way it would in a native hook.
-    """
+    """Yield for a duration. `milliseconds` picks WAIT_MSEC over WAIT_FRM."""
 
     duration: Expression | None = None
     milliseconds: bool = False

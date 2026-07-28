@@ -1,13 +1,10 @@
 """`symbols` commands: what the game's functions are called, and where they live.
 
-Two sources. `spm.<version>.lst` is what `elf2rel` consumes and what every mod
-so far has linked against. `spm-decomp`'s `symbols.txt` is ~4.7x larger and
-carries types and sizes, which is what turns "unknown symbol" into "that is
-data, not a function".
+Two sources: `spm.<version>.lst`, which `elf2rel` consumes, and `spm-decomp`'s
+larger `symbols.txt`, which also carries types and sizes.
 
 ⚠️ `spm-decomp` states no licence (D54), so nothing from it ships here. Point
-`BLECK_DECOMP` at your own clone. Without it these commands still work against
-the lst alone.
+`BLECK_DECOMP` at your own clone; without it these work against the lst alone.
 """
 
 from __future__ import annotations
@@ -83,8 +80,7 @@ def cmd_compare(args: argparse.Namespace) -> int:
     print(f"\n{shared} shared name(s), {len(disagreements)} disagreement(s)")
     for item in disagreements:
         print(f"  {item.describe()}")
-        # Naming what actually lives at the disputed address is what makes a
-        # disagreement actionable rather than alarming.
+        # Name what actually lives at the disputed address.
         other = [s.name for s in decomp.symbols if s.address == item.lst_address]
         if other:
             print(f"      the decomp calls {item.lst_address:08X} {', '.join(other)}")

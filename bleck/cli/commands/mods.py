@@ -1,7 +1,5 @@
-"""Mod commands: new, list, vendor, status, chain, check, build.
-
-The base game is treated as read-only throughout — every command reads from it
-and writes only into the mods or build directories.
+"""Mod commands. The base game is read-only throughout — these write only into
+the mods or build directories.
 """
 
 from __future__ import annotations
@@ -137,10 +135,8 @@ def cmd_chain(args: argparse.Namespace) -> int:
 def boot_override(args: argparse.Namespace, base: Path) -> builder.CodeOverride:
     """Turn command-line flags into build-time code changes.
 
-    `--map` accepts either the name the disc uses or the game's own numeric id,
-    because `bleck maps` prints both and neither is more memorable than the
-    other. It is resolved here rather than passed through so a typo is caught
-    against the real map list, with a suggestion, before anything compiles.
+    `--map` takes a map name or numeric id, resolved here so a typo is caught
+    against the real map list before anything compiles.
     """
     if not args.map:
         return builder.CodeOverride()
@@ -220,11 +216,8 @@ def cmd_build(args: argparse.Namespace) -> int:
 def _embed_loader(chain: resolver.Chain, staged: Path, args: argparse.Namespace) -> None:
     """Put the Gecko loader inside the disc, so a code mod runs without setup.
 
-    Only meaningful when the chain actually ships code. Skipped rather than
-    fatal when the codelist is missing: plenty of people already have the
-    loader pasted into Dolphin's cheat configuration and do not need this.
-    But it says so loudly, because a code mod that silently does nothing is
-    exactly the failure this feature exists to remove.
+    A missing codelist warns loudly rather than failing — the loader may already
+    be in Dolphin's cheat configuration.
     """
     coded = [mod for mod in chain.mods if mod.manifest.has_code]
     if not coded or args.no_embed_loader:
@@ -354,12 +347,7 @@ def _read_json(source: str) -> str:
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    """A whole mod as JSON. What an editor opens.
-
-    ⚠️ Declarations only. A mod's overlay holds extracted game assets, which are
-    binary and already on disk; dragging megabytes through a document that is
-    mostly a name would make every read expensive.
-    """
+    """A whole mod as JSON. ⚠️ Declarations only — overlay assets stay on disk."""
     mod = _registry().require(args.name)
     print(api.ModDocument.of(mod.manifest).model_dump_json(indent=2))
     return 0
@@ -368,10 +356,8 @@ def cmd_export(args: argparse.Namespace) -> int:
 def cmd_import(args: argparse.Namespace) -> int:
     """Write a JSON document back to a mod's `mod.json`.
 
-    ⚠️ Replaces the manifest rather than merging into it, for the same reason
-    `setup apply` does: merging needs a rule for "the document omits a field --
-    clear it or keep it?", and either answer surprises half of callers. An
-    editor holds the whole document.
+    ⚠️ Replaces the manifest rather than merging: an omitted field has no
+    unsurprising meaning. An editor holds the whole document.
     """
     try:
         document = api.ModDocument.model_validate_json(_read_json(args.json))

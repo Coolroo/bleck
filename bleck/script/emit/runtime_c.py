@@ -1,14 +1,8 @@
 """The C that `bleck` generates into every mod: the bleck runtime.
 
-Separated from `emit.py` because it is *data*, not logic — nearly five hundred
-lines of C source that happens to live in Python strings. Keeping it here means
-`emit.py` reads as what it is, an assembler of these pieces, and means a change
-to the generated runtime shows up in a diff of one file whose whole purpose is
-the runtime.
-
-Every template is a `str.format` pattern, so literal braces are doubled. The
-generated output must be pure ASCII: `emit._require_ascii` fails the build
-otherwise, and it has caught a stray unicode character in a comment here twice.
+Every template is a `str.format` pattern, so literal braces are doubled, and
+the generated output must be pure ASCII — `generate._require_ascii` fails the
+build otherwise.
 """
 
 from __future__ import annotations
@@ -32,9 +26,8 @@ typedef unsigned int u32;
 typedef unsigned char u8;
 """
 
-#: Defined in every generated module, so a mod's own C can run at load time
-#: without owning `_prolog` itself. Weak, so a mod that supplies its own
-#: strong definition overrides this empty one at link time.
+#: Lets a mod's own C run at load time without owning `_prolog`. Weak, so a
+#: mod's own strong definition overrides it at link time.
 MOD_HOOK = """/*
     A mod's own C may define `mod_prolog` to run when the module loads.
 
@@ -59,11 +52,8 @@ __attribute__((weak)) void mod_prolog(void)
 
 
 #: Running a script when a named map is reached.
-#:
-#: ⛔ This does *not* patch `MapData.initScript`, which was the obvious design
-#: and does not work: it deadlocks the map loader (D51). Instead the sequence
-#: hook watches where the game says it is going, and starts the script once
-#: gameplay resumes -- both mechanisms already verified in D43.
+#: ⛔ Patching `MapData.initScript` deadlocks the map loader (D51); the sequence
+#: hook watches the destination instead.
 MAP_BLOCK = """
 /*
     Map hooks.
@@ -154,11 +144,9 @@ MAP_TABLE = """
 static const char {prefix}name_{index}[] = {name};
 """
 
-#: The on-screen label naming the loaded mod.
-#:
-#: Every call mirrors `spm-rel-loader`'s title-screen example, which is the only
-#: known-working use of this API: start, style, measure, draw -- and draw
-#: *before* delegating to the real sequence main.
+#: The on-screen label naming the loaded mod. Call order mirrors
+#: `spm-rel-loader`: start, style, measure, draw -- before the real sequence
+#: main runs.
 BANNER_BLOCK = """
 /*
     Naming the loaded mod on screen.
@@ -211,8 +199,7 @@ static void bleck_draw_banner(void)
 }}
 """
 
-#: Typedefs and the saved originals. Needed by anything wanting a per-frame
-#: hook -- a free-running script, a map watcher, or both.
+#: Typedefs and the saved originals, needed by anything wanting a per-frame hook.
 SEQ_TABLE = """
 /*
     Hooking the game's sequence table.
@@ -282,12 +269,8 @@ static void bleck_start_entry(u32 seq)
 }
 """
 
-#: Booting straight into a chosen map.
-#:
-#: Deliberately *not* a re-armed hook like `_SCRIPT_START`: this fires once, on
-#: the first frame of gameplay, and never again. Re-arming it would send the
-#: game back to the same map every time it left, which is a loop rather than a
-#: starting point.
+#: Booting straight into a chosen map. Fires once on the first frame of
+#: gameplay; re-arming it like `SCRIPT_START` would trap the game on that map.
 BOOT_BLOCK = """
 /*
     Booting into a map.
@@ -320,11 +303,9 @@ static void bleck_boot_on_seq(u32 seq)
 }}
 """
 
-#: Starting a script when a button combination is pressed.
-#:
-#: The reading path is measured, not assumed: `wpadGetWork()` is at `0x8023697c`
-#: in the eu0 lst, `WpadWork.statuses` is at `+0x6C` with the newest sample
-#: first, and `KPADStatus.buttonsHeld` is its first field (D67, D68).
+#: Starting a script when a button combination is pressed. ✅ The read path is
+#: measured: `WpadWork.statuses` at `+0x6C`, newest sample first, with
+#: `KPADStatus.buttonsHeld` as its first field (D67, D68).
 COMBO_BLOCK = """
 /*
     Button combinations.
@@ -409,11 +390,7 @@ static void bleck_combos_on_seq(u32 seq)
 """
 
 #: Starting several mods' entry scripts, when a disc merges more than one.
-#:
-#: The single-mod form above is kept rather than replaced, so a disc holding one
-#: mod emits exactly what it always has. A loop over one element would behave
-#: identically and produce a different file, and "the output changed but only
-#: cosmetically" is a claim nobody can check cheaply.
+#: `SCRIPT_START` is kept alongside so a one-mod disc emits an unchanged file.
 SCRIPT_START_MANY = """
 /*
     Entry scripts, one per mod sharing this module.

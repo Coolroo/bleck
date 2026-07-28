@@ -13,7 +13,7 @@ from bleck.mods import builder, conflicts, manifest, overlay, registry, resolver
 
 @dataclass(frozen=True)
 class ModSpec:
-    """What a test mod should contain. Grouped so the helper stays narrow."""
+    """What a test mod should contain."""
 
     version: str = "1.0.0"
     deps: list[str] = field(default_factory=list)
@@ -273,18 +273,12 @@ class TestConflicts:
         assert builder.check(chain, base, allow_binary=False).is_clean
 
     def test_setup_duplicate_warning(self, base: Path, mods_root: Path):
-        """A setup file exists twice and it is unknown which the game reads.
-
-        Editing one by hand is the silent no-op this warning exists to catch --
-        which is exactly what happened when only the archive copy was written
-        (D59).
-        """
+        """A setup file exists twice; editing one is a silent no-op (D59)."""
         make_mod(mods_root, "s", ModSpec(files={"files/setup/aa1_01.dat": b"Z" * 64}))
         chain = resolver.resolve(registry.load(mods_root), "s")
         report = builder.check(chain, base, allow_binary=False)
         warning = next(w for w in report.warnings if "aa1_01" in w)
-        # D62: the standalone copy is the one the game reads. The warning has to
-        # say which, not just that there are two.
+        # D62: the standalone copy is the one the game reads; say which.
         assert "the copy the game reads" in warning
         assert "Edit both" in warning
 
@@ -406,10 +400,8 @@ class TestArchiveMemberPaths:
     """SPM's two archive families spell member paths differently.
 
     `lyt/*.bin.uk` stores `arc/anim/x.brlan`; `map/*.bin` stores
-    `./dvd/setup/x.dat`. An overlay directory cannot contain a `.` component, so
-    an overlay addressing a map-archive member produces `dvd/setup/x.dat` and
-    used to match nothing -- the member was *added* beside the original rather
-    than replacing it, leaving two nodes with the same name.
+    `./dvd/setup/x.dat`. An overlay directory cannot contain a `.` component,
+    so both spellings must normalise to one key.
     """
 
     def test_a_dot_slash_member_is_matched(self):
@@ -419,6 +411,5 @@ class TestArchiveMemberPaths:
         assert u8.member_key("arc/timg/mario.tpl") == "arc/timg/mario.tpl"
 
     def test_both_spellings_collide_deliberately(self):
-        # They must land on the same key, or the merge cannot see that an
-        # overlay entry and an archive node are the same file.
+        # One key, or the merge cannot see overlay and archive node as one file.
         assert u8.member_key("./a/b.dat") == u8.member_key("a/b.dat")

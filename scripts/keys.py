@@ -1,24 +1,11 @@
 """Synthesising keystrokes into Dolphin, on Windows.
 
-⚠️ **This is not what D48 ruled out, and the distinction is the whole point.**
-D48 measured `SendKeys` and `PostMessage`, which post to a window's *message
-queue*. Dolphin reads DirectInput, which polls device state and never looks at
-the queue, so those were invisible to it — correctly measured, correctly
-recorded.
+⚠️ **Needs an unlocked session with Dolphin in the foreground**, so the
+unattended limit in D48 stands. `SendInput` injects below DirectInput's polling
+and does reach Dolphin, unlike the `SendKeys`/`PostMessage` D48 ruled out.
 
-`SendInput` is a different mechanism: it injects at the driver level, beneath
-DirectInput's polling, so a focused window does see it. D48 already said as
-much ("driver-level injection still needs the session to be unlocked and
-Dolphin focused") — the blocker was a locked machine, not the technique.
-
-So: **this needs an unlocked session with Dolphin in the foreground.** The
-unattended limit in D48 stands. What it buys is that a button-triggered feature
-can be tested by a script instead of by a person pressing keys on cue, which is
-the difference between a repeatable check and a favour.
-
-Dolphin's default Wii remote mapping puts each button on its own letter — `A`
-on A, `B` on B, `1` on 1, `2` on 2 — so the button names used elsewhere in this
-toolkit map straight through.
+Dolphin's default Wii remote mapping puts each button on its own letter, so the
+button names used elsewhere in this toolkit map straight through.
 """
 
 from __future__ import annotations
@@ -31,12 +18,8 @@ from dataclasses import dataclass
 
 IS_WINDOWS = sys.platform == "win32"
 
-#: Hardware scan codes, not virtual key codes.
-#:
-#: DirectInput reports *physical* keys, so it keys off the scan code. Sending a
-#: virtual key and letting Windows derive the scan code works for ordinary
-#: applications and is unreliable here; `KEYEVENTF_SCANCODE` says "this is the
-#: physical key" and removes the layout from the equation entirely.
+#: Hardware scan codes, not virtual key codes: DirectInput reports *physical*
+#: keys, and `KEYEVENTF_SCANCODE` takes the keyboard layout out of it.
 SCAN_CODES = {
     "a": 0x1E,
     "b": 0x30,
@@ -68,12 +51,10 @@ class _KeyboardInput(ctypes.Structure):
 class _MouseInput(ctypes.Structure):
     """Unused, but it is the largest arm of the union and so sets its size.
 
-    ⚠️ Do not replace this with a hand-counted padding array. The first version
-    did, guessed 24 bytes from `KEYBDINPUT`, and produced a 32-byte `INPUT`
-    where Windows wants 40 on x64 — `SendInput` then rejected every call with
-    `ERROR_INVALID_PARAMETER` (87). That looked exactly like the OS refusing to
-    inject input for security reasons, and very nearly got recorded as one.
-    Declaring the real fields lets ctypes size the union on any architecture.
+    ⚠️ Do not replace with hand-counted padding. Getting `INPUT`'s size wrong
+    makes `SendInput` reject every call with `ERROR_INVALID_PARAMETER` (87),
+    which reads as the OS refusing injection for security reasons. Declaring
+    the real fields lets ctypes size the union on any architecture.
     """
 
     _fields_ = [
@@ -111,8 +92,7 @@ class _Input(ctypes.Structure):
 EXPECTED_INPUT_SIZE = 40 if ctypes.sizeof(ctypes.c_void_p) == 8 else 28
 
 if IS_WINDOWS and ctypes.sizeof(_Input) != EXPECTED_INPUT_SIZE:
-    # Loud, at import, because the symptom of getting this wrong is
-    # `SendInput` failing in a way that reads as a security refusal.
+    # Loud, at import: the symptom otherwise reads as a security refusal.
     raise RuntimeError(
         f"INPUT is {ctypes.sizeof(_Input)} bytes, but SendInput wants "
         f"{EXPECTED_INPUT_SIZE}; the struct definitions above are wrong"
@@ -166,24 +146,16 @@ def windows_for_pid(pid: int) -> list[int]:
 def focus(pid: int) -> bool:
     """Bring a process's window to the front, and confirm it got there.
 
-    Injected input goes to whatever is focused, so this is not cosmetic: sending
-    keys to an unfocused Dolphin types them into whatever *is* focused, which on
-    a developer's machine is usually an editor or a terminal.
+    Not cosmetic: injected input goes to whatever is focused, so keys sent to
+    an unfocused Dolphin land in an editor or terminal instead.
 
-    ⚠️ `SetForegroundWindow` alone does not work from a background script.
-    Windows only grants it to a process that already owns the foreground or
-    handled the most recent input, specifically to stop programs stealing focus
-    — measured here: it returned false every time and no key was ever sent.
+    ⚠️ `SetForegroundWindow` alone fails from a background script. The
+    sanctioned way round it is `AttachThreadInput` on the thread that owns the
+    foreground, detached immediately after -- two threads left sharing an input
+    queue can deadlock.
 
-    The sanctioned way round it is `AttachThreadInput`: attach to the thread
-    that currently owns the foreground, which makes the two share an input
-    queue and puts this process inside the permitted set for as long as the
-    attachment lasts. Detached again immediately, because leaving two threads
-    sharing an input queue is a good way to deadlock both.
-
-    Returns whether the window is *actually* frontmost afterwards, not whether
-    the call claimed success — the two differ, and only the first one is safe
-    to send keystrokes on.
+    Returns whether the window is *actually* frontmost, not whether the call
+    claimed success; only the first is safe to send keystrokes on.
     """
     if not IS_WINDOWS:
         return False
@@ -221,15 +193,9 @@ def is_foreground(pid: int) -> bool:
 def wait_until_foreground(pid: int, seconds: float = 30.0) -> bool:
     """Wait for a window of `pid` to become frontmost, however it gets there.
 
-    ⚠️ Deliberately cooperative. Windows blocks a background process from
-    stealing focus, and `AttachThreadInput` did not get around it here —
-    measured: the call is accepted and the foreground never changes.
-
-    It *can* be forced, by setting `SPI_SETFOREGROUNDLOCKTIMEOUT` to zero and
-    turning off the protection system-wide. That is not done, and should not
-    be: quietly disabling an operating system's defence against focus theft is
-    a bigger imposition than synthesising a keystroke, and it would persist
-    beyond this process. One click is cheaper than that trade.
+    ⚠️ Deliberately cooperative: waits for a human click. Forcing focus needs
+    `SPI_SETFOREGROUNDLOCKTIMEOUT` set to zero, which disables the protection
+    system-wide and outlasts this process. One click is cheaper.
     """
     if not IS_WINDOWS:
         return False
@@ -244,14 +210,11 @@ def wait_until_foreground(pid: int, seconds: float = 30.0) -> bool:
 def press(button: str, hold: float = 0.35, gap: float = 0.9) -> PressResult:
     """Press and release one button or one combination, then pause.
 
-    `a` presses a single button; `1+2` holds both together and releases both.
-    A combination has to be *simultaneous* — the whole point of the feature is
-    that a mod tests `(held & mask) == mask` in one frame, so pressing the
-    buttons in sequence exercises nothing.
+    `a` presses one button; `1+2` holds both together. A combination must be
+    *simultaneous*: a mod tests `(held & mask) == mask` within one frame.
 
-    `hold` is generous on purpose. The game samples once per frame, so a press
-    shorter than a frame or two can be missed entirely — and a missed press is
-    indistinguishable from the feature not working when results are read back.
+    ⚠️ `hold` is generous on purpose. The game samples once per frame, and a
+    missed press is indistinguishable from the feature not working.
     """
     if not IS_WINDOWS:
         return PressResult(button, False, "keystroke injection is Windows-only")
@@ -267,8 +230,8 @@ def press(button: str, hold: float = 0.35, gap: float = 0.9) -> PressResult:
     if not scans:
         return PressResult(button, False, "nothing to press")
 
-    # Down in order, up in reverse, so the combination is genuinely held at
-    # once rather than being a fast sequence of individual presses.
+    # Down in order, up in reverse, so a combination is genuinely held at once
+    # rather than being a fast sequence of individual presses.
     for scan in scans:
         if not _send(scan, keyup=False):
             for done in reversed(scans):

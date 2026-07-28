@@ -1,29 +1,15 @@
 """The `evt` bytecode format: opcodes and operand encoding.
 
-Super Paper Mario ships its own scripting VM. `evtmgrMain()` runs every frame,
-executing up to 128 concurrent script entries cooperatively. Scripts are plain
-`s32` arrays, and the engine treats them as data: NPCs, objects, items, doors
-and maps all hold `EvtScriptCode *` fields pointing at one.
-
-That is why `bleck` compiles to this format rather than shipping an interpreter.
-The game already has one, tuned for its own frame budget, and it is reachable
-from a code mod with a single call.
-
-Everything here is a statement of the format, not of the game's addresses — no
-symbol values appear in this module, so nothing in it is derived from the
-symbol lists. See `docs/scripting.md`.
-
-Format
-------
-Each instruction is one header word followed by its argument words::
+Scripts are plain `s32` arrays. Each instruction is one header word followed by
+its argument words::
 
     header = (argument_count << 16) | opcode
 
 Arguments are `s32`, and **the numeric range of an argument encodes its storage
-class**. A value near -30000000 is local work slot 0; a value near -240000000 is
-a fixed-point float. Anything outside every declared range is a literal. This is
-why `encode_*` below exists: writing a raw integer where the VM expects a
-variable reference silently reads the wrong storage.
+class**: near -30000000 is local work slot 0, near -240000000 is a fixed-point
+float, and anything outside every declared range is a literal. Hence the
+`encode_*` helpers — a raw integer in a variable's window is read as that
+variable. See `docs/scripting.md`.
 """
 
 from __future__ import annotations
@@ -31,8 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
-#: Fixed-point scale for float operands. `evt` stores floats as `value * 1024`
-#: biased into the float range, so it carries about three decimal places.
+#: Fixed-point scale for float operands: ~3 decimal places of precision.
 FLOAT_SCALE = 1024.0
 
 
@@ -163,11 +148,10 @@ class Opcode(IntEnum):
 
 @dataclass(frozen=True)
 class StorageClass:
-    """One of `evt`'s variable families, and the range that encodes it.
+    """One of `evt`'s variable families, and the numeric window that encodes it.
 
-    The VM has no separate operand-type field. It recovers the storage class by
-    testing which numeric window an argument falls into, so `base` is not a
-    stylistic choice — it is the encoding.
+    The VM has no operand-type field; it tests which window an argument falls
+    into, so `base` is the encoding rather than a convention.
     """
 
     name: str
@@ -200,8 +184,8 @@ LF = StorageClass("LF", 70000000, 96, "local flags: per-script booleans")
 #: Shared boolean flags, not saved.
 GF = StorageClass("GF", 90000000, 96, "global flags: shared booleans")
 
-#: Persisted in the save file. The game's own progression uses these, so
-#: writing one can corrupt a playthrough — see `docs/scripting.md`.
+#: Persisted in the save file, and shared with the game's own progression —
+#: writing one can corrupt a playthrough. See `docs/scripting.md`.
 LSW = StorageClass("LSW", 150000000, 0, "saved local work (persists in saves)")
 GSW = StorageClass("GSW", 170000000, 0, "saved global work (persists in saves)")
 LSWF = StorageClass("LSWF", 110000000, 0, "saved local flags (persists in saves)")
@@ -214,18 +198,11 @@ STORAGE_CLASSES = [LW, GW, LF, GF, LSW, GSW, LSWF, GSWF]
 
 
 def encode_float(value: float) -> int:
-    """Encode a float operand.
-
-    `evt` has no 32-bit float operands: it stores `value * 1024` as an integer
-    biased into the float window, then converts back when the instruction reads
-    it. Precision is therefore ~3 decimal places, and very large magnitudes fall
-    out of the window entirely — which is why the bound is checked here rather
-    than producing an operand the VM would decode as something else.
-    """
+    """Encode a float operand as `value * 1024` biased into the float window."""
     scaled = int(value * FLOAT_SCALE)
     encoded = scaled - FLOAT_BASE
-    # Below this the value would land in the address window and be read as a
-    # pointer; above it, in the plain-literal range.
+    # Outside this window the operand decodes as a pointer (below) or a plain
+    # literal (above), so the magnitude is bounded here.
     if not -290000000 < encoded <= -220000000:
         raise ValueError(
             f"float {value} cannot be represented as an evt operand "
@@ -242,8 +219,7 @@ def instruction_header(opcode: Opcode, argument_count: int) -> int:
 def is_literal(encoded: int) -> bool:
     """Whether an encoded operand would be read as a plain number.
 
-    Useful as a guard: an integer literal that happens to land inside a storage
-    window is silently reinterpreted as a variable reference by the VM, and that
-    is close to impossible to debug from in-game behaviour alone.
+    A literal that lands inside a storage window is silently read as a variable
+    reference instead, which is near-undebuggable from in-game behaviour.
     """
     return encoded > -20000000 or encoded <= -290000000

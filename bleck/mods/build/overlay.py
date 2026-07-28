@@ -1,10 +1,8 @@
 """Turning a chain of mods into a concrete set of edits against the base.
 
-An overlay path may point *into* an archive. Given a base file
-`lyt/title.bin.uk` and an overlay path
-`lyt/title.bin.uk/arc/timg/mario.tpl`, the archive is the longest prefix that
-exists as a file in the base, and the remainder addresses a member inside it.
-That lets a mod ship one 18 KB texture instead of a 240 KB repacked blob.
+An overlay path may point *into* an archive: the disc file is the longest
+prefix that exists as a file in the base, and the remainder names a member
+inside it, so a mod ships one texture rather than a repacked archive.
 """
 
 from __future__ import annotations
@@ -91,9 +89,8 @@ class Plan:
         return [f.disc_path for f in self.files]
 
 
-# The data partition sits under `files/` in a wit extract. Overlays mirror the
-# extract root so `sys/main.dol` is addressable too, but typing `files/` every
-# time is tedious — so a bare path is accepted when it resolves under it.
+# The data partition sits under `files/` in a wit extract; overlays mirror the
+# extract root, but a bare path is accepted when it resolves under this prefix.
 DATA_PREFIX = "files"
 
 
@@ -132,8 +129,7 @@ def resolve_target(base: Path, overlay_path: str) -> TargetPath:
 def build_plan(base: Path, chain_mods: list) -> Plan:
     """Collect every edit from every mod, in chain order.
 
-    Order matters: within a target, later mods in the chain appear later, so the
-    last edit wins where a merge is not attempted.
+    Order matters: where no merge is attempted, the last edit wins.
     """
     plan = Plan()
     by_path: dict[str, FilePlan] = {}

@@ -1,30 +1,16 @@
 """Check a frozen `bleck` binary actually works before it is published.
 
-⚠️ A PyInstaller build that *builds* proves almost nothing. The failures that
-matter are all at runtime: a data file bundled to the wrong path, a command
-module never imported because nothing references it by name, a compiled
-dependency missing its native half. Each produces a binary that starts happily
-and then reports an empty catalog or an unknown subcommand — which reads as a
-corrupt install rather than a packaging bug.
-
-So CI runs this against the artifact it just built, on every platform.
+A PyInstaller build that *builds* proves almost nothing; the failures that
+matter are all at runtime -- a data file bundled to the wrong path, a command
+module nothing references by name, a compiled dependency missing its native
+half. CI runs this against the artifact it just built, on every platform.
 
     uv run python scripts/smoke_binary.py work/dist/bleck
 
-Deliberately needs no extracted disc: these check what is *inside* the binary,
-so they run on a CI machine that has never seen the game.
-
-⚠️ That last claim was false for the first version of this script, and the
-mistake is worth keeping in mind. The map-catalog check ran `bleck maps`, which
-walks `files/map/` on a real extracted disc — so it could only ever pass on a
-machine that had the game. It looked like a solid check for as long as it was
-only run where it could not fail, and failed on all three platforms the first
-time CI ran it.
-
-The check now builds a **synthetic base** — one empty file named after a real
-map — and asserts the map *id* comes back. Ids exist nowhere on the disc; they
-come from `mapcatalog.json` alone, so a missing catalog prints `?` instead and
-the check fails for the reason it claims to test.
+⚠️ Every check must be able to fail where it runs. These need no extracted
+disc, so they work on a CI machine that has never seen the game -- the first
+version's map check quietly required one and passed only where it could not
+fail.
 """
 
 from __future__ import annotations
@@ -39,9 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-#: A real map name, and the id `mapcatalog.json` records for it. The id is the
-#: whole point: nothing on the disc stores it, so it can only come from the
-#: bundled catalog.
+#: A real map name, and the id `mapcatalog.json` records for it. Nothing on the
+#: disc stores the id, so it can only come from the bundled catalog.
 SAMPLE_MAP = "he1_01"
 SAMPLE_MAP_ID = "26"
 
@@ -99,9 +84,8 @@ CHECKS = [
 def synthetic_base(root: Path) -> Path:
     """A base build with one map and nothing else.
 
-    `bleck maps` takes map *names* from the disc and *ids* from the bundled
-    catalog, so this is the smallest thing that exercises both without needing
-    a real extraction.
+    `bleck maps` takes names from the disc and ids from the bundled catalog;
+    this is the smallest thing exercising both without a real extraction.
     """
     map_dir = root / "files" / "map"
     map_dir.mkdir(parents=True, exist_ok=True)

@@ -1,13 +1,8 @@
 """The pieces a code build is made of, and the steps both paths share.
 
-`__init__` decides *which* build happens — one mod, or several merged. This
-holds what both need: the values they pass around, the resolution of a
-manifest's declarations into what the emitter wants, and the two steps that are
-identical either way — compiling one mod to a program, and linking programs
-into a REL.
-
-Separated because the strategies are the interesting part, and they were buried
-under three hundred lines of shared machinery.
+`__init__` decides which build happens — one mod, or several merged. This holds
+what both need: the shared values, the resolution of a manifest's declarations
+into what the emitter wants, and compiling and linking.
 """
 
 from __future__ import annotations
@@ -37,10 +32,8 @@ class CodeError(BleckError):
 class CodeOverride:
     """Build-time changes to what a mod compiles, from the command line.
 
-    Separate from the manifest because these are properties of *this build*,
-    not of the mod: `--map` exists so a disc can be thrown at a level for one
-    test without editing and un-editing `mod.json` around it. Anything worth
-    keeping belongs in the manifest, where it is reviewable.
+    Properties of *this build*, not of the mod; anything worth keeping belongs
+    in the manifest.
     """
 
     boot_map: str = ""
@@ -76,9 +69,7 @@ class CodeBuild:
             names = ", ".join(path.name for path in self.sources)
             parts.append(f"{len(self.sources)} source(s) [{names}]")
         what = " + ".join(parts) or "nothing"
-        # Said out loud because a boot map changes where the disc *goes*, which
-        # is the kind of surprise worth naming in build output rather than
-        # leaving someone to wonder why the attract demo stopped playing.
+        # Named in build output because a boot map changes where the disc goes.
         where = f", boots at {self.boot_map}" if self.boot_map else ""
         return (
             f"{self.mod}: compiled {what} -> "
@@ -90,9 +81,8 @@ class CodeBuild:
 class ScriptSource:
     """Script text on its way to the compiler, and where it came from.
 
-    `path` is None when `bleck` generated the text itself, which is why the two
-    are separate: an error position means something different in a file someone
-    wrote than in one that only exists inside this process.
+    `path` is None when `bleck` generated the text itself, so an error can
+    point at a real file only when there is one.
     """
 
     text: str
@@ -108,8 +98,8 @@ class ScriptSource:
 def collect_sources(mod: Mod, spec) -> list[Path]:
     """Resolve `code.sources` to actual `.c` files.
 
-    An entry may name a file or a directory; a directory contributes every `.c`
-    beneath it, sorted, so a build does not depend on filesystem ordering.
+    A directory entry contributes every `.c` beneath it, sorted, so a build
+    does not depend on filesystem ordering.
     """
     found: list[Path] = []
     for entry in spec.sources:
@@ -129,12 +119,8 @@ def collect_sources(mod: Mod, spec) -> list[Path]:
     return found
 
 
-#: Comments, stripped before looking for a definition.
-#:
-#: Necessary rather than fastidious: `docs-site` tells mod authors to "define
-#: `mod_prolog`", and several existing mods quote that line in a comment above
-#: the function. Matching the prose would report a collision between a mod that
-#: defines it and one that merely mentions it.
+#: Comments, stripped first: mods quote "define `mod_prolog`" from the docs in
+#: a comment, and matching that prose reports a false collision.
 _C_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
 
 #: A *definition*, not a declaration: the body brace is what makes it one.
@@ -145,10 +131,8 @@ _MOD_PROLOG_DEFINITION = re.compile(r"\bvoid\s+mod_prolog\s*\([^)]*\)\s*\{")
 def defines_mod_prolog(source: Path) -> bool:
     """Whether a C file supplies its own `mod_prolog`.
 
-    `bleck` emits a *weak* one, so a single mod overriding it is the intended
-    design (see `runtime_c.MOD_HOOK`). Two mods overriding it is a duplicate
-    symbol, and the linker reports that as a clash between two object files
-    nobody wrote by hand.
+    `bleck` emits a *weak* one (see `runtime_c.MOD_HOOK`), so one mod may
+    override it; two is a duplicate symbol.
     """
     try:
         text = source.read_text(encoding="utf-8", errors="replace")
@@ -167,11 +151,7 @@ def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:
 
 
 def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
-    """The map attachments this mod declares, as the emitter wants them.
-
-    The manifest speaks in map and script *names*; the emitter needs the same
-    pairing but validates it against what the source actually declares.
-    """
+    """The map attachments this mod declares, as the emitter wants them."""
     spec = mod.manifest.code
     if spec is None:
         return []
@@ -183,9 +163,7 @@ def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
 def combo_hooks_for(mod: Mod, spec, settings) -> list[emit.ComboHook]:
     """Resolve each `code.combos` binding against `bleck.yml`.
 
-    The manifest names a combination and the config says which buttons it is.
-    Joining the two here means a mod never contains a button mask, so changing
-    what `start_map` means is one edit in one file.
+    Joined here so a mod never contains a button mask.
     """
     hooks: list[emit.ComboHook] = []
     for binding in spec.combos:
@@ -212,13 +190,8 @@ def combo_hooks_for(mod: Mod, spec, settings) -> list[emit.ComboHook]:
 def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     """The on-screen label this mod should draw, if any.
 
-    The text comes from the mod's own name unless the manifest overrides it, so
-    the common case needs nothing declared: build a mod, and the disc says which
-    mod it is.
-
-    `spec` is passed explicitly when the build is working from something other
-    than the manifest's own `code` block — a `--map` build of an asset mod has a
-    synthesized spec, and that disc should still name itself.
+    The text defaults to the mod's own name. Pass `spec` when the build works
+    from a synthesized `code` block rather than the manifest's own.
     """
     spec = spec if spec is not None else mod.manifest.code
     if spec is None or not spec.banner.enabled:
@@ -234,11 +207,8 @@ def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
 def script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
     """The script source to compile: the mod's own, the boot script, or both.
 
-    A boot map is desugared into script source and appended, so a mod that
-    already has a script keeps it and gains one, and a mod with no script at all
-    still ends up with something the compiler can process. Appending rather than
-    generating a second translation unit means one `evtEntry` table, one string
-    table, and one place where a duplicate script name is an error.
+    A boot map is desugared into script source and *appended* rather than made
+    a second translation unit, keeping one `evtEntry` and string table.
     """
     own = ""
     path = mod.root / spec.script if spec.has_script else None
@@ -265,7 +235,7 @@ def script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
 
 @dataclass(frozen=True)
 class Part:
-    """One mod compiled but not yet emitted, on its way into a shared module."""
+    """One mod compiled but not yet emitted."""
 
     mod: Mod
     spec: CodeSpec
@@ -285,21 +255,20 @@ class Part:
 def prepare(mod: Mod, override: CodeOverride | None) -> Part:
     """Everything up to but not including emitting C.
 
-    Split from emission so one mod and several take the same path to a compiled
-    program, and differ only in what gets generated from it.
+    One mod and several reach a compiled program by this same path.
     """
     spec = mod.manifest.code
     boot_map = override.boot_map if override else ""
     if spec is None:
         if not boot_map:
             raise CodeError(f"{mod.name} declares no code to build")
-        # Nothing declared, but a boot map was asked for. Defaults are enough:
-        # they name eu0 and module 2, which is all the generated code needs.
+        # Nothing declared, but a boot map was asked for; defaults (eu0,
+        # module 2) are all the generated code needs.
         spec = CodeSpec()
     boot_map = boot_map or spec.boot_map
 
-    # The same table the link will use, so "that will not link" is said now
-    # rather than after a compile and a toolchain run (D61).
+    # The same table the link will use, so "that will not link" is said before
+    # the toolchain runs (D61).
     table = symbol_tables.best_available(
         toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
     )
@@ -307,9 +276,8 @@ def prepare(mod: Mod, override: CodeOverride | None) -> Part:
     program = None
     if source.text:
         try:
-            # No scaffolding here: this pass only needs the compiled program.
-            # What the module *does* with it is decided at emission, which is
-            # the step that differs between one mod and several.
+            # No scaffolding: this pass only needs the compiled program; what
+            # the module does with it is decided at emission.
             program = compile_source(
                 source.text,
                 origin=source.origin,

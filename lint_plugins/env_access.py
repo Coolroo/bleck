@@ -1,11 +1,6 @@
-"""Pylint plugin: confine environment access to one module.
-
-Environment reads scattered through a codebase are invisible — there is no list
-of what can be configured, and a typo'd variable name fails silently. All reads
-go through `bleck.common.env`, where each variable is declared once.
-
-Flags `os.environ`, `os.getenv`, `os.putenv`, and `os.unsetenv` outside the
-allowed module.
+"""Pylint plugin: confine environment access to `bleck.common.env`, where each
+variable is declared once. Flags `os.environ`, `os.getenv`, `os.putenv` and
+`os.unsetenv` elsewhere.
 """
 
 from __future__ import annotations

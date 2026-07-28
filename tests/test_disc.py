@@ -22,11 +22,7 @@ def fixture_stub_tools(monkeypatch):
 
 
 def _parent_existed_at_call(monkeypatch, dest: Path) -> list[bool]:
-    """Record whether `dest`'s parent existed at the moment the tool ran.
-
-    Checking after the fact would pass even if the directory were created too
-    late; the ordering is the thing under test.
-    """
+    """Record whether `dest`'s parent existed *at the moment* the tool ran."""
     seen: list[bool] = []
     monkeypatch.setattr(disc, "_run", lambda _args: seen.append(dest.parent.is_dir()))
     return seen
@@ -36,10 +32,7 @@ def _parent_existed_at_call(monkeypatch, dest: Path) -> list[bool]:
 class TestOutputParentDirectories:
     """Neither wit nor DolphinTool creates a missing parent directory.
 
-    DolphinTool in particular fails with only "Conversion failed" — no path, no
-    reason — so this is expensive to diagnose in the field. It bit on the
-    documented fresh-machine command `bleck extract disc.rvz extracted/eu0`,
-    where `extracted/` does not exist yet.
+    DolphinTool fails with only "Conversion failed" — no path, no reason.
     """
 
     def test_convert_rvz_creates_parent(self, monkeypatch, tmp_path: Path):
@@ -93,8 +86,8 @@ class TestAlignFiles:
     def test_build_always_passes_overwrite(self, monkeypatch, tmp_path: Path):
         """`--force` must reach wit, not just satisfy bleck's own guard.
 
-        Without this, rebuilding over an existing image staged the whole build
-        and then failed at the last step with wit's ERROR #64.
+        Otherwise a rebuild over an existing image stages, then fails on wit's
+        ERROR #64 at the last step.
         """
         captured: list[list[str]] = []
         monkeypatch.setattr(disc, "_run", captured.append)
@@ -123,8 +116,7 @@ class TestGeckoCodelist:
         assert len(gecko.build_gct(source)) == 8 + 4 * 4 + 8
 
     def test_rejects_a_file_that_is_not_a_codelist(self):
-        # wstrt's own message for this is "Invalid WCH header", which says
-        # nothing about what the user actually handed it.
+        # wstrt says only "Invalid WCH header", which names nothing.
         with pytest.raises(gecko.GeckoError, match=r"expected 8-digit hex words"):
             gecko.build_gct("this is not a gecko code")
 
@@ -147,11 +139,8 @@ class TestGeckoCodelist:
 @pytest.mark.usefixtures("stub_tools")
 class TestGeckoEmbedding:
     def test_detaches_the_dol_before_patching(self, monkeypatch, tmp_path: Path):
-        """The staged DOL is a hardlink to the base; wstrt rewrites in place.
-
-        Patching without detaching would edit the pristine base — the one
-        failure the whole build design exists to prevent.
-        """
+        """The staged DOL hardlinks to the base and wstrt rewrites in place, so
+        patching without detaching would edit the pristine base."""
         base = tmp_path / "base.dol"
         base.write_bytes(b"original")
         staged = tmp_path / "staged.dol"

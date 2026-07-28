@@ -1,22 +1,9 @@
 """Lowering the syntax tree onto `evt` bytecode.
 
-The interesting constraint is that `evt` is not a stack machine. There is no
-expression stack and no register file — every arithmetic instruction is
-two-operand and writes back into its first operand, which must be a variable.
-So `x = (a + b) * c` cannot be emitted as written; it becomes a sequence of
-copies and in-place operations through scratch slots.
-
-That is what most of this module does: turn a tree into a flat sequence, renting
-local-work slots for intermediate results and giving them back afterwards.
-
-Words, not integers
--------------------
-A compiled script is a list of `Word`, not a list of `int`, because three of the
-values in a finished script are addresses that only exist after linking: game
-functions called by `USER_FUNC`, string constants, and other scripts. Those stay
-symbolic all the way through, and `emit.py` writes them as C expressions for the
-linker to resolve. This is deliberate — it is what keeps game addresses out of
-`bleck` entirely, so no symbol list has to be redistributed.
+`evt` is not a stack machine: every arithmetic instruction is two-operand and
+writes back into its first operand, which must be a variable. So most of this
+module flattens the tree into copies and in-place operations, renting
+local-work slots for intermediates and returning them afterwards.
 """
 
 from __future__ import annotations
@@ -26,8 +13,7 @@ from dataclasses import dataclass
 from bleck.script import catalog as builtin_catalog
 from bleck.script import evt
 
-# Re-exported: callers have always reached these through `compiler`, and the
-# split is about where they live, not about who may use them.
+# Re-exported: callers reach these through `compiler`.
 from bleck.script.compiler.ir import (
     ARITHMETIC,
     COMPARISONS,
@@ -58,12 +44,7 @@ class _Variable:
 
 
 class _ScriptCompiler:  # pylint: disable=too-many-public-methods
-    """Compiles one `script` block.
-
-    As with the parser, the method count tracks the size of the language rather
-    than any tangling: there is roughly one method per node kind, plus the slot
-    bookkeeping they all share.
-    """
+    """Compiles one `script` block."""
 
     def __init__(self, owner: _ProgramCompiler, script: tree.Script) -> None:
         self.owner = owner
@@ -145,11 +126,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     def reject_ambiguous_literal(self, value: int, at: Position) -> None:
         """Refuse integers the VM would decode as a variable reference.
 
-        `evt` recovers an operand's storage class from its numeric range, so a
-        literal like -30000000 *is* `lw[0]` as far as the VM is concerned. There
-        is no encoding that distinguishes them, so the only honest thing to do
-        is reject the literal rather than emit something that silently reads a
-        variable.
+        Storage class comes from an operand's numeric range, so -30000000 *is*
+        `lw[0]`; no encoding distinguishes them.
         """
         if not evt.is_literal(value):
             raise self.fail(
@@ -180,9 +158,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             encoded = storage.encode(node.index)
         except ValueError as exc:
             raise self.fail(str(exc), node.position) from exc
-        # Flags are booleans; everything else is read as an integer. Floats live
-        # in the same work slots and are distinguished by the instruction used,
-        # so a bare slot reference is typed INT and float use is explicit.
+        # Floats share the same work slots and are distinguished by the
+        # instruction, so a bare slot reference is typed INT.
         return Value(Literal(encoded), ValueType.INT)
 
     def evaluate(self, node: tree.Expression) -> Value:
@@ -243,9 +220,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         right = self.evaluate(node.right)
         result_type = self.unify(left, right, node.operator, node.position)
 
-        # The accumulator must be a fresh slot: `evt` arithmetic writes back
-        # into its first operand, so reusing `left` would clobber a variable the
-        # rest of the statement still needs.
+        # Fresh slot: arithmetic writes back into its first operand, so reusing
+        # `left` would clobber a variable the statement still needs.
         slot = self.take_scratch(node.position)
         setter = evt.Opcode.SETF if result_type is ValueType.FLOAT else evt.Opcode.SET
         self.emit(setter, self.slot_word(slot), left.word)
@@ -282,9 +258,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     def branch_if(self, node: tree.Expression, invert: bool) -> None:
         """Open an `IF` that runs its body when `node` is true (or false).
 
-        The caller is responsible for the matching `END_IF`. Comparisons lower
-        straight to an `IF_*` opcode; anything else is reduced to a 0/1 value
-        first and then compared against zero.
+        The caller must emit the matching `END_IF`.
         """
         if isinstance(node, tree.Binary) and node.operator in COMPARISONS:
             self.branch_comparison(node, invert)
@@ -346,9 +320,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     def branch_boolean(self, node: tree.Binary, invert: bool) -> None:
         """`and`/`or` via a 0/1 accumulator.
 
-        `evt` has no short-circuit control flow, so both sides are evaluated.
-        That is safe here because expressions have no side effects — calls are
-        statements, not expressions.
+        No short-circuiting: `evt` has none, and expressions are side-effect
+        free because calls are statements.
         """
         assert node.left is not None and node.right is not None
         left = self.boolean_value(node.left)
@@ -364,8 +337,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     def compile_body(self, body: list[tree.Statement]) -> None:
         for statement in body:
-            # Scratch is statement-local: nothing computed for one statement is
-            # readable by the next, so the slots go back into the pool.
+            # Scratch is statement-local; slots go back into the pool after.
             high_water = self.scratch_low
             self.compile_statement(statement)
             self.scratch_low = high_water
@@ -453,9 +425,8 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     def compile_while(self, node: tree.While) -> None:
         """`while` on top of `evt`'s counted `DO`/`WHILE`.
 
-        `evt` has no condition-tested loop, only `DO n` ... `WHILE`, which
-        repeats a fixed number of times. An unbounded `DO 0` with a guarded
-        `DO_BREAK` at the top reproduces `while` exactly.
+        There is no condition-tested loop, so an unbounded `DO 0` with a guarded
+        `DO_BREAK` at the top stands in for one.
         """
         assert node.condition is not None
         self.emit(evt.Opcode.DO, Literal(0))
@@ -515,8 +486,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         self.owner.check_call(call)
         arguments = [self.evaluate(argument) for argument in call.arguments]
         self.owner.note_symbol(call.callee)
-        # USER_FUNC takes the function pointer as its first argument, so the
-        # declared argument count is one more than the script wrote.
+        # USER_FUNC takes the function pointer as its first argument.
         self.emit(
             evt.Opcode.USER_FUNC,
             SymbolWord(call.callee),
@@ -525,8 +495,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     def compile(self) -> CompiledScript:
         self.compile_body(self.script.body)
-        # Every script array ends with END_SCRIPT; the VM scans for it, so a
-        # missing terminator runs off into whatever follows in memory.
+        # Required terminator: without it the VM runs off into adjacent memory.
         self.emit(evt.Opcode.END_SCRIPT)
         return CompiledScript(
             name=self.script.name, words=self.words, slots_used=self.slots_used
@@ -546,8 +515,8 @@ class _ProgramCompiler:
         self.program = program
         self.source = source
         self.catalog = catalog if catalog is not None else builtin_catalog.load()
-        #: Optional. When present, a call to a name it does not know is rejected
-        #: here rather than at link time -- see `_check_linkable`.
+        #: Optional; when present, unknown names are rejected here, not at link
+        #: time -- see `_check_linkable`.
         self.symbol_table = symbol_table
         self.strings: list[str] = []
         self.symbols: list[str] = []
@@ -574,10 +543,8 @@ class _ProgramCompiler:
     def check_call(self, call: tree.Call) -> None:
         """Reject a call the catalog says cannot be right.
 
-        Both failures below are otherwise found far too late: an unknown name
-        surfaces as `elf2rel`'s "Missing 1 required symbol(s)" after a compile
-        and a toolchain, and a wrong argument count is not caught at all -- it
-        links cleanly and misbehaves in-game.
+        Otherwise an unknown name surfaces only as an `elf2rel` link failure,
+        and a wrong argument count is never caught at all.
         """
         if not self.catalog.builtins:
             return  # No catalog generated; nothing to check against.
@@ -600,8 +567,7 @@ class _ProgramCompiler:
         self._check_linkable(call)
 
         if known.arity is not None and len(call.arguments) != known.arity:
-            # Only show the signature when there is one; the fallback would
-            # just restate the sentence above it.
+            # Only show the signature when there is one.
             shape = f"\n  {known.signature}" if known.signature else ""
             raise ScriptError(
                 f"{call.callee} takes {known.arity} argument(s), "
@@ -613,15 +579,8 @@ class _ProgramCompiler:
     def _check_linkable(self, call: tree.Call) -> None:
         """Reject a call that will not survive the link.
 
-        ⚠️ **A third of the catalog is not linkable against the lst alone.** Of
-        443 documented builtins, 148 are absent from `spm.eu0.lst`: 94 are in
-        `spm-decomp`'s table, 21 live in the game's own REL at REL-relative
-        addresses, and 33 have no known address anywhere (D61).
-
-        All of them pass the catalog check above -- the header declares them --
-        and then die at `elf2rel` with "Missing 1 required symbol(s)", after a
-        compile and a toolchain run. Saying it here costs nothing and names the
-        fix.
+        ⚠️ 148 of 443 documented builtins are absent from `spm.eu0.lst` (D61).
+        They pass the catalog check above and then die at `elf2rel`.
         """
         table = self.symbol_table
         if table is None or table.find(call.callee) is not None:
@@ -649,14 +608,11 @@ class _ProgramCompiler:
 
 
 def _fold_negation(node: tree.Expression) -> tree.Expression | None:
-    """Rewrite `-&lt;literal&gt;` into a negative literal.
+    """Rewrite a negated literal into a negative literal.
 
-    Without this, a negative constant becomes three instructions (set a scratch
-    slot to zero, subtract, read it back) instead of one operand. It also makes
-    the ambiguous-literal check reachable: a negative number is the only way to
-    land in `evt`'s variable-encoding windows, and the check would otherwise
-    never see one, because the parser always produces a unary minus applied to a
-    positive literal.
+    Saves three instructions, and makes `reject_ambiguous_literal` reachable —
+    only negative numbers land in `evt`'s variable-encoding windows, and the
+    parser otherwise only ever produces a unary minus over a positive literal.
     """
     if not isinstance(node, tree.Unary) or node.operator != "-":
         return None

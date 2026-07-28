@@ -1,8 +1,5 @@
-"""Archive manifests.
-
-U8 node order is a flat depth-first listing, and repacking byte-identically
-depends on preserving it. A directory on disk does not preserve that order, so
-unpacking records it here and packing reads it back.
+"""Archive manifests. Byte-identical repacking depends on U8's depth-first node
+order, which a directory on disk does not preserve — so unpacking records it.
 """
 
 from __future__ import annotations

@@ -1,9 +1,7 @@
 """Button combinations: `bleck.yml` + `code.combos` -> generated C.
 
-The interesting seam is the join. A mod names a combination, `bleck.yml` says
-which buttons it is, and neither knows about the other until build time — so a
-mod never contains a button mask and changing what `start_map` means is one
-edit in one file.
+A mod names a combination and `bleck.yml` says which buttons it is; the two
+only meet at build time, so a mod never contains a button mask.
 """
 
 from __future__ import annotations
@@ -33,11 +31,7 @@ class TestGeneratedWatcher:
         assert "bleck_script_warp," in out
 
     def test_it_tests_the_mask_rather_than_the_whole_word(self):
-        """Bit 31 flips between frames while the controller is untouched (D67).
-
-        `held == mask` would therefore match on roughly half the frames and
-        read as flaky hardware rather than as a bug here.
-        """
+        """Bit 31 flips between frames untouched, so `held == mask` is flaky (D67)."""
         out = generated([emit.ComboHook("c", 0x0C00, "warp")])
         assert "(held & bleck_combo_masks[i]) == bleck_combo_masks[i]" in out
         assert "held == bleck_combo_masks" not in out
@@ -51,23 +45,20 @@ class TestGeneratedWatcher:
         assert "bleck_combo_down &= ~bit" in watcher
 
     def test_nothing_fires_from_a_button_held_at_boot(self):
-        # All-ones means every combination counts as already-held until it has
-        # been seen released. Also non-zero, so it lands in .data.
+        # All-ones: every combo counts as already-held until seen released.
         assert "static u32 bleck_combo_down = 0xFFFFFFFFu;" in generated(
             [emit.ComboHook("c", 0x0C00, "warp")]
         )
 
     def test_it_waits_for_gameplay(self):
-        """evtEntry needs the script VM, which needs gameplay. Watching earlier
-        is what hung the game in D65."""
+        """evtEntry needs the script VM; watching before gameplay hangs (D65)."""
         watcher = generated([emit.ComboHook("c", 0x0C00, "warp")]).split(
             "static void bleck_combos_on_seq"
         )[1]
         assert "seq != BLECK_SEQ_GAME" in watcher
 
     def test_the_null_check_is_present(self):
-        # wpadGetWork returns null before wpadInit; reading through it faults,
-        # and a fault here would look like the feature being impossible.
+        # wpadGetWork returns null before wpadInit; reading through it faults.
         assert "if (work == 0)" in generated([emit.ComboHook("c", 0x0C00, "warp")])
 
     def test_a_combo_needs_no_main_script(self):
@@ -110,8 +101,7 @@ class TestManifest:
         assert "combos" not in mod_manifest.CodeSpec(script="a.evt").to_json()
 
     def test_a_list_is_refused(self):
-        # An object makes a second binding for the same combo unwriteable,
-        # rather than something to detect later.
+        # An object makes a duplicate binding unwriteable rather than detectable.
         with pytest.raises(mod_manifest.ManifestError, match=r"code\.combos"):
             mod_manifest.Manifest.from_json(
                 '{"name": "m", "code": {"script": "s", "combos": []}}'

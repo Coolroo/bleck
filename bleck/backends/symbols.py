@@ -1,24 +1,17 @@
 """Symbol tables: turning a game function's name into its address.
 
-Two sources, deliberately kept separate.
+Two sources, kept separate:
 
-**`spm.<version>.lst`** (spm-headers, MIT) is what `elf2rel` consumes. It is
-curated and small — **976 entries for eu0** — and carries only `address:name`.
+- **`spm.<version>.lst`** (spm-headers, MIT) is what `elf2rel` consumes:
+  `address:name` only, 976 entries for eu0.
+- **`spm-decomp/config/<VERSION>/symbols.txt`** is ~4.7x larger and typed
+  (4,584 named for EU0, 3,960 functions), carrying section, size and kind.
 
-**`spm-decomp/config/<VERSION>/symbols.txt`** is far larger and typed:
-**4,584 human-named symbols for EU0, 3,960 of them functions**, each with a
-section, a size and a kind. That is ~4.7x the lst, and the types are what allow
-"you called `pouchCoin`, which is data, not a function" at compile time instead
-of a REL that jumps into a table.
+⚠️ `spm-decomp` states no licence (D54), so nothing from it is vendored. Point
+`BLECK_DECOMP` at a clone; absent, everything degrades to the lst.
 
-⚠️ **`spm-decomp` states no licence** (D54), so nothing from it is vendored.
-Point `BLECK_DECOMP` at your own clone; absent, everything here degrades to the
-lst and nothing breaks.
-
-⚠️ Two figures worth not repeating: D39 recorded "~9,566 human-named", which is
-not what the file contains — see above, measured. And `relF/symbols.txt` looks
-tempting at 30,162 lines but holds only **216** human names, at **REL-relative**
-addresses that cannot be linked the way absolute DOL symbols are.
+⛔ `relF/symbols.txt` looks useful at 30,162 lines but holds only 216 human
+names, at REL-relative addresses that cannot be linked like absolute DOL ones.
 """
 
 from __future__ import annotations
@@ -30,8 +23,8 @@ from pathlib import Path
 from bleck.common.errors import BleckError
 
 #: `mapDataPtr = .text:0x800294E0; // type:function size:0xC8 scope:global`
-#: The `@`-prefixed exception-table entries (`@etb_*`) deliberately do not match:
-#: they are compiler bookkeeping, ~9,600 of them, and useless to a mod.
+#: `@`-prefixed exception-table entries (`@etb_*`) deliberately do not match:
+#: compiler bookkeeping, ~9,600 of them, useless to a mod.
 _DECOMP = re.compile(
     r"^(?P<name>\w+)\s*=\s*\.?(?P<section>\w+):0x(?P<addr>[0-9A-Fa-f]+);"
     r"(?:\s*//\s*(?P<rest>.*))?$"
@@ -40,8 +33,8 @@ _DECOMP = re.compile(
 #: `800294e0:mapDataPtr`
 _LST = re.compile(r"^(?P<addr>[0-9A-Fa-f]{8}):(?P<name>\S+)\s*$")
 
-#: Names the decomp generates for undecompiled code. Valid symbols, but nobody
-#: is going to call `func_8012ab34` by name, so they are noise in a listing.
+#: Names the decomp generates for undecompiled code -- valid, but noise in a
+#: listing since nobody calls `func_8012ab34` by name.
 _GENERATED = re.compile(r"^(?:lbl|func|jumptable|__vt|_ctors|_dtors)_[0-9A-Fa-f]+$")
 
 FUNCTION = "function"
@@ -174,8 +167,7 @@ def read(path: Path) -> SymbolTable:
 def compare(lst: SymbolTable, decomp: SymbolTable) -> list[Disagreement]:
     """Names both tables know, at addresses they disagree about.
 
-    Worth checking before trusting a merge: the two are maintained separately,
-    and a disagreement means one of them would send a call to the wrong place.
+    Worth checking before trusting a merge: one of them sends calls astray.
     """
     by_name = {symbol.name: symbol for symbol in decomp.symbols}
     return [
@@ -188,22 +180,13 @@ def compare(lst: SymbolTable, decomp: SymbolTable) -> list[Disagreement]:
 def merge(lst: SymbolTable, decomp: SymbolTable) -> SymbolTable:
     """Both tables as one. **The decomp wins any disagreement.**
 
-    The instinct is the other way -- the lst is what has been building working
-    mods. But every disagreement found so far shows the lst pointing at the
-    *neighbouring* function, which the decomp also names:
+    Every disagreement seen so far had the lst pointing at the *neighbouring*
+    function (`strlen` -> the debugger's `TRK_strlen`; `evt_fairy_flag_onoff`
+    -> `..._all`), with the decomp naming both. It also carries type and size,
+    which the lst format cannot.
 
-    | name | lst address | what the decomp calls that address |
-    |---|---|---|
-    | `strlen` | `80267018` | `TRK_strlen` — the debugger's copy |
-    | `evt_fairy_flag_onoff` | `800E8214` | `evt_fairy_flag_onoff_all` |
-
-    In both cases the decomp holds *both* symbols and the lst picked the wrong
-    one, so preferring the lst would keep a known-wrong address. It also keeps
-    the type and size, which the lst format cannot carry at all.
-
-    ⚠️ Nothing is silent: `compare` lists every disagreement, and callers are
-    expected to show it. Two cases is not a large enough sample to make this a
-    law -- see D60.
+    ⚠️ Two cases is not a large sample (D60), so nothing is silent: `compare`
+    lists every disagreement and callers are expected to show it.
     """
     merged = {symbol.name: symbol for symbol in lst.symbols}
     merged.update({symbol.name: symbol for symbol in decomp.named})
@@ -245,9 +228,7 @@ def decomp_path(version: str, root: Path | None) -> Path | None:
 def best_available(lst_path: Path, decomp_root: Path | None, version: str) -> SymbolTable:
     """The richest table that can be assembled, degrading to the lst alone.
 
-    Used wherever a name has to be resolved, so configuring `BLECK_DECOMP` makes
-    ~94 more of the game's documented builtins linkable without changing
-    anything else.
+    Configuring `BLECK_DECOMP` makes ~94 more documented builtins linkable.
     """
     lst = read(lst_path)
     found = decomp_path(version, decomp_root)

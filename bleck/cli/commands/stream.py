@@ -1,7 +1,4 @@
-"""Stream-level commands: raw LZ77.
-
-An escape hatch for working one layer at a time, below the archive commands.
-"""
+"""Raw LZ77 — an escape hatch one layer below the archive commands."""
 
 from __future__ import annotations
 

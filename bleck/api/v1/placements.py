@@ -1,20 +1,8 @@
 """Enemy placement, as JSON.
 
-This is the first editing surface `bleck` exposes as an API rather than a
-command, because it is the one format that is *fully decoded* — all 227 setup
-files on the disc parse with no exceptions (D42) — so a tool built on it can be
-real rather than speculative.
-
-Two directions, deliberately different shapes:
-
-- `MapPlacements` is what a map **currently holds**: every slot, with the enemy
-  name resolved from the catalog. What an editor reads to populate a view.
-- `SetupEdits` is what someone **wants changed**: a sparse list of slots. What
-  an editor sends back, and what a manifest stores.
-
-A read is not an edit turned around. Sending back a whole map as edits would
-rewrite a hundred slots to change one, and lose the distinction between "left
-alone" and "explicitly set to what it already was".
+Two directions, deliberately different shapes: `MapPlacements` is every slot a
+map currently holds (what an editor reads); `SetupEdits` is a sparse list of
+changes (what an editor sends back, and what a manifest stores).
 """
 
 from __future__ import annotations
@@ -29,9 +17,8 @@ from bleck.mods.manifest import placements as manifest_placements
 class Position(BaseModel):
     """A placement in world space.
 
-    ⚠️ Super Paper Mario is 2D with a 3D flip axis, so `z` is not decoration:
-    the same `x`/`y` at a different `z` is a different place in the flipped
-    world. Editors should surface all three.
+    ⚠️ `z` is not decoration: the same `x`/`y` at a different `z` is a different
+    place in the flipped world. Editors should surface all three.
     """
 
     model_config = ConfigDict(extra="forbid")

@@ -1,12 +1,7 @@
 """Declared changes to a map's enemy placement.
 
-Split from `manifest.py` because it is its own subject: `setup/*.dat` has a
-format, a version-dependent stride and a hundred fixed slots, none of which the
-rest of a manifest cares about.
-
-⚠️ Edits are *declared*, never shipped as bytes. `bleck` derives the file at
-build time so the change stays reviewable, undoable and re-appliable — see
-`docs/vision.md`. A blob cannot be opened in an editor.
+⚠️ Edits are *declared*, never shipped as bytes; `bleck` derives the file at
+build time so the change stays reviewable and undoable (`docs/vision.md`).
 """
 
 from __future__ import annotations
@@ -19,11 +14,7 @@ from bleck.mods.errors import ManifestError
 
 @dataclass(frozen=True)
 class PlacementEdit:
-    """One change to one enemy slot, as declared rather than as bytes.
-
-    Declared so the change stays reviewable, undoable and re-appliable — see
-    `docs/vision.md`. `bleck` derives the file at build time.
-    """
+    """One change to one enemy slot, as declared rather than as bytes."""
 
     slot: int
     template: int | None = None

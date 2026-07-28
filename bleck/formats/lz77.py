@@ -75,8 +75,8 @@ MIN_MATCH = 3
 MAX_MATCH = 18
 MAX_DISP = 4096
 
-# Nintendo's own encoder never emits a displacement of 1, though the format
-# permits it. Mirrored here so our output stays in the same shape as theirs.
+# Nintendo's encoder never emits a displacement of 1, though the format permits
+# it. Mirrored so our output keeps the same shape.
 MIN_DISP = 2
 
 
@@ -87,10 +87,9 @@ def _header(size: int) -> bytearray:
 
 
 def compress_literals(data: bytes) -> bytes:
-    """Emit a valid stream with no back-references.
+    """Emit a valid stream with no back-references: ~1.125x the input.
 
-    Always correct, ~1.125x the input. Useful as a fallback and as a control
-    when debugging the real encoder.
+    A fallback, and a control when debugging the real encoder.
     """
     out = _header(len(data))
     for i in range(0, len(data), 8):
@@ -99,9 +98,8 @@ def compress_literals(data: bytes) -> bytes:
     return bytes(out)
 
 
-# How many candidate positions to consider per match. Candidates are visited
-# nearest-first, and the search stops early on a maximal match, so this bound
-# rarely binds in practice.
+# Candidate positions considered per match. Visited nearest-first with an early
+# stop on a maximal match, so this rarely binds.
 MAX_CANDIDATES = 256
 
 
@@ -123,10 +121,8 @@ NO_MATCH = Match(0, 0)
 def _extend(data: bytes, pos: int, src: int, limit: int) -> int:
     """Length of the match at `src`, allowing the copy to overlap `pos`.
 
-    A back-reference is resolved byte-by-byte at decompression time, so a match
-    may legally read bytes it has just produced — that is how run-length
-    patterns are encoded. `data` already holds those bytes, so comparing
-    straight through works.
+    Back-references resolve byte-by-byte, so a match may legally read bytes it
+    has just produced; that is how run-length patterns are encoded.
     """
     n = 0
     while n < limit and data[src + n] == data[pos + n]:
@@ -137,8 +133,8 @@ def _extend(data: bytes, pos: int, src: int, limit: int) -> int:
 def _longest_match(data: bytes, pos: int, end: int) -> Match:
     """Longest match at `pos`, or NO_MATCH.
 
-    Candidates come from searching backwards for the 3-byte prefix; each is then
-    extended with overlap allowed. Ties keep the nearest (smallest) displacement.
+    Candidates come from searching backwards for the 3-byte prefix, then
+    extending with overlap allowed. Ties keep the smallest displacement.
     """
     limit = min(MAX_MATCH, end - pos)
     if limit < MIN_MATCH:

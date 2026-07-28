@@ -1,17 +1,11 @@
-"""The only place that reads the environment.
+"""The only place that reads the environment; `DECLARED` is the complete list.
 
-Every variable the toolkit understands is declared here, so `DECLARED` is the
-complete list — no hunting through the codebase to find what can be configured.
-A lint rule (`lint_plugins/env_access.py`) enforces that `os.environ` and
-`os.getenv` appear nowhere else.
+`lint_plugins/env_access.py` enforces that `os.environ` and `os.getenv` appear
+nowhere else. To add a variable: declare an `EnvVar`, add it to `DECLARED`, and
+expose a reader beside the others.
 
-To add a variable: declare an `EnvVar`, add it to `DECLARED`, and expose a
-reader beside the others.
-
-A `.env` beside the project is loaded automatically on import, so tool paths
-survive between shells without being exported every time. Copy `.env.example`
-and fill it in. ⚠️ The real environment always wins over the file, so a
-one-off `BLECK_DOLPHIN=... bleck ...` still overrides it.
+A `.env` is loaded automatically on import. ⚠️ The real environment always wins
+over the file, so a one-off `BLECK_DOLPHIN=... bleck ...` still overrides it.
 """
 
 from __future__ import annotations
@@ -23,26 +17,18 @@ from pathlib import Path
 TRUTHY = frozenset({"1", "true", "yes", "on"})
 FALSEY = frozenset({"0", "false", "no", "off", ""})
 
-#: Machine-local settings, gitignored. Found by walking up from the working
-#: directory, so it works from anywhere inside a checkout.
+#: Machine-local settings, gitignored. Found by walking up from the cwd.
 DOTENV_NAME = ".env"
 
-#: Only `BLECK_*` is honoured from the file. A `.env` is a convenience for this
-#: toolkit, not a general way to set arbitrary variables for whatever `bleck`
-#: happens to run -- silently injecting `PATH` or `LD_PRELOAD` into a
-#: subprocess is not a power this needs.
+#: Only `BLECK_*` is honoured from the file, so it cannot inject `PATH` or
+#: `LD_PRELOAD` into a subprocess.
 _PREFIX = "BLECK_"
 
 _LOADED_FROM: Path | None = None
 
 
 def _parse_dotenv(text: str) -> list[tuple[str, str]]:  # pylint: disable=container-return
-    """Read `KEY=VALUE` lines. Blank lines, `#` comments and `export ` are fine.
-
-    Deliberately hand-rolled rather than taking a dependency: the format that
-    is actually used here is a dozen lines of `NAME=path`, and this stays
-    readable at that size.
-    """
+    """Read `KEY=VALUE` lines. Blank lines, `#` comments and `export ` are fine."""
     pairs: list[tuple[str, str]] = []
     for line in text.splitlines():
         stripped = line.strip()
@@ -53,9 +39,8 @@ def _parse_dotenv(text: str) -> list[tuple[str, str]]:  # pylint: disable=contai
         name, _, value = stripped.partition("=")
         name = name.strip()
         value = value.strip()
-        # Quotes are stripped so a Windows path with spaces can be quoted, but
-        # backslashes are left exactly as written -- `C:\tools\wit` must not
-        # become `C:  ools\wit` through escape processing.
+        # Quotes are stripped, but backslashes are left as written so
+        # `C:\tools\wit` survives.
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
             value = value[1:-1]
         if name:
@@ -66,8 +51,7 @@ def _parse_dotenv(text: str) -> list[tuple[str, str]]:  # pylint: disable=contai
 def load_dotenv(start: Path | None = None) -> Path | None:
     """Apply the nearest `.env`, without overriding the real environment.
 
-    Returns the file used, or None. Idempotent: values already present are left
-    alone, so calling it twice changes nothing.
+    Returns the file used, or None. Idempotent.
     """
     global _LOADED_FROM  # pylint: disable=global-statement
 
@@ -117,12 +101,8 @@ class EnvSetting:
 
 # --- declarations ---------------------------------------------------------
 
-#: Everything the toolkit generates or is handed lives under one directory.
-#: These are large (a disc image is ~424 MB, an extract ~400 MB), all
-#: gitignored, and none of them are source — grouping them keeps the repository
-#: root readable and makes "what can I safely delete?" a single answer.
-#:
-#: `mods/` is deliberately NOT here: manifests and scripts are committed.
+#: Everything generated or handed to the toolkit — large, gitignored, all
+#: safely deletable. `mods/` is deliberately NOT here; it is committed.
 WORK_DIR = "work"
 
 
@@ -208,8 +188,7 @@ DECLARED: list[EnvVar] = [
 ]
 
 
-# Applied at import so every entry point benefits -- the CLI, `scripts/*.py`,
-# and anything importing `bleck` -- without each having to remember to call it.
+# Applied at import so every entry point benefits without calling it.
 load_dotenv()
 
 
@@ -222,11 +201,7 @@ def text(variable: EnvVar) -> str:
 
 
 def flag(variable: EnvVar) -> bool:
-    """Interpret the variable as a boolean.
-
-    Unrecognised values count as true: a user who sets a flag to anything
-    meant to turn it on.
-    """
+    """Interpret the variable as a boolean. Unrecognised values count as true."""
     raw = os.environ.get(variable.name)
     if raw is None:
         return False

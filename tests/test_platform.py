@@ -23,9 +23,8 @@ ALL_PROFILES = [
 ]
 
 
-#: Taken from the platform package rather than restated here. A hardcoded list
-#: silently stopped covering `powerpc-gcc` and `wstrt` when those were added,
-#: which is exactly the regression this test exists to catch.
+#: Taken from the platform package, not restated: a hardcoded list silently
+#: stopped covering `powerpc-gcc` and `wstrt` when those were added.
 ALL_TOOLS = platforms.ALL_TOOLS
 
 
@@ -73,12 +72,8 @@ class TestProfiles:
 
 
 class TestDolphinIsNotDolphinTool:
-    """The emulator and the disc utility ship together and are easy to confuse.
-
-    They are not interchangeable: DolphinTool cannot boot a game and Dolphin
-    cannot convert an image. Finding one where the other was meant produces a
-    baffling failure, so the two must never share an executable name.
-    """
+    """DolphinTool cannot boot a game and Dolphin cannot convert an image, so
+    the two must never share an executable name."""
 
     def test_no_platform_shares_a_name_between_them(self):
         for profile in ALL_PROFILES:
@@ -87,12 +82,7 @@ class TestDolphinIsNotDolphinTool:
             assert not emulator_names & tool_names, profile.name
 
     def test_linux_never_searches_for_bare_dolphin(self):
-        """`dolphin` on Linux is KDE's file manager, and is often installed.
-
-        Searching for it by that name would launch a file browser instead of the
-        emulator — which looks like `bleck` doing something bizarre rather than
-        like a missing dependency.
-        """
+        """`dolphin` on Linux is KDE's file manager, and is often installed."""
         assert "dolphin" not in platforms.linux.PROFILE.tool(platforms.DOLPHIN).names
 
     def test_each_platform_names_its_emulator_binary(self):
@@ -290,11 +280,7 @@ class TestToolchainNamesPerPlatform:
         assert all("eabi" in name for name in names)
 
     def test_linux_prefers_devkitppc_over_the_distro_compiler(self):
-        """devkitPPC targets the ABI the game was built with; Debian's does not.
-
-        Order matters: the distro compiler works but needs -fno-pic -fno-PIE
-        and rejects -mgcn, so finding it first would silently pick the fussier
-        toolchain on a machine that has both.
-        """
+        """devkitPPC targets the game's ABI; the distro compiler needs -fno-pic
+        -fno-PIE and rejects -mgcn, so order decides which one a mixed host picks."""
         names = platforms.linux.PROFILE.tool(platforms.PPC_GCC).names
         assert names.index("powerpc-eabi-gcc") < names.index("powerpc-linux-gnu-gcc")

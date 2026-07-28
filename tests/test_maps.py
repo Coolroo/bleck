@@ -1,10 +1,7 @@
 """Reading the game's map list off an extracted disc.
 
-Map names are not a table this toolkit maintains -- they are archive filenames.
-That is the property worth pinning: `files/map/aa4_01.bin` must yield exactly
-`aa4_01`, because that string goes straight into `code.maps` and on to
-`mapDataPtr`. An off-by-one in the suffix stripping would produce names that
-look right and match nothing.
+A map name is its archive filename: `files/map/aa4_01.bin` must yield exactly
+`aa4_01`, since that string goes straight through to `mapDataPtr`.
 """
 
 from __future__ import annotations
@@ -69,11 +66,9 @@ class TestMapIndex:
 class TestChapters:
     """Turning `he1_01` into something a person recognises.
 
-    The prefix-to-chapter mapping is fixed by two anchors in spm-headers --
-    `he1_01_tippi_tutorial_evt` (chapter 1-1) and `sammerDefsCh6` -- with
-    contiguous `mapData[]` runs between them. These guard the result, because
-    the obvious reading of a prefix is not reliable: `sp` is chapter 5, not
-    "space".
+    The prefix-to-chapter mapping is interpolated between two spm-headers
+    anchors (`he1_01_tippi_tutorial_evt`, `sammerDefsCh6`); prefixes do not
+    read literally, so the result is guarded.
     """
 
     def test_sp_is_chapter_five_not_space(self):
@@ -86,8 +81,7 @@ class TestChapters:
         assert numbered == [1, 2, 3, 4, 5, 6, 7, 8]
 
     def test_the_anchors_that_fix_the_ordering(self):
-        # If either of these moves, the whole interpolation between them is
-        # invalid and every chapter number here becomes a guess.
+        # If either anchor moves, every interpolated chapter number is a guess.
         by_prefix = {a.prefix: a.chapter for a in maps.AREAS}
         assert by_prefix["he"] == 1
         assert by_prefix["wa"] == 6

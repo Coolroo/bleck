@@ -1,14 +1,6 @@
-"""macOS specifics.
-
-Three things differ from Linux in ways that matter:
-
-1. **Dolphin is an application bundle**, so its tools live inside
-   `Dolphin.app/Contents/MacOS/` rather than on PATH.
-2. **Homebrew's prefix depends on the CPU** — `/opt/homebrew` on Apple Silicon,
-   `/usr/local` on Intel. Both are listed; only one will exist.
-3. **Finder creates `.DS_Store` files** in any directory a user browses, and
-   non-native volumes collect `._` AppleDouble sidecars. Browsing an extracted
-   disc would otherwise put that clutter onto a rebuilt image.
+"""macOS specifics: Dolphin's tools live inside `Dolphin.app/Contents/MacOS/`,
+Homebrew's prefix depends on the CPU, and Finder clutter (`.DS_Store`, `._`
+sidecars) must never reach a rebuilt image.
 """
 
 from __future__ import annotations
@@ -23,8 +15,7 @@ from .base import (
     ToolLocation,
 )
 
-# Apple Silicon first: /usr/local also exists on those machines but is not
-# where Homebrew installs.
+# Apple Silicon first; /usr/local exists there too but is not Homebrew's.
 HOMEBREW_PREFIXES = ["/opt/homebrew", "/usr/local"]
 
 DOLPHIN_BUNDLES = [
@@ -60,8 +51,7 @@ PROFILE = PlatformProfile(
             ),
         ),
         DOLPHIN: ToolLocation(
-            # The bundle's executable is `Dolphin`; `dolphin-emu` is what a
-            # Homebrew-built binary is called.
+            # `Dolphin` in the bundle; `dolphin-emu` when Homebrew-built.
             names=["Dolphin", "dolphin-emu"],
             directories=[
                 *DOLPHIN_BUNDLES,
@@ -75,8 +65,7 @@ PROFILE = PlatformProfile(
             ),
         ),
         WSTRT: ToolLocation(
-            # No Homebrew formula exists; the prefixes are listed anyway because
-            # that is where a hand-installed binary usually lands.
+            # No Homebrew formula; the prefixes are where hand-installs land.
             names=["wstrt"],
             directories=[
                 "/usr/local/bin",
@@ -94,8 +83,7 @@ PROFILE = PlatformProfile(
             ),
         ),
         PPC_GCC: ToolLocation(
-            # Homebrew has no PowerPC cross-compiler cask; devkitPPC installs to
-            # the same /opt/devkitpro prefix it uses on Linux.
+            # No Homebrew cask; devkitPPC uses the same prefix as on Linux.
             names=["powerpc-eabi-gcc"],
             directories=[
                 "/opt/devkitpro/devkitPPC/bin",

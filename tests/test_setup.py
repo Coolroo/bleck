@@ -1,9 +1,7 @@
 """Reading and writing `setup/*.dat` — enemy and item placement.
 
-The load-bearing property is **byte-exact round-tripping**. Roughly 70 of an
-entry's 112 bytes are undocumented, so a writer that rebuilds an entry from the
-fields it understands would quietly discard the rest. Everything here is really
-in service of "changing one thing changes exactly one thing".
+The load-bearing property is **byte-exact round-tripping**: ~70 of an entry's
+112 bytes are undocumented, so changing one thing must change exactly one thing.
 """
 
 from __future__ import annotations
@@ -52,12 +50,7 @@ class TestRoundTrip:
         assert setup.parse(raw).to_bytes() == raw
 
     def test_undocumented_bytes_survive_an_edit(self):
-        """The point of the whole design.
-
-        An entry has ~70 bytes nobody has decoded. Editing the template must
-        carry them through untouched, or a one-field change silently rewrites
-        most of the entry.
-        """
+        """Editing one field must carry the ~70 undecoded bytes through untouched."""
         noise = bytes(range(0x10, 0x10 + 112 - 16))
         raw = build(6, slots={0: entry(5, tail=noise)})
         data = setup.parse(raw)
@@ -83,8 +76,7 @@ class TestRoundTrip:
 
 class TestParsing:
     def test_the_slot_count_is_always_a_hundred(self):
-        # Fixed regardless of how many are used -- which is why a nearly empty
-        # map still produces an 11 KB file.
+        # Fixed regardless of use, so a near-empty map still writes ~11 KB.
         assert len(setup.parse(build(6)).enemies) == 100
 
     def test_an_unknown_version_is_rejected_with_the_known_ones(self):
@@ -104,9 +96,8 @@ class TestParsing:
             setup.parse(raw)
 
     def test_empty_slots_are_judged_by_template_not_by_blankness(self):
-        """Unused slots are not blank -- they carry a default in an
-        undocumented field, so an any-non-zero test counts 6,438 slots where
-        only ~1,328 place anything."""
+        """Unused slots are not blank: an any-non-zero test counts 6,438 slots
+        where only ~1,328 place anything."""
         raw = build(
             6,
             slots={0: entry(0, position=(0, 0, 0), tail=bytes([0] * 4 + [0, 0, 1, 44]))},
@@ -172,8 +163,8 @@ class TestAgainstTheRealDisc:
 class TestNames:
     """Turning `template 250` into `Squiglet (e_octa2)`.
 
-    Two hops, and the middle one is the easy thing to get wrong: a setup entry
-    names a *template*, templates name a *tribe*, and only the tribe has a name.
+    Two hops: an entry names a template, a template names a tribe, and only the
+    tribe has a name.
     """
 
     def test_a_template_resolves_through_its_tribe(self):
@@ -215,18 +206,14 @@ class TestTheCommittedNpcCatalog:
         assert names.lookup(435) is None
 
     def test_goomba_survives_the_enum_collision(self):
-        """`npcdrv.h` has several `NPC_` enums, and `NPCMoveMode` also starts at
-        0. Parsing them all named tribe 0 "Move Walk No Hit"."""
+        """`npcdrv.h` has several `NPC_` enums; parsing them all named tribe 0
+        "Move Walk No Hit"."""
         assert setup.load_names().lookup(2).describe() == "Goomba (e_kuribo)"
 
 
 class TestDeclaredEdits:
-    """Edits live in `mod.json` and the bytes are derived at build time.
-
-    A mod could ship a patched `.dat` instead. It would work and be a dead end:
-    a blob cannot be reviewed, undone, or re-applied to a corrected base. See
-    `docs/vision.md`.
-    """
+    """Edits live in `mod.json`; the bytes are derived at build time, never
+    shipped as a blob (`docs/vision.md`)."""
 
     def parse(self, body: dict):
 
@@ -307,12 +294,8 @@ class TestApplyingEdits:
 
 
 class TestOrphanedSlots:
-    """The game stops reading setup entries at the first empty one (D79).
-
-    A cleared slot in the middle silently discards everything past it. That was
-    open for a day as "an enemy did not appear", with two plausible and entirely
-    wrong explanations, because the file `bleck` wrote looked perfectly fine.
-    """
+    """The game stops reading setup entries at the first empty one (D79), so a
+    cleared middle slot silently discards everything past it."""
 
     def _file(self, used):
         """A parsed setup file whose listed slots are occupied, rest empty."""

@@ -1,11 +1,7 @@
 """Shared fixtures.
 
-Two constraints shape this suite:
-
-1. The LZ77 compressor runs ~12 s/MB, so tests compress only small synthetic
-   inputs. Anything that compresses real game data is marked `slow`.
-2. Game data is not in the repo. Tests needing it skip cleanly when absent, so a
-   fresh clone still runs green.
+LZ77 runs ~12 s/MB, so only small synthetic inputs are compressed here; real
+game data is absent from a fresh clone, so tests needing it skip cleanly.
 """
 
 from __future__ import annotations

@@ -1,9 +1,7 @@
 """Recursive-descent parser: tokens to a `Program`.
 
-The grammar is deliberately small. Every construct here has to survive being
-lowered onto `evt`, a VM with two-operand instructions and no expression stack,
-so syntax that would imply arbitrary nesting depth at runtime is not offered.
-What is offered maps down cleanly — see `compiler.py`.
+The grammar stays small because `evt` has two-operand instructions and no
+expression stack; syntax implying arbitrary runtime nesting is not offered.
 """
 
 from __future__ import annotations
@@ -43,19 +41,13 @@ _KEYWORD_ONLY_STATEMENTS = {
 
 
 class _Parser:  # pylint: disable=too-many-public-methods
-    """Token cursor with the usual expect/accept helpers.
-
-    The method count is high by design: a recursive-descent parser has roughly
-    one method per grammar production, and collapsing them would trade a long
-    class for a long function.
-    """
+    """Token cursor with the usual expect/accept helpers."""
 
     def __init__(self, tokens: list[Token], source: str) -> None:
         self.tokens = tokens
         self.source = source
         self.index = 0
-        # Statement dispatch as data, so `parse_statement` stays a lookup rather
-        # than a ladder of keyword tests that grows with the language.
+        # Statement dispatch as data, so `parse_statement` stays a lookup.
         self.compound_statements = {
             "var": self.parse_var,
             "if": self.parse_if,
@@ -111,8 +103,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
         if self.current.kind in (TokenKind.NEWLINE, TokenKind.END):
             self.skip_newlines()
             return
-        # A closing brace ends the last statement in a block without needing a
-        # line of its own, so `{ wait(1) }` on one line is legal.
+        # A closing brace also ends a statement, so `{ wait(1) }` is legal.
         if self.current.is_op("}"):
             return
         raise self.fail(f"unexpected {self.current} after statement")
@@ -291,8 +282,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
                 return left
 
             self.advance()
-            # Every operator here is left-associative, so the right operand is
-            # parsed at one level tighter.
+            # All operators are left-associative: parse the right side tighter.
             right = self.parse_expression(precedence + 1)
             left = tree.Binary(
                 position=token.position,
@@ -374,11 +364,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
 
 
 def _canonical_operator(spelling: str) -> str:
-    """Fold the two accepted spellings of the boolean operators into one.
-
-    `and`/`&&` and `or`/`||` are both allowed at the surface so neither the Lua
-    reflex nor the C reflex is wrong; the tree only ever sees the word form.
-    """
+    """Fold `&&`/`||` onto `and`/`or`; the tree only sees the word forms."""
     if spelling == "&&":
         return "and"
     if spelling == "||":

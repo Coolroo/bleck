@@ -1,8 +1,5 @@
-"""Wrappers around external tools.
-
-Disc I/O is delegated rather than reimplemented — `wit` for ISO/WBFS and
-`dolphin-tool` for RVZ, which `wit` cannot read.
-"""
+"""Wrappers around external tools: `wit` for ISO/WBFS, `dolphin-tool` for RVZ
+(which `wit` cannot read)."""
 
 from . import disc
 

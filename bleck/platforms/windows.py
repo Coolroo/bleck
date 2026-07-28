@@ -12,9 +12,8 @@ from .base import (
     ToolLocation,
 )
 
-# Dolphin ships as a portable folder rather than an installer, so there is no
-# canonical install path — these are the conventional ones. A user who unzipped
-# it somewhere else sets BLECK_DOLPHIN instead.
+# Dolphin ships as a portable folder, so there is no canonical install path —
+# these are conventional. Elsewhere, set BLECK_DOLPHIN.
 DOLPHIN_DIRECTORIES = [
     r"C:\Program Files\Dolphin",
     r"C:\Program Files (x86)\Dolphin",
@@ -71,8 +70,7 @@ PROFILE = PlatformProfile(
             ),
         ),
         PPC_GCC: ToolLocation(
-            # devkitPPC is the only realistic source on Windows; there is no
-            # distro package to fall back to.
+            # devkitPPC is the only realistic source on Windows.
             names=["powerpc-eabi-gcc.exe", "powerpc-eabi-gcc"],
             directories=[
                 r"C:\devkitPro\devkitPPC\bin",

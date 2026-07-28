@@ -26,8 +26,7 @@ _PROFILES = {
     "Windows": windows.PROFILE,
 }
 
-# Unknown platforms behave like Linux, which is the least surprising default
-# for anything else POSIX-shaped (BSD, for instance).
+# Unknown platforms behave like Linux — the sane default for anything POSIX.
 CURRENT: PlatformProfile = _PROFILES.get(_platform.system(), linux.PROFILE)
 
 

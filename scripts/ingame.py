@@ -1,39 +1,21 @@
 """Run a mod in Dolphin and read its report block, unattended.
 
-Three rounds of asking a human to look at a screen produced two wrong
-conclusions (D38, D40). Reading the game's memory from outside settled the same
-question in four runs and has since answered four more, so this is the default
-way to test anything in-game — especially when nobody is at the machine.
-
-How it works
-------------
-A mod writes progress into a fixed block of the game's RAM;
-`dolphin-memory-engine` attaches to the running Dolphin *process* and reads it
-back. No emulator configuration, no fork, stock builds. The mod side of the
-convention is `docs/diagnostics/probe.h`.
+The default way to test anything in-game (D38, D40): a mod writes progress into
+a fixed block of RAM and `dolphin-memory-engine` reads it back from the running
+process. Stock Dolphin, no configuration. Mod side: `docs/diagnostics/probe.h`.
 
     uv run python scripts/ingame.py menu-watch --words 12
     uv run python scripts/ingame.py coin-tick --watch-gw 30
 
-Dolphin is always stopped at the end, including on failure or Ctrl-C.
+Dolphin is always stopped at the end, including on failure or Ctrl-C. A run
+costs 2-3 minutes, so read `work/build/ingame.log` rather than re-running.
 
-Button presses
---------------
-`--press a b 1 2` sends keystrokes to Dolphin once gameplay starts, so a
-button-triggered feature can be checked without a person tapping keys on cue.
+⚠️ `--press` is **attended only**: it needs an unlocked session with Dolphin in
+the foreground (D48). Everything else works on a locked machine.
 
-⚠️ **Attended only.** D48 measured `SendKeys` and `PostMessage`, which post to
-a message queue Dolphin never reads — that finding stands. `scripts/keys.py`
-uses `SendInput`, which injects below DirectInput's polling and does work, but
-still needs an unlocked session with Dolphin in the foreground. On a locked
-machine there is no foreground window to give it to, so the unattended limit in
-D48 is unchanged.
-
-⚠️ It lives in `scripts/`, **not** in the `bleck` package, and must stay there.
-Synthesising input is a reasonable thing for a test harness to do on the
-machine of the person running it, and not something a modding toolkit should
-ship to other people's computers. `tests/test_boundaries.py` enforces the
-split.
+⚠️ `scripts/keys.py` lives in `scripts/`, **not** in the `bleck` package, and
+must stay there -- a modding toolkit should not ship input synthesis to other
+people's computers. `tests/test_boundaries.py` enforces the split.
 """
 
 from __future__ import annotations
@@ -69,19 +51,15 @@ SEQUENCES = ["LOGO", "TITLE", "GAME", "MAPCHANGE", "GAMEOVER", "LOAD"]
 SEQ_GAME = 2
 
 #: `seq_mapchange_wp` (eu0) -- a pointer to the map-change sequence's work.
-#: Unlike `seqWork.p0` this survives the transition, so it says which map the
-#: game is *in* rather than which one it is on its way to. See D75.
+#: Unlike `seqWork.p0` it survives the transition, so it says which map the game
+#: is *in* rather than which one it is on its way to (D75).
 SEQ_MAPCHANGE_WP = 0x805AE0A8
 
 #: `SeqMapChangeWork.mapName`, from `spm/seq_mapchange.h`.
 SEQ_MAPCHANGE_MAP_NAME = 0x20
 
-#: `npcdrv_wp` (eu0) -- a pointer to `NPCWork`, the live NPC list.
-#:
-#: ⚠️ This exists so "how many enemies spawned" stops being a question answered
-#: by looking at a screen. Every placement conclusion so far has rested on
-#: someone reporting what they saw, and D76 is what that costs when the thing
-#: doing the reporting is wrong.
+#: `npcdrv_wp` (eu0) -- a pointer to `NPCWork`, the live NPC list. It exists so
+#: "how many enemies spawned" is measured rather than eyeballed (D76).
 NPCDRV_WP = 0x805AE188
 
 #: `NPCWork`, from `spm/npcdrv.h`: `num` at 0x04, `entries` at 0x08.
@@ -134,10 +112,8 @@ class Snapshot:
 class ReadResult:
     """One poll of the running game: what was read, or why nothing was.
 
-    The `problem` half exists because silence used to mean four different
-    things — no Dolphin, wrong Dolphin, game not up yet, game hung — and the
-    run printed the same nothing for all of them. A whole session was lost to
-    that. Reporting *why* a read failed turns a dead end into a diagnosis.
+    `problem` distinguishes no Dolphin, wrong Dolphin, game not up yet and game
+    hung -- silence looks the same for all four.
     """
 
     snapshot: Snapshot | None = None
@@ -172,12 +148,12 @@ class Session:
         # `-b` boots straight into the game rather than opening the game list.
         args = [self.dolphin, "-b", "-e", str(self.image)]
         if self.unlimited:
-            # 0 means "no limit". Gameplay is reached ~45s in at 100% speed, and
-            # almost all of that is logos nobody is watching.
+            # 0 means "no limit". Gameplay is ~45s in at 100% speed, nearly all
+            # of it logos nobody is watching.
             args += ["-C", "Dolphin.Core.EmulationSpeed=0"]
         if self.state is not None:
-            # Skips the boot entirely, and carries a save with it -- which is
-            # what stops Mario being invisible for want of a profile.
+            # Skips the boot, and carries a save with it -- which is what stops
+            # Mario being invisible for want of a profile.
             args += ["-s", str(self.state)]
         return args
 
@@ -207,16 +183,9 @@ class Session:
     def _destination(dme) -> str:
         """Which map the game is in, from `seq_mapchange_wp->mapName`.
 
-        ⚠️ This used to read `seqWork.p0`, and that was wrong in a way that
-        produced four wrong conclusions (D75). `p0` is a *parameter to the
-        map-change sequence* and only means anything while one is running.
-        Between changes it holds whatever was left there, so the field went
-        blank and a run that had changed maps looked exactly like one that had
-        not. D70, D73 and D74 all rest on that mistake.
-
-        `SeqMapChangeWork` is the map-change sequence's own work struct and
-        keeps `mapName` after the change completes, so this answers "where is
-        the game" rather than "is a transition in flight right now".
+        ⚠️ Never read `seqWork.p0` for this. It only means anything *during* a
+        map change, so a run that changed maps looks like one that did not --
+        which is what D70, D73 and D74 got wrong before D75.
 
         Layout from `spm/seq_mapchange.h`: `areaName[32]` at 0x00,
         `mapName[32]` at 0x20, `beroName[32]` (the door) at 0x40.
@@ -230,7 +199,7 @@ class Session:
             return ""
         end = raw.find(b"\0")
         text = raw[: end if end >= 0 else 32].decode("ascii", "replace")
-        # Map names are lowercase ASCII, digits and underscores. Anything else
+        # Map names are lowercase ASCII, digits and underscores; anything else
         # means the struct is not populated yet.
         return text if text and all(c.isalnum() or c == "_" for c in text) else ""
 
@@ -238,15 +207,11 @@ class Session:
     def _npcs(dme) -> str:
         """The live NPC list, as `slot=name` for anything from a setup file.
 
-        `setupFileIndex` is **1-based**, so a `setup` slot 2 shows here as 3.
-        It is printed as the slot the manifest names, minus one, because that
-        is the number someone is actually holding when they ask why an enemy
-        did not appear.
+        `setupFileIndex` is **1-based**; it is printed minus one, to match the
+        slot numbers the manifest uses.
         """
-        # ⚠️ Every branch says *something*. An empty string here would make "no
-        # enemies spawned" and "the list could not be read" identical, which is
-        # precisely the confusion that produced D76 -- and this field exists to
-        # answer a question of exactly that shape.
+        # ⚠️ Every branch says *something*. An empty string would make "no
+        # enemies spawned" and "the list could not be read" identical (D76).
         try:
             work = dme.read_word(NPCDRV_WP)
             if not 0x80000000 <= work < 0x94000000:
@@ -257,10 +222,9 @@ class Session:
             return f"npcs=? ({exc})"
         if not 0x80000000 <= entries < 0x94000000:
             return f"npcs=? (entries is 0x{entries:08X})"
-        # ⚠️ `num` is the array's *capacity*, not how many are alive. It reads 80
-        # from the first frame of the logo onward, long before any map exists.
-        # Liveness is `flag8 & 1` per entry, so every slot has to be walked and
-        # filtered rather than trusting a count.
+        # ⚠️ `num` is the array's *capacity*, not how many are alive -- it reads
+        # 80 from the logo onward. Liveness is `flag8 & 1` per entry, so every
+        # slot is walked and filtered rather than trusting the count.
         if not 0 < count <= NPC_SCAN_LIMIT:
             return f"npcs=? (num is {count}, outside anything plausible)"
         try:
@@ -280,9 +244,7 @@ class Session:
             raw = block[at + NPC_NAME : at + NPC_NAME + 32]
             end = raw.find(b"\0")
             name = raw[: end if end >= 0 else 32].decode("ascii", "replace")
-            # `setupFileIndex` is 1-based; the manifest's slots are 0-based, and
-            # the slot number is what someone is holding when they ask why an
-            # enemy did not appear.
+            # `setupFileIndex` is 1-based; the manifest's slots are 0-based.
             where = f"slot{setup_index - 1}" if setup_index else "-"
             found.append(f"{where}:{name}")
         return f"npcs[{len(found)}] " + " ".join(found) if found else "npcs[0]"
@@ -316,10 +278,9 @@ class Session:
                 )
             )
         except RuntimeError as exc:
-            # Attached to the process, but the emulated address space is not
-            # readable. Normal for a second or two after launch; if it persists,
-            # the game never started -- which is a *result*, and used to be
-            # indistinguishable from the tool failing to attach at all.
+            # Attached, but the emulated address space is not readable. Normal
+            # for a second or two after launch; if it persists, the game never
+            # started -- which is a *result*, not a failure to attach.
             return ReadResult(problem=f"attached, but memory is unreadable: {exc}")
 
 
@@ -334,9 +295,8 @@ CHUNK = 1 << 20
 def find_bytes(dme, pattern: bytes) -> list[int]:  # pylint: disable=container-return
     """Every address in the game's RAM holding `pattern`.
 
-    Used to answer "which copy of a file did the game actually load?" without
-    knowing anything about how it loads them: mark two candidates differently,
-    then look for the marks. See D13.
+    Answers "which copy of a file did the game load?" without knowing how it
+    loads them: mark two candidates differently, then look for the marks (D13).
     """
     hits: list[int] = []
     overlap = len(pattern) - 1
@@ -364,13 +324,8 @@ def running_dolphins() -> list[int]:
     """PIDs of Dolphin processes already running.
 
     ⚠️ An existing instance breaks a run in a way that reads as the mod being
-    broken. `dolphin-memory-engine` attaches to *a* Dolphin process, not to the
-    one this script launched -- and if it picks an idle one, with no game
-    emulating, `hook()` simply fails and every read reports nothing.
-
-    An idle Dolphin left over from an earlier session cost two rounds of
-    debugging exactly this way. `docs/handoff.md` has warned about it for a
-    while; a warning nobody is shown at the moment it matters is not a control.
+    broken: `dolphin-memory-engine` attaches to *a* Dolphin, and if it picks an
+    idle one every read reports nothing.
     """
     try:
         found = subprocess.run(
@@ -392,8 +347,7 @@ def running_dolphins() -> list[int]:
 def build(mod: str, image: Path, boot_map: str = "") -> None:
     command = ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"]
     if boot_map:
-        # The disc drives itself to the map, so the run stays unattended --
-        # which is the only kind of run this script can do (D48).
+        # The disc drives itself to the map, so the run stays unattended (D48).
         command += ["--map", boot_map]
     result = subprocess.run(
         command,
@@ -518,10 +472,8 @@ def main() -> int:
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 
-    # Everything is written here as well as printed. A run costs two to three
-    # minutes, and reading the console output through `tail` has already thrown
-    # away a probe word that then needed the whole run repeating. The log is
-    # always complete, so re-reading is free.
+    # ⚠️ Everything is written here as well as printed. A run costs 2-3 minutes;
+    # the log is always complete, so re-reading it is free and re-running is not.
     log_path = Path(args.log) if args.log else registry.build_root() / "ingame.log"
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("w", encoding="utf-8")
@@ -559,8 +511,8 @@ def main() -> int:
             elapsed = int(time.time() - start)
 
             # Dolphin exiting on its own is a result, not an inconvenience: it
-            # usually means the game crashed. Silently running out the clock
-            # here once made a hard crash look like a mod that did nothing.
+            # usually means the game crashed. Running out the clock instead
+            # makes a hard crash look like a mod that did nothing.
             if session.exited:
                 say(f"[t+{elapsed:>3}s] *** dolphin exited on its own ***")
                 break
@@ -577,10 +529,9 @@ def main() -> int:
 
             result = session.read(args.probe, args.words, args.watch_gw, args.npcs)
             if not result.ok:
-                # Say why, and keep saying it if it persists. A run that prints
-                # nothing for three minutes teaches nothing; one that says
-                # "attached, but memory is unreadable" for three minutes says
-                # the game never started.
+                # Say why, and keep saying it if it persists: three minutes of
+                # "attached, but memory is unreadable" says the game never
+                # started, where three minutes of silence says nothing.
                 if result.problem != seen:
                     say(f"[t+{elapsed:>3}s] {result.problem}")
                     seen = result.problem
@@ -589,9 +540,8 @@ def main() -> int:
                     say(f"[t+{elapsed:>3}s] ... still: {result.problem}")
                     quiet = elapsed
                 continue
-            # Buttons are pressed once gameplay is actually up, not on a timer:
-            # the game reaching SEQ_GAME is the only reliable signal that it is
-            # listening, and a timer would drift with load times.
+            # Pressed once gameplay is up, not on a timer: SEQ_GAME is the only
+            # reliable signal, and a timer would drift with load times.
             if (
                 args.press
                 and not pressed
@@ -600,10 +550,9 @@ def main() -> int:
             ):
                 pressed = True
                 say(f"[t+{elapsed:>3}s] ready to press {' '.join(args.press)}")
-                # Politely first; Windows usually refuses a background process,
-                # so fall back to waiting for a human to click the window. Keys
-                # are never sent to an unfocused Dolphin -- they would land in
-                # whatever *is* focused, which is nobody's idea of a test.
+                # Windows usually refuses focus to a background process, so fall
+                # back to waiting for a human click. Keys are never sent to an
+                # unfocused Dolphin -- they would land in whatever *is* focused.
                 if not keys.focus(session.process.pid) and not keys.is_foreground(
                     session.process.pid
                 ):
@@ -616,9 +565,8 @@ def main() -> int:
                     say(f"    {button}: {'sent' if outcome.sent else outcome.problem}")
 
             line = result.snapshot.render()
-            # A heartbeat, because "no output" otherwise means both "nothing
-            # changed" and "the game froze" -- and telling those apart is
-            # usually the whole question.
+            # A heartbeat: "no output" otherwise means both "nothing changed"
+            # and "the game froze", and telling those apart is the question.
             if line != seen:
                 say(f"[t+{elapsed:>3}s] {line}")
                 seen = line

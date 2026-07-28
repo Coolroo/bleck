@@ -1,8 +1,7 @@
 """Disc-level operations, delegated to external tools.
 
 `wit` handles ISO/WBFS and the rebuild; it cannot read RVZ, so `dolphin-tool`
-converts those first. Both are probed before use so a missing dependency
-produces an actionable message rather than a traceback.
+converts those first.
 """
 
 from __future__ import annotations
@@ -79,10 +78,7 @@ def _ensure_parent(path: Path) -> None:
     """Create an output's parent directory before an external tool writes there.
 
     Neither wit nor DolphinTool creates missing parents, and both report the
-    failure uninformatively — DolphinTool says only "Conversion failed", naming
-    neither the path nor the reason. This bites on exactly the fresh-machine
-    path `bleck extract disc.rvz extracted/eu0`, where `extracted/` does not
-    exist yet.
+    failure uninformatively (DolphinTool says only "Conversion failed").
     """
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -120,9 +116,8 @@ def extract(image: Path, dest: Path, keep_iso: bool = False) -> None:
 class ImageFormat(Enum):
     """Output disc image formats.
 
-    WBFS is the safe default for sharing: scrubbed to ~424 MB and supported by
-    every Dolphin build. RVZ is smaller still (~249 MB) but needs Dolphin
-    5.0-12188 (2020) or newer — older builds reject it as "not a GC/Wii ISO".
+    WBFS (~424 MB) is the safe default for sharing: every Dolphin build reads
+    it. RVZ is smaller (~249 MB) but needs Dolphin 5.0-12188 (2020) or newer.
     """
 
     ISO = "iso"
@@ -143,16 +138,9 @@ class ImageFormat(Enum):
 def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
     """Rebuild an extracted filesystem into an image wit can write.
 
-    --align-files is mandatory: upstream requires it and omitting it fails
-    subtly rather than loudly. It is passed unconditionally so callers cannot
-    forget it.
-
-    --overwrite is also unconditional, and that is deliberate. Whether the user
-    may clobber the destination is decided earlier by `guard_overwrite`, which
-    refuses without `--force`; reaching here means the answer was yes. Leaving
-    it off made `--force` a half-truth — `bleck` allowed the overwrite and then
-    `wit` refused it, reporting ERROR #64 FILE ALREADY EXISTS after the build
-    had already been staged.
+    ⚠️ `--align-files` is mandatory and fails subtly when omitted, so it is
+    passed unconditionally. `--overwrite` likewise: `guard_overwrite` has
+    already decided whether clobbering is allowed.
     """
     wit = find_tool(WIT)
     _ensure_parent(out)
@@ -169,16 +157,15 @@ def build(source: Path, out: Path, wit_format: str = "--iso") -> None:
     )
 
 
-# dolphin-tool requires these explicitly for RVZ; these are its suggested
-# values. Level 5 rather than the 19 seen on retail dumps — 19 is far slower
-# for a few percent, which is the wrong trade for an iteration artifact.
+# dolphin-tool requires these explicitly for RVZ. Level 5, not the 19 seen on
+# retail dumps: 19 is far slower for a few percent.
 RVZ_BLOCK_SIZE = "131072"
 RVZ_COMPRESSION = "zstd"
 RVZ_LEVEL = "5"
 
 
 def convert_to_rvz(src: Path, dest: Path) -> None:
-    """ISO -> RVZ. Roughly a 14x size reduction, and Dolphin reads it natively."""
+    """ISO -> RVZ. Roughly a 14x size reduction; Dolphin reads it natively."""
     tool = find_tool(DOLPHIN_TOOL)
     _ensure_parent(dest)
     _run(
@@ -217,7 +204,7 @@ def build_image(
         build(source, out, "--wbfs")
         return
 
-    # A distinct hidden name, not `out.with_suffix('.iso')` — that would collide
+    # A distinct hidden name, not `out.with_suffix('.iso')`: that could collide
     # with a real ISO the user already has, and wit refuses to overwrite.
     staging_iso = out.parent / f".{out.stem}.staging.iso"
     staging_iso.unlink(missing_ok=True)

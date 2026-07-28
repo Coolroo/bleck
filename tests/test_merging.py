@@ -1,13 +1,10 @@
 """Several mods compiled into one module.
 
-Step 2 of `docs/plan-merging.md`. The loader opens exactly one `/mod/mod.rel`
-and does not care how many mods went into it, so merging at compile time
-satisfies that limit without any runtime REL chaining — the part nobody in this
-scene has solved (D39).
+Step 2 of `docs/plan-merging.md`: the loader opens exactly one `/mod/mod.rel`,
+so merging at compile time avoids unsolved runtime REL chaining (D39).
 
-⚠️ None of this shows two mods' scripts actually *running*. That needs a game
-and two probe slots; D51 installed perfectly by every mechanical check and still
-froze. These tests cover what can be checked without one.
+⚠️ None of this shows two mods' scripts actually *running* — that needs a game
+and two probe slots (compare D51, which installed cleanly and still froze).
 """
 
 from __future__ import annotations
@@ -59,8 +56,7 @@ class TestNamespacing:
         assert "bleck_beta_string_0" in out
 
     def test_colliding_slugs_name_both_mods(self):
-        # `hard-mode` and `hard mode` both reduce to `hard_mode`, and the
-        # result would be a linker error about a symbol nobody wrote.
+        # Both reduce to `hard_mode`; unreported it is a baffling linker error.
         with pytest.raises(ScriptError) as caught:
             merged(part("hard-mode", LOOPER), part("hard mode", GREETER))
         message = str(caught.value)
@@ -86,12 +82,7 @@ class TestSharedRuntime:
         assert "BLECK_ENTRY_COUNT 2" in out
 
     def test_a_mod_without_main_contributes_no_entry(self):
-        """A disc where only one of several mods loops is entirely ordinary.
-
-        With one entry left the single-mod form is emitted rather than a table
-        of one — deliberately, so a disc that ends up with one entry looks like
-        a disc that only ever had one.
-        """
+        """With one entry left, the single-mod form is emitted, not a table of one."""
         out = merged(
             part("alpha", LOOPER),
             part("beta", "script greet {\n gw[29] = 1\n}"),
@@ -152,8 +143,7 @@ class TestDiscLevelChoices:
 
 class TestLimits:
     def test_the_map_cap_applies_to_the_union(self):
-        """Where the cap actually starts to matter: 17 hooks each is fine
-        alone and 34 together is not."""
+        """17 hooks each is fine alone; the union of 34 is not."""
         hooks = [emit.MapHook(f"m{i:02d}", "greet") for i in range(17)]
         with pytest.raises(ScriptError, match="at most 32"):
             merged(
@@ -168,7 +158,7 @@ class TestLimits:
 
 class TestGeneratedCIsValid:
     def test_it_stays_ascii(self):
-        # The guard that has caught a stray unicode character twice.
+        # Catches a stray unicode character in the emitted C.
         merged(part("alpha", LOOPER), part("beta", GREETER)).encode("ascii")
 
     def test_declarations_precede_the_shared_runtime(self):
@@ -182,8 +172,8 @@ class TestGeneratedCIsValid:
 class TestModPrologCollision:
     """`bleck` emits a weak `mod_prolog`; exactly one mod may override it.
 
-    Two overriding it is a duplicate symbol, which the linker reports as a
-    clash between object files nobody wrote by hand. This names the mods.
+    Two is a duplicate symbol, reported by the linker against object files
+    nobody wrote by hand — so bleck names the mods instead.
     """
 
     def _source(self, tmp_path, name, body):
@@ -203,9 +193,8 @@ class TestModPrologCollision:
         assert not parts.defines_mod_prolog(source)
 
     def test_a_block_comment_mentioning_it_does_not_count(self, tmp_path):
-        """docs-site tells authors to "define `mod_prolog`", and several mods
-        quote that line above the function. Matching prose would report a
-        collision between a mod that defines it and one that talks about it."""
+        """Mods quote docs-site's "define `mod_prolog`" in comments; prose is
+        not a definition."""
         source = self._source(
             tmp_path,
             "a",
@@ -221,6 +210,5 @@ class TestModPrologCollision:
         assert not parts.defines_mod_prolog(source)
 
     def test_the_weak_definition_bleck_emits_is_still_a_definition(self):
-        """Sanity: the generated one would match too, which is why this is
-        applied to a mod's own sources and not to generated C."""
+        """The generated one matches too — hence the check runs on mod sources only."""
         assert "void mod_prolog(void)" in runtime_c.MOD_HOOK

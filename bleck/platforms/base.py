@@ -1,8 +1,5 @@
-"""Platform profile types.
-
-Platform differences are data, not conditionals scattered through the code:
-each supported OS supplies one `PlatformProfile` and the rest of the toolkit
-reads from it.
+"""Platform profile types. Differences are data, not scattered conditionals:
+each supported OS supplies one `PlatformProfile`.
 """
 
 from __future__ import annotations
@@ -13,37 +10,27 @@ from pathlib import Path
 WIT = "wit"
 DOLPHIN_TOOL = "dolphin-tool"
 DOLPHIN = "dolphin"
-"""The emulator itself, which is a different binary from `dolphin-tool`.
-
-They ship together and sit in the same directory, which makes them easy to
-conflate — but only one of them boots a game, and only the other one converts
-an image. Finding the wrong one fails confusingly, so they are separate keys.
+"""The emulator itself — a separate binary from `dolphin-tool`, easy to conflate
+because they ship into the same directory. Only one of them boots a game.
 """
 
 WSTRT = "wstrt"
-"""Wiimms StaticR Tool, from the SZS toolset -- a different package from `wit`.
+"""Wiimms StaticR Tool, from the SZS toolset (a different package from `wit`).
 
-Used to embed the Gecko loader into the game's DOL. It carries its own copy of
-the code handler, which is why `bleck` never has to ship one.
+Embeds the Gecko loader into the game's DOL, using its own code handler.
 """
 
 PPC_GCC = "powerpc-gcc"
 """The cross-compiler that builds code mods for the Wii's PowerPC CPU.
 
-Only the C compiler is looked up. Its siblings — `g++`, `ld`, `objcopy` — always
-live in the same directory under the same prefix, so deriving them from this one
-is more reliable than searching for each separately: a machine with two
-toolchains installed could otherwise mix a compiler from one with a linker from
-the other, which fails in ways that look like source bugs.
+Only the C compiler is looked up; `g++`, `ld` and `objcopy` are derived from its
+directory and prefix, so two installed toolchains cannot be mixed.
 """
 
 
 ALL_TOOLS = [WIT, DOLPHIN_TOOL, DOLPHIN, WSTRT, PPC_GCC]
-"""Every external tool `bleck` knows how to find.
-
-Declared here rather than rebuilt by each caller so that adding a tool is one
-edit. The completeness test walks this list, so a new key that some platform
-forgot to describe fails immediately instead of only on that platform.
+"""Every external tool `bleck` knows how to find. The completeness test walks
+this list, so a key no platform describes fails everywhere, not just there.
 """
 
 

@@ -1,9 +1,7 @@
 """Script diagnostics that point at a line and column.
 
-A mod author's script is the thing they are editing, so an error has to name a
-place in it. Everything raised out of `bleck.script` carries a `Position`, and
-`ScriptError.render` prints the offending line with a caret under it — the same
-shape as a compiler the user has already met.
+Everything raised out of `bleck.script` carries a `Position`, and
+`ScriptError.render` prints the offending line with a caret under it.
 """
 
 from __future__ import annotations
@@ -46,9 +44,8 @@ class ScriptError(BleckError):
 
         text = lines[self.position.line - 1]
         gutter = f"{self.position.line} | "
-        # Tabs would misalign the caret against a terminal's own tab stops, so
-        # they are widened to a single space in both the echoed line and the
-        # count used to place the caret.
+        # Tabs are widened to one space so the caret lines up regardless of the
+        # terminal's tab stops.
         shown = text.replace("\t", " ")
         caret = " " * (len(gutter) + max(self.position.column - 1, 0)) + "^"
         return f"{head}\n{gutter}{shown}\n{caret}"

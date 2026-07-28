@@ -1,13 +1,8 @@
 """Flattening a dependency graph into one concrete install order.
 
-Dependencies form a DAG and the same mod can be reached by several paths, so the
-resolver produces a list where each mod appears exactly once:
-
-    depth-first post-order, in declaration order, keeping first occurrence
-
-Post-order is what guarantees the invariant that matters — a mod is emitted only
-after everything it depends on, so later layers can override earlier ones.
-Declaration order makes it deterministic, so a build reproduces.
+Depth-first post-order, in declaration order, keeping first occurrence.
+Post-order puts a mod after everything it depends on, so later layers override
+earlier ones; declaration order keeps builds reproducible.
 """
 
 from __future__ import annotations
@@ -26,8 +21,6 @@ class ResolutionError(BleckError):
 
 @dataclass(frozen=True)
 class ChainEntry:
-    """One mod in the resolved install order."""
-
     mod: Mod
     required_by: str
     """Who pulled this in; empty for the target itself."""
@@ -106,10 +99,9 @@ def _lookup(registry: Registry, requirement: Requirement, required_by: str) -> M
 
 
 def check_bases(chain: Chain, base: str) -> list[str]:
-    """Mods in the chain that target a different base build.
+    """Complaints about mods targeting a different base; empty means all agree.
 
-    Returns human-readable complaints; empty means every mod agrees. A mod built
-    against eu0 cannot be trusted on us0 — the file lists differ.
+    A mod built against eu0 cannot be trusted on us0 — the file lists differ.
     """
     return [
         f"{entry.mod.name} targets base {entry.mod.manifest.base!r}, not {base!r}"

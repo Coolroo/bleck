@@ -1,24 +1,15 @@
-"""`setup/*.dat` — where the game's enemies and items are placed.
+"""`setup/*.dat` — where the game's enemies and items are placed, one per map.
 
-One file per map, named after it. After textures, this is the most obviously
-moddable thing on the disc: it is what decides which enemies exist and where
-they stand.
+⚠️ The game reads the standalone `files/setup/<map>.dat` (D62); the copy inside
+the map archive is ignored. `bleck mod build` warns, and writes both.
+⛔ D53 said the reverse and is superseded — check which way round before copying.
 
-⚠️ **The game reads the standalone `files/setup/<map>.dat`** (D62). The copy
-embedded in the map archive is ignored, so editing only that one does nothing.
-`bleck mod build` warns about this, and writes both when it generates a file.
-
-⛔ D53 concluded the opposite and is superseded. Its measurement was sound —
-the embedded copy is the one that reaches MEM1 — but the inference from "in
-fast RAM" to "in use" was wrong.
-
-The layout is documented upstream in `spm-headers`
-(`include/spm/setup_data.h`, MIT) and independently confirmed here by parsing
-all 227 files on the disc:
+Layout (spm-headers `include/spm/setup_data.h`, MIT; confirmed against all 227
+files on the disc):
 
     struct SetupFileV6 {
         u16 version;              // 1..6
-        u16 padding;              // always 0 -- and read by nothing (D53)
+        u16 padding;              // always 0, and read by nothing
         SetupEnemy enemies[100];  // ALWAYS 100; stride depends on version
         // v6 only, and only when the map places items:
         s32 itemCount;
@@ -26,14 +17,10 @@ all 227 files on the disc:
         SetupItem items[itemCount];
     };
 
-⚠️ **Only version 6 has a documented entry layout**, and it is 198 of the 227
-files. Other versions are parsed as opaque entries of the correct stride, so
-they still round-trip byte-exactly but expose no fields.
-
-Everything not understood is preserved verbatim rather than rebuilt, so writing
-a file back out is byte-identical unless a known field was changed. That is the
-same standard the archive code holds itself to, and for the same reason: a mod
-should change what the author asked for and nothing else.
+⚠️ Only version 6 has a documented entry layout (198 of the 227 files). Other
+versions parse as opaque entries of the correct stride: they round-trip
+byte-exactly but expose no fields. Unrecognised bytes are always preserved
+verbatim rather than rebuilt.
 """
 
 from __future__ import annotations
@@ -45,12 +32,10 @@ from pathlib import Path
 
 from bleck.common.errors import BleckError
 
-#: Entry stride by version. `base size = 4 + 100 * stride` holds for every file
-#: on the disc, which is what makes an arbitrary-looking size predictable.
+#: Entry stride by version. `base size = 4 + 100 * stride` holds disc-wide.
 STRIDE = {1: 28, 2: 96, 3: 100, 4: 104, 5: 108, 6: 112}
 
 #: Fixed regardless of how many enemies a map uses; unused slots are zeroed.
-#: This is why a nearly empty map still produces an 11 KB file.
 ENEMY_SLOTS = 100
 
 HEADER_SIZE = 4
@@ -61,8 +46,8 @@ DOCUMENTED_VERSION = 6
 #: `SetupItem` is 16 bytes: u16 flags, u16 type, Vec3 pos.
 ITEM_SIZE = 16
 
-#: `itemVersion`, called SETUPOBJ_FORMAT_VERSION upstream. Every file with items
-#: carries this exact value, confirmed on all 14 of them.
+#: `itemVersion`, SETUPOBJ_FORMAT_VERSION upstream. All 14 files with items
+#: carry this exact value.
 ITEM_VERSION = 20051201
 
 # --- v6 enemy field offsets, from spm-headers' SetupEnemyV6 -----------------
@@ -74,8 +59,7 @@ _GRAVITY_ROTATION = 0x6C
 
 
 #: Template and tribe names, dumped from the game by `scripts/dump_npcs.py`.
-#: Committed rather than recomputed: the names live behind pointers in the
-#: game's own tables and exist only at runtime.
+#: Committed rather than recomputed: they exist only at runtime.
 NPC_CATALOG = Path(__file__).with_name("npccatalog.json")
 
 
@@ -126,7 +110,7 @@ class NpcNames:
 
 
 def load_names(path: Path | None = None) -> NpcNames:
-    """Read the committed NPC catalog. Absent is not an error -- names are a
+    """Read the committed NPC catalog. Absent is not an error: names are a
     convenience, and every other operation works without them."""
     source = path or NPC_CATALOG
     if not source.is_file():
@@ -139,9 +123,8 @@ def load_names(path: Path | None = None) -> NpcNames:
 class Enemy:
     """One placement slot.
 
-    `raw` holds the whole entry. Named fields are views onto it, and `replace_*`
-    returns a new entry with `raw` patched, so the ~70 undocumented bytes travel
-    untouched.
+    `raw` holds the whole entry; named fields are views onto it, so the ~70
+    undocumented bytes travel untouched through a `with_*` edit.
     """
 
     slot: int
@@ -156,10 +139,9 @@ class Enemy:
     def is_empty(self) -> bool:
         """Whether this slot places nothing.
 
-        🔶 Judged by `type == 0`. Template 0 appears to be a sentinel: 5,110 of
-        the 6,438 non-zero slots on the disc have it, and they carry no position
-        either. A whole-entry zero test does *not* work -- unused slots are not
-        blank, they hold a default in an undocumented field.
+        🔶 Judged by `type == 0`, which appears to be a sentinel. A whole-entry
+        zero test does *not* work: unused slots hold a default in an
+        undocumented field rather than being blank.
         """
         if not self.documented:
             return not any(self.raw)
@@ -169,9 +151,8 @@ class Enemy:
     def template(self) -> int:
         """Index into the game's `npcEnemyTemplates`, which decides what spawns.
 
-        ⚠️ Not an `NPC_*` value from `npcdrv.h` -- those are *tribe* ids, and
-        there are 535 of them against 435 templates. A template names its tribe
-        separately.
+        ⚠️ Not an `NPC_*` value from `npcdrv.h` -- those are *tribe* ids (535
+        of them against 435 templates). A template names its tribe separately.
         """
         return self._int(_TYPE)
 
@@ -318,8 +299,7 @@ def parse(data: bytes, origin: str = "setup file") -> SetupFile:
     if version not in STRIDE:
         known = ", ".join(str(v) for v in sorted(STRIDE))
         raise SetupError(f"{origin}: unknown setup version {version} (known: {known})")
-    # Not an error: the field is padding and read by nothing, which is exactly
-    # why D53 could use it as a marker. Worth noticing all the same.
+    # Not an error: the field is padding and read by nothing.
     del padding
 
     stride = STRIDE[version]
@@ -361,9 +341,9 @@ class ItemSection:
 def _parse_items(data: bytes, base: int, origin: str) -> ItemSection:
     """Read the item trailer, if the file has one.
 
-    Only 14 files on the disc do, all version 6. Upstream notes that reading it
-    from a file without one returns zeros "because of disc alignment" -- so
-    absence is detected by length rather than by trusting a zero count.
+    Only 14 files on the disc do, all version 6. Absence is detected by length:
+    upstream notes a file without one reads back zeros "because of disc
+    alignment", so a zero count cannot be trusted.
     """
     if len(data) < base + 8:
         return ItemSection(present=False, items=[])

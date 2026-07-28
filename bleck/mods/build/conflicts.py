@@ -1,11 +1,8 @@
 """Detecting when two independent mods cannot both be applied.
 
-Conflicts are only possible between mods where **neither depends on the other**.
-If B depends on A, B overriding A's files is intentional — that is what
-depending on something means.
-
-Checks run finest-granularity-first, so most collisions turn out not to be real:
-two mods editing different members of the same archive do not conflict at all.
+Conflicts are only possible between mods where **neither depends on the other**
+— B overriding A's files is what depending on A means. Checks run
+finest-granularity-first: different members of one archive do not conflict.
 """
 
 from __future__ import annotations
@@ -82,9 +79,8 @@ class MergeOutcome:
 def changed_range(base: bytes, edited: bytes) -> ByteRange:
     """The minimal span containing every difference.
 
-    Bounded by the common prefix and suffix — O(n) and conservative. A tighter
-    hunk analysis would report less overlap, but over-reporting a conflict is
-    the safe direction.
+    Bounded by common prefix and suffix — conservative, and over-reporting a
+    conflict is the safe direction.
     """
     if base == edited:
         return ByteRange(0, 0)
@@ -193,12 +189,9 @@ def detect(chain: Chain, plan: Plan, base: Path, allow_binary: bool) -> list[Con
 def effective_edits(chain: Chain, edits: list[Edit]) -> list[Edit]:
     """Drop edits that a later mod deliberately supersedes via dependency.
 
-    If B depends on A (directly or transitively), B's edit wins and A's is
-    neither a conflict nor applied. Only mutually independent edits remain.
-
-    Both conflict detection and the builder must use this, or they disagree
-    about what is in play — detection reports clean while the build hits a
-    phantom conflict.
+    If B depends on A, B's edit wins and A's is neither a conflict nor applied.
+    ⚠️ Detection and the builder must both use this, or detection reports clean
+    while the build hits a phantom conflict.
     """
     keep: list[Edit] = []
     for edit in edits:

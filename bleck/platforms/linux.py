@@ -44,8 +44,8 @@ PROFILE = PlatformProfile(
             ),
         ),
         WSTRT: ToolLocation(
-            # The toolset's own install.sh puts binaries in /usr/local/bin;
-            # the tarball can also just be unpacked and used in place.
+            # install.sh puts binaries in /usr/local/bin; the tarball also works
+            # unpacked in place.
             names=["wstrt"],
             directories=[
                 "/usr/local/bin",
@@ -62,9 +62,8 @@ PROFILE = PlatformProfile(
             ),
         ),
         PPC_GCC: ToolLocation(
-            # devkitPPC's `powerpc-eabi-gcc` first: it targets the same ABI the
-            # game was built with. Debian's `powerpc-linux-gnu-gcc` also works
-            # but needs different flags — see `bleck.backends.toolchain`.
+            # devkitPPC's `powerpc-eabi-gcc` first: same ABI as the game.
+            # Debian's works too but needs different flags (see toolchain.py).
             names=["powerpc-eabi-gcc", "powerpc-linux-gnu-gcc"],
             directories=["/opt/devkitpro/devkitPPC/bin", "/usr/bin"],
             hint=(

@@ -63,12 +63,7 @@ class TestRoundTrip:
 
 class TestMatching:
     def test_encodes_overlapping_runs(self):
-        """A long single-byte run needs matches that read their own output.
-
-        This is the bug found by diffing against Nintendo's stream: a match may
-        legally extend past the current position. Without it, a 4096-byte run
-        cannot compress well.
-        """
+        """A match may extend past the current position, reading its own output."""
         payload = b"\xab" * 4096
         packed = lz77.compress(payload)
         assert lz77.decompress(packed) == payload

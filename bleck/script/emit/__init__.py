@@ -1,11 +1,7 @@
 """The back end: a compiled program to one C translation unit.
 
-Three files, three jobs. `scaffold` is what a module is wired up to *do*, as
-values. `runtime_c` is the C that ships inside every mod, which is data rather
-than logic. `generate` assembles them.
-
-Every name the rest of the toolkit uses is re-exported here, so `emit.MapHook`
-and `emit.generate` mean what they always have.
+`scaffold` is what a module is wired up to *do*, as values; `runtime_c` is the
+C that ships inside every mod; `generate` assembles them.
 """
 
 from bleck.script.emit.generate import (

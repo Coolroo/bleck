@@ -13,8 +13,7 @@ from pathlib import Path
 
 from bleck.mods.errors import ManifestError
 
-# Re-exported: every caller has always reached these through `manifest`, and
-# the split is about where they live rather than who may use them.
+# Re-exported: callers reach these through `manifest`.
 # pylint: disable=unused-import
 from bleck.mods.manifest.codespec import (  # noqa: F401
     REL_DISC_PATH,
@@ -31,8 +30,7 @@ from bleck.mods.manifest.placements import (  # noqa: F401
 )
 
 MANIFEST_NAME = "mod.json"
-# Named `overlay`, not `files`: the disc's own data partition is `files/`,
-# so `overlay/files/...` reads correctly where `files/files/...` would not.
+# Named `overlay`, not `files`: the disc's data partition is already `files/`.
 OVERLAY_DIR = "overlay"
 SCHEMA_VERSION = 1
 
@@ -142,8 +140,7 @@ class Manifest:
                 placement.map_name: [edit.to_json() for edit in placement.edits]
                 for placement in self.setup
             }
-        # Omitted rather than written as null: most mods ship no code, and an
-        # always-present empty block invites people to fill it in.
+        # Omitted rather than written as null: most mods ship no code.
         if self.code is not None:
             body["code"] = self.code.to_json()
         return json.dumps(body, indent=2) + "\n"

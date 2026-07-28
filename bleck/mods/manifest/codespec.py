@@ -1,9 +1,5 @@
-"""A mod's `code` block: what it compiles, and what the module then does.
-
-Split from `manifest.py`, which was doing three unrelated jobs. This one is
-about behaviour — scripts, native sources, map hooks, button combinations, the
-boot map and the on-screen banner. `manifest.py` keeps identity and
-dependencies; `placements.py` keeps enemy edits.
+"""A mod's `code` block: scripts, native sources, map hooks, combos, boot map
+and banner.
 """
 
 from __future__ import annotations
@@ -14,11 +10,9 @@ from dataclasses import dataclass, field
 from bleck.mods.errors import ManifestError
 from bleck.script import emit
 
-#: Where a compiled code mod lands on the disc. The Gecko loader opens exactly
-#: this path, so it is fixed rather than configurable.
-#:
-#: ⚠️ It is one path, not one *mod*: several mods are merged into this single
-#: module at compile time (D78). The loader's limit is on RELs, not on authors.
+#: Where a compiled code mod lands. Fixed: the Gecko loader opens this exact
+#: path. One path, not one mod — several mods merge into it at compile time
+#: (D78).
 REL_DISC_PATH = "files/mod/mod.rel"
 
 
@@ -26,10 +20,8 @@ REL_DISC_PATH = "files/mod/mod.rel"
 class BannerSpec:
     """The on-screen label naming the loaded mod.
 
-    On by default, because the problem it solves is invisible until it bites:
-    a modded disc looks exactly like a stock one, so someone holding several
-    builds cannot tell which is running without playing far enough to spot a
-    difference. Opt out with `"banner": false`.
+    On by default, since a modded disc otherwise looks stock. Opt out with
+    `"banner": false`.
     """
 
     enabled: bool = True
@@ -68,9 +60,7 @@ class BannerSpec:
 class ComboBinding:
     """A script bound to a button combination declared in `bleck.yml`.
 
-    The manifest names a combination; it does not say which buttons. That split
-    is the point — a mod says `start_map`, the project says once what
-    `start_map` is, and changing the buttons does not touch any mod.
+    The manifest names a combination, never the buttons; `bleck.yml` says which.
     """
 
     combo: str
@@ -82,13 +72,7 @@ class ComboBinding:
 
 @dataclass(frozen=True)
 class MapHook:
-    """A script attached to a map, so it runs when that map loads.
-
-    This is how the game itself uses `evt`: a map's `MapData.initScript` is an
-    ordinary pointer to bytecode, and doors, NPCs and items work the same way.
-    Attaching to one is the difference between a mod that loops and a mod that
-    reacts.
-    """
+    """A script attached to a map's `MapData.initScript`, so it runs on load."""
 
     map_name: str
     """The map's internal name, e.g. `aa4_01`. Resolved by `mapDataPtr`."""
@@ -99,15 +83,10 @@ class MapHook:
 
 @dataclass(frozen=True)
 class CodeSpec:
-    """A mod's compiled-code half.
+    """A mod's compiled-code half: a script, native C sources, or both.
 
-    Present only for mods that ship behaviour rather than only assets. A mod
-    may supply a script, native C sources, or both -- they compile into one
-    `mod.rel`.
-
-    Scripts cover event logic and are far easier to write. Native sources exist
-    for what a script cannot reach: calling ordinary game functions, and
-    attaching scripts to maps, doors, items and NPCs by name.
+    Scripts cover event logic; native sources reach what a script cannot, such
+    as calling ordinary game functions. Both compile into one `mod.rel`.
     """
 
     script: str = ""
@@ -119,8 +98,8 @@ class CodeSpec:
     target: str = "eu0"
     """Game version whose symbol list resolves the functions this script calls.
 
-    Addresses differ per version, so this is not cosmetic: building against the
-    wrong list produces a REL that jumps into unrelated code.
+    Addresses differ per version; the wrong list produces a REL that jumps into
+    unrelated code.
     """
 
     module_id: int = 2
@@ -138,9 +117,7 @@ class CodeSpec:
     boot_map: str = ""
     """A map to start the game at, instead of the attract demo.
 
-    The game boots into `aa4_01` and then `ls4_12` and nowhere else without a
-    controller, so testing anything elsewhere used to mean a human holding a
-    Wii remote. Naming a map here makes the disc go there on its own.
+    Without one the disc only ever reaches `aa4_01` then `ls4_12` unattended.
     """
 
     @property
@@ -177,8 +154,7 @@ class CodeSpec:
             body["combos"] = {b.combo: b.script for b in self.combos}
         if self.boot_map:
             body["boot"] = self.boot_map
-        # Written only when it says something a default would not, so the
-        # common manifest stays as short as it was before banners existed.
+        # Written only when it differs from the default.
         if not self.banner.is_default:
             body["banner"] = self.banner.to_json()
         return body
@@ -210,8 +186,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     module_id = raw.get("module_id", 2)
     if not isinstance(module_id, int) or isinstance(module_id, bool):
         raise ManifestError(f"{source}: 'code.module_id' must be a whole number")
-    # Module 0 is the DOL and 1 is the game's own REL; claiming either would
-    # collide with something already linked when the mod loads.
+    # Module 0 is the DOL and 1 is the game's own REL; either would collide.
     if module_id < 2:
         raise ManifestError(
             f"{source}: 'code.module_id' must be 2 or more "
@@ -230,11 +205,8 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     )
 
 
-#: A map's name as the disc spells it: `he1_01`, `aa4_01`, `mac_01`.
-#:
-#: Enforced rather than passed through because the name is interpolated into
-#: generated script source. Restricting it to the shape every real map already
-#: has means there is no escaping question to get wrong later.
+#: A map's name as the disc spells it: `he1_01`, `aa4_01`. Enforced because it
+#: is interpolated into generated script source.
 _MAP_NAME_RE = re.compile(r"^[a-z0-9_]{1,16}$")
 
 
@@ -259,12 +231,7 @@ def _parse_boot(raw: object, source: str) -> str:
 
 
 def _parse_banner(raw: object, source: str) -> BannerSpec:
-    """Read `code.banner`, which may be absent, a boolean, or an object.
-
-    A bare `false` is accepted because turning the label off is much the most
-    likely reason to mention it at all, and `"banner": false` reads better than
-    `"banner": {"enabled": false}`.
-    """
+    """Read `code.banner`: absent, a boolean, or an object."""
     if raw is None or raw is True:
         return BannerSpec()
     if raw is False:
@@ -307,9 +274,8 @@ def _parse_banner(raw: object, source: str) -> BannerSpec:
 def _parse_maps(raw: object, source: str) -> list[MapHook]:
     """Read `code.maps`, an object of map name -> script name.
 
-    Written as an object rather than a list because a map can only have one
-    init script: the shape should make a second entry for the same map
-    impossible to express, rather than something to validate.
+    An object, not a list: a map has one init script, so a duplicate entry
+    should be inexpressible rather than validated.
     """
     if raw is None:
         return []
@@ -332,13 +298,8 @@ def _parse_maps(raw: object, source: str) -> list[MapHook]:
 def _parse_combos(raw: object, source: str) -> list[ComboBinding]:
     """Read `code.combos`, an object of combination name -> script name.
 
-    An object for the same reason `code.maps` is one: a combination fires one
-    script, so a second entry for the same combination should be impossible to
-    write rather than something to detect.
-
-    The names are not checked here. `bleck.yml` is what defines them, it is not
-    a manifest concern, and the check belongs where the config is loaded so the
-    error can list what *is* defined.
+    Combination names are not validated here: `bleck.yml` defines them, so the
+    check lives where the config is loaded and can list what is defined.
     """
     if raw is None:
         return []

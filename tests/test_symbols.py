@@ -1,8 +1,7 @@
 """Symbol tables, and the disagreements between the two sources.
 
-The consequential test here is `compare`: the lst and the decomp are maintained
-separately, and where they disagree one of them sends a call to the wrong
-address. Two such cases exist in eu0 and neither was known before (D60).
+Where the lst and the decomp disagree, one of them sends a call to the wrong
+address; two such cases exist in eu0 (D60).
 """
 
 from __future__ import annotations
@@ -45,8 +44,7 @@ def _lst():
 
 class TestParsing:
     def test_exception_tables_are_excluded(self, decomp):
-        """`@etb_*` entries are compiler bookkeeping -- ~9,600 of them in the
-        real file, and useless to a mod."""
+        """`@etb_*` is compiler bookkeeping -- ~9,600 entries, useless to a mod."""
         assert all(not s.name.startswith("@") for s in decomp.symbols)
         assert len(decomp.symbols) == 5
 
@@ -89,8 +87,7 @@ class TestDisagreements:
 
 class TestMerging:
     def test_the_decomp_wins_a_disagreement(self, decomp):
-        """Every real disagreement so far had the lst pointing at the
-        *neighbouring* function, which the decomp also names (D60)."""
+        """Real disagreements have the lst pointing at a neighbouring function (D60)."""
         stale = symbols.parse_lst("80000001:mapDataPtr\n", Path("x.lst"))
         merged = symbols.merge(stale, decomp)
         assert merged.find("mapDataPtr").address == 0x800294E0
@@ -131,9 +128,8 @@ class TestExport:
 class TestLinkability:
     """Catching "this will not link" at compile time instead of at link time.
 
-    A third of the documented builtins are absent from the lst (D61). They pass
-    the catalog check -- the header declares them -- and then die at `elf2rel`
-    after a compile and a toolchain run.
+    A third of the documented builtins are absent from the lst (D61): they pass
+    the catalog check and then die at `elf2rel`.
     """
 
     def test_a_missing_name_is_rejected_with_the_fix_named(self):
@@ -158,8 +154,7 @@ class TestLinkability:
         assert compiled.program.called_symbols == ["evt_pouch_add_coins"]
 
     def test_without_a_table_nothing_is_checked(self):
-        """The check is optional so `bleck script check` works with no build
-        target configured, and so nothing regresses for existing setups."""
+        """The check is optional, so `bleck script check` needs no build target."""
         compile_source("script main {\n evt_cam_get_at(0, 0, 0)\n}")
 
 

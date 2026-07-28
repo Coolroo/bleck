@@ -1,9 +1,4 @@
-"""Turning script text into tokens.
-
-Hand-written rather than regex-driven or generated: the language is small, and a
-hand-written scanner is what lets every token carry an exact position, which is
-most of what makes the error messages usable.
-"""
+"""Turning script text into tokens, each carrying an exact source position."""
 
 from __future__ import annotations
 
@@ -135,9 +130,8 @@ class _Scanner:
 def tokenize(source: str) -> list[Token]:
     """Scan `source` into tokens, ending with a single `END`.
 
-    Newlines are emitted as tokens rather than skipped: the language uses them
-    as statement terminators, which keeps semicolons out of the surface syntax.
-    Runs of blank lines collapse to one, so formatting never changes meaning.
+    Newlines are tokens — they terminate statements. Runs of blank lines
+    collapse to one, so formatting never changes meaning.
     """
     scanner = _Scanner(source)
     tokens: list[Token] = []
@@ -148,8 +142,7 @@ def tokenize(source: str) -> list[Token]:
         if char == "\n":
             position = scanner.position()
             scanner.advance()
-            # Collapse blank lines; the parser only needs to know a statement
-            # ended, not how much whitespace followed it.
+            # Collapse blank lines.
             if tokens and tokens[-1].kind is not TokenKind.NEWLINE:
                 tokens.append(Token(TokenKind.NEWLINE, "\n", position))
             continue
@@ -158,8 +151,7 @@ def tokenize(source: str) -> list[Token]:
             scanner.advance()
             continue
 
-        # Both comment styles are accepted. `--` is what the SPM community
-        # writes; `//` is what people arriving from C reach for first.
+        # `--` (SPM community style) and `//` are both accepted.
         if char == "-" and scanner.peek(1) == "-":
             _skip_line(scanner)
             continue

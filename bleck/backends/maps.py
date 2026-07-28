@@ -1,12 +1,8 @@
 """The list of maps on the disc, and what they are called.
 
-A map's name is not written down anywhere in this toolkit — it is the name of
-its archive. `files/map/aa4_01.bin` *is* the map `aa4_01`, and that is exactly
-the string `mapDataPtr` takes and the one a manifest puts in `code.maps`.
-
-So this reads the base build rather than shipping a table. The disc cannot go
-stale, needs no licence, and covers whichever region is extracted; a vendored
-list would manage none of those.
+A map's name is the name of its archive: `files/map/aa4_01.bin` *is* the map
+`aa4_01`, which is the string `mapDataPtr` takes and the one a manifest puts in
+`code.maps`. So this reads the base build rather than shipping a table.
 """
 
 from __future__ import annotations
@@ -24,8 +20,7 @@ MAP_DIR = "files/map"
 MAP_SUFFIX = ".bin"
 
 #: Map ids, dumped from the game's own `mapData[]` by `scripts/dump_maps.py`.
-#: Committed rather than recomputed: it needs a running emulator to produce and
-#: never changes for a given build.
+#: Committed rather than recomputed: it needs a running emulator to produce.
 CATALOG = Path(__file__).with_name("mapcatalog.json")
 
 #: Names are `<area><sublevel>_<room>`, e.g. `he1_01`. The trailing number is
@@ -48,21 +43,13 @@ class Area:
         return self.chapter > 0
 
 
-#: ✅ The eight chapters, in `mapData[]` order, which is the game's progression
-#: order. Two independent anchors fix the sequence, and the runs between them
-#: are contiguous with no gaps:
+#: ✅ The eight chapters, in `mapData[]` (progression) order. Two spm-headers
+#: anchors fix the sequence, with no gaps between them: `he` is chapter 1
+#: (`he1_01_tippi_tutorial_evt`, and Tippi's tutorial is 1-1) and `wa` is
+#: chapter 6 (`sammerDefsCh6` in `wa1_02.h`). Labels come from the game's own
+#: `msg/UK/stg<N>.txt`.
 #:
-#:   - `he1_01_tippi_tutorial_evt` (spm-headers) -- Tippi's tutorial is 1-1,
-#:     so `he` is chapter 1.
-#:   - `sammerDefsCh6` in `wa1_02.h` (spm-headers) -- `wa` is chapter 6, and it
-#:     holds 103 maps, matching Sammer's 100 duel rooms.
-#:
-#: Everything between those two is therefore fixed by position. Labels come
-#: from the game's own text: `msg/UK/stg<N>.txt` names the locations, and
-#: `machi.txt` (Japanese *machi*, town) is Flipside/Flopside.
-#:
-#: ⚠️ `sp` is **chapter 5, not "space"**. The obvious reading of the prefix is
-#: wrong, and was believed here until the anchors were checked.
+#: ⚠️ `sp` is **chapter 5, not "space"**.
 AREAS: list[Area] = [
     Area("he", "Lineland", 1),
     Area("mi", "Gloam Valley", 2),
@@ -131,7 +118,7 @@ class MapEntry:
 
 @dataclass(frozen=True)
 class AreaCount:
-    """How many maps an area has. Named, because a bare pair says nothing."""
+    """How many maps an area has."""
 
     area: str
     maps: int
@@ -167,11 +154,8 @@ class MapIndex:
         return sorted(found, key=lambda e: (e.sublevel, e.name))
 
     def areas(self) -> list[AreaCount]:
-        """Areas in the game's own order — the shape of the game at a glance.
-
-        Ordered by map id rather than by size, so the listing reads as a
-        playthrough: intro, hub, chapters 1-8, then the extras.
-        """
+        """Areas ordered by map id rather than size, so the listing reads as a
+        playthrough: intro, hub, chapters 1-8, then the extras."""
         counts: dict[str, int] = {}
         first: dict[str, int] = {}
         for position, entry in enumerate(self.entries):
@@ -203,8 +187,8 @@ def _catalog_ids() -> dict[str, int]:  # pylint: disable=container-return
 def load(base: Path) -> MapIndex:
     """Read the map list out of an extracted build.
 
-    Names come from the disc, which is authoritative for what exists; ids come
-    from the committed catalog, because nothing on the disc records them.
+    Names come from the disc; ids come from the committed catalog, since
+    nothing on the disc records them.
     """
     directory = base / MAP_DIR
     if not directory.is_dir():

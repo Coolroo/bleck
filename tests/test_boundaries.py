@@ -1,10 +1,6 @@
 """What the shipped package is not allowed to contain.
 
-`bleck` is installed on other people's machines. `scripts/` is not — it is a
-test harness for whoever is working on this repo, and `pyproject.toml` exposes
-exactly one entry point, `bleck.cli.app:main`.
-
-That distinction is doing real work, so it is checked rather than remembered.
+`bleck` is installed on other people's machines; `scripts/` is not.
 """
 
 from __future__ import annotations
@@ -15,12 +11,7 @@ import pytest
 
 PACKAGE = Path(__file__).resolve().parent.parent / "bleck"
 
-#: Synthesising keystrokes is fine for a harness driving an emulator on the
-#: machine of the person who launched it. It is not something a modding toolkit
-#: should ship to strangers, whatever the intent — the capability reads the
-#: same either way, and a tool that can drive other applications' input is a
-#: different kind of program from one that repacks disc images.
-#:
+#: Input synthesis is fine in a local harness but must not ship to strangers.
 #: `scripts/keys.py` does this deliberately and is excluded from the package.
 INPUT_INJECTION = (
     "SendInput",

@@ -1,9 +1,7 @@
 """The JSON contract other applications integrate against.
 
-The load-bearing property is **round-tripping**: a document read out, sent back
-unchanged, must produce the same manifest. An editor that cannot re-open what it
-wrote is a converter, so this is checked rather than assumed
-(`docs/vision.md`).
+The load-bearing property is **round-tripping**: a document read out and sent
+back unchanged must produce the same manifest (`docs/vision.md`).
 """
 
 from __future__ import annotations
@@ -60,8 +58,7 @@ class TestEditValidation:
             api.PlacementEdit(slot=1, clear=True, template=5)
 
     def test_an_edit_that_changes_nothing_is_refused(self):
-        # Otherwise `{"slot": 1}` writes a no-op into a manifest and looks
-        # like it did something.
+        # Otherwise `{"slot": 1}` writes a no-op that looks like it did something.
         with pytest.raises(ValidationError, match="must change something"):
             api.PlacementEdit(slot=1)
 
@@ -70,8 +67,7 @@ class TestEditValidation:
             api.PlacementEdit(slot=-1, template=5)
 
     def test_an_unknown_field_is_refused(self):
-        """`extra="forbid"` so a typo is an error rather than silently dropped
-        -- an editor sending `{"tempalte": 5}` should hear about it."""
+        """`extra="forbid"`, so a typo is an error rather than silently dropped."""
         with pytest.raises(ValidationError):
             api.PlacementEdit(slot=1, tempalte=5)
 
@@ -113,8 +109,8 @@ class TestMapPlacements:
 
 
 class TestSchema:
-    """The reason for pydantic rather than hand-rolled JSON: the schema and the
-    parser are the same declaration, so they cannot drift."""
+    """With pydantic the schema and the parser are one declaration, so they
+    cannot drift."""
 
     @pytest.mark.parametrize("model", [api.SetupEdits, api.MapPlacements])
     def test_a_schema_is_published(self, model):
@@ -131,8 +127,8 @@ class TestSchema:
 
 
 class TestVersioning:
-    """`api_version` rides inside each document, and the module path versions
-    the code. Both, because a document read off disk has no schema to hand."""
+    """Documents carry `api_version` *and* the module path versions the code —
+    both, since a document read off disk has no schema to hand."""
 
     def test_a_document_stamps_its_version(self):
         assert api.SetupEdits().api_version == api.API_VERSION

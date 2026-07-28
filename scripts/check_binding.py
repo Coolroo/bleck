@@ -1,19 +1,12 @@
 """Read back the address `elf2rel` actually bound a game function to.
 
-A script's bytecode stores `USER_FUNC` targets as raw addresses, filled in when
-the REL is linked. If one is bound wrongly the script still runs — it calls
-whatever is at that address and carries on — so the symptom is a call that
-silently does nothing, which is indistinguishable from the call being wrong.
-
-D70 is exactly that shape: adding the button-combination watcher stopped
-`evt_seq_mapchange` working in *every* script in the module, including one that
-has nothing to do with combinations. This settles whether the binding is the
-cause, by finding the script array in the running game and reading the word.
+A `USER_FUNC` target is a raw address filled in at link time; bound wrongly, the
+script still runs and silently does nothing (D70). This finds the script array
+in the running game and reads the word.
 
     uv run python scripts/check_binding.py warp-combo warp_home 4 0x8010D0F0
 
-No keystrokes and no focused window — it only reads memory, so it works on a
-locked machine, unlike anything needing a button press.
+Memory reads only, so it works on a locked machine.
 """
 
 from __future__ import annotations
@@ -41,8 +34,7 @@ from bleck.mods import registry  # noqa: E402
 class Anchor:
     """A distinctive run of literal words from a script, used to find it in RAM.
 
-    Only the literal words are usable: entries holding `&symbol` are exactly
-    what is unknown, so they cannot be part of the pattern being searched for.
+    Only literals are usable: `&symbol` entries are exactly what is unknown.
     """
 
     pattern: bytes

@@ -1,8 +1,6 @@
 """Lowering a syntax tree onto `evt` bytecode.
 
-`lower` does the work; `ir` is what it produces. They are separate because the
-IR is what everything downstream depends on — `emit` needs to know what a `Word`
-is and has no business importing the thing that lowers a tree.
+`lower` does the work; `ir` is what it produces and what `emit` depends on.
 """
 
 from bleck.script.compiler.ir import (

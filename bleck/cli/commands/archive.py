@@ -1,7 +1,4 @@
-"""Archive-level commands: unpack, pack, ls.
-
-Operates on the LZ77+U8 containers that hold SPM's maps and assets.
-"""
+"""unpack/pack/ls for the LZ77+U8 containers holding SPM's maps and assets."""
 
 from __future__ import annotations
 
@@ -20,7 +17,7 @@ CATEGORY = "archives"
 
 @dataclass(frozen=True)
 class Unwrapped:
-    """An archive with any LZ77 wrapper removed, remembering whether there was one."""
+    """An archive with any LZ77 wrapper removed, and whether there was one."""
 
     data: bytes
     was_compressed: bool
@@ -110,8 +107,8 @@ def cmd_pack(args: argparse.Namespace) -> int:
         order, dirs = found.order, set(found.dirs)
         was_compressed = found.compressed
 
-    # --raw and --store answer different questions: whether to compress at all,
-    # and which encoder to use. Either overrides what the source did.
+    # --raw decides whether to compress; --store which encoder. Either overrides
+    # what the source did.
     if args.raw:
         compressed = False
     elif args.store:

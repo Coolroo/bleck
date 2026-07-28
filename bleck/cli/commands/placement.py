@@ -1,9 +1,4 @@
-"""`setup` commands: what enemies and items a map places, and where.
-
-After textures, this is the most obviously moddable thing on the disc. Reading
-it needs no emulator and no build, so the loop is fast: look at what a map
-places, change one thing, build, boot.
-"""
+"""`setup` commands: what enemies and items a map places, and where."""
 
 from __future__ import annotations
 
@@ -33,8 +28,8 @@ def _path(name: str):
     path = base / SETUP_DIR / f"{name}.dat"
     if path.exists():
         return path
-    # A map with no setup file is normal -- 383 maps, 227 setup files -- so say
-    # which case this is rather than just failing to open something.
+    # A map with no setup file is normal (383 maps, 227 setup files), so say
+    # which case this is.
     index = maps.load(base)
     if index.find(name) is None:
         near = index.search(name)
@@ -72,11 +67,8 @@ def cmd_show(args: argparse.Namespace) -> int:
     for item in data.items:
         print(f"  item: {item.describe()}")
 
-    # The trap this whole area has: editing the wrong copy silently does
-    # nothing (D53). Say it where someone is about to go and edit something.
-    #
-    # Plain ASCII deliberately: the Windows console is cp1252 by default, and a
-    # warning that crashes the command instead of printing is worse than none.
+    # Editing the wrong copy silently does nothing (D53). ASCII only: the
+    # Windows console is cp1252 by default.
     print(
         f"\nNote: the game reads the copy inside files/map/{args.map}.bin, "
         f"not this one (D13)."
@@ -128,11 +120,7 @@ def register(add) -> None:
 
 
 def _emit(model) -> int:
-    """Print a pydantic model as JSON, and nothing else.
-
-    Nothing else on purpose: a caller piping this into `jq` or a GUI should not
-    have to strip a friendly header off the front.
-    """
+    """Print a pydantic model as JSON and nothing else, so `jq` can read it."""
     print(model.model_dump_json(indent=2, exclude_none=True))
     return 0
 
@@ -149,7 +137,7 @@ def _read_json(source: str) -> str:
 
 def _as_json(map_name: str, data: setup.SetupFile) -> api.MapPlacements:
     # Entry *fields* are only decoded for version 6; other versions parse as a
-    # container and nothing more. Saying so beats emitting confident nulls.
+    # container and nothing more.
     documented = data.version == setup.DOCUMENTED_VERSION
     names = setup.load_names()
     enemies = []
@@ -189,10 +177,8 @@ def cmd_edits(args: argparse.Namespace) -> int:
 def cmd_apply(args: argparse.Namespace) -> int:
     """Write declared edits into a mod's `mod.json`, from JSON.
 
-    ⚠️ Replaces the mod's `setup` block rather than merging into it. Merging
-    would need a rule for "the incoming JSON omits a map -- delete it, or leave
-    it?", and any rule chosen would surprise half the callers. An editor holds
-    the whole document anyway.
+    ⚠️ Replaces the mod's `setup` block rather than merging: an omitted map has
+    no unsurprising meaning. An editor holds the whole document.
     """
     mod = registry.load().require(args.name)
     try:
@@ -212,11 +198,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
 
 
 def cmd_schema(args: argparse.Namespace) -> int:
-    """The JSON Schema for these documents, so other tools can validate.
-
-    The point of using pydantic rather than hand-rolling the JSON: the schema
-    and the parser cannot drift, because they are the same declaration.
-    """
+    """The JSON Schema for these documents, so other tools can validate."""
     model = api.MapPlacements if args.of == "map" else api.SetupEdits
     print(json.dumps(model.model_json_schema(), indent=2))
     return 0

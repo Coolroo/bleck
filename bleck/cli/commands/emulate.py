@@ -1,8 +1,5 @@
-"""Emulation commands: launch.
-
-Kept apart from the disc commands because Dolphin the emulator and DolphinTool
-the disc utility are different binaries found in different ways. This is also
-where per-game emulator configuration will land if `bleck` grows it.
+"""Emulation commands. Separate from the disc commands: Dolphin the emulator and
+DolphinTool the disc utility are different binaries, found in different ways.
 """
 
 from __future__ import annotations

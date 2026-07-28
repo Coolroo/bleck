@@ -1,21 +1,14 @@
-"""Embedding the loader code into the game's own executable.
+"""Embedding the REL loader code into the game's own executable.
 
-A code mod is inert on its own: the REL sits on the disc and nothing loads it.
-Something has to run the Gecko loader code, and the usual answer is to paste it
-into the emulator's cheat configuration — which fails silently in two separate
-ways (listed under one section instead of two, or with cheats switched off) and
-does not help on real hardware at all.
+`wstrt patch --add-sect` puts the code handler *and* the codes into a new TEXT
+section of `main.dol` at `0x80001800` and redirects the game's VBI hook into
+it. The loader then travels inside the disc, so a built image boots with the
+mod active on a stock emulator and on console without Riivolution — unlike the
+usual emulator-cheat-configuration route, which fails silently in two ways.
 
-`wstrt patch --add-sect` avoids the whole problem by putting the code handler
-*and* the codes into a new TEXT section of `main.dol` at `0x80001800`, and
-redirecting the game's VBI hook into it. The loader then travels inside the
-disc, so a built image boots with the mod active on a stock emulator with no
-configuration, and on console with no Riivolution.
-
-⚠️ `wstrt` supplies its own copy of the code handler. That matters for more than
-convenience: it means `bleck` never ships, vendors, or even reads any part of
-the GPLv3 Gecko handler. The only thing we supply is the per-version loader
-codelist, and that is user-supplied too — see `codelist`.
+⚠️ `wstrt` supplies its own code handler, so `bleck` never ships, vendors or
+reads any part of the GPLv3 Gecko handler. The loader codelist is
+user-supplied too — see `codelist`.
 """
 
 from __future__ import annotations
@@ -59,10 +52,9 @@ class Embedding:
 def build_gct(text: str, source: str = "codelist") -> bytes:
     """Assemble a Gecko codelist into a GCT.
 
-    The input is the plain two-columns-of-hex format every SPM loader ships in.
-    Parsing it here rather than shelling out keeps the one format `bleck` has to
-    understand in Python, and gives a useful error instead of `wstrt`'s
-    "Invalid WCH header" when the file is not what the user thought.
+    Input is the plain two-columns-of-hex format every SPM loader ships in.
+    Parsed here so a bad file gets a useful error rather than `wstrt`'s
+    "Invalid WCH header".
     """
     words: list[int] = []
     for number, line in enumerate(text.splitlines(), start=1):
@@ -94,9 +86,8 @@ def build_gct(text: str, source: str = "codelist") -> bytes:
 def codelist(target: str, directory: Path | None = None) -> Path:
     """Locate the loader codelist for a game version.
 
-    Not shipped with `bleck`. The SPM loader code is GPLv3, and keeping it
-    user-supplied is what lets this toolkit stay unlicensed for now without
-    the question becoming urgent -- the same reasoning as the symbol lists.
+    Not shipped with `bleck`: the SPM loader code is GPLv3, so it stays
+    user-supplied, as the symbol lists do.
     """
     root = directory or env.path(env.GECKO_DIR) or Path("gecko")
     candidate = root / f"loader.{target}.txt"
@@ -115,9 +106,8 @@ def embed(dol: Path, gct: bytes, workdir: Path) -> Embedding:
     """Patch `dol` in place so it carries the loader.
 
     ⚠️ The DOL is detached first. A staged file is a hardlink to the pristine
-    base, and `wstrt` rewrites in place, so patching without detaching would
-    edit `extracted/<build>/sys/main.dol` — silently corrupting the one thing
-    the whole build design exists to protect.
+    base and `wstrt` rewrites in place, so skipping that would silently corrupt
+    `extracted/<build>/sys/main.dol`.
     """
     if not dol.exists():
         raise GeckoError(f"no DOL to patch at {dol}")

@@ -1,10 +1,4 @@
-"""Script commands: check, build, dump.
-
-These operate on a single `.evt` file, outside any mod. Compiling a script is
-much faster than building a 400 MB disc, so having a way to do just that is what
-makes the language usable: most iterations are a syntax error or a mistyped
-function name, and neither needs a disc to find.
-"""
+"""Script commands, operating on a single `.evt` file outside any mod."""
 
 from __future__ import annotations
 
@@ -22,10 +16,8 @@ CATEGORY = "scripting"
 def _load(path: Path, require_entry: bool = True):
     """Compile a script file, reporting errors against the file the user wrote.
 
-    `require_entry` is off for `check`: needing a script called `main` is a rule
-    about how a *mod* starts things, not about whether the file is valid. A file
-    whose scripts are all attached to maps is perfectly good, and refusing to
-    check it was a papercut.
+    `require_entry` is off for `check`: needing a `main` is a rule about how a
+    *mod* starts things, not about whether the file is valid.
     """
     if not path.exists():
         raise BleckError(f"no such script: {path}")
@@ -49,9 +41,8 @@ def cmd_check(args: argparse.Namespace) -> int:
         print(f"  calls {known.describe() if known else name}")
     if not compiled.program.called_symbols:
         print("  calls no game functions")
-    # Names and argument counts are already checked against the catalog by the
-    # compiler; what is left is turning a name into an address, which needs a
-    # symbol list and therefore waits for the build.
+    # The compiler already checked names and argument counts; only address
+    # resolution is left, and that needs a symbol list at build time.
     print("  (addresses are resolved when the module is built)")
     return 0
 

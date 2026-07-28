@@ -1,9 +1,7 @@
 """Turning a compiled program into one C translation unit.
 
-What is asserted here is the *shape* of the generated runtime -- which hook
-runs when, what lands in .data rather than .bss, and which mechanisms were
-ruled out. Several assertions exist to stop a rejected design being
-reintroduced; those name the decision that rejected it.
+Asserts the *shape* of the generated runtime: which hook runs when, what lands
+in .data rather than .bss, and which mechanisms are ruled out (cited by D-number).
 """
 
 from __future__ import annotations
@@ -36,8 +34,7 @@ def values(source: str, script: str = "main") -> list[int]:
     return [word.value for word in words(source, script) if isinstance(word, Literal)]
 
 
-#: The smallest useful program, for tests that only care about the scaffolding
-#: the emitter wraps around every script.
+#: The smallest useful program, for tests that only care about the scaffolding.
 SIMPLE = "script main {\n wait(1)\n}"
 
 
@@ -51,8 +48,7 @@ class TestGeneratedC:
         assert "extern void evt_pouch_add_coins(void);" in out.text
 
     def test_takes_the_address_of_called_functions(self):
-        # This is what keeps game addresses out of bleck: the linker resolves
-        # the name, we never write a number.
+        # The linker resolves the name, so bleck never writes a game address.
         out = compile_source("script main {\n evt_pouch_add_coins(1)\n}").generated
         assert "(s32) &evt_pouch_add_coins" in out.text
 
@@ -66,24 +62,22 @@ class TestGeneratedC:
         assert "evtEntry(bleck_script_main, 0, 0)" in out.text
 
     def test_prolog_only_arms_hooks(self):
-        # Measured, not assumed: evtEntry from _prolog does nothing (D38), and
-        # hooking .init does not work either (D40). Hooking .main does, verified
-        # by reading the running game's memory (D43).
+        # evtEntry from _prolog does nothing (D38) and .init does not work
+        # (D40); hooking .main does (D43).
         out = compile_source(SIMPLE).generated
         prolog = out.text.split("void _prolog(void)")[1]
         assert "seq_data[i].main = bleck_hooks[i]" in prolog
         assert "evtEntry" not in prolog
 
     def test_every_sequence_is_hooked(self):
-        # A script does not survive a map change (D43), so gameplay cannot be
-        # the only sequence watched -- something has to notice we left it.
+        # A script does not survive a map change (D43), so something must
+        # notice gameplay was left.
         out = compile_source(SIMPLE).generated
         for index in range(6):
             assert f"bleck_seq{index}" in out.text
 
     def test_leaving_gameplay_re_arms_the_start(self):
-        # A script does not survive a map change (D43), so anything other than
-        # gameplay must re-arm rather than the start happening once.
+        # A script does not survive a map change (D43), so the start re-arms.
         out = compile_source(SIMPLE).generated
         body = out.text.split("static void bleck_start_entry")[1]
         assert "bleck_needs_start = 1" in body
@@ -94,8 +88,8 @@ class TestGeneratedC:
         assert "bleck_real_main[seq](work)" in compile_source(SIMPLE).generated.text
 
     def test_saved_pointers_avoid_bss(self):
-        # The loader allocates this module's bss but nothing documents whether
-        # it zeroes it, so the initialisers must be non-zero to force .data.
+        # Nothing documents whether the loader zeroes bss, so initialisers are
+        # non-zero to force .data.
         out = compile_source(SIMPLE).generated
         assert "static u32 bleck_needs_start = 1;" in out.text
         assert "(SeqFunc *) 1" in out.text
@@ -115,8 +109,7 @@ class TestGeneratedC:
             compile_source("script helper {\n wait(1)\n}")
 
     def test_output_is_ascii(self):
-        # Mods build on three platforms whose compilers disagree about default
-        # source encoding.
+        # Three host compilers disagree about default source encoding.
         out = compile_source(
             'script main {\n evt_msg_print_add(0, "café — ok")\n}'
         ).generated
@@ -144,9 +137,8 @@ MAP_SOURCE = "script on_arrive {\n gw[31] = 1\n}"
 class TestMapHooks:
     """Running a script when a named map is reached.
 
-    The mechanism is deliberately *not* the obvious one. Patching
-    `MapData.initScript` deadlocks the map loader (D51), so these assertions
-    guard the working design against someone reintroducing the broken one.
+    Deliberately not the obvious mechanism: patching `MapData.initScript`
+    deadlocks the map loader (D51).
     """
 
     def _generated(self, source=MAP_SOURCE, hooks=(("aa4_01", "on_arrive"),)):
@@ -158,8 +150,7 @@ class TestMapHooks:
         ).generated.text
 
     def test_it_does_not_touch_the_map_s_own_init_script(self):
-        # The comment explains why, so this checks for the *mechanism* --
-        # a lookup and a write into MapData -- rather than for the word.
+        # Checks for the mechanism -- a lookup and a write into MapData.
         out = self._generated()
         assert "mapDataPtr" not in out
         assert "BLECK_MAP_INIT_OFFSET" not in out
@@ -181,8 +172,7 @@ class TestMapHooks:
         assert watcher.index("bleck_map_pending |=") < watcher.index("evtEntry(")
 
     def test_a_map_hook_needs_no_main_script(self):
-        """`main` is what the sequence hook free-runs. A map hook has its own
-        way to start, so requiring `main` would be ceremony."""
+        """`main` is what the sequence hook free-runs; a map hook starts itself."""
         out = self._generated()
         assert "bleck_script_on_arrive" in out
         assert "bleck_start_entry" not in out
@@ -205,8 +195,7 @@ class TestMapHooks:
         assert "bleck_script_b," in out
 
     def test_an_unknown_script_is_rejected_against_the_source(self):
-        # The manifest and the source are written separately; nothing links the
-        # two until generation, so a typo must be caught with both names in view.
+        # Manifest and source only meet at generation, so name both in the error.
         with pytest.raises(ScriptError) as caught:
             self._generated(hooks=(("aa4_01", "on_arrve"),))
         assert "on_arrve" in str(caught.value)
@@ -232,10 +221,8 @@ class TestMapHooks:
 class TestBanner:
     """The on-screen label naming the loaded mod.
 
-    A modded disc is indistinguishable from a stock one until something visibly
-    differs, so the banner is what tells someone which build is running. It is
-    generated for every mod rather than opted into, which is the property most
-    of these tests are really guarding.
+    A modded disc otherwise looks stock, so the banner is generated for every
+    mod rather than opted into.
     """
 
     def test_it_draws_only_on_the_sequences_it_was_given(self):
@@ -254,20 +241,16 @@ class TestBanner:
         assert 'bleck_banner_text[] = "mod_loaded: foo"' in out
 
     def test_a_sources_only_mod_gains_sequence_hooks_for_the_banner(self):
-        """Drawing needs a per-frame hook even when there is no script.
-
-        Without a banner a native-only module installs no hooks at all, so this
-        is the case where the banner is the only reason the sequence table gets
-        touched.
-        """
+        """Drawing needs a per-frame hook even when there is no script — a
+        native-only module otherwise installs none."""
         plain = emit.generate_bare().text
         assert "seq_data" not in plain
 
         with_banner = emit.generate_bare(banner=emit.Banner(text="x")).text
         assert "seq_data[i].main = bleck_hooks[i]" in with_banner
         assert "bleck_draw_banner()" in with_banner
-        # Still no script machinery -- the hook exists purely to draw. The
-        # word itself appears in an explanatory comment, so match the call.
+        # No script machinery. Match the call, not the word: it appears in a
+        # generated comment.
         assert "evtEntry(" not in with_banner
 
     def test_a_script_and_a_banner_share_one_set_of_hooks(self):
@@ -283,18 +266,13 @@ class TestBanner:
         assert "evtEntry(" in out
 
     def test_it_draws_before_delegating_to_the_real_sequence_main(self):
-        """Ordering copied from `spm-rel-loader`, the only known-working use.
-
-        Its title-screen text draws first and then calls the real main, and
-        that text is visible in game -- so the order is evidence, not taste.
-        """
+        """Ordering copied from `spm-rel-loader`, the only known-working use."""
         out = emit.generate_bare(banner=emit.Banner(text="x")).text
         body = out.split("static void bleck_after_seq")[1]
         assert body.index("bleck_draw_banner()") < body.index("bleck_real_main[seq]")
 
     def test_the_colour_is_writable_because_the_game_overwrites_alpha(self):
-        # fontmgr.h: "Warning: Overwrites color.a". A const array here would be
-        # a write to .rodata every frame.
+        # fontmgr.h: "Warning: Overwrites color.a" -- const would write .rodata.
         out = emit.generate_bare(banner=emit.Banner(text="x")).text
         assert "static u8 bleck_banner_color[4]" in out
         assert "const u8 bleck_banner_color" not in out
@@ -308,8 +286,7 @@ class TestBanner:
         assert "bleck_banner_color[4] = {255, 255, 255, 255}" in out
 
     def test_generated_c_stays_ascii_for_an_awkward_mod_name(self):
-        # Names come from a manifest someone else wrote; the escaping guard
-        # must hold rather than the generator emitting raw UTF-8.
+        # Names come from a manifest someone else wrote.
         out = emit.generate_bare(banner=emit.Banner(text="mod_loaded: café")).text
         out.encode("ascii")
 
@@ -318,28 +295,16 @@ class TestGeneratedHandoff:
     """How generated scaffolding hands control to a mod's own C."""
 
     def test_the_hook_is_a_weak_definition_not_a_declaration(self):
-        """A script-only module must leave `mod_prolog` defined, not undefined.
-
-        This was a real build failure, not a style preference. A weak
-        *declaration* leaves an undefined symbol, and `elf2rel` resolves every
-        undefined symbol against the game's list -- so a mod with a script and
-        no C of its own died with "Missing 1 required symbol(s): mod_prolog"
-        before it could ever be built. A weak definition leaves nothing
-        undefined, and a mod's own strong definition still overrides it.
-        """
+        """A weak *declaration* leaves an undefined symbol, which `elf2rel`
+        rejects with "Missing 1 required symbol(s): mod_prolog"."""
         out = compile_source(SIMPLE).generated.text
         assert "__attribute__((weak)) void mod_prolog(void)\n{\n}" in out
         assert "__attribute__((weak)) void mod_prolog(void);" not in out
-        # With a definition present the address is never null, so a guard here
-        # is dead code that -Waddress would flag.
+        # With a definition present the address is never null; -Waddress flags a guard.
         assert "if (mod_prolog != 0)" not in out
 
     def test_generated_code_keeps_ownership_of_prolog(self):
-        """The sequence hooks must be installed before the mod's own code runs.
-
-        If a mod owned `_prolog` it could start work before the scaffolding was
-        in place, and the ordering would depend on link order.
-        """
+        """Sequence hooks must be installed before the mod's own code runs."""
         out = compile_source(SIMPLE).generated.text
         prolog = out.split("void _prolog(void)")[1]
         assert prolog.index("seq_data[i].main") < prolog.index("mod_prolog()")

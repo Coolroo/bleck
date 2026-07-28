@@ -1,9 +1,7 @@
 """The builtin catalog, and the call validation it powers.
 
-The point of the catalog is to move two failures earlier. An unknown name used
-to surface as `elf2rel`'s "Missing 1 required symbol(s)" — after a compile, a
-toolchain and a symbol list. A wrong argument count was never caught at all: it
-linked cleanly and misbehaved in-game.
+The catalog moves two failures earlier: an unknown name (previously `elf2rel`'s
+"Missing 1 required symbol(s)") and a wrong argument count (previously silent).
 """
 
 from __future__ import annotations
@@ -58,11 +56,7 @@ class TestParsingHeaders:
         assert found["evt_mario_take_damage"].arity == 6
 
     def test_variadic_and_unknown_both_become_none(self):
-        """-1 means variadic, the other macro means nobody knows.
-
-        Neither can be checked, so collapsing them keeps the compiler from
-        pretending it can validate something it cannot.
-        """
+        """-1 is variadic, the other macro is unknown; neither can be checked."""
         found = {b.name: b for b in parse_header(HEADER, "spm")}
         assert found["evt_sub_get_mapname"].arity is None
         assert found["evt_pouch_get_arcade_tokens"].arity is None
@@ -75,8 +69,7 @@ class TestParsingHeaders:
         )
 
     def test_unrelated_prose_is_not_mistaken_for_a_signature(self):
-        # `evt_mario_take_damage` has two comment lines above it, neither of
-        # which is its signature.
+        # The two comment lines above `evt_mario_take_damage` are not signatures.
         found = {b.name: b for b in parse_header(HEADER, "spm")}
         assert found["evt_mario_take_damage"].signature == ""
 
@@ -94,8 +87,7 @@ class TestParsingHeaders:
 
 class TestCatalog:
     def test_round_trips_through_json(self):
-        # `to_json` sorts by name deliberately, so a regenerated catalog gives a
-        # readable diff rather than one that reshuffles with header order.
+        # `to_json` sorts by name so a regenerated catalog diffs readably.
         original = build_catalog_from_text()
         restored = Catalog.from_json(original.to_json())
         assert sorted(restored.builtins, key=lambda b: b.name) == sorted(
@@ -103,8 +95,7 @@ class TestCatalog:
         )
 
     def test_json_records_its_provenance(self):
-        # The data is extracted from MIT-licensed headers; saying so where the
-        # data lives keeps the attribution attached to the artifact.
+        # Extracted from MIT-licensed headers; attribution rides with the data.
         text = build_catalog_from_text().to_json()
         assert "spm-headers" in text
         assert "MIT" in text

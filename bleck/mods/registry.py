@@ -1,8 +1,8 @@
 """Discovering mods on disk.
 
 A mod is a directory under the mods root containing `mod.json`. The registry is
-the only thing that knows where mods live, so dependency resolution never
-touches the filesystem itself.
+the only thing that knows where mods live, so resolution stays off the
+filesystem.
 """
 
 from __future__ import annotations
@@ -23,8 +23,6 @@ class RegistryError(BleckError):
 
 @dataclass(frozen=True)
 class Mod:
-    """A mod found on disk."""
-
     manifest: Manifest
     root: Path
 
@@ -40,8 +38,7 @@ class Mod:
     def overlay_paths(self) -> list[str]:
         """Every path in the overlay, relative and posix-style, files only.
 
-        Directories that stand in for archives are *not* listed as directories;
-        their members appear individually.
+        Archive-standing-in directories are not listed; their members are.
         """
         if not self.overlay.is_dir():
             return []

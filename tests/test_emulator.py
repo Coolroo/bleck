@@ -1,8 +1,7 @@
 """Launching Dolphin.
 
 The emulator is stubbed throughout: these assert how `bleck` *invokes* Dolphin,
-not that a game boots. Booting is verified by hand (D25, D36) — it needs a GPU
-and a person looking at the screen.
+not that a game boots (verified by hand — D25, D36).
 """
 
 from __future__ import annotations
@@ -69,13 +68,8 @@ class TestArguments:
         assert Path(spawned[0][-1]).is_absolute()
 
     def test_exec_flag_and_path_stay_separate_tokens(self, spawned, image: Path):
-        """Never the joined `--exec=<path>` form.
-
-        Whoever builds that string has to quote it, and a path arriving with its
-        quotes still attached makes Dolphin report "Could not be opened! This may
-        happen with improper permissions, or use by another process" — blaming
-        permissions for a mangled argument. Two tokens cannot be misquoted.
-        """
+        """Never the joined `--exec=<path>` form: two tokens cannot be misquoted,
+        and Dolphin blames permissions when a quoted path reaches it."""
         emulator.launch(image)
 
         assert "-e" in spawned[0]
@@ -137,11 +131,7 @@ class TestFailures:
 
 class TestPopenUsage:
     def test_the_emulator_is_not_waited_on_implicitly(self, image: Path, monkeypatch):
-        """Popen must not be used as a context manager.
-
-        `with Popen(...)` waits for the child on exit, which would pin the
-        terminal until the user quits Dolphin — the opposite of the intent.
-        """
+        """`with Popen(...)` waits on exit, pinning the terminal until Dolphin quits."""
         entered: list[str] = []
 
         class Tracking(FakeProcess):
@@ -167,11 +157,7 @@ def test_real_popen_is_what_gets_patched():
 
 
 class TestFastBoot:
-    """Super Paper Mario spends ~2,100 frames on logos before gameplay.
-
-    At 100% that is ~45 seconds of watching nothing on every test run. Uncapped
-    it is ~6 (D63), which changes what is worth testing in-game at all.
-    """
+    """~2,100 frames of logos precede gameplay: ~45 s capped, ~6 s uncapped (D63)."""
 
     def test_uncapping_passes_dolphins_config_override(self, spawned, image: Path):
         emulator.launch(image, unlimited=True)

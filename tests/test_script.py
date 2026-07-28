@@ -1,13 +1,11 @@
 """The script language itself: lexing, encoding, statements, control flow.
 
-The assertions here are mostly about *encoding*, because that is where this
-code can be wrong in ways nothing else catches. `evt` recovers an operand's
-meaning from its numeric range, so an off-by-one in a base constant produces a
-script that runs and does the wrong thing rather than one that fails. Several
-tests therefore check exact words against values derived by hand.
+Mostly about *encoding*: `evt` recovers an operand's meaning from its numeric
+range, so an off-by-one in a base constant runs and misbehaves rather than
+failing — hence the hand-derived exact-word assertions.
 
-Generating C from a compiled program is `test_emit.py`; wiring a program into
-a mod is `test_code_mods.py`.
+Generating C is `test_emit.py`; wiring a program into a mod is
+`test_code_mods.py`.
 """
 
 from __future__ import annotations
@@ -41,8 +39,7 @@ def values(source: str, script: str = "main") -> list[int]:
     return [word.value for word in words(source, script) if isinstance(word, Literal)]
 
 
-#: The smallest useful program, for tests that only care about the scaffolding
-#: the emitter wraps around every script.
+#: The smallest useful program, for tests that only care about the scaffolding.
 SIMPLE = "script main {\n wait(1)\n}"
 
 
@@ -110,8 +107,8 @@ class TestEncoding:
         assert evt.encode_float(value) == expected
 
     def test_huge_floats_are_rejected(self):
-        # Silently wrapping into the address window would produce an operand the
-        # VM reads as a pointer.
+        # Wrapping into the address window gives the VM an operand it reads as
+        # a pointer.
         with pytest.raises(ValueError, match=r"cannot be represented"):
             evt.encode_float(1e9)
 
@@ -139,8 +136,7 @@ class TestStatements:
         )
 
     def test_every_script_is_terminated(self):
-        # The VM scans for END_SCRIPT; without it execution runs into whatever
-        # follows the array in memory.
+        # Without END_SCRIPT the VM runs into whatever follows the array.
         assert values("script main {\n wait(1)\n}")[-1] == int(evt.Opcode.END_SCRIPT)
 
     def test_variable_lands_in_slot_zero(self):
@@ -186,8 +182,8 @@ class TestStatements:
 
 class TestExpressions:
     def test_arithmetic_uses_a_scratch_slot(self):
-        # Results must not be written back into an operand: `evt` arithmetic
-        # updates its first argument in place, which would clobber `a`.
+        # `evt` arithmetic updates its first argument in place, so a result
+        # written back into an operand would clobber `a`.
         result = values("script main {\n var a = 1\n var b = a + 2\n}")
         assert evt.LW.encode(15) in result
         assert header(evt.Opcode.ADD, 2) in result
@@ -286,9 +282,8 @@ class TestControlFlow:
         assert header(evt.Opcode.IF_NOT_EQUAL, 2) in values(source)
 
     def test_not_binds_tighter_than_comparison(self):
-        # Matches C and Lua: `not a == 1` is `(not a) == 1`, not `not (a == 1)`.
-        # Worth pinning down, because the two readings differ in behaviour and
-        # a reader coming from Python would expect the other one.
+        # As in C and Lua, `not a == 1` is `(not a) == 1` -- Python reads it
+        # the other way.
         source = "script main {\n var a=1\n if not a == 1 {\n wait(1)\n }\n}"
         result = values(source)
         assert header(evt.Opcode.IF_NOT_EQUAL, 2) not in result

@@ -1,17 +1,8 @@
 """The project's config file: `bleck.yml`.
 
-Distinct from `env.py`, and the split is deliberate. `.env` holds **machine**
-settings — where `wit` lives on this laptop — and is gitignored. `bleck.yml`
-holds **project** settings: things every build of this repo should agree on, and
-which belong in version control so the next person gets them too.
-
-The first thing it carries is named button combinations, so a mod says
-`start_map` rather than a magic number, and the number is written once. Nothing
-about the file is combo-specific though: `constants` is already there as the
-general case, and the schema is versioned so it can grow.
-
-Found by walking up from the working directory, exactly as `.env` is, so it
-works from anywhere inside a checkout.
+Distinct from `env.py`: `.env` holds machine settings and is gitignored, while
+`bleck.yml` holds committed project settings — named button combos, constants.
+Found by walking up from the working directory, exactly as `.env` is.
 """
 
 from __future__ import annotations
@@ -23,8 +14,7 @@ import yaml
 
 from bleck.common.errors import BleckError
 
-#: Committed, unlike `.env` — these are decisions about the project, not about
-#: the machine it happens to be built on.
+#: Committed, unlike `.env`.
 CONFIG_NAME = "bleck.yml"
 
 #: Bumped when a change would make an older `bleck` misread a newer file.
@@ -37,22 +27,11 @@ class ConfigError(BleckError):
 
 # --- buttons ---------------------------------------------------------------
 
-#: Wii remote button masks.
+#: Wii remote button masks. ✅ `a`, `b`, `1`, `2` verified in-game (D68);
+#: 🔶 the rest are published SDK values, unverified.
 #:
-#: ✅ **`a`, `b`, `1` and `2` are verified individually** (D68). Each was pressed
-#: on its own in the running game and reported exactly the value below:
-#: a=0x0800, b=0x0400, 1=0x0200, 2=0x0100. Not inferred, not a group total --
-#: four separate presses, four separate readings.
-#:
-#: 🔶 **`plus`, `minus`, `home` and the d-pad are unverified.** They are the
-#: published Revolution SDK values and nothing in `spm-headers` defines them --
-#: `wii/kpad.h` documents `buttonsHeld` and stops there. Confirm them the same
-#: way before relying on them: `mods/button-probe` plus
-#: `scripts/decode_buttons.py`.
-#:
-#: ⚠️ Bit 31 of `buttonsHeld` is **not** a button. It flips between frames while
-#: the controller is untouched, so a combo must test `(held & mask) == mask` and
-#: never compare the whole word for equality. See D67.
+#: ⚠️ Bit 31 of `buttonsHeld` is not a button — it flips between frames, so a
+#: combo must test `(held & mask) == mask`, never whole-word equality (D67).
 BUTTON_MASKS = {
     "left": 0x0001,
     "right": 0x0002,
@@ -67,13 +46,11 @@ BUTTON_MASKS = {
     "home": 0x8000,
 }
 
-#: Nunchuk buttons are not in `KPADStatus.buttonsHeld` at all — they live in the
-#: `extension` union, which is a different field with a different layout. Named
-#: here only so asking for one gets an explanation instead of "unknown button".
+#: Nunchuk buttons live in the `extension` union, not `buttonsHeld`. Named here
+#: so asking for one gets an explanation instead of "unknown button".
 EXTENSION_BUTTONS = frozenset({"c", "z"})
 
-#: A single button fires during ordinary play. Two is the smallest combination
-#: that a player will not hit by accident while walking around.
+#: A single button fires during ordinary play.
 MIN_COMBO_BUTTONS = 2
 
 
@@ -92,12 +69,7 @@ class Combo:
 
 @dataclass(frozen=True)
 class Constant:
-    """A named value injected at compile time.
-
-    Deliberately stringly-typed for now. Every use so far is a map name or a
-    similar identifier, and inventing a type system for a file with three
-    entries in it would be inventing work.
-    """
+    """A named value injected at compile time. Stringly-typed for now."""
 
     name: str
     value: str
@@ -105,12 +77,7 @@ class Constant:
 
 @dataclass(frozen=True)
 class Config:
-    """Everything `bleck.yml` declares.
-
-    Returned as a value with lookup methods rather than as dictionaries: the
-    project forbids returning `dict` (pylint C9001) precisely so that a
-    signature says what comes back.
-    """
+    """Everything `bleck.yml` declares."""
 
     combos: list[Combo] = field(default_factory=list)
     constants: list[Constant] = field(default_factory=list)
@@ -145,12 +112,7 @@ class Config:
 
 
 def find(start: Path | None = None) -> Path | None:
-    """The nearest `bleck.yml`, walking up from `start`.
-
-    Same search as `.env`, for the same reason: a command run from three
-    directories deep inside a checkout should behave the same as one run at the
-    top.
-    """
+    """The nearest `bleck.yml`, walking up from `start`. Same search as `.env`."""
     origin = start or Path.cwd()
     for directory in (origin, *origin.parents):
         candidate = directory / CONFIG_NAME
@@ -216,9 +178,8 @@ def _parse_combo(name: str, raw: object, where: str) -> Combo:
 def _require_mapping(raw: object, key: str, where: str) -> dict:  # pylint: disable=container-return
     """A top-level section, which must be `name: value` pairs if present.
 
-    Returns a plain dict because it is an intermediate step in parsing, not a
-    return value anyone outside this module sees -- the parsed result is
-    `Config`, which names everything.
+    A plain dict because it is an intermediate parsing step; the parsed result
+    is `Config`.
     """
     if raw is None:
         return {}
@@ -265,11 +226,8 @@ def parse(text: str, where: str = CONFIG_NAME, source: Path | None = None) -> Co
 
 
 def load(start: Path | None = None) -> Config:
-    """The nearest `bleck.yml`, parsed. An absent file is not an error.
-
-    A project with no config is the normal case — combos are opt-in, and every
-    other feature works without them. Referring to a combo that is not declared
-    is what fails, and it fails where the reference is.
+    """The nearest `bleck.yml`, parsed. An absent file is not an error — an
+    undeclared combo fails where it is referenced instead.
     """
     path = find(start)
     if path is None:

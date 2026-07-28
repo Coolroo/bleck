@@ -30,9 +30,8 @@ def _has_symbols() -> bool:
     return True
 
 
-#: `code.prepare` resolves the symbol list eagerly, and that list is third-party
-#: and deliberately not vendored. Same contract as `game_data` in conftest: a
-#: fresh clone runs green rather than red.
+#: `code.prepare` eagerly resolves the third-party, deliberately unvendored
+#: symbol list. Same contract as `game_data`: a fresh clone runs green.
 needs_symbols = pytest.mark.skipif(
     not _has_symbols(),
     reason="no spm-headers symbol list; set BLECK_SYMBOLS_DIR",
@@ -53,8 +52,7 @@ def values(source: str, script: str = "main") -> list[int]:
     return [word.value for word in words(source, script) if isinstance(word, Literal)]
 
 
-#: The smallest useful program, for tests that only care about the scaffolding
-#: the emitter wraps around every script.
+#: The smallest useful program, for tests that only care about the scaffolding.
 SIMPLE = "script main {\n wait(1)\n}"
 
 
@@ -96,8 +94,7 @@ class TestManifestCodeBlock:
 
     @pytest.mark.parametrize("module_id", [0, 1])
     def test_reserved_module_ids_are_rejected(self, module_id):
-        # 0 is the game binary and 1 is its own REL; either would collide with
-        # something already linked when the mod loads.
+        # 0 is the game binary and 1 its own REL; either would collide.
         raw = json.dumps(
             {"name": "m", "code": {"script": "a.evt", "module_id": module_id}}
         )
@@ -116,13 +113,8 @@ class TestManifestCodeBlock:
 
 
 class TestSeveralCodeMods:
-    """The loader opens exactly one `/mod/mod.rel` — and does not care how many
-    mods went into it.
-
-    Two code mods used to be refused outright. They are now merged at compile
-    time, which satisfies the loader's limit without any runtime REL chaining
-    (`docs/plan-merging.md`).
-    """
+    """The loader opens exactly one `/mod/mod.rel`, so several code mods are
+    merged at compile time (`docs/plan-merging.md`)."""
 
     def _mod(self, name: str, has_code: bool):
         spec = mod_manifest.CodeSpec(script="s.evt") if has_code else None
@@ -148,8 +140,7 @@ class TestSeveralCodeMods:
         assert merged == [["alpha", "beta"]]
 
     def test_one_code_mod_still_takes_the_single_path(self, monkeypatch):
-        """A one-mod disc must keep emitting what it always has, so it must not
-        wander into the merging code at all."""
+        """A one-mod disc must emit what it always has, never touching merging."""
         seen: list[str] = []
 
         def refuse(*_args, **_kwargs):
@@ -177,10 +168,8 @@ class TestSeveralCodeMods:
 class TestNativeSources:
     """`code.sources`: native C compiled into the same module as the script.
 
-    This exists because a script cannot reach ordinary game functions. Every
-    evt builtin takes `(EvtEntry *, bool)`, so calling something like
-    `mapDataPtr` -- which is how a mod attaches behaviour to a specific map --
-    is only possible from C.
+    Every evt builtin takes `(EvtEntry *, bool)`, so ordinary game functions
+    are reachable only from C.
     """
 
     def _mod(self, tmp_path: Path, **code) -> registry.Mod:
@@ -296,7 +285,7 @@ class TestBannerFromManifest:
                     "code": {"sources": ["src"], "banner": {"sequences": ["titel"]}},
                 },
             )
-        # The message has to list the alternatives, or a typo is a guessing game.
+        # The message must list the alternatives.
         assert "titel" in str(excinfo.value)
         assert "title" in str(excinfo.value)
 
@@ -346,16 +335,7 @@ class TestCodeIntermediates:
 
     @needs_symbols
     def test_they_are_not_inside_the_staged_disc(self, tmp_path, monkeypatch):
-        """`build_rel` promises to keep its intermediates. It has to be able to.
-
-        `builder.stage` deletes the mod's build directory wholesale before
-        mirroring the base into it, so intermediates written underneath it were
-        gone by the time a build finished. The promise held for
-        `bleck mod check`, which never stages, and broke for every real build --
-        exactly backwards, since a full build is when a compile error is most
-        likely and reading the generated `mod.c` is the only way to make sense
-        of the compiler's line numbers.
-        """
+        """Intermediates must survive staging, which wipes the build directory."""
         root = tmp_path / "mods" / "demo"
         (root / "src").mkdir(parents=True)
         (root / "src" / "a.c").write_text("void nothing(void) {}\n")
@@ -405,12 +385,12 @@ class TestMergedModProlog:
             code.build_merged(mods, mods[-1], tmp_path / "work")
         message = str(caught.value)
         assert "alpha" in message and "beta" in message
-        # And says what to do, not just that it went wrong.
+        # And says what to do instead.
         assert "sequence hook" in message
 
     @needs_symbols
     def test_one_definition_alongside_another_mod_is_fine(self, tmp_path: Path):
-        """The intended design: bleck's own is weak, so one override wins."""
+        """bleck's own definition is weak, so a single override wins."""
         mods = [
             self._mod(tmp_path, "alpha", True),
             self._mod(tmp_path, "beta", False),

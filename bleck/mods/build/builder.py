@@ -1,8 +1,7 @@
 """Materialising a resolved chain into a bootable disc.
 
 The base is opened read-only throughout. Staging hardlinks unchanged files
-rather than copying, so a build writes only what actually differs — copying
-400 MB per iteration would make the loop unusable on modest hardware.
+rather than copying 400 MB per iteration, so a build writes only what differs.
 """
 
 from __future__ import annotations
@@ -31,11 +30,7 @@ class BuildError(BleckError):
 
 @dataclass(frozen=True)
 class BuildContext:
-    """Everything a build step needs, so state is threaded as one value.
-
-    These arguments always travel together; passing them individually made
-    every helper take six positionals.
-    """
+    """Everything a build step needs, threaded as one value."""
 
     base: Path
     staged: Path
@@ -76,8 +71,7 @@ def stage(base: Path, dest: Path) -> int:
     profile = platforms.current()
     count = 0
     for source in base.rglob("*"):
-        # Never stage OS clutter — macOS scatters .DS_Store and ._ sidecars
-        # through any directory a user browses, and it must not reach the disc.
+        # Never stage OS clutter (.DS_Store, ._ sidecars) onto the disc.
         if profile.is_ignored(source.name):
             continue
         target = dest / source.relative_to(base)
@@ -96,8 +90,7 @@ def stage(base: Path, dest: Path) -> int:
 def _on_rmtree_error(func, path: str, _exc) -> None:
     """Retry a failed removal after clearing the read-only bit.
 
-    Windows refuses to delete read-only files, which staged copies inherit from
-    a read-only base.
+    Windows refuses to delete read-only files, which staged copies inherit.
     """
     Path(path).chmod(stat.S_IWRITE)
     func(path)
@@ -113,14 +106,9 @@ def remove_tree(path: Path) -> None:
 def _detach(path: Path) -> None:
     """Remove a staged file before rewriting it, so the base is never modified.
 
-    Staged files are hardlinks to the base, and writing through one would edit
-    the base in place — the exact failure this design exists to prevent.
-
-    This unlinks unconditionally rather than checking `st_nlink > 1`: Windows
-    does not reliably report link counts, so a check that silently returns 1
-    there would write straight through the link. Unlinking always is cheap and
-    cannot get this wrong. Callers either rewrite the file or fall back to
-    reading the base, both of which are correct once it is gone.
+    Staged files are hardlinks to the base; writing through one edits the base.
+    ⚠️ Unlinks unconditionally rather than checking `st_nlink > 1` — Windows
+    does not report link counts reliably.
     """
     path.unlink(missing_ok=True)
 
@@ -187,12 +175,10 @@ def _merge_archive(
 
 def _merge_members(items, file_plan, context, report) -> bytes | None:
     """Apply every member edit and repack. None when the merge conflicted."""
-    # ⚠️ Matched on a normalised key, not the stored path. SPM's two archive
-    # families disagree: `lyt/*.bin.uk` stores `arc/anim/...` while `map/*.bin`
-    # stores `./dvd/...`. An overlay path cannot express a `./` component, so
-    # matching literally meant a map-archive member was never recognised -- it
-    # was silently *added* alongside the original instead of replacing it,
-    # producing an archive with two members of the same name.
+    # ⚠️ Matched on a normalised key, not the stored path: `lyt/*.bin.uk`
+    # stores `arc/anim/...` while `map/*.bin` stores `./dvd/...`, and an overlay
+    # path cannot express `./`. Matching literally adds a duplicate member
+    # instead of replacing the original.
     known = {u8.member_key(item.path): item.path for item in items}
 
     replacements: dict[str, bytes] = {}
@@ -223,8 +209,7 @@ def _merge_members(items, file_plan, context, report) -> bytes | None:
         return None
 
     # Preserve node order *and the stored path*: unchanged members stay
-    # byte-identical (D17), and a replaced one keeps the archive's own spelling
-    # rather than the overlay's.
+    # byte-identical (D17), and a replaced one keeps the archive's spelling.
     merged = [
         u8.U8Item(item.path, replacements.get(u8.member_key(item.path), item.data))
         for item in items
@@ -249,9 +234,8 @@ def prepare(chain: Chain, base: Path) -> Plan:
 def compile_code(chain: Chain, override: CodeOverride | None = None) -> list[CodeBuild]:
     """Compile the chain's code mods into their overlays.
 
-    Must happen before `prepare`: the overlay plan comes from walking each mod's
-    `overlay/` directory, so a generated `mod.rel` that does not exist yet would
-    simply not be part of the build.
+    ⚠️ Must run before `prepare`: the plan comes from walking `overlay/`, so a
+    `mod.rel` generated later would not be in the build.
     """
     return build_chain(chain, override=override)
 
@@ -262,10 +246,9 @@ def check(
     allow_binary: bool,
     override: CodeOverride | None = None,
 ) -> BuildReport:
-    """Resolve and detect conflicts without writing anything.
+    """Resolve and detect conflicts without writing a disc.
 
-    Scripts are still compiled: a mod whose code does not build is not a mod
-    that passes checking, and finding that out here is the whole point.
+    Scripts are still compiled: a mod whose code does not build fails checking.
     """
     report = BuildReport(staged=Path())
     report.code_builds = compile_code(chain, override)
@@ -310,15 +293,10 @@ def emit(
 def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
     """Warn when a mod edits a setup file that exists in two places.
 
-    Setup files ship both standalone in `setup/` and embedded inside some map
-    archives, byte-identically (see docs/decision-log.md D13).
-
-    ✅ D62 settled it: the game reads the **standalone** `files/setup/<map>.dat`.
-    A disc with a different enemy in each copy spawned the standalone one's.
-
-    `bleck` writes both when it generates a setup file -- hygiene rather than a
-    hedge, since a stale embedded copy would mislead anyone inspecting the
-    archive -- and warns when a hand-written overlay touches only one.
+    Setup files ship both standalone in `setup/` and embedded in some map
+    archives, byte-identically (D13). ✅ The game reads the **standalone**
+    `files/setup/<map>.dat` (D62). `bleck` writes both; this warns when a
+    hand-written overlay touches only one.
     """
     warnings: list[str] = []
     for file_plan in plan.files:

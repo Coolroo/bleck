@@ -1,10 +1,7 @@
 """Booting the game straight into a chosen map.
 
-Without this, an unattended boot reaches `aa4_01` and `ls4_12` and nowhere
-else, because controller input cannot be injected (D48). Every other map needed
-a human holding a Wii remote — which is what made `--fast`, running the
-emulator uncapped, look like the answer to slow tests. It was not: it made the
-wrong 45 seconds shorter.
+Without it an unattended boot reaches only `aa4_01` and `ls4_12`, since
+controller input cannot be injected (D48).
 """
 
 from __future__ import annotations
@@ -20,14 +17,7 @@ from bleck.script import ScriptError, compile_source, emit
 
 
 class TestBootMap:
-    """Starting the game at a chosen map instead of the attract demo.
-
-    Without this, an unattended boot reaches `aa4_01` and `ls4_12` and nothing
-    else, because controller input cannot be injected (D48). Every other map
-    needed a human holding a Wii remote, which is what made `--fast` -- running
-    the emulator at unlimited speed -- look like the answer to slow tests. It
-    was not: it made the wrong 45 seconds shorter.
-    """
+    """Starting the game at a chosen map instead of the attract demo."""
 
     def _generated(self, source="", boot="he1_01"):
         text = emit.boot_source(boot)
@@ -42,30 +32,20 @@ class TestBootMap:
         assert "evt_seq_mapchange" in out
 
     def test_it_goes_through_the_game_s_own_map_change(self):
-        """Not a poke at `seqWork.p0` on the way into the first load.
-
-        That would be faster and is exactly the shape of thing that deadlocked
-        the map loader in D51. Arriving through `evt_seq_mapchange` is the same
-        arrival a door performs, so the map gets set up the way it expects.
-        """
+        """Arrive the way a door does, not by poking `seqWork.p0` (deadlock, D51)."""
         out = self._generated()
         assert "seqWork.p0 =" not in out
         assert "evt_seq_mapchange" in out
 
     def test_it_fires_once_and_is_never_re_armed(self):
-        """A re-armed boot map is a loop, not a starting point.
-
-        Re-arming would send the game back the moment it left, so leaving the
-        map by any means would bounce straight back into it.
-        """
+        """A re-armed boot map is a loop: leaving it would bounce straight back."""
         out = self._generated()
         block = out.split("static void bleck_boot_on_seq")[1].split("}\n")[0]
         assert "bleck_boot_pending = 0" in block
         assert "= 1" not in block
 
     def test_the_flag_starts_in_data_not_bss(self):
-        # The loader allocates this module's bss and nothing documents whether
-        # it zeroes it; a boot map firing only on some builds would be grim.
+        # Nothing documents whether the loader zeroes this module's bss.
         assert "static u32 bleck_boot_pending = 1;" in self._generated()
 
     def test_it_waits_before_asking(self):
@@ -74,8 +54,7 @@ class TestBootMap:
         assert str(emit.BOOT_DELAY_FRAMES) in out
 
     def test_a_boot_map_needs_no_main_script(self):
-        # The whole point is that a placement or texture mod can use this, and
-        # those have no script at all.
+        # A placement or texture mod has no script at all and still needs this.
         out = self._generated()
         assert "bleck_start_entry" not in out
         assert "bleck_boot_on_seq(seq)" in out
@@ -87,8 +66,7 @@ class TestBootMap:
         assert "bleck_boot_on_seq(seq)" in out
 
     def test_the_boot_script_runs_after_everything_else_that_frame(self):
-        # It tears the world down a couple of seconds later, so anything else
-        # due this frame should already have happened.
+        # It tears the world down shortly after, so let the frame finish first.
         out = self._generated(source="script main {\n wait(1)\n}")
         body = out.split("static void bleck_after_seq")[1]
         assert body.index("bleck_start_entry") < body.index("bleck_boot_on_seq")
@@ -135,8 +113,7 @@ class TestBootMapManifest:
 
     @pytest.mark.parametrize("bad", ["He1_01", "he1 01", "../etc/passwd", '", 0) --'])
     def test_anything_that_is_not_a_map_name_is_rejected(self, bad):
-        # The name is interpolated into generated script source, so this is the
-        # boundary that keeps escaping from ever being a question.
+        # The name is interpolated into generated script source.
         raw = json.dumps({"name": "m", "code": {"boot": bad}})
         with pytest.raises(mod_manifest.ManifestError, match="not a map name"):
             mod_manifest.Manifest.from_json(raw)
@@ -168,8 +145,7 @@ class TestBootMapOverride:
         return seen
 
     def test_it_gives_code_to_a_mod_that_has_none(self, built):
-        """A placement or texture mod is exactly what someone wants to boot
-        into a level, and those declare no `code` block at all."""
+        """A placement or texture mod declares no `code` block but still boots."""
         code.build_chain(
             self._chain(has_code=False),
             workroot=Path("unused"),

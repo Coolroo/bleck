@@ -158,11 +158,10 @@ class TestLz:
 
 
 class TestBootMapFlag:
-    """`--map` resolves against the game's real map list before anything builds.
+    """`--map` resolves against the real map list before anything builds.
 
-    A name that does not exist would otherwise compile fine, boot fine, and then
-    sit on the attract demo forever — the failure mode looks identical to the
-    feature not working at all.
+    An unknown name would otherwise build and boot fine, then sit on the
+    attract demo — indistinguishable from the feature not working.
     """
 
     def _resolve(self, value):

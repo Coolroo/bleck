@@ -1,8 +1,4 @@
-"""Disc-level commands: extract, build.
-
-Thin wrappers over the `wit`/`dolphin-tool` backend — the knowledge worth owning
-here is the defaults, not the disc I/O itself.
-"""
+"""extract/build — thin wrappers over the `wit`/`dolphin-tool` backend."""
 
 from __future__ import annotations
 
