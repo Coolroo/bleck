@@ -187,7 +187,8 @@ class TestFastBoot:
         emulator.launch(image, state=state)
         assert spawned[0][-2:] == ["-s", str(state.resolve())]
 
-    def test_a_missing_save_state_is_refused(self, spawned, image: Path, tmp_path):
+    def test_a_missing_save_state_is_refused(self, monkeypatch, image: Path, tmp_path):
         # Silently booting cold would look like the state simply not working.
+        monkeypatch.setattr(emulator, "find_tool", lambda _name: FAKE_DOLPHIN)
         with pytest.raises(DiscError, match="no save state"):
             emulator.launch(image, state=tmp_path / "absent.sav")
