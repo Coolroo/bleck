@@ -3,14 +3,34 @@ title: Overview
 description: What bleck needs, on any platform
 ---
 
-`bleck` is a Python package with **no runtime dependencies**. It shells out to
-two external tools for disc I/O.
+`bleck` ships two ways: a **single-file executable** that needs no Python, or
+the Python package. Either way it shells out to two external tools for disc I/O.
+
+## The binary
+
+Download the build for your platform from the repository's Actions artifacts and
+run it — there is nothing to install and no Python needed.
+
+```bash
+./bleck --help
+```
+
+Builds are produced for Linux x86-64, Windows x86-64 and macOS arm64 on every
+change, and each is smoke-tested before it is published: a packaging mistake
+produces a binary that starts happily and then reports an empty catalog, which
+looks like a corrupt install rather than a build bug.
+
+## The Python package
+
+Needed if you want to work *on* `bleck` rather than with it, or if your platform
+has no published build. Python 3.10+, and two small runtime dependencies
+(`pydantic` for the JSON API, `pyyaml` for `bleck.yml`).
 
 ## Requirements
 
 | | Needed for |
 |---|---|
-| **Python 3.10+** | `bleck` itself |
+| **Python 3.10+** | `bleck` itself — *not needed for the binary* |
 | **`wit`** (Wiimms ISO Tools) | `extract`, `build` |
 | **`dolphin-tool`** | Reading and writing RVZ |
 | A Super Paper Mario disc image | Everything. Not distributed with `bleck`. |

@@ -41,6 +41,12 @@ dev = [
     "pylint-pydantic>=0.3",
 ]
 
+# Building the single-file executable. Separate from `dev` so a contributor
+# running the tests does not pull in a packaging toolchain.
+build = [
+    "pyinstaller>=6.6",
+]
+
 # Separate from `dev` so that editing prose does not pull in a test and lint
 # toolchain, and so CI can install only what a docs build needs.
 docs = [

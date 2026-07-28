@@ -1,0 +1,77 @@
+name: build
+
+# Binaries for the three platforms bleck supports, built the same way on each.
+#
+# ⚠️ Deploying to GitHub Pages needs a paid plan on a private repository, which
+# is why the docs workflow lives on the `docs/github-pages` branch. Uploading
+# build artifacts has no such limit, so this one stays on main.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binary:
+    strategy:
+      # One platform failing should not hide whether the others work -- the
+      # failures worth catching here are usually platform-specific.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            name: linux-x86_64
+          - os: windows-latest
+            name: windows-x86_64
+          - os: macos-latest
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install
+        run: uv sync --extra build
+
+      - name: Build
+        run: uv run pyinstaller bleck.spec --noconfirm --distpath dist --workpath build
+
+      # ⚠️ The step that earns its keep. A PyInstaller build that *builds*
+      # proves almost nothing: a data file bundled to the wrong path, or a
+      # command module never imported, produces a binary that starts and then
+      # reports an empty catalog. That reads as a corrupt install rather than a
+      # packaging bug, so it is checked here rather than by a user.
+      - name: Smoke test the artifact
+        run: uv run python scripts/smoke_binary.py dist/bleck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bleck-${{ matrix.name }}
+          path: |
+            dist/bleck
+            dist/bleck.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  # The same checks a contributor runs locally, so a green tick means the same
+  # thing in both places.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --extra dev
+      - run: uv run pytest -q
+      - run: uv run python scripts/lint.py
