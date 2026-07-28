@@ -6775,3 +6775,89 @@ does not disappear — `StrEnum.__str__` is `str.__str__`, so the generated C
 comments and error messages still depend on `str(mode)` being `"replace"`. The
 mechanism changed, not the requirement, so the test asserting the wire format
 stays exactly as it is.
+
+---
+
+## D100 — ✅ `PatchKind` and `Sequence`, and where the enum pattern stops (2026-07-28)
+
+Finishing the pass D98 began. Two more enums, each with a different relationship
+to the wire format, and that difference is the whole entry.
+
+### `PatchKind` — a value that is *half* a wire string
+
+`map:he1_01` is one manifest field holding two things. So unlike `HookMode`,
+the enum is not the field: `ScriptPatch.selector` reassembles it and
+`_parse_selector` splits it, and those two are the only places the wire is
+touched. ✅ Round-tripped for all three selector spellings, asserting
+`"PatchKind"` appears nowhere in the output.
+
+Deleted: `_SUPPORTED_SELECTORS`, prose listing the same values as the tuple two
+lines above it, with nothing keeping them in step. `SUPPORTED_SELECTORS` is
+derived from the members.
+
+⛔ **`door:` deliberately stays out of the enum.** `DEFERRED_PATCH_KINDS` is a
+plain dict, and a key in it is a selector `bleck` recognises well enough to
+*explain* and refuses anyway (D91, D93). As a member it would appear in
+`SUPPORTED_SELECTORS` and in every "here is what works" list. There is now a
+test asserting `PatchKind.parse("door") is None` *and* that it is still in
+`DEFERRED_PATCH_KINDS` — the pair, because either alone would pass for the
+wrong reason.
+
+⚠️ **Comparing with `is` rather than `==` caught four tests** still constructing
+the resolved type with raw strings. A `StrEnum` compares equal to its value, so
+`==` accepted them silently. That is the argument for the identity check, and it
+is why the codegen table's hand-written "this is a bug in bleck" branch could be
+deleted: a member nobody wired up is now a `KeyError` at the line that uses it.
+
+### `Sequence` — ⚠️ the odd one out, and the only risky one
+
+An `IntEnum`, and **the only enum here whose value is not the wire format**:
+
+- the **value** is game truth — what the game puts in `seqWork.seq`, and the row
+  it reads from `seq_data[]`. Generated C uses it.
+- the **name**, lowercased, is what `code.banner.sequences` holds in `mod.json`.
+
+So `json.dumps` on a member emits a **number**. Two consequences, both handled
+explicitly rather than by hoping:
+
+1. `BannerSpec.to_json` serializes through names, never members.
+2. ⛔ **The v1 API field stays `list[str]`, not `list[Sequence]`.** A pydantic
+   field typed with an `IntEnum` would have silently rewritten every manifest's
+   `sequences` as integers. The `list[str]` is now commented with why, because
+   it looks like an oversight and is the opposite.
+
+⚠️ The real hazard was quieter than either: `BannerSpec.is_default` decides
+**whether `banner` is written to `mod.json` at all**, so a broken comparison
+changes files rather than raising.
+
+✅ **So the test was written first, against unchanged code**, parametrized over
+absent / `["title"]` / `["game"]` / `["title", "game"]`, asserting names survive
+and neither an index nor a member repr appears. It passed before the refactor
+and after — which is what makes it evidence rather than decoration.
+
+That test also surfaced existing behaviour worth recording: an **empty**
+`sequences` list is refused at parse time, since a banner drawing nowhere is
+`"banner": false` written confusingly. Correct, and now pinned.
+
+✅ Generated C checked directly: `banner-probe` declares title+game and emits
+`bleck_banner_on[6] = {0, 1, 1, 0, 0, 0}`.
+
+### ⛔ Where the pattern stops
+
+Not everything closed-set should be an enum, and these were considered and
+rejected:
+
+- **`OutputKind`, `Language`** — each value carries a *callable* plus five
+  fields. An enum either loses that or becomes an enum-of-dataclasses. They are
+  the data-table pattern `docs/` already endorses.
+- **`Symbol.kind`** — an **open** set, parsed from spm-decomp's `type=` tag.
+- **The pyelf2rel error dispatch** (`type(exc).__name__`) — stringly-typed on
+  purpose: importing pyelf2rel at module scope breaks startup when it is absent.
+- **`Button` from `BUTTON_MASKS`** — `"1"` and `"2"` are not identifiers, so
+  members would need `ONE`/`TWO` plus a name map, reintroducing the parallel
+  structure the enum exists to remove.
+
+The rule the pass converged on: **enumerate a closed set of bare values;
+leave a table of behaviour as a table.**
+
+791 tests (787 before), pylint 10.00/10.

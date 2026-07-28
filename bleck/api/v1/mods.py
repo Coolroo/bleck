@@ -49,10 +49,13 @@ class Banner(BaseModel):
     text: str = Field(
         default="", description="Overrides the label. Empty means `mod_loaded: <name>`."
     )
+    # `list[str]`, not `list[Sequence]`, on purpose: `Sequence` is an `IntEnum`,
+    # so a pydantic field typed with it would serialize to NUMBERS and silently
+    # change what `code.banner.sequences` looks like on the wire.
     sequences: list[str] = Field(
         default_factory=lambda: list(codespec.emit.DEFAULT_BANNER_SEQUENCES),
         description=(
-            "Which game sequences draw it: logo, title, game, mapchange, gameover, load."
+            f"Which game sequences draw it: {', '.join(codespec.emit.SEQUENCE_NAMES)}."
         ),
     )
 

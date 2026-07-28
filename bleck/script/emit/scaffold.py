@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 
 from bleck.script.errors import Position, ScriptError
 
@@ -117,12 +117,48 @@ SUPPORTED_SELECTORS = ", ".join(kind.example for kind in PatchKind)
 #: change which script runs.
 ENTRY_SCRIPT = "main"
 
-#: The game's sequences, in order (spm/seqdrv.h). A name's index is both the
-#: value the game puts in `seqWork.seq` and the row it uses in `seq_data[]`.
-SEQUENCE_NAMES = ("logo", "title", "game", "mapchange", "gameover", "load")
 
-#: Where the banner is drawn unless a mod says otherwise.
-DEFAULT_BANNER_SEQUENCES = ("title",)
+# ⚠️ THE ODD ONE OUT: an `IntEnum`, and the only enum here whose value is *not*
+# the wire format. Two representations of one thing, and both are load-bearing:
+#
+#   the VALUE   is game truth -- what the game puts in `seqWork.seq`, and the
+#               row it reads from `seq_data[]`. Generated C uses it.
+#   the NAME    lowercased, is what `code.banner.sequences` holds in mod.json.
+#
+# So `json.dumps` on a member emits a NUMBER, which is not what a manifest
+# wants. Serialization must go through `manifest_name`; never hand a member to
+# a JSON encoder. `BannerSpec.to_json` is the one place that matters.
+class Sequence(IntEnum):
+    """A top-level game sequence (`spm/seqdrv.h`).
+
+    ⚠️ Do not reorder. The values are the game's own, not bleck's.
+    """
+
+    LOGO = 0
+    TITLE = 1
+    GAME = 2
+    MAPCHANGE = 3
+    GAMEOVER = 4
+    LOAD = 5
+
+    @property
+    def manifest_name(self) -> str:
+        """How this sequence is written in `code.banner.sequences`."""
+        return self.name.lower()
+
+    @classmethod
+    def parse(cls, raw: str) -> Sequence | None:
+        """The sequence `raw` names, or None. The one place the wire is decoded."""
+        return next((seq for seq in cls if seq.manifest_name == raw), None)
+
+
+#: Every sequence name, for an error listing what is accepted. Derived, so a new
+#: member cannot leave it stale.
+SEQUENCE_NAMES = tuple(seq.manifest_name for seq in Sequence)
+
+#: Where the banner is drawn unless a mod says otherwise. The title screen is
+#: where someone looks to see which disc they put in.
+DEFAULT_BANNER_SEQUENCES = (Sequence.TITLE.manifest_name,)
 
 #: The script a `code.boot` declaration is desugared into.
 BOOT_SCRIPT = "bleck_boot"
@@ -175,16 +211,18 @@ class Banner:
     """An on-screen label naming the mod that is loaded."""
 
     text: str
-    sequences: tuple[int, ...] = (1,)
-    """Sequence indices to draw on. Defaults to the title screen."""
+    sequences: tuple[Sequence, ...] = (Sequence.TITLE,)
+    """Which sequences draw it. Already resolved from the manifest's names."""
 
     @property
     def flags(self) -> str:
-        """The `sequences` set rendered as a C initialiser, one flag per row."""
+        """The `sequences` set rendered as a C initialiser, one flag per row.
+
+        One column per member, in value order, because the generated table is
+        indexed by the sequence the game reports.
+        """
         on = set(self.sequences)
-        return ", ".join(
-            "1" if index in on else "0" for index in range(len(SEQUENCE_NAMES))
-        )
+        return ", ".join("1" if seq in on else "0" for seq in Sequence)
 
 
 @dataclass(frozen=True)

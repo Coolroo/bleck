@@ -31,6 +31,7 @@ from bleck.script.emit.scaffold import (
     PatchKind,
     Scaffolding,
     ScriptPatch,
+    Sequence,
     mod_slug,
     prefix_for,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "PatchKind",
     "Scaffolding",
     "ScriptPatch",
+    "Sequence",
     "boot_source",
     "generate",
     "generate_bare",

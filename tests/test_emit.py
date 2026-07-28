@@ -236,6 +236,27 @@ class TestBanner:
         # Where someone actually looks to see which disc they put in.
         assert emit.Banner(text="hi").sequences == (emit.SEQUENCE_NAMES.index("title"),)
 
+    # No empty case: an empty list is refused at parse time, since a banner that
+    # draws nowhere is `"banner": false` written the confusing way.
+    @pytest.mark.parametrize("sequences", [None, ["title"], ["game"], ["title", "game"]])
+    def test_the_sequences_round_trip_through_mod_json_as_names(self, sequences):
+        """`sequences` is a wire format written as NAMES, while the generated C
+        needs INDICES -- the index is what the game puts in `seqWork.seq`.
+
+        Both representations of one thing, so this pins the boundary between
+        them. It matters more than it looks: `is_default` decides whether
+        `banner` is written to `mod.json` at all, so getting the comparison
+        wrong changes files silently instead of raising.
+        """
+        banner: dict[str, object] = {} if sequences is None else {"sequences": sequences}
+        document = {"name": "m", "code": {"sources": ["src"], "banner": banner}}
+        written = mod_manifest.Manifest.from_json(json.dumps(document)).to_json()
+        again = mod_manifest.Manifest.from_json(written)
+        assert again.code.banner.sequences == (sequences or ["title"])
+        # Names, never indices, and never a member repr.
+        assert '"sequences": [0' not in written
+        assert "Sequence." not in written
+
     def test_the_text_is_embedded_as_a_c_string(self):
         out = emit.generate_bare(banner=emit.Banner(text="mod_loaded: foo")).text
         assert 'bleck_banner_text[] = "mod_loaded: foo"' in out

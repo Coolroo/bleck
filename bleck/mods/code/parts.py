@@ -506,9 +506,10 @@ def banner_for(mod: Mod, spec: CodeSpec | None = None) -> emit.Banner | None:
         return None
     return emit.Banner(
         text=spec.banner.label(mod.name),
-        sequences=tuple(
-            emit.SEQUENCE_NAMES.index(name) for name in spec.banner.sequences
-        ),
+        # Names to members. `_parse_banner` has already rejected anything
+        # unknown, so this cannot be None -- but `.index()` would have raised
+        # ValueError rather than said so.
+        sequences=tuple(emit.Sequence[name.upper()] for name in spec.banner.sequences),
     )
 
 
