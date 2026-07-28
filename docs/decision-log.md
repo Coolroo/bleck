@@ -4617,3 +4617,37 @@ from the first logo frame onward. Liveness is per-entry.
 **This is what turned the question from unanswerable to settled.** Every
 placement conclusion before it rested on someone reporting what they saw, which
 cannot distinguish "did not spawn" from "spawned somewhere I did not look".
+
+---
+
+## D80 — The fix verified, including the template that was blamed (2026-07-27)
+
+✅ **`mods/hard-lineland` spawns all three declared enemies.**
+
+```
+[t+51s] map=he1_01  npcs[3] slot0:npc_00000001 slot1:npc_00000002 slot2:npc_00000003
+```
+
+Same mod, same map, same `template 144` at `[-75, 0, -75]` in slot 2 that has
+been blamed since this started. The only change is that slot 1 is occupied
+rather than cleared, so nothing is orphaned (D79).
+
+### Why this run was worth making
+
+D79 ruled out "template 144 is refused here" by *arguing from template 250*: 250
+spawns in slot 2, so the slot is fine, so 144 must be too. That is an inference,
+and this session has now produced four retracted entries built on inferences
+that felt equally safe.
+
+144 is now measured. The last piece of the original question that rested on
+reasoning rather than observation is gone.
+
+### ⚠️ A `--map` mistake worth not repeating
+
+The first build of this test had no `code` block, so no boot map -- the disc
+would have played the attract demo and reached `ls4_12`, and the NPC census
+would have described a map nobody asked about. Caught before the run only
+because the mod's manifest was read first.
+
+**A placement test needs `--map` on the build**, or it measures the wrong map
+and says so confidently.
