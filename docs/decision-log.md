@@ -4779,3 +4779,63 @@ while the file every agent reads first still asserts the opposite. The project i
 the highest-leverage place a wrong fact can hide, and it was the last place
 checked. A hedge is also not a safe resting place — someone will eventually
 resolve it, and half of them will resolve it wrongly.
+
+---
+
+## D83 — The smoke test could never have failed where it was run (2026-07-28)
+
+First real CI run. `docs` deployed cleanly; `build` failed on **all four** jobs.
+
+### ⛔ The map-catalog check needed the game
+
+`scripts/smoke_binary.py` opened with:
+
+> "Deliberately needs no extracted disc: these check what is *inside* the
+> binary, so they run on a CI machine that has never seen the game."
+
+That was false when it was written. The check ran `bleck maps --search he1_0`
+and expected `383 maps` — but `maps.load()` walks `files/map/` on a real
+extracted disc, and errors without one. It was only ever run on machines that
+had the disc, so it passed for reasons unrelated to what it claimed to test.
+
+The fix builds a **synthetic base** — a temp directory holding one empty
+`he1_01.bin` — points `BLECK_BASE_DIR` at it, and asserts the map **id** comes
+back. Ids appear nowhere on the disc; `mapcatalog.json` is their only source, so
+a missing catalog prints `?` and the check fails for its stated reason. The old
+`383 maps` string tested disc contents, not packaging.
+
+### ✅ Verified with a positive control, not by re-running where it already passed
+
+Running the fixed script on this machine proves nothing — the real disc is here,
+so `26` comes back either way. It was run instead from a clean clone with no
+`work/extracted` and no `.env`:
+
+| Script | Result there |
+|---|---|
+| old | ⛔ `FAIL map catalog is bundled — no map directory at work\extracted\eu0\files\map` |
+| new | ✅ 6 checks passed |
+
+The old script failing is what makes the new one's pass meaningful.
+
+### ⛔ Three tests needed a symbol list the repo does not ship
+
+`checks` failed at `pytest`, which passes locally. `code.prepare` resolves
+`spm.eu0.lst` eagerly, and that list is third-party and deliberately not
+vendored (D26). Three tests in `test_code_mods.py` inherited the requirement
+without a guard.
+
+`conftest.py` already states the contract — *"Tests needing game data skip
+cleanly when absent, so a fresh clone still runs green"* — and the symbol list
+is the same category. Added a `needs_symbols` skipif. A clean clone now reports
+562 passed, 9 skipped, 0 failed.
+
+### What this cost, and the general shape
+
+Nothing that a clean clone would not have caught in 90 seconds, at any point in
+the weeks the binary and suite existed. **Every check here ran only where it
+could not fail.** The rule already in the project instructions — *before trusting a negative
+result, produce a positive one* — has a sibling worth stating: **a check that
+has only ever passed has not been tested.** Run it somewhere it should fail.
+
+Reproducing CI locally is one `git clone` into a temp directory plus `uv sync`,
+and it is now the thing to do before pushing a workflow change.

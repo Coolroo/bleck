@@ -22,6 +22,23 @@ from bleck.script.compiler import (
 from bleck.script.syntax.parser import parse
 
 
+def _has_symbols() -> bool:
+    try:
+        toolchain.symbols_file("eu0")
+    except toolchain.ToolchainError:
+        return False
+    return True
+
+
+#: `code.prepare` resolves the symbol list eagerly, and that list is third-party
+#: and deliberately not vendored. Same contract as `game_data` in conftest: a
+#: fresh clone runs green rather than red.
+needs_symbols = pytest.mark.skipif(
+    not _has_symbols(),
+    reason="no spm-headers symbol list; set BLECK_SYMBOLS_DIR",
+)
+
+
 def words(source: str, script: str = "main") -> list:
     """Compile `source` and return one script's words."""
     program = compile_program(parse(source), source)
@@ -327,6 +344,7 @@ class TestBannerFromManifest:
 class TestCodeIntermediates:
     """Where compile intermediates land, and why it is not obvious."""
 
+    @needs_symbols
     def test_they_are_not_inside_the_staged_disc(self, tmp_path, monkeypatch):
         """`build_rel` promises to keep its intermediates. It has to be able to.
 
@@ -377,6 +395,7 @@ class TestMergedModProlog:
             manifest=mod_manifest.Manifest(name=name, code=spec), root=root
         )
 
+    @needs_symbols
     def test_two_definitions_are_refused_naming_both(self, tmp_path: Path):
         mods = [
             self._mod(tmp_path, "alpha", True),
@@ -389,6 +408,7 @@ class TestMergedModProlog:
         # And says what to do, not just that it went wrong.
         assert "sequence hook" in message
 
+    @needs_symbols
     def test_one_definition_alongside_another_mod_is_fine(self, tmp_path: Path):
         """The intended design: bleck's own is weak, so one override wins."""
         mods = [

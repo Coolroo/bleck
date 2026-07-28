@@ -13,16 +13,37 @@ So CI runs this against the artifact it just built, on every platform.
 
 Deliberately needs no extracted disc: these check what is *inside* the binary,
 so they run on a CI machine that has never seen the game.
+
+⚠️ That last claim was false for the first version of this script, and the
+mistake is worth keeping in mind. The map-catalog check ran `bleck maps`, which
+walks `files/map/` on a real extracted disc — so it could only ever pass on a
+machine that had the game. It looked like a solid check for as long as it was
+only run where it could not fail, and failed on all three platforms the first
+time CI ran it.
+
+The check now builds a **synthetic base** — one empty file named after a real
+map — and asserts the map *id* comes back. Ids exist nowhere on the disc; they
+come from `mapcatalog.json` alone, so a missing catalog prints `?` instead and
+the check fails for the reason it claims to test.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+
+#: A real map name, and the id `mapcatalog.json` records for it. The id is the
+#: whole point: nothing on the disc stores it, so it can only come from the
+#: bundled catalog.
+SAMPLE_MAP = "he1_01"
+SAMPLE_MAP_ID = "26"
 
 
 @dataclass(frozen=True)
@@ -37,6 +58,9 @@ class Check:
     json_out: bool = False
     """Parse stdout as JSON, so malformed output fails rather than passing."""
 
+    needs_base: bool = False
+    """Point `BLECK_BASE_DIR` at the synthetic disc before running."""
+
 
 #: Each covers a different way packaging goes wrong, not a different feature.
 CHECKS = [
@@ -48,8 +72,11 @@ CHECKS = [
     ),
     Check(
         "map catalog is bundled",
-        ["maps", "--search", "he1_0"],
-        expect="383 maps",
+        ["maps", "--search", SAMPLE_MAP],
+        # The id, not the name -- the name would come back from the synthetic
+        # disc even with no catalog bundled at all.
+        expect=SAMPLE_MAP_ID,
+        needs_base=True,
     ),
     Check(
         "pydantic models load and emit a schema",
@@ -69,13 +96,30 @@ CHECKS = [
 ]
 
 
-def run(binary: Path, check: Check) -> str:
+def synthetic_base(root: Path) -> Path:
+    """A base build with one map and nothing else.
+
+    `bleck maps` takes map *names* from the disc and *ids* from the bundled
+    catalog, so this is the smallest thing that exercises both without needing
+    a real extraction.
+    """
+    map_dir = root / "files" / "map"
+    map_dir.mkdir(parents=True, exist_ok=True)
+    (map_dir / f"{SAMPLE_MAP}.bin").write_bytes(b"")
+    return root
+
+
+def run(binary: Path, check: Check, base: Path) -> str:
+    environment = dict(os.environ)
+    if check.needs_base:
+        environment["BLECK_BASE_DIR"] = str(base)
     result = subprocess.run(
         [str(binary), *check.args],
         capture_output=True,
         text=True,
         check=False,
         timeout=120,
+        env=environment,
     )
     if result.returncode != 0:
         raise SystemExit(
@@ -111,9 +155,11 @@ def main() -> int:
     if not binary.exists():
         raise SystemExit(f"no binary at {args.binary}")
 
-    for check in CHECKS:
-        run(binary, check)
-        print(f"ok   {check.name}")
+    with tempfile.TemporaryDirectory(prefix="bleck-smoke-") as scratch:
+        base = synthetic_base(Path(scratch) / "base")
+        for check in CHECKS:
+            run(binary, check, base)
+            print(f"ok   {check.name}")
     print(f"\n{len(CHECKS)} checks passed against {binary}")
     return 0
 

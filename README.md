@@ -16,8 +16,19 @@ game's own bytecode VM, so there is no interpreter to ship:
 "code": { "script": "scripts/main.evt", "maps": { "mac_01": "on_arrive" } }
 ```
 
-- **Using it:** [`docs-site/`](docs-site/)
-- **How it works, and why:** [`docs/`](docs/)
+## Documentation
+
+**[coolroo.github.io/bleck](https://coolroo.github.io/bleck/)** — install, guides
+and the CLI reference.
+
+Start with the [Quickstart](https://coolroo.github.io/bleck/quickstart/), or
+download a prebuilt binary from the
+[latest release](https://github.com/Coolroo/bleck/releases/latest) — no Python
+needed.
+
+The source for that site is [`docs-site/`](docs-site/). [`docs/`](docs/) is
+something else: the design record for people working *on* `bleck` — why choices
+were made, and what is known about the disc.
 
 ## Credits
 
