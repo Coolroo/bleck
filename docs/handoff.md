@@ -594,7 +594,11 @@ need the same treatment.
 - 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each
 - 🔶 **The unfired-enemy question** (`mods/slot-check`) — untouched today, and
   worth re-reading in light of D76: it also rests on "nothing appeared"
-- 🟡 **`bleck` is still unlicensed**
+- 🟢 **Licensing is deliberately deferred** (2026-07-27). It blocks sharing and
+  nothing else, and nothing is being shared until the base app exists. Do not
+  spend time on it before then — but it *does* have to be settled before the
+  first release, since `docs-site` tells people to clone a repo that is
+  all-rights-reserved by default.
 - 🟡 **PyYAML is now the first runtime dependency**, against a comment in
   `pyproject.toml` that defended having none. Argued in
   [`plan-config.md`](./plan-config.md); reversible

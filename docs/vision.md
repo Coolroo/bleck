@@ -133,3 +133,28 @@ build-it-all-then-ship:
 4. **A view** — needs `map.dat`, and is gated on it.
 
 See [`roadmap.md`](./roadmap.md) for what is actually next.
+
+---
+
+## Priority as of 2026-07-27
+
+**Everything is measured against "does this get us to the base app".**
+
+Licensing, distribution and polish are explicitly deferred: nothing is shared
+until there is an application worth sharing. That is a decision, not an
+oversight — see `handoff.md`.
+
+What that promotes:
+
+- **A programmatic API** for reading and editing a mod, not just a CLI. A GUI
+  cannot shell out to `bleck mod build` for every keystroke.
+- **Editing surfaces**, in the order they are already understood: enemy
+  placement (format fully decoded), then whatever the map archive holds.
+- **Round-tripping**, because an editor that cannot re-open what it wrote is a
+  converter.
+
+What it demotes:
+
+- Licensing, packaging, release engineering
+- Breadth of game-version support — `eu0` remains the only anchor
+- Anything whose value is "someone else could use this"
