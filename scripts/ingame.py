@@ -81,6 +81,24 @@ class Snapshot:
         return "  ".join(parts)
 
 
+@dataclass(frozen=True)
+class ReadResult:
+    """One poll of the running game: what was read, or why nothing was.
+
+    The `problem` half exists because silence used to mean four different
+    things — no Dolphin, wrong Dolphin, game not up yet, game hung — and the
+    run printed the same nothing for all of them. A whole session was lost to
+    that. Reporting *why* a read failed turns a dead end into a diagnosis.
+    """
+
+    snapshot: Snapshot | None = None
+    problem: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.snapshot is not None
+
+
 def _signed(value: int) -> int:
     return value - 0x100000000 if value >= 0x80000000 else value
 
@@ -163,23 +181,33 @@ class Session:
         text = name.decode("ascii", "replace")
         return text if text and all(c.isalnum() or c == "_" for c in text) else ""
 
-    def read(self, probe: int, words: int, watch_gw: list[int]) -> Snapshot | None:
+    def read(self, probe: int, words: int, watch_gw: list[int]) -> ReadResult:
         import dolphin_memory_engine as dme  # noqa: PLC0415
 
         if not dme.is_hooked():
             dme.hook()
-            return None
+            if not dme.is_hooked():
+                return ReadResult(
+                    problem="not attached to any Dolphin process yet "
+                    "(is one running? is another instance in the way?)"
+                )
+            return ReadResult(problem="attached; waiting for emulated memory")
         try:
-            return Snapshot(
-                sequence=_signed(dme.read_word(SEQ_WORK)),
-                stage=_signed(dme.read_word(SEQ_WORK + 4)),
-                destination=self._destination(dme),
-                words=[dme.read_word(probe + 4 * i) for i in range(words)],
-                gw={n: dme.read_word(EVT_WORK + 4 + 4 * n) for n in watch_gw},
+            return ReadResult(
+                snapshot=Snapshot(
+                    sequence=_signed(dme.read_word(SEQ_WORK)),
+                    stage=_signed(dme.read_word(SEQ_WORK + 4)),
+                    destination=self._destination(dme),
+                    words=[dme.read_word(probe + 4 * i) for i in range(words)],
+                    gw={n: dme.read_word(EVT_WORK + 4 + 4 * n) for n in watch_gw},
+                )
             )
-        except RuntimeError:
-            # The process is up but the emulated memory is not mapped yet.
-            return None
+        except RuntimeError as exc:
+            # Attached to the process, but the emulated address space is not
+            # readable. Normal for a second or two after launch; if it persists,
+            # the game never started -- which is a *result*, and used to be
+            # indistinguishable from the tool failing to attach at all.
+            return ReadResult(problem=f"attached, but memory is unreadable: {exc}")
 
 
 #: The Wii's two RAM regions. A file the game loaded could be in either.
@@ -355,10 +383,21 @@ def main() -> int:
                     where = ", ".join(f"0x{a:08X}" for a in hits[:4]) or "not found"
                     say(f"[t+{elapsed:>3}s] {text_pattern}: {len(hits)} hit(s)  {where}")
 
-            snapshot = session.read(args.probe, args.words, args.watch_gw)
-            if snapshot is None:
+            result = session.read(args.probe, args.words, args.watch_gw)
+            if not result.ok:
+                # Say why, and keep saying it if it persists. A run that prints
+                # nothing for three minutes teaches nothing; one that says
+                # "attached, but memory is unreadable" for three minutes says
+                # the game never started.
+                if result.problem != seen:
+                    say(f"[t+{elapsed:>3}s] {result.problem}")
+                    seen = result.problem
+                    quiet = elapsed
+                elif elapsed - quiet >= 15:
+                    say(f"[t+{elapsed:>3}s] ... still: {result.problem}")
+                    quiet = elapsed
                 continue
-            line = snapshot.render()
+            line = result.snapshot.render()
             # A heartbeat, because "no output" otherwise means both "nothing
             # changed" and "the game froze" -- and telling those apart is
             # usually the whole question.
