@@ -4194,3 +4194,60 @@ different problem from the one being chased.
 
 That test should have come before the binding check. The binding check needed a
 new tool; this one needs two lines of script.
+
+---
+
+## D72 — ⛔ D70 was wrong: the combo block does not break map changes (2026-07-27)
+
+⛔ **Supersedes D70's conclusion.** A module containing the combination watcher
+changes maps perfectly well.
+
+```
+[t+48s] GAME       gw[30]=1          <- script ran
+[t+72s] MAPCHANGE  map=he1_01        <- the call worked
+[t+81s] GAME                         <- arrived
+[t+105s] MAPCHANGE map=he1_01        <- again, because `main` re-arms (D43)
+```
+
+`mods/mapchange-probe` has `code.combos` compiled in and calls
+`evt_seq_mapchange` from `main`. It works.
+
+### The variable D70 missed: the settle
+
+The same probe **without** a 120-frame wait entered `MAPCHANGE` and **hung at
+stage 11 forever**. The generated boot script waits 120 frames for exactly this
+reason (D52, D64) and the note has been in `emit.py` the whole time: "asking for
+another change immediately is the kind of thing that deadlocks (D51)".
+
+✅ So the settle is not superstition. It is load-bearing, and now measured:
+without it the map loader stops at stage 11 and never resumes.
+
+D70 compared builds that differed in **two** ways and attributed the result to
+one of them. Three runs with one variable each is not a bisection if the runs
+also differ in something unrecorded.
+
+### ✅ Also answered: what happens after `evt_seq_mapchange`
+
+`gw[30] = 2`, the statement *after* the call, never lands. That is correct
+behaviour, not a fault: the map change tears down evt state and the script with
+it (D43). A script must not expect to survive its own map change.
+
+### 🔶 What is actually still open, and it is narrower
+
+The failing case is **combo block + the generated boot block together** -- the
+boot's map change never fires. Not combos, and not map changes; the interaction
+of those two emitted blocks.
+
+`code.combos` with a `main` script is fine. `code.boot` alone is fine. Only the
+pair misbehaves, and nothing yet says why.
+
+### ⚠️ The process failure, which is the more useful record
+
+D70 was written up with a table, three runs, and a confident cause. It was
+wrong, and it was wrong in the direction of the tidiest story. What was missing
+was the cheap discriminating test -- two lines of script -- which D71 identified
+and which took one run to overturn everything.
+
+**Reach for the two-line test before the new tool.** `check_binding.py` is
+genuinely useful and answered its question correctly; it just was not the
+question that mattered.

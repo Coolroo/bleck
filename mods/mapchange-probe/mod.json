@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "mapchange-probe",
+  "version": "0.1.0",
+  "description": "Does the script die at evt_seq_mapchange, or does the call do nothing?",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "combos": { "start_map": "unused" }
+  }
+}
