@@ -159,11 +159,27 @@ class ScriptPatch:
         return -1
 
     @property
+    def door_offset(self) -> int:
+        """Byte offset into `DoorDesc` for a `door:` patch, -1 otherwise.
+
+        A selector may name which of the door's three scripts it means --
+        `door:he1_01:0:init` -- and omitting it means `interact`.
+        """
+        if self.kind is not PatchKind.DOOR:
+            return -1
+        parts = self.target.split(":")
+        named = parts[2] if len(parts) == 3 else emit.DoorScript.INTERACT.value
+        script = emit.DoorScript.parse(named)
+        if script is None:  # pragma: no cover -- `_parse_door` rejects these
+            raise ManifestError(f"door script {named!r} was never validated")
+        return script.offset
+
+    @property
     def emit_target(self) -> str:
         """The name the generated C looks up.
 
-        For `door:` that is the MAP, not the whole selector -- the door index
-        travels separately in `index`, because the runtime needs them apart.
+        For `door:` that is the MAP, not the whole selector -- the index and the
+        script offset travel separately, because the runtime needs them apart.
         """
         return self.target.split(":")[0] if self.kind is PatchKind.DOOR else self.target
 
@@ -603,34 +619,53 @@ def _check_map_name(name: str, where: str) -> None:
 
 
 def _parse_door(raw: str, where: str) -> str:
-    """Check `he1_01:0` and hand it back as written.
+    """Check `he1_01:0` or `he1_01:0:init`, and hand it back as written.
 
     ⚠️ The index is **not** bounds-checked here, and cannot be: how many doors a
     map registers is in the game's data, which is a run-time question. The
     generated code compares against the `count` argument beside the descriptor
     array and reports NO_SCRIPT rather than reading past the end.
     """
-    map_name, sep, index = raw.partition(":")
-    if not sep or not index:
+    parts = raw.split(":")
+    if len(parts) not in (2, 3) or not all(parts[:2]):
         raise ManifestError(
             f"{where}: 'door:{raw}' names no door.\n"
-            f"  A door selector is 'door:<map>:<index>' -- 'door:he1_01:0' is "
-            f"that map's first door.\n"
+            f"  A door selector is 'door:<map>:<index>', with an optional "
+            f"script -- 'door:he1_01:0' is that map's first door, and "
+            f"'door:he1_01:0:init' is the same door's init script.\n"
             f"  A map registers its doors in order, so the index is a position "
             f"in that list, not an id. `mods/door-scan` reports how many a map "
             f"has."
         )
-    _check_map_name(map_name, where)
+    _check_map_name(parts[0], where)
     try:
-        value = int(index, 0)
+        value = int(parts[1], 0)
     except ValueError:
         raise ManifestError(
-            f"{where}: door index {index!r} is not a number. Write "
-            f"'door:{map_name}:0' for the first door."
+            f"{where}: door index {parts[1]!r} is not a number. Write "
+            f"'door:{parts[0]}:0' for the first door."
         ) from None
     if value < 0:
-        raise ManifestError(f"{where}: door index {index!r} cannot be negative")
+        raise ManifestError(f"{where}: door index {parts[1]!r} cannot be negative")
+    if len(parts) == 3:
+        _check_door_script(parts[2], raw, where)
     return raw
+
+
+def _check_door_script(name: str, raw: str, where: str) -> None:
+    """Which of the three scripts a `DoorDesc` carries, when one is named."""
+    if emit.DoorScript.parse(name) is not None:
+        return
+    known = ", ".join(emit.DOOR_SCRIPTS)
+    close = difflib.get_close_matches(name, emit.DOOR_SCRIPTS, n=1, cutoff=0.6)
+    hint = f"\n  Did you mean {close[0]!r}?" if close else ""
+    raise ManifestError(
+        f"{where}: 'door:{raw}' names {name!r}, which is not one of a door's "
+        f"scripts.{hint}\n"
+        f"  A DoorDesc carries: {known}.\n"
+        f"  Omitting it means 'interact' -- the script that runs when the "
+        f"player uses the door."
+    )
 
 
 def _parse_item_id(raw: str, where: str) -> str:

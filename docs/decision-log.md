@@ -7107,3 +7107,61 @@ guessing safe rather than destructive.
   earning its keep.
 - 797 tests (793 before). `DEFERRED_PATCH_KINDS` is now empty and stays as the
   shape for the next kind that is explained and refused.
+
+---
+
+## D104 — ✅ `initScript` and `moveScript` too: `door:<map>:<index>:<script>` (2026-07-28)
+
+```json
+{ "script": "door:he1_01:0:init", "at": 0, "expect": "...", "call": "f" }
+```
+
+The fourth part names which of a `DoorDesc`'s three `EvtScriptCode *` fields the
+patch means. Omitting it means `interact` — the script that runs when the player
+uses the door, and what "change what this door does" usually means. D103's
+selectors are unchanged, as promised.
+
+### ✅ Measured: all three offsets, cross-checked against D102
+
+| | status | pointer read back | D102 measured |
+|---|---|---|---|
+| `interact` (+0x40) | **2 APPLIED** | `0x80D2FB78` | `0x80D2FB78` |
+| `init` (+0x50) | **3 REFUSED** | `0x80D2F9E0` | `0x80D2F9E0` |
+| `move` (+0x54) | **3 REFUSED** | `0x80D2FB70` | `0x80D2FB70` |
+
+✅ The three pointers match values measured in a **different run by a different
+probe**, which is what confirms the offsets — not the statuses. A wrong offset
+landing on a non-null word would also read REFUSED, so status alone could not
+tell the three apart.
+
+REFUSED on `init` and `move` is expected: `expect` was `MULF`, measured from
+`interact`. Only `interact` opens that way, and 🔶 what the other two open with
+is not yet recorded.
+
+### ⚠️ A defect in the probe, recorded rather than glossed
+
+`STATUS(i)` was `probe[2 + i]`, so `STATUS(3)` collided with `GAME_FRAMES` at
+`probe[5]`. The fourth patch — `door:he1_01:9:init`, the out-of-bounds row —
+was written once at `mod_prolog` and then overwritten every frame. **Its status
+was never observed.**
+
+The bounds check itself is unchanged from D103, where it was measured, and it
+runs before any offset is used (`index >= count`), so nothing here depends on
+it. But this run did not test it, and a report block that silently overwrites
+one of its own fields is exactly the class of instrument error D101 and D102
+were about. Fix the layout before reusing `door-patch`.
+
+### Design
+
+- **`DoorScript` is a `StrEnum` with an `offset` property**, not a data table.
+  D100's rule: enumerate a closed set of bare values; leave a table of behaviour
+  as a table. An offset is data, not behaviour.
+- **Four parts, split on every colon**, so a fifth is refused rather than
+  ignored — there is a test for that specifically, because `partition` would
+  have swallowed it.
+- **A near miss is suggested**: `door:he1_01:0:innit` says "Did you mean
+  'init'?", matching how unknown symbols and mod names already behave.
+- The generated comment names the script it patched (`door:he1_01:0:init`), so
+  reading `mod.c` does not require knowing that 80 means `initScript`.
+
+809 tests (797 before), pylint 10.00/10.

@@ -242,7 +242,7 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
     used = [kind for kind in _PATCH_KINDS if kind in wanted]
     rows = "".join(
         f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
-        f"{patch.index}, {patch.at}u, 0x{patch.expect:08X}u, "
+        f"{patch.index}, {patch.door_offset}, {patch.at}u, 0x{patch.expect:08X}u, "
         f"(const void *) &{patch.call}}},"
         f"  {patch.comment}\n"
         for index, patch in enumerate(patches)

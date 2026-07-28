@@ -33,6 +33,9 @@
       +0x24 ( 9)  its second word
       +0x28 (10)  its third word
       +0x2C (11)  descriptor count the map registered
+      +0x30 (12)  DoorDesc[0].interactScript -- D102 read 0x80D2FB78
+      +0x34 (13)  DoorDesc[0].initScript     -- D102 read 0x80D2F9E0
+      +0x38 (14)  DoorDesc[0].moveScript     -- D102 read 0x80D2FB70
 
     Run with:  scripts/ingame.py door-patch --words 8 --seconds 75
     Target: eu0.
@@ -81,6 +84,7 @@ static volatile u32 *const probe = (volatile u32 *) PROBE;
 
 #define PATCH_COUNT (probe[1])
 #define STATUS(i) (probe[2 + (i)])
+#define PTR(i) (probe[12 + (i)])
 #define ENTERED (probe[4])
 #define GAME_FRAMES (probe[5])
 #define SENTINEL (probe[6])
@@ -118,6 +122,11 @@ static void readDoorZero(void)
             DOOR_COUNT = script[at + 3];
             if (descs == 0)
                 return;
+            /* All three, so each can be checked against the value D102
+               measured by a different route. */
+            PTR(0) = *(u32 *) (descs + 0x40);
+            PTR(1) = *(u32 *) (descs + 0x50);
+            PTR(2) = *(u32 *) (descs + 0x54);
             interact = *(u32 **) (descs + DOORDESC_INTERACT);
             SCRIPT_PTR = (u32) interact;
             if (interact == 0)
@@ -162,7 +171,7 @@ void mod_prolog(void)
 {
     u32 i;
 
-    for (i = 0; i < 12; i++)
+    for (i = 0; i < 15; i++)
         probe[i] = 0;
     probe[0] = MAGIC;
     SENTINEL = 0xD00D0000U;
@@ -170,6 +179,8 @@ void mod_prolog(void)
     PATCH_COUNT = bleck_patch_count;
     STATUS(0) = bleck_patch_status[0];
     STATUS(1) = bleck_patch_status[1];
+    STATUS(2) = bleck_patch_status[2];
+    STATUS(3) = bleck_patch_status[3];
     readDoorZero();
 
     for (i = 0; i < SEQ_COUNT; i++)

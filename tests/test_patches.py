@@ -123,7 +123,7 @@ class TestGeneratedCode:
         the door-without-a-map-patch combination."""
         out = generated([DOOR_PATCH])
         assert "bleck_map_init_script" in out
-        assert "bleck_door_interact_script(patch->target, patch->index)" in out
+        assert "bleck_door_script(patch->target, patch->index," in out
         # Still nothing it does not need.
         assert "itemEventDataTable" not in out
 
@@ -145,7 +145,7 @@ class TestGeneratedCode:
 
     def test_the_door_resolver_is_absent_from_a_map_only_module(self):
         out = generated()
-        assert "bleck_door_interact_script" not in out
+        assert "bleck_door_script" not in out
 
     def test_the_status_table_is_readable_from_a_mod(self):
         out = generated()
@@ -223,6 +223,76 @@ class TestPatchKind:
         it is the right shape for the next kind that is explained and refused."""
         assert not mod_manifest.DEFERRED_PATCH_KINDS
         assert emit.PatchKind.parse("door") is emit.PatchKind.DOOR
+
+
+class TestDoorScript:
+    """Which of a `DoorDesc`'s three scripts a selector names."""
+
+    @pytest.mark.parametrize(
+        ("selector", "offset"),
+        [
+            ("door:he1_01:0", 0x40),
+            ("door:he1_01:0:interact", 0x40),
+            ("door:he1_01:0:init", 0x50),
+            ("door:he1_01:0:move", 0x54),
+        ],
+    )
+    def test_the_script_part_picks_the_offset(self, selector, offset):
+        parsed = manifest({**WHOLE, "script": selector}).code.patches[0]
+        assert parsed.door_offset == offset
+        assert parsed.emit_target == "he1_01"
+        assert parsed.index == 0
+
+    def test_omitting_it_means_interact(self):
+        """The script that runs when the player uses the door -- what "change
+        what this door does" means, so it is the one worth defaulting to."""
+        plain = manifest({**WHOLE, "script": "door:he1_01:0"}).code.patches[0]
+        named = manifest({**WHOLE, "script": "door:he1_01:0:interact"}).code.patches[0]
+        assert plain.door_offset == named.door_offset
+
+    def test_an_unknown_script_is_refused_with_the_three(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "script": "door:he1_01:0:open"})
+        message = str(caught.value)
+        assert "interact, init, move" in message
+
+    def test_a_near_miss_is_suggested(self):
+        with pytest.raises(mod_manifest.ManifestError, match="Did you mean 'init'"):
+            manifest({**WHOLE, "script": "door:he1_01:0:innit"})
+
+    def test_a_fourth_part_is_refused(self):
+        """`door:he1_01:0:init:extra` is not a selector. Splitting on every
+        colon means an extra one has to be caught here or it is ignored."""
+        with pytest.raises(mod_manifest.ManifestError, match="names no door"):
+            manifest({**WHOLE, "script": "door:he1_01:0:init:extra"})
+
+    @pytest.mark.parametrize(
+        "selector", ["door:he1_01:0", "door:he1_01:1:init", "door:mac_01:2:move"]
+    )
+    def test_a_door_selector_round_trips_as_written(self, selector):
+        written = manifest({**WHOLE, "script": selector}).to_json()
+        assert f'"script": "{selector}"' in written
+
+    def test_the_offset_reaches_the_generated_table(self):
+        """Three columns now: the map is looked up, the index selects the
+        descriptor, the offset selects which of its scripts."""
+        rows = [
+            emit.ScriptPatch(
+                kind=emit.PatchKind.DOOR,
+                target="he1_01",
+                at=0,
+                expect=0x00010072,
+                call="on_door",
+                index=0,
+                door_offset=offset,
+            )
+            for offset in (0x40, 0x50, 0x54)
+        ]
+        out = generated(rows)
+        assert "0, 64," in out  # interact
+        assert "0, 80," in out  # init
+        assert "0, 84," in out  # move
+        assert "door:he1_01:0:init" in out  # the comment names what it patched
 
 
 class TestManifest:

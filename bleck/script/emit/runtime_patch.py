@@ -87,6 +87,9 @@ typedef struct
        door index for BLECK_PATCH_DOOR, -1 where the kind needs neither. */
     s32 index;
 
+    /* Which of a DoorDesc's three scripts, as a byte offset. -1 elsewhere. */
+    s32 doorOffset;
+
     u32 at;
     u32 expect;
     const void *call;
@@ -266,8 +269,9 @@ PATCH_DOOR_RESOLVER = """
     NO_SCRIPT rather than writing somewhere wrong.
 
     DoorDesc is 0x58 bytes (SIZE_ASSERT in evt_door.h, and consistent with what
-    was read back); `interactScript` is at +0x40 -- the script that runs when
-    the player uses the door, which is what `door:` means.
+    was read back). A selector names which of its three scripts it means;
+    `interact` (+0x40) is the default because it is the one that runs when the
+    player uses the door. `init` (+0x50) and `move` (+0x54) resolve the same way.
 
     Resolved once at load, like every other patch. The descriptor arrays were
     readable at `_prolog` for every map tried (D101, D102), which is what makes
@@ -280,8 +284,10 @@ extern void evt_door_set_door_descs(void);
 /* Measured, D102. Header word for USER_FUNC with argc 3. */
 #define BLECK_DOOR_SETTER_HEADER 0x0003005Cu
 
+/* DoorDesc is 0x58 bytes and carries three EvtScriptCode * fields:
+   interactScript +0x40, initScript +0x50, moveScript +0x54. Which one a patch
+   means arrives in `doorOffset`, resolved from the selector at build time. */
 #define BLECK_DOORDESC_SIZE 0x58
-#define BLECK_DOORDESC_INTERACT 0x40
 
 /* An init script that has not ended by here has desynced; stop rather than
    walk into unrelated memory. D93 nearly recorded a truncated walk as a
@@ -292,12 +298,12 @@ extern void evt_door_set_door_descs(void);
 #define BLECK_EVT_MAX_OPCODE 0x0077u
 #define BLECK_EVT_MAX_ARGC 16u
 
-static u32 *bleck_door_interact_script(const char *map, s32 index)
+static u32 *bleck_door_script(const char *map, s32 index, s32 offset)
 {
     u32 *script = bleck_map_init_script(map);
     u32 at = 0;
 
-    if (script == 0 || index < 0)
+    if (script == 0 || index < 0 || offset < 0)
         return 0;
 
     while (at < BLECK_DOOR_WALK_LIMIT)
@@ -322,8 +328,7 @@ static u32 *bleck_door_interact_script(const char *map, s32 index)
 
             if (descs == 0 || index >= count)
                 return 0;
-            return *(u32 **) (descs + index * BLECK_DOORDESC_SIZE
-                              + BLECK_DOORDESC_INTERACT);
+            return *(u32 **) (descs + index * BLECK_DOORDESC_SIZE + offset);
         }
         at += 1 + argc;
     }
@@ -334,7 +339,8 @@ static u32 *bleck_door_interact_script(const char *map, s32 index)
 #: The door arm of `bleck_apply_patches`. No shared-script count: unlike item
 #: scripts, nothing has measured whether doors share theirs.
 PATCH_DOOR_RESOLVE = """        if (patch->kind == BLECK_PATCH_DOOR)
-            script = bleck_door_interact_script(patch->target, patch->index);
+            script = bleck_door_script(patch->target, patch->index,
+                                       patch->doorOffset);
 """
 
 #: One patched script's name, held out of the table so it is a real string.

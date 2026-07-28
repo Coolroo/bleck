@@ -2,15 +2,39 @@
   "schema": 1,
   "name": "door-patch",
   "version": "0.1.0",
-  "description": "Does door:<map>:<index> resolve to a real interact script and apply?",
+  "description": "Do all three of a DoorDesc's scripts resolve through door:<map>:<index>:<script>?",
   "base": "eu0",
   "code": {
-    "sources": ["src"],
+    "sources": [
+      "src"
+    ],
     "target": "eu0",
     "module_id": 2,
     "patches": [
-      { "script": "door:he1_01:0", "at": 0, "expect": "MULF", "call": "on_door" },
-      { "script": "door:he1_01:9", "at": 0, "expect": "MULF", "call": "on_door" }
+      {
+        "script": "door:he1_01:0:interact",
+        "at": 0,
+        "expect": "MULF",
+        "call": "on_door"
+      },
+      {
+        "script": "door:he1_01:0:init",
+        "at": 0,
+        "expect": "MULF",
+        "call": "on_door"
+      },
+      {
+        "script": "door:he1_01:0:move",
+        "at": 0,
+        "expect": "MULF",
+        "call": "on_door"
+      },
+      {
+        "script": "door:he1_01:9:init",
+        "at": 0,
+        "expect": "MULF",
+        "call": "on_door"
+      }
     ]
   }
 }

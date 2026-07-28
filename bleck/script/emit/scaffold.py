@@ -109,8 +109,51 @@ class PatchKind(StrEnum):
 _PATCH_KIND_EXAMPLES = {
     PatchKind.MAP: "map:<name>",
     PatchKind.ITEM: "item:<id>",
-    PatchKind.DOOR: "door:<map>:<index>",
+    PatchKind.DOOR: "door:<map>:<index>[:interact|init|move]",
 }
+
+
+# Which of a door's three scripts a `door:` selector names. A closed set of bare
+# values with one number each, so an enum rather than a data table -- the number
+# is data, not behaviour (D100).
+class DoorScript(StrEnum):
+    """One of the three `EvtScriptCode *` fields a `DoorDesc` carries.
+
+    Written as the fourth part of a door selector: `door:he1_01:0:init`.
+    Omitting it means `interact`, which is what "change what this door does"
+    usually means.
+
+    The value is the wire format.
+    """
+
+    INTERACT = "interact"
+    INIT = "init"
+    MOVE = "move"
+
+    @property
+    def offset(self) -> int:
+        """Byte offset into `DoorDesc`. From `evt_door.h`, and 0x40 is confirmed
+        against a live read (D103) -- the other two are 🔶 until one lands."""
+        return _DOOR_SCRIPT_OFFSETS[self]
+
+    @classmethod
+    def parse(cls, raw: str) -> DoorScript | None:
+        return next((script for script in cls if script.value == raw), None)
+
+
+#: `DoorDesc` is 0x58 bytes: interactScript +0x40, initScript +0x50,
+#: moveScript +0x54.
+_DOOR_SCRIPT_OFFSETS = {
+    DoorScript.INTERACT: 0x40,
+    DoorScript.INIT: 0x50,
+    DoorScript.MOVE: 0x54,
+}
+
+#: For an error listing what a door selector accepts.
+DOOR_SCRIPTS = tuple(script.value for script in DoorScript)
+
+#: Back the other way, so a generated comment can name what it patched.
+_DOOR_BY_OFFSET = {script.offset: script.value for script in DoorScript}
 
 #: Derived, not written out. The prose list this replaces sat two lines below
 #: the tuple it was meant to describe, with nothing keeping the two in step.
@@ -285,6 +328,13 @@ class ScriptPatch:
     call: str
     """A C function in the mod's own sources, with evt's user-func signature."""
 
+    door_offset: int = -1
+    """Byte offset into `DoorDesc` for a `door:` patch, -1 otherwise.
+
+    Carried rather than derived here because the emitter has no `DoorScript` --
+    the selector was already resolved when this was built.
+    """
+
     index: int = -1
     """What `target` alone does not say.
 
@@ -296,7 +346,8 @@ class ScriptPatch:
     def selector(self) -> str:
         """How this patch was written in the manifest, for a comment."""
         if self.kind is PatchKind.DOOR:
-            return f"{self.kind}:{self.target}:{self.index}"
+            named = _DOOR_BY_OFFSET.get(self.door_offset, "?")
+            return f"{self.kind}:{self.target}:{self.index}:{named}"
         if self.kind is PatchKind.ITEM:
             return f"{self.kind}:{self.index}"
         return f"{self.kind}:{self.target}"
