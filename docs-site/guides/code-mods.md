@@ -182,14 +182,18 @@ For Dolphin, Gecko codes go in `User/GameSettings/R8PP01.ini`.
 
 ## Known limitations
 
-??? note "One code mod per disc"
+??? success "One code mod per disc — no longer a limitation"
 
-    The loader loads exactly one file, `/mod/mod.rel`. Two mods in a chain both
-    wanting code would collide, and unlike an asset conflict the second simply
-    would not exist.
+    This used to say the loader loads exactly one `/mod/mod.rel`, so two code
+    mods would collide. The first half is still true; the conclusion was not.
 
-    [`chainrel`](https://github.com/SeekyCt/chainrel) solves this properly and
-    is planned once single code mods work.
+    `bleck` compiles several mods into that one file, so the loader's limit is
+    satisfied without loading anything extra at runtime. See
+    [Several code mods on one disc](#several-code-mods-on-one-disc).
+
+    [`chainrel`](https://github.com/SeekyCt/chainrel) tries to chain several
+    RELs at *load* time instead, which is a harder problem and is not needed
+    here.
 
 ??? note "ABI risk with a distro compiler"
 
