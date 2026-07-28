@@ -5319,3 +5319,63 @@ D83 and D76 both cost a session for skipping.
 - ⛔ **Adding `Call`/`ReturnFromCall` opcodes** as `evtpatch` does. It requires
   patching `evtmgrCmd`'s dispatcher and bypassing a bound check; worth revisiting
   once in-place patching is proven, not before.
+
+---
+
+## D88 — ✅ `initScript` is linked at `mod_prolog`, and my own D87 guess was wrong (2026-07-28)
+
+One run of `mods/evt-probe`, unattended. Full transcript
+`work/build/evt-probe-run.log`.
+
+### ✅ Step 1: the pointer is stable, and available early
+
+| Map | `initScript` at `mod_prolog` | during `SEQ_GAME` |
+|---|---|---|
+| `aa4_01` (attract demo loads it) | `0x80E5FA18` | `0x80E5FA18` |
+| `he1_01` (never loaded — control) | `0x80D2FF10` | `0x80D2FF10` |
+
+Both non-zero, distinct from each other, **identical across both samples**.
+
+⛔ **This refutes the 🔶 hypothesis I recorded in D87.** I proposed that
+`map_data.h`'s *"In rel, linked by prolog function"* meant `initScript` might be
+unlinked at `mod_prolog`, and that this could retroactively explain D51's
+freeze. It does not. The field is populated that early, for a map that never
+loads as much as for one that does, and loading `aa4_01` did not change it.
+
+**So D51's freeze had some other cause**, and the 🔶 explanation recorded there —
+that the loader waits on the specific `EvtEntry` built from `initScript` — is
+still the only candidate. Pointer *swapping* remains ⛔; nothing here challenges
+that.
+
+### ✅ Step 2: it points at genuine `evt` bytecode
+
+First four words at `0x80E5FA18`:
+
+    0x00010072   argc=1  opcode 0x72  DEBUG_PUT_MSG
+    0x80CF4BB0           its one argument — a data pointer
+    0x0002005C   argc=2  opcode 0x5C  USER_FUNC
+    0x800EF650           first argument — a code pointer
+
+Both opcodes are in range (`evt.py` tops out at `0x77`) and **the argument
+counts tile the stream exactly**: header, one word, header, two words. Random
+memory does not produce in-range opcodes whose declared arity lines up while the
+operands remain plausible pointers.
+
+### What this unblocks
+
+In-place patching is worth attempting. The target is reachable by name, present
+at `mod_prolog`, stable, and demonstrably bytecode. The remaining unknown is
+whether *writing* to it is accepted — which is D87's step 3, and the only step
+that mutates anything.
+
+Still ⛔ for a first increment: instruction insertion or deletion (moves labels,
+and `jumptable[]` is cached per `EvtEntry`), pointer swapping (D51), and adding
+opcodes to the dispatcher as `evtpatch` does.
+
+### ⚠️ One instrument note, so it is not misread later
+
+The probe's map-name field read `0` every sample. It captured `seqWork.p0`,
+which is only meaningful *during* a map change — precisely the field that cost
+D70/D73/D74. That zero says nothing about the game. The map names in the
+transcript come from the rig's own `seq_mapchange_wp->mapName` (the D76 fix) and
+are correct: the first `SEQ_GAME` sample was taken while `aa4_01` was current.
