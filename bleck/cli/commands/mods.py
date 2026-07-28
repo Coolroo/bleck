@@ -7,9 +7,10 @@ and writes only into the mods or build directories.
 from __future__ import annotations
 
 import argparse
+import difflib
 from pathlib import Path
 
-from bleck.backends import disc, emulator, gecko
+from bleck.backends import disc, emulator, gecko, maps
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
@@ -128,9 +129,45 @@ def cmd_chain(args: argparse.Namespace) -> int:
     return 0
 
 
+def boot_override(args: argparse.Namespace, base: Path) -> builder.CodeOverride:
+    """Turn command-line flags into build-time code changes.
+
+    `--map` accepts either the name the disc uses or the game's own numeric id,
+    because `bleck maps` prints both and neither is more memorable than the
+    other. It is resolved here rather than passed through so a typo is caught
+    against the real map list, with a suggestion, before anything compiles.
+    """
+    if not args.map:
+        return builder.CodeOverride()
+
+    index = maps.load(base)
+    wanted = str(args.map).strip()
+
+    if wanted.lstrip("-").isdigit():
+        found = next((e for e in index.entries if e.map_id == int(wanted)), None)
+        if found is None:
+            raise UserError(
+                f"no map with id {wanted}. `bleck maps` lists all "
+                f"{len(index.entries)} of them with their ids."
+            )
+        return builder.CodeOverride(boot_map=found.name)
+
+    if index.find(wanted) is None:
+        close = difflib.get_close_matches(
+            wanted, [e.name for e in index.entries], n=3, cutoff=0.5
+        )
+        hint = f"\n  Did you mean: {', '.join(close)}?" if close else ""
+        raise UserError(
+            f"no map named {wanted!r} in {len(index.entries)} maps.\n"
+            f"  `bleck maps --search {wanted[:3]}` will narrow it down.{hint}"
+        )
+    return builder.CodeOverride(boot_map=wanted)
+
+
 def cmd_check(args: argparse.Namespace) -> int:
     chain = resolver.resolve(_registry(), args.name)
-    report = builder.check(chain, _base(), args.merge_binary)
+    base = _base()
+    report = builder.check(chain, base, args.merge_binary, boot_override(args, base))
     return _report(report, chain)
 
 
@@ -138,7 +175,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     chain = resolver.resolve(_registry(), args.name)
     base = _base()
     staged = registry.build_root() / args.name
-    report = builder.build(chain, base, staged, args.merge_binary)
+    report = builder.build(
+        chain, base, staged, args.merge_binary, boot_override(args, base)
+    )
     if _report(report, chain) != 0:
         return 1
 
@@ -243,6 +282,7 @@ def register(add) -> None:
     child = action("check", cmd_check, "resolve and detect conflicts; writes nothing")
     child.add_argument("name")
     _add_merge_flag(child)
+    _add_map_flag(child)
 
     child = action("build", cmd_build, "base + chain -> ISO")
     child.add_argument("name")
@@ -262,6 +302,18 @@ def register(add) -> None:
     )
     add_format_flags(child)
     _add_merge_flag(child)
+    _add_map_flag(child)
+
+
+def _add_map_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--map",
+        metavar="NAME|ID",
+        help=(
+            "start the game at this map instead of the attract demo, "
+            "e.g. --map he1_01 or --map 42"
+        ),
+    )
 
 
 def _add_merge_flag(parser: argparse.ArgumentParser) -> None:

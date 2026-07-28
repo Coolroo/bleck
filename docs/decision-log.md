@@ -3638,3 +3638,143 @@ load one, which skips the boot *and* carries a save. Creating it needs a human
 once: play far enough to have a profile, save a state, and every later run can
 start from it. Not yet done -- there is no SPM save in this Dolphin's NAND at
 all.
+
+---
+
+## D64 — `--map`: put the destination in the disc, not in the frame limiter (2026-07-27)
+
+✅ **A mod can now name the map the game should start at, and the disc drives
+itself there. `bleck mod build <mod> --map he1_01`, or `"boot": "he1_01"` in
+`mod.json` under `code`.**
+
+```
+$ uv run bleck mod check tex-koopa --map 26
+tex-koopa: compiled tex-koopa [bleck_boot] -> 1644 byte module (devkitPPC), boots at he1_01
+```
+
+Confirmed in game by the user: the disc loaded straight into Lineland.
+
+### Why this exists, and what it replaces
+
+D63 made a test run cost 6 seconds instead of 45 by uncapping Dolphin's frame
+limiter. That was the wrong fix aimed at the right problem. The 45 seconds are
+logos nobody is watching, and **uncapping makes the whole session fast, forever**
+— including the part you actually wanted to look at. There is no way to restore
+the cap part-way through: Dolphin's `-C` is a startup override.
+
+✅ Verified: `-C Dolphin.Core.EmulationSpeed=0` does **not** persist. It is
+absent from `AppData/Roaming/Dolphin Emulator/Config/Dolphin.ini` after runs
+that used it, so it leaks nothing into the user's configuration. The problem is
+confined to the session, but within that session it is total.
+
+So `--fast` stays for unattended runs, where nobody is looking, and `--map` is
+the answer for everything else.
+
+### How it works
+
+`code.boot` is desugared into **script source**, not into bytecode or a C
+special case:
+
+```
+script bleck_boot {
+    wait(120)
+    evt_seq_mapchange("he1_01", 0)
+}
+```
+
+That text is appended to the mod's own script (or is the whole thing, if it has
+none) and run through the ordinary compiler. Consequences worth having:
+
+- The map name goes through the same string table as any other literal.
+- `evt_seq_mapchange` is checked against the symbol table like any other call,
+  so an unlinkable build is caught at compile time (D61) rather than at link.
+- The script appears in build output — `[bleck_boot]` above — like any other.
+
+The C side is a one-shot on the first frame of gameplay:
+
+```c
+static u32 bleck_boot_pending = 1;    /* 1, not 0: keeps it out of .bss */
+
+static void bleck_boot_on_seq(u32 seq)
+{
+    if (seq != BLECK_SEQ_GAME || bleck_boot_pending == 0)
+        return;
+    bleck_boot_pending = 0;
+    evtEntry(bleck_script_bleck_boot, 0, 0);
+}
+```
+
+**Deliberately not re-armed**, unlike the free-running entry script (D43). A
+re-armed boot map is a loop, not a starting point: leaving the map by any means
+would bounce straight back into it.
+
+### Rejected: redirecting the first map load
+
+The obvious optimisation is to overwrite `seqWork.p0` during the first
+`SEQ_MAPCHANGE`, so the game loads the target map *instead of* `aa4_01` rather
+than after it. That would skip a whole map load.
+
+⛔ Not done, and not because it would not work — because it is untested and D51
+is precisely what happens when the map loader is handed something it did not
+expect: every mechanical check passed and the game froze anyway. Going through
+`evt_seq_mapchange` means the arrival is the same arrival a door performs.
+
+### `--map` works on a mod with no code at all
+
+A texture or placement mod declares no `code` block, and those are exactly the
+mods someone wants to see inside a particular level. `CodeOverride` supplies a
+default `CodeSpec` in that case, so the 1,644-byte module above came from
+`tex-koopa`, which is a `.tpl` swap and nothing else. It gets the banner too.
+
+`--map` takes either the name or the game's own id, because `bleck maps` prints
+both columns and neither is more memorable:
+
+```
+$ uv run bleck mod check tex-koopa --map he1_O1
+bleck: no map named 'he1_O1' in 383 maps.
+  `bleck maps --search he1` will narrow it down.
+  Did you mean: he1_01, he4_12, he4_11?
+```
+
+Manifest names are validated against `^[a-z0-9_]{1,16}$` before they are
+interpolated into generated script source, so escaping never becomes a question.
+
+### 🔶 The remaining 45 seconds — the next step
+
+This does **not** yet make a normal-speed boot quick. The boot map fires on the
+first frame of gameplay, which is still ~45 seconds of logos away at 100% speed.
+So today the honest position is: `--map` gets you to the right *place*, `--fast`
+gets you there *soon*, and you still cannot have both while playing.
+
+The fix is to skip the logo sequence rather than run it faster. The symbols are
+already in the lst:
+
+| Symbol | Address (eu0) |
+|---|---|
+| `seqSetSeq` | `0x8017c074` |
+| `seqGetSeq` | `0x8017c084` |
+| `seq_logoMain` | `0x80179140` |
+| `evt_seq_set_seq` | `0x8010d028` |
+
+🔶 **Hypothesis, untested:** the sequence hook already wraps
+`seq_data[SEQ_LOGO].main`, so calling `seqSetSeq` from there with the target map
+would go straight from LOGO to the map, skipping both the logo playback and the
+`aa4_01` load. `seqSetSeq`'s signature is **not verified** — `seqWork` carries
+`seq`, `stage`, `p0`, `p1`, which suggests `seqSetSeq(seq, p0, p1)`, but that is
+inference from a struct layout, not a read of the declaration. Check it against
+`spm-headers/include/spm/seqdrv.h` before writing the call.
+
+⚠️ Do not skip straight to implementing this. It is the same shape as D51.
+
+### Also: `ingame.py` now reports which map the game is in
+
+`seqWork.p0` is read and rendered as `map=<name>`. Without it a boot map that
+worked and one that quietly did nothing produce identical output — both just say
+`seq=GAME`.
+
+### Incidental: Dolphin exits on its own ~30-40s into an unattended run
+
+Seen on **both** a `--map` disc and a control build of the same mod without one,
+at t+30s and t+39s. So it is **not** caused by the boot map. Cause unknown;
+recorded so the next person does not attribute it to whatever they just changed.
+The control run is the only reason this is known, and it cost one boot.

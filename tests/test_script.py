@@ -621,7 +621,9 @@ class TestMapHooks:
     def _generated(self, source=MAP_SOURCE, hooks=(("aa4_01", "on_arrive"),)):
         return compile_source(
             source,
-            map_hooks=[emit.MapHook(map_name=m, script=s) for m, s in hooks],
+            scaffolding=emit.Scaffolding(
+                map_hooks=[emit.MapHook(map_name=m, script=s) for m, s in hooks]
+            ),
         ).generated.text
 
     def test_it_does_not_touch_the_map_s_own_init_script(self):
@@ -739,7 +741,8 @@ class TestBanner:
 
     def test_a_script_and_a_banner_share_one_set_of_hooks(self):
         out = compile_source(
-            SIMPLE, banner=emit.Banner(text="x", sequences=(1, 2))
+            SIMPLE,
+            scaffolding=emit.Scaffolding(banner=emit.Banner(text="x", sequences=(1, 2))),
         ).generated.text
         # One installer, not two layers of them.
         assert out.count("seq_data[i].main = bleck_hooks[i]") == 1

@@ -56,6 +56,12 @@ def launch(
     ~2,100 frames on logos, so a cold boot takes about 45 seconds of watching
     nothing; uncapped it reaches gameplay in about 6 (D63).
 
+    ⚠️ It stays uncapped. Dolphin's `-C` is a session override, so nothing leaks
+    into the user's config — but there is no way to restore the cap part-way
+    through a run, which makes this useless for anything a human wants to play.
+    For that, put the destination in the disc with `code.boot` (`--map`) and
+    leave the speed alone. D64.
+
     `state` loads a Dolphin save state, which skips the boot altogether and --
     more usefully -- carries a save with it. Entering a map without one leaves
     the player character uninitialised and invisible.

@@ -17,7 +17,7 @@ from bleck.backends import toolchain
 from bleck.common import env
 from bleck.common.errors import BleckError
 from bleck.mods import registry as mod_registry
-from bleck.mods.manifest import REL_DISC_PATH
+from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
 from bleck.mods.registry import Mod
 from bleck.mods.resolver import Chain
 from bleck.script import ScriptError, compile_source, emit
@@ -41,6 +41,24 @@ class CodeError(BleckError):
 
 
 @dataclass(frozen=True)
+class CodeOverride:
+    """Build-time changes to what a mod compiles, from the command line.
+
+    Separate from the manifest because these are properties of *this build*,
+    not of the mod: `--map` exists so a disc can be thrown at a level for one
+    test without editing and un-editing `mod.json` around it. Anything worth
+    keeping belongs in the manifest, where it is reviewable.
+    """
+
+    boot_map: str = ""
+    """Overrides `code.boot`, and supplies one to a mod that has no code."""
+
+    @property
+    def is_empty(self) -> bool:
+        return not self.boot_map
+
+
+@dataclass(frozen=True)
 class CodeBuild:
     """One mod's compiled code, and what it took to produce."""
 
@@ -54,6 +72,9 @@ class CodeBuild:
     sources: list[Path]
     """Native translation units compiled alongside the script."""
 
+    boot_map: str = ""
+    """The map this build starts the game at, if any."""
+
     def describe(self) -> str:
         parts = []
         if self.scripts:
@@ -62,16 +83,44 @@ class CodeBuild:
             names = ", ".join(path.name for path in self.sources)
             parts.append(f"{len(self.sources)} source(s) [{names}]")
         what = " + ".join(parts) or "nothing"
+        # Said out loud because a boot map changes where the disc *goes*, which
+        # is the kind of surprise worth naming in build output rather than
+        # leaving someone to wonder why the attract demo stopped playing.
+        where = f", boots at {self.boot_map}" if self.boot_map else ""
         return (
-            f"{self.mod}: compiled {what} -> {self.size} byte module ({self.toolchain})"
+            f"{self.mod}: compiled {what} -> "
+            f"{self.size} byte module ({self.toolchain}){where}"
         )
+
+
+@dataclass(frozen=True)
+class ScriptSource:
+    """Script text on its way to the compiler, and where it came from.
+
+    `path` is None when `bleck` generated the text itself, which is why the two
+    are separate: an error position means something different in a file someone
+    wrote than in one that only exists inside this process.
+    """
+
+    text: str
+    path: Path | None
+    origin: str
+
+    @property
+    def where(self) -> str:
+        """What to name in an error message."""
+        return str(self.path) if self.path is not None else self.origin
 
 
 def mods_with_code(chain: Chain) -> list[Mod]:
     return [mod for mod in chain.mods if mod.manifest.has_code]
 
 
-def build_chain(chain: Chain, workroot: Path | None = None) -> list[CodeBuild]:
+def build_chain(
+    chain: Chain,
+    workroot: Path | None = None,
+    override: CodeOverride | None = None,
+) -> list[CodeBuild]:
     """Compile every code mod in `chain`, newest last.
 
     Raises before touching anything if the chain contains more than one code
@@ -88,8 +137,14 @@ def build_chain(chain: Chain, workroot: Path | None = None) -> list[CodeBuild]:
             "  Combine their scripts into a single mod for now."
         )
 
+    # An override can give code to a chain that has none. That is the point:
+    # `--map` has to work on a pure asset or placement mod, which is exactly the
+    # kind of mod someone wants to look at inside a particular level.
+    if not coded and override is not None and not override.is_empty:
+        coded = [chain.target]
+
     root = workroot or mod_registry.build_root()
-    return [build_mod(mod, root) for mod in coded]
+    return [build_mod(mod, root, override) for mod in coded]
 
 
 def collect_sources(mod: Mod, spec) -> list[Path]:
@@ -130,14 +185,18 @@ def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     ]
 
 
-def banner_for(mod: Mod) -> emit.Banner | None:
+def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     """The on-screen label this mod should draw, if any.
 
     The text comes from the mod's own name unless the manifest overrides it, so
     the common case needs nothing declared: build a mod, and the disc says which
     mod it is.
+
+    `spec` is passed explicitly when the build is working from something other
+    than the manifest's own `code` block — a `--map` build of an asset mod has a
+    synthesized spec, and that disc should still name itself.
     """
-    spec = mod.manifest.code
+    spec = spec if spec is not None else mod.manifest.code
     if spec is None or not spec.banner.enabled:
         return None
     return emit.Banner(
@@ -148,11 +207,51 @@ def banner_for(mod: Mod) -> emit.Banner | None:
     )
 
 
-def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
+def _script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
+    """The script source to compile: the mod's own, the boot script, or both.
+
+    A boot map is desugared into script source and appended, so a mod that
+    already has a script keeps it and gains one, and a mod with no script at all
+    still ends up with something the compiler can process. Appending rather than
+    generating a second translation unit means one `evtEntry` table, one string
+    table, and one place where a duplicate script name is an error.
+    """
+    own = ""
+    path = mod.root / spec.script if spec.has_script else None
+    if path is not None:
+        if not path.exists():
+            raise CodeError(
+                f"{mod.name}: no script at {path}\n"
+                f"  mod.json points 'code.script' at {spec.script!r}"
+            )
+        own = path.read_text(encoding="utf-8")
+
+    if not boot_map:
+        return ScriptSource(text=own, path=path, origin=spec.script)
+
+    generated = emit.boot_source(boot_map)
+    if not own:
+        return ScriptSource(text=generated, path=None, origin=f"code.boot -> {boot_map}")
+    return ScriptSource(
+        text=own.rstrip("\n") + "\n\n" + generated,
+        path=path,
+        origin=f"{spec.script} + code.boot -> {boot_map}",
+    )
+
+
+def build_mod(
+    mod: Mod, workroot: Path, override: CodeOverride | None = None
+) -> CodeBuild:
     """Compile one mod's script and native sources into its `mod.rel`."""
     spec = mod.manifest.code
+    boot_map = override.boot_map if override else ""
     if spec is None:
-        raise CodeError(f"{mod.name} declares no code to build")
+        if not boot_map:
+            raise CodeError(f"{mod.name} declares no code to build")
+        # Nothing declared, but a boot map was asked for. Defaults are enough:
+        # they name eu0 and module 2, which is all the generated script needs.
+        spec = CodeSpec()
+    boot_map = boot_map or spec.boot_map
 
     # The same table the link will use, so "that will not link" is said now
     # rather than after a compile and a toolchain run (D61).
@@ -160,38 +259,36 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
         toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
     )
     sources = collect_sources(mod, spec)
-    script_path = mod.root / spec.script if spec.has_script else None
-    banner = banner_for(mod)
+    banner = banner_for(mod, spec)
+    source = _script_text(mod, spec, boot_map)
     compiled = None
 
-    if script_path is not None:
-        if not script_path.exists():
-            raise CodeError(
-                f"{mod.name}: no script at {script_path}\n"
-                f"  mod.json points 'code.script' at {spec.script!r}"
-            )
+    if source.text:
         try:
             compiled = compile_source(
-                script_path.read_text(encoding="utf-8"),
-                origin=spec.script,
-                map_hooks=map_hooks_for(mod),
-                banner=banner,
+                source.text,
+                origin=source.origin,
+                scaffolding=emit.Scaffolding(
+                    map_hooks=map_hooks_for(mod),
+                    banner=banner,
+                    boot_script=emit.BOOT_SCRIPT if boot_map else "",
+                ),
                 symbol_table=table,
             )
         except ScriptError as exc:
-            raise CodeError(f"{mod.name}:\n{exc.render(str(script_path))}") from exc
-        scaffolding = compiled.generated.text
+            raise CodeError(f"{mod.name}:\n{exc.render(source.where)}") from exc
+        generated_c = compiled.generated.text
     else:
         # Native-only: still needs the REL entry points and the `mod_prolog`
         # hand-off, just nothing to hand to the scheduler.
-        scaffolding = emit.generate_bare(
+        generated_c = emit.generate_bare(
             origin=f"{mod.name} native sources", banner=banner
         ).text
 
     headers = env.path(env.HEADERS_DIR)
     result = toolchain.build_rel(
         toolchain.BuildRequest(
-            source=scaffolding,
+            source=generated_c,
             workdir=workroot / CODE_WORKDIR / mod.name,
             target=spec.target,
             module_id=spec.module_id,
@@ -206,7 +303,8 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
 
     return CodeBuild(
         mod=mod.name,
-        script=script_path or mod.root,
+        script=source.path or mod.root,
+        boot_map=boot_map,
         output=output,
         size=result.size,
         toolchain=result.toolchain,

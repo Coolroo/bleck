@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import argparse
 import struct
 from pathlib import Path
 
 import pytest
 
+from bleck.backends import maps
 from bleck.cli import app as cli
+from bleck.cli.commands import mods
 from bleck.common import manifest
+from bleck.common.errors import UserError
 from bleck.formats import detect as formats
 from bleck.formats import u8
 
@@ -151,3 +155,44 @@ class TestLz:
         source.write_bytes(b"x" * 100)
         assert cli.main(["lz", "compress", str(source)]) == 0
         assert "->" in capsys.readouterr().out
+
+
+class TestBootMapFlag:
+    """`--map` resolves against the game's real map list before anything builds.
+
+    A name that does not exist would otherwise compile fine, boot fine, and then
+    sit on the attract demo forever — the failure mode looks identical to the
+    feature not working at all.
+    """
+
+    def _resolve(self, value):
+        return mods.boot_override(argparse.Namespace(map=value), Path("base"))
+
+    @pytest.fixture(autouse=True)
+    def _index(self, monkeypatch):
+        entries = [
+            maps.MapEntry(name="he1_01", archive=Path("he1_01.bin"), map_id=42),
+            maps.MapEntry(name="he1_02", archive=Path("he1_02.bin"), map_id=43),
+            maps.MapEntry(name="mac_01", archive=Path("mac_01.bin"), map_id=7),
+        ]
+        index = maps.MapIndex(entries=entries, source=Path())
+        monkeypatch.setattr(mods.maps, "load", lambda _base: index)
+
+    def test_no_flag_means_no_override(self):
+        assert self._resolve(None).is_empty
+
+    def test_a_name_is_taken_as_given(self):
+        assert self._resolve("he1_01").boot_map == "he1_01"
+
+    def test_a_numeric_id_resolves_to_its_name(self):
+        """`bleck maps` prints both columns and neither is more memorable."""
+        assert self._resolve("7").boot_map == "mac_01"
+
+    def test_an_unknown_id_says_so(self):
+        with pytest.raises(UserError, match="no map with id 999"):
+            self._resolve("999")
+
+    def test_a_typo_gets_a_suggestion(self):
+        with pytest.raises(UserError) as caught:
+            self._resolve("he1_O1")
+        assert "he1_01" in str(caught.value)

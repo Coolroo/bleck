@@ -13,7 +13,7 @@ from pathlib import Path
 
 from bleck.backends import toolchain
 from bleck.common.errors import BleckError
-from bleck.script import ScriptError, compile_source
+from bleck.script import ScriptError, compile_source, emit
 from bleck.script import catalog as builtin_catalog
 
 CATEGORY = "scripting"
@@ -33,7 +33,7 @@ def _load(path: Path, require_entry: bool = True):
         return compile_source(
             path.read_text(encoding="utf-8"),
             origin=path.name,
-            require_entry=require_entry,
+            scaffolding=emit.Scaffolding(require_entry=require_entry),
         )
     except ScriptError as exc:
         raise BleckError(exc.render(str(path))) from exc

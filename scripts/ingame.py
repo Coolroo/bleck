@@ -61,6 +61,7 @@ class Snapshot:
 
     sequence: int
     stage: int
+    destination: str = ""
     words: list[int] = field(default_factory=list)
     gw: dict[int, int] = field(default_factory=dict)
 
@@ -70,6 +71,8 @@ class Snapshot:
 
     def render(self) -> str:
         parts = [f"seq={self.sequence_name}({self.sequence}) stage={self.stage}"]
+        if self.destination:
+            parts.append(f"map={self.destination}")
         if self.gw:
             parts.append(" ".join(f"gw[{n}]={v}" for n, v in sorted(self.gw.items())))
         if self.words:
@@ -133,6 +136,33 @@ class Session:
         """Whether Dolphin has quit without being asked to."""
         return self.process is not None and self.process.poll() is not None
 
+    @staticmethod
+    def _destination(dme) -> str:
+        """Where the game says it is going, from `seqWork.p0`.
+
+        This is the same field the map-hook machinery watches, and reading it
+        here is what turns "the game is in SEQ_GAME" into "the game is in
+        Lineland". Without it, a boot map that quietly did nothing and one that
+        worked produce identical output — both just say `seq=GAME`.
+
+        `p0` is only meaningful during a map change; the game leaves the old
+        pointer in place afterwards, which is useful rather than stale, because
+        the last destination *is* where you are.
+        """
+        pointer = dme.read_word(SEQ_WORK + 8)
+        if not 0x80000000 <= pointer < 0x94000000:
+            return ""
+        try:
+            raw = dme.read_bytes(pointer, 16)
+        except RuntimeError:
+            return ""
+        end = raw.find(b"\0")
+        name = raw[: end if end >= 0 else 16]
+        # Map names are lowercase ASCII with digits and underscores. Anything
+        # else means the pointer is not pointing at a name right now.
+        text = name.decode("ascii", "replace")
+        return text if text and all(c.isalnum() or c == "_" for c in text) else ""
+
     def read(self, probe: int, words: int, watch_gw: list[int]) -> Snapshot | None:
         import dolphin_memory_engine as dme  # noqa: PLC0415
 
@@ -143,6 +173,7 @@ class Session:
             return Snapshot(
                 sequence=_signed(dme.read_word(SEQ_WORK)),
                 stage=_signed(dme.read_word(SEQ_WORK + 4)),
+                destination=self._destination(dme),
                 words=[dme.read_word(probe + 4 * i) for i in range(words)],
                 gw={n: dme.read_word(EVT_WORK + 4 + 4 * n) for n in watch_gw},
             )
@@ -188,9 +219,14 @@ def find_bytes(dme, pattern: bytes) -> list[int]:  # pylint: disable=container-r
     return hits
 
 
-def build(mod: str, image: Path) -> None:
+def build(mod: str, image: Path, boot_map: str = "") -> None:
+    command = ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"]
+    if boot_map:
+        # The disc drives itself to the map, so the run stays unattended --
+        # which is the only kind of run this script can do (D48).
+        command += ["--map", boot_map]
     result = subprocess.run(
-        ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"],
+        command,
         cwd=REPO,
         capture_output=True,
         text=True,
@@ -228,6 +264,12 @@ def main() -> int:
         "--no-build", action="store_true", help="boot the existing image as-is"
     )
     parser.add_argument(
+        "--map",
+        metavar="NAME|ID",
+        default="",
+        help="start the game at this map instead of the attract demo",
+    )
+    parser.add_argument(
         "--slow",
         action="store_true",
         help="run at normal speed; the default is unlimited, which boots faster",
@@ -254,9 +296,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    if args.map and args.no_build:
+        raise SystemExit("--map has to be built in; drop --no-build")
+
     image = registry.build_root() / f"{args.mod}.wbfs"
     if not args.no_build:
-        build(args.mod, image)
+        build(args.mod, image, args.map)
     if not image.exists():
         raise SystemExit(f"no image at {image}")
 

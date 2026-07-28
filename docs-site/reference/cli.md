@@ -137,6 +137,8 @@ be chained after a build without pinning your terminal.
 |---|---|
 | `--batch` | Boot straight into the game, skipping Dolphin's game list |
 | `--wait` | Block until the emulator exits, and return its exit code |
+| `--fast` | Uncap emulation speed — see the warning below |
+| `--state` | Load a Dolphin save state instead of booting cold |
 
 ```bash
 bleck mod build my-mod work/out/my-mod.wbfs && bleck launch --batch work/out/my-mod.wbfs
@@ -146,6 +148,16 @@ bleck mod build my-mod work/out/my-mod.wbfs && bleck launch --batch work/out/my-
 
     This needs the Dolphin **emulator**, found via `BLECK_DOLPHIN` — a different
     executable from the `DolphinTool` used to convert images.
+
+!!! warning "`--fast` stays fast"
+
+    `--fast` uncaps the emulator so a cold boot reaches gameplay in about 6
+    seconds instead of 45. It uncaps the **entire session**, gameplay included,
+    and Dolphin offers no way to restore the cap part-way through — so a game
+    launched this way is not playable, only observable.
+
+    It is meant for unattended runs. To reach a level quickly and still play
+    it, build with [`--map`](#bleck-mod-build) instead.
 
 ## Streams
 
@@ -199,7 +211,7 @@ The resolved install order, dependencies first.
 ### `bleck mod check`
 
 ```bash
-bleck mod check <name> [--merge-binary]
+bleck mod check <name> [--merge-binary] [--map NAME|ID]
 ```
 
 Resolve and detect conflicts. **Writes nothing** — the fast inner-loop command.
@@ -207,7 +219,8 @@ Resolve and detect conflicts. **Writes nothing** — the fast inner-loop command
 ### `bleck mod build`
 
 ```bash
-bleck mod build <name> [out] [--no-image] [--launch] [--format {iso,rvz,wbfs}] [--merge-binary]
+bleck mod build <name> [out] [--no-image] [--launch] [--map NAME|ID]
+                       [--format {iso,rvz,wbfs}] [--merge-binary]
 ```
 
 Stage the base, apply the chain, and write a disc image.
@@ -218,6 +231,7 @@ Stage the base, apply the chain, and write a disc image.
 | `--launch` | Boot the result in Dolphin once it is built |
 | `--format` | Override the inferred output format |
 | `--merge-binary` | Auto-merge disjoint edits to the same binary file |
+| `--map` | Start the game at this map instead of the attract demo |
 
 `--launch` makes the whole edit-build-boot loop a single command:
 
@@ -227,6 +241,15 @@ bleck mod build my-mod work/out/my-mod.wbfs --force --launch
 
 If the mod declares a `code` block, its script is compiled first and the
 resulting module is packaged automatically.
+
+`--map` takes a map name or the game's own id — `bleck maps` prints both —
+and works on any mod, including one that ships nothing but a texture. It is
+the same thing as `code.boot` in `mod.json`, set for one build:
+
+```bash
+bleck mod build my-mod --map he1_01 --launch    # by name
+bleck mod build my-mod --map 26     --launch    # the same map, by id
+```
 
 ## Scripts
 

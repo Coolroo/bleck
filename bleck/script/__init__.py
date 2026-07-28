@@ -72,22 +72,19 @@ def compile_source(
     text: str,
     origin: str = "script",
     *,
-    map_hooks: list[emit.MapHook] | None = None,
-    require_entry: bool = True,
-    banner: emit.Banner | None = None,
+    scaffolding: emit.Scaffolding | None = None,
     symbol_table=None,
 ) -> CompiledSource:
     """Compile script text to C.
+
+    `scaffolding` says what the module does besides run its entry script — map
+    hooks, a boot map, the on-screen banner. `symbol_table` is what a call to a
+    game function is checked against, so "this will not link" is said here
+    rather than after a toolchain run (D61).
 
     Raises `ScriptError` with a source position for anything the author can fix.
     """
     tree = parser.parse(text)
     program = compiler.compile_program(tree, text, symbol_table=symbol_table)
-    generated = emit.generate(
-        program,
-        origin=origin,
-        map_hooks=map_hooks,
-        require_entry=require_entry,
-        banner=banner,
-    )
+    generated = emit.generate(program, origin=origin, scaffolding=scaffolding)
     return CompiledSource(origin=origin, generated=generated, program=program)

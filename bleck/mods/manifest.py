@@ -226,6 +226,18 @@ class CodeSpec:
     banner: BannerSpec = field(default_factory=BannerSpec)
     """The on-screen label naming this mod."""
 
+    boot_map: str = ""
+    """A map to start the game at, instead of the attract demo.
+
+    The game boots into `aa4_01` and then `ls4_12` and nowhere else without a
+    controller, so testing anything elsewhere used to mean a human holding a
+    Wii remote. Naming a map here makes the disc go there on its own.
+    """
+
+    @property
+    def has_boot_map(self) -> bool:
+        return bool(self.boot_map)
+
     @property
     def has_maps(self) -> bool:
         return bool(self.maps)
@@ -248,6 +260,8 @@ class CodeSpec:
         body["module_id"] = self.module_id
         if self.maps:
             body["maps"] = {hook.map_name: hook.script for hook in self.maps}
+        if self.boot_map:
+            body["boot"] = self.boot_map
         # Written only when it says something a default would not, so the
         # common manifest stays as short as it was before banners existed.
         if not self.banner.is_default:
@@ -358,10 +372,12 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     if not isinstance(sources, list) or not all(isinstance(s, str) for s in sources):
         raise ManifestError(f"{source}: 'code.sources' must be a list of paths")
 
-    if not script and not sources:
+    boot = _parse_boot(raw.get("boot"), source)
+
+    if not script and not sources and not boot:
         raise ManifestError(
-            f"{source}: 'code' needs a 'script', 'sources', or both -- "
-            f"otherwise there is nothing to compile"
+            f"{source}: 'code' needs a 'script', 'sources', 'boot', or a "
+            f"combination -- otherwise there is nothing to compile"
         )
 
     module_id = raw.get("module_id", 2)
@@ -382,7 +398,36 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         module_id=module_id,
         maps=_parse_maps(raw.get("maps"), source),
         banner=_parse_banner(raw.get("banner"), source),
+        boot_map=boot,
     )
+
+
+#: A map's name as the disc spells it: `he1_01`, `aa4_01`, `mac_01`.
+#:
+#: Enforced rather than passed through because the name is interpolated into
+#: generated script source. Restricting it to the shape every real map already
+#: has means there is no escaping question to get wrong later.
+_MAP_NAME_RE = re.compile(r"^[a-z0-9_]{1,16}$")
+
+
+def _parse_boot(raw: object, source: str) -> str:
+    if raw is None:
+        return ""
+    if not isinstance(raw, str):
+        raise ManifestError(
+            f"{source}: 'code.boot' must be a map name like 'he1_01', not "
+            f"{type(raw).__name__}"
+        )
+    name = raw.strip()
+    if not name:
+        return ""
+    if not _MAP_NAME_RE.match(name):
+        raise ManifestError(
+            f"{source}: {raw!r} is not a map name. They look like 'he1_01' -- "
+            f"lowercase letters, digits and underscores.\n"
+            f"  `bleck maps` lists all 383 of them."
+        )
+    return name
 
 
 def _parse_banner(raw: object, source: str) -> BannerSpec:

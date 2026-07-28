@@ -18,7 +18,7 @@ from bleck.backends import disc
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, u8
 
-from .code import CodeBuild, build_chain
+from .code import CodeBuild, CodeOverride, build_chain
 from .conflicts import Conflict, detect, effective_edits, merge_three_way
 from .edits import PlacementBuild, apply_chain
 from .overlay import Plan, build_plan
@@ -246,24 +246,29 @@ def prepare(chain: Chain, base: Path) -> Plan:
     return build_plan(base, chain.mods)
 
 
-def compile_code(chain: Chain) -> list[CodeBuild]:
+def compile_code(chain: Chain, override: CodeOverride | None = None) -> list[CodeBuild]:
     """Compile the chain's code mods into their overlays.
 
     Must happen before `prepare`: the overlay plan comes from walking each mod's
     `overlay/` directory, so a generated `mod.rel` that does not exist yet would
     simply not be part of the build.
     """
-    return build_chain(chain)
+    return build_chain(chain, override=override)
 
 
-def check(chain: Chain, base: Path, allow_binary: bool) -> BuildReport:
+def check(
+    chain: Chain,
+    base: Path,
+    allow_binary: bool,
+    override: CodeOverride | None = None,
+) -> BuildReport:
     """Resolve and detect conflicts without writing anything.
 
     Scripts are still compiled: a mod whose code does not build is not a mod
     that passes checking, and finding that out here is the whole point.
     """
     report = BuildReport(staged=Path())
-    report.code_builds = compile_code(chain)
+    report.code_builds = compile_code(chain, override)
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
@@ -271,10 +276,16 @@ def check(chain: Chain, base: Path, allow_binary: bool) -> BuildReport:
     return report
 
 
-def build(chain: Chain, base: Path, staged: Path, allow_binary: bool) -> BuildReport:
+def build(
+    chain: Chain,
+    base: Path,
+    staged: Path,
+    allow_binary: bool,
+    override: CodeOverride | None = None,
+) -> BuildReport:
     """Stage the base, apply the chain, and report what happened."""
     report = BuildReport(staged=staged)
-    report.code_builds = compile_code(chain)
+    report.code_builds = compile_code(chain, override)
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)

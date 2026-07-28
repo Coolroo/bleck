@@ -146,6 +146,29 @@ Every mod has a `mod.json` at its root.
             `main` is what runs continuously during gameplay, and a map hook has
             its own way to start.
 
+        `code.boot` <span class="pf-type">string</span>
+
+        :   A map to start the game at, instead of the attract demo:
+
+            ```json
+            "code": { "boot": "he1_01" }
+            ```
+
+            The game boots into `aa4_01` and then `ls4_12` and nowhere else
+            without a controller. This makes the disc take itself somewhere
+            else, which is what lets a mod be looked at without playing to it.
+
+            `bleck` generates the script that does this, so a mod needs no
+            `code.script` — and no `code` block at all if `boot` is the only
+            thing in it. `bleck mod build --map <name|id>` sets it for one
+            build without touching the manifest.
+
+            !!! warning "The player is uninitialised"
+
+                No save file and no profile means **Mario is invisible** and
+                anything reading player state is meaningless. This is for
+                looking at a map, not playing it.
+
 `setup` <span class="pf-type">object</span>
 
 :   Changes to a map's enemy placement, as map name → a list of slot edits.

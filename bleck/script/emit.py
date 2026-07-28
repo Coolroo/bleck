@@ -15,7 +15,7 @@ with it.
 from __future__ import annotations
 
 import difflib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from bleck.script.compiler import (
     CompiledProgram,
@@ -39,6 +39,23 @@ SEQUENCE_NAMES = ("logo", "title", "game", "mapchange", "gameover", "load")
 #: Where the banner is drawn unless a mod says otherwise. The title screen is
 #: where someone checks which disc they are running.
 DEFAULT_BANNER_SEQUENCES = ("title",)
+
+#: The script a `code.boot` declaration is desugared into.
+#:
+#: Named rather than anonymous so it appears in `bleck mod build` output like
+#: any other script, and so a collision with a mod's own script is a plain
+#: duplicate-name error instead of a mystery.
+BOOT_SCRIPT = "bleck_boot"
+
+#: How long the boot script waits before asking for the map change.
+#:
+#: Two seconds. The first map has only just finished loading and the sequence
+#: that loaded it is still unwinding; requesting another change immediately is
+#: the shape of thing that deadlocked the map loader in D51. This is the value
+#: `mods/goto-map` proved works (D52), kept rather than tuned downward — the
+#: whole point of booting into a map is that nobody is watching, so two seconds
+#: costs nothing and a deadlock costs a run.
+BOOT_DELAY_FRAMES = 120
 
 _PREFIX = "bleck_"
 
@@ -311,6 +328,44 @@ static void bleck_start_entry(u32 seq)
 }
 """
 
+#: Booting straight into a chosen map.
+#:
+#: Deliberately *not* a re-armed hook like `_SCRIPT_START`: this fires once, on
+#: the first frame of gameplay, and never again. Re-arming it would send the
+#: game back to the same map every time it left, which is a loop rather than a
+#: starting point.
+_BOOT_BLOCK = """
+/*
+    Booting into a map.
+
+    An unattended boot reaches exactly two maps -- aa4_01 then ls4_12, the
+    attract demo -- and controller input cannot be injected (D48), so every
+    other map used to need a human. This starts a script on the first frame of
+    gameplay that asks the game to go somewhere else instead (D52).
+
+    Note what this does *not* do: it does not try to redirect the first map
+    load, which would be faster. The game is asked to change maps through its
+    own `evt_seq_mapchange`, exactly as a door would, so arriving here is the
+    same arrival the game performs everywhere else. Overwriting `seqWork.p0`
+    before the loader reads it is the obvious shortcut and is untested; D51 is
+    what happens when the map loader is handed something it did not expect.
+
+    `bleck_boot_pending` starts at 1 rather than 0 so it lands in .data. The
+    loader allocates this module's bss but nothing documents whether it zeroes
+    it, and a boot map that fired only on some builds would be a miserable bug.
+*/
+
+static u32 bleck_boot_pending = 1;
+
+static void bleck_boot_on_seq(u32 seq)
+{{
+    if (seq != BLECK_SEQ_GAME || bleck_boot_pending == 0)
+        return;
+    bleck_boot_pending = 0;
+    evtEntry({script}, 0, 0);
+}}
+"""
+
 #: One trampoline per sequence, because the game passes no index of its own.
 _SEQ_STUBS = """
 static void bleck_seq0(void *w) { bleck_after_seq(0, w); }
@@ -385,6 +440,42 @@ class MapHook:
     map_name: str
     script: str
     """Name of a script in the same program, not a C identifier."""
+
+
+@dataclass(frozen=True)
+class Scaffolding:
+    """Everything the generated module does besides run its entry script.
+
+    Grouped rather than passed as four parallel arguments because they are one
+    idea — what this module is wired up to do — and because they kept arriving
+    together at every call site anyway. Each one adds a line to the same
+    per-frame sequence hook.
+    """
+
+    map_hooks: list[MapHook] = field(default_factory=list)
+    """Scripts started on arrival at a named map."""
+
+    banner: Banner | None = None
+    """The on-screen label naming the mod."""
+
+    boot_script: str = ""
+    """A script started once, on the first frame of gameplay."""
+
+    require_entry: bool = True
+    """Whether a script called `main` must exist.
+
+    Off for `bleck script check`, where insisting on an entry point would be a
+    rule about mods imposed on someone checking a file's syntax.
+    """
+
+    @property
+    def needs_entry_script(self) -> bool:
+        """A mod needs `main` only when nothing else can start a script.
+
+        Map hooks and boot maps each bring their own way in, so requiring
+        `main` alongside them would be ceremony.
+        """
+        return self.require_entry and not self.map_hooks and not self.boot_script
 
 
 @dataclass(frozen=True)
@@ -481,14 +572,45 @@ def _banner_block(banner: Banner) -> str:
     return _BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
 
-def _footer(entry: str, hooks: list[MapHook], banner: Banner | None = None) -> str:
+def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
+    """The script text a `code.boot` declaration desugars into.
+
+    Generated as *source* and run through the ordinary compiler rather than
+    emitted as bytecode. That is the difference between a feature and a special
+    case: the map name goes through the same string table, the call goes through
+    the same symbol-table check that would reject `evt_seq_mapchange` if it were
+    not linkable, and the result shows up in build output as a script like any
+    other.
+
+    `map_name` is validated against the game's own map list before it gets here,
+    so it cannot carry anything that needs escaping.
+    """
+    return (
+        f"-- Generated by bleck from `code.boot`: start the game at {map_name}.\n"
+        "--\n"
+        "-- Edit mod.json, not this. See docs/testing.md.\n"
+        f"script {BOOT_SCRIPT} {{\n"
+        f"    wait({delay})\n"
+        "    -- Door 0 means 'use the map's own default entrance', which\n"
+        "    -- spm/map_data.h documents as the behaviour for a null door name.\n"
+        f'    evt_seq_mapchange("{map_name}", 0)\n'
+        "}\n"
+    )
+
+
+def _footer(
+    entry: str,
+    hooks: list[MapHook],
+    banner: Banner | None = None,
+    boot: str = "",
+) -> str:
     """Assemble the scaffolding that runs the mod, from the pieces it needs.
 
     A free-running script and a map hook want the same per-frame hook on the
     sequence table -- one to start and re-start itself, the other to notice
     where the game went. A mod using both installs one set of hooks, not two.
     """
-    if not entry and not hooks and banner is None:
+    if not entry and not hooks and banner is None and not boot:
         return _PLAIN_PROLOG + _ENTRY_POINTS
 
     parts = [_SEQ_TABLE]
@@ -503,6 +625,11 @@ def _footer(entry: str, hooks: list[MapHook], banner: Banner | None = None) -> s
     if entry:
         parts.append(_SCRIPT_START % entry)
         body += "    bleck_start_entry(seq);\n"
+    # Last, so anything else due this frame has already run: the boot script
+    # tears the world down a couple of seconds later.
+    if boot:
+        parts.append(_BOOT_BLOCK.format(script=boot))
+        body += "    bleck_boot_on_seq(seq);\n"
 
     parts.append(
         "\nstatic void bleck_after_seq(u32 seq, void *work)\n"
@@ -534,16 +661,14 @@ def generate_bare(
 def generate(
     program: CompiledProgram,
     origin: str = "a script",
-    map_hooks: list[MapHook] | None = None,
-    require_entry: bool = True,
-    banner: Banner | None = None,
+    scaffolding: Scaffolding | None = None,
 ) -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
-    hooks = list(map_hooks or [])
+    plan = scaffolding or Scaffolding()
+    hooks = list(plan.map_hooks)
     _check_map_hooks(program, hooks)
-    # A mod that only attaches to maps has nothing to free-run, so `main` stops
-    # being required the moment there is another way for a script to start.
-    entry = _entry_script(program, required=require_entry and not hooks)
+    _check_boot_script(program, plan.boot_script)
+    entry = _entry_script(program, required=plan.needs_entry_script)
 
     parts = [_HEADER.format(origin=origin)]
 
@@ -578,7 +703,14 @@ def generate(
         )
 
     parts.extend(_script_array(script) for script in program.scripts)
-    parts.append(_footer(f"{_PREFIX}script_{entry}" if entry else "", hooks, banner))
+    parts.append(
+        _footer(
+            f"{_PREFIX}script_{entry}" if entry else "",
+            hooks,
+            plan.banner,
+            boot=f"{_PREFIX}script_{plan.boot_script}" if plan.boot_script else "",
+        )
+    )
 
     text = "\n\n".join(parts)
     _require_ascii(text)
@@ -629,6 +761,25 @@ def _check_map_hooks(program: CompiledProgram, hooks: list[MapHook]) -> None:
             f"(it declares: {listed}).{hint}",
             Position(),
         )
+
+
+def _check_boot_script(program: CompiledProgram, name: str) -> None:
+    """The boot script has to be in the program the caller compiled.
+
+    `bleck` generates the source for it, so this failing means the generated
+    text and the emitter disagree — a bug here rather than in anyone's mod. It
+    is checked anyway because the alternative is an undefined C symbol, which
+    surfaces as a linker error naming `bleck_script_bleck_boot` and nothing at
+    all about the `--map` flag that asked for it.
+    """
+    if not name or any(script.name == name for script in program.scripts):
+        return
+    listed = ", ".join(script.name for script in program.scripts) or "none"
+    raise ScriptError(
+        f"boot script {name!r} is missing from the compiled program "
+        f"(it declares: {listed}). This is a bug in bleck.",
+        Position(),
+    )
 
 
 def _entry_script(program: CompiledProgram, required: bool = True) -> str:

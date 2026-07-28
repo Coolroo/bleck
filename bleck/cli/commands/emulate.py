@@ -46,7 +46,11 @@ def register(add) -> None:
     p.add_argument(
         "--fast",
         action="store_true",
-        help="uncap emulation speed; reaches gameplay in ~6s instead of ~45s",
+        help=(
+            "uncap emulation speed for the whole session, gameplay included -- "
+            "for unattended runs, not for playing. To reach a level quickly and "
+            "still play it, build with `bleck mod build --map <name>` instead"
+        ),
     )
     p.add_argument(
         "--state",
