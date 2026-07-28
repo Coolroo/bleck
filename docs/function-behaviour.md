@@ -176,24 +176,73 @@ spell one.
 +0x40, `initScript` +0x50, `moveScript` +0x54. `MapDoorDesc` is 0x20 bytes with
 `destMapName` +0x14 and `destDoorName` +0x18 — the **loading zone** descriptor.
 
-⚠️ **`evt_door.h`'s argument count is wrong.**
-`EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` contradicts the comment
-directly above it, `evt_door_set_door_descs(DoorDesc *descs, s32 count)` — two
-arguments, so argc 3. D93 trusted the macro, searched at argc 2 only, and
-recorded zero calls. ⛔ D93 and D94 are superseded; the pointer above was read at
-`+2`, which is correct for any argc ≥ 2, and the `he1_02` string says it was.
+### ✅ All three setters take argc 3 (D102)
 
-🔶 **The actual argc is still not measured**, and `code.patches` needs it — a
-replacement carries the original's argc (D92), so a patch at the wrong size
-corrupts the script rather than failing.
+`mods/door-argc`, one 75 s run:
 
-🔶 Which map holds the `set_door_descs` call was not recorded, and five maps is
-not the game.
+| | header | map | arg0 | arg1 |
+|---|---|---|---|---|
+| `evt_door_set_door_descs` | **`0x0003005C`** | `he1_01` | `0x80D2FBB0` | **1** |
+| `evt_door_set_map_door_descs` | **`0x0003005C`** | `he1_01` | `0x80D2F940` | **3** |
+| `evt_door_set_dokan_descs` | **`0x0003005C`** | `mac_01` | — | — |
+| control `evt_hitobj_attr_onoff` | **`0x0005005C`** | — | — | 8 hits |
+
+The `USER_FUNC` header, the function pointer, then `(descs, count)`. ⚠️ The
+control's *header word* is the check that matters, not its hit count: D88
+recorded that call at argc 5, so `0x0005005C` was known in advance from an
+unrelated run and reading it back proves headers are being decoded from the
+right offset.
+
+✅ So `he1_01` registers **1** door and **3** loading zones, and `mac_01`
+registers dokan (pipes) — which is why D94's two maps genuinely have no
+`DoorDesc` call. Its zero was honest, and about map coverage.
+
+✅ `DoorDesc[0]`'s three script pointers are all non-null and were re-read by a
+different probe in a different run (D103, D104), which is what confirms the
+offsets — a wrong offset landing on a non-null word would look the same:
+
+| field | offset | pointer |
+|---|---|---|
+| `interactScript` | +0x40 | `0x80D2FB78` |
+| `initScript` | +0x50 | `0x80D2F9E0` |
+| `moveScript` | +0x54 | `0x80D2FB70` |
+
+✅ `MapDoorDesc[0]` spells `destMapName` **`he1_02`** and `destDoorName`
+**`doa1_l`**, so its +0x14/+0x18 offsets are right too. ✅ All of it read at
+`mod_prolog`, so the descriptor arrays are resident before gameplay — which is
+what makes a build-time-declared patch possible at all.
+
+⚠️ **A door interact script opens with `MULF`.** `he1_01` door 0's
+`interactScript` starts `0x0002003C` — opcode `0x3C`, a float multiply, argc 2.
+Not a `USER_FUNC`, not a `DEBUG_PUT_MSG`, and not what anyone would guess, which
+is why `code.patches`' `expect` has no useful default for a door (D103). 🔶 What
+`initScript` and `moveScript` open with is not recorded.
+
+### ⛔ `evt_door.h`'s argument count is wrong
+
+```c
+// evt_door_set_door_descs(DoorDesc * descs, s32 count)
+EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)     // -> argc 2
+```
+
+The comment says two arguments; the macro says one. **The game says three words
+— the comment.** D93 trusted the macro, searched at argc 2 only, and recorded
+zero calls; D94 followed. ⛔ Both are superseded.
+
+⚠️ **`spm-headers` is a reference, not ground truth.** It is hand-maintained
+against a 2.34%-matched decomp, and this is the first case recorded here where
+one of its declarations is simply incorrect. Where a header's claim is
+load-bearing — an argc, an offset, a size — reading it is a hypothesis 🔶, not a
+finding. Measure it.
+
+🔶 Five maps is not the game, and the `count` argument was read as a literal — a
+script that computed it would not be handled.
 
 ⛔ **Hooking the function is not the route in.** D94 branched over it and counted
 zero entries in 90 s with a control at 62,480 — but that run covered `mac_01`,
 `aa4_01` and `ls4_12`, none of which contain the call. Reading the argument out
-of the bytecode needs no hook at all (D89, D101).
+of the bytecode needs no hook at all (D89, D101), and `code.patches`'
+`door:<map>:<index>` selector is built on that walk (D103, D104).
 
 ---
 
@@ -201,7 +250,8 @@ of the bytecode needs no hook at all (D89, D101).
 
 - [`decision-log.md`](decision-log.md) — D94 (instruction patching), D95
   (`code.hooks`), D96 (the trace), D101 (the door setters, and why D93/D94 were
-  wrong about them)
+  wrong about them), D102 (their argc, and the wrong header), D103/D104 (the
+  `door:` selector)
 - [`hook-points.md`](hook-points.md) — when custom code can safely run
 - [`code-mods.md`](code-mods.md) — the trace pattern and its hazards
 - [`disc-layout.md`](disc-layout.md) — facts about the disc rather than the code

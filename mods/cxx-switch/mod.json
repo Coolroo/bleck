@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "cxx-switch",
+  "version": "0.1.0",
+  "description": "C++ and a compiled switch, both running in-game with a main that does not return",
+  "base": "eu0",
+  "code": {
+    "script": "src/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "sources": [
+      "src"
+    ]
+  }
+}

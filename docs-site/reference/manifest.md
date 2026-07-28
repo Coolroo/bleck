@@ -162,9 +162,30 @@ Every mod has a `mod.json` at its root.
             ]
             ```
 
-            - `script` — which script, as `<kind>:<name>`. Two kinds:
-              `map:he1_01` for a map's init script, `item:0x41` for an item's
-              use script. `door:` is not supported.
+            - `script` — which script, as `<kind>:<name>`. Three kinds:
+
+                | Selector | Reaches |
+                |---|---|
+                | `map:he1_01` | that map's init script |
+                | `item:0x41` | that item's use script |
+                | `door:he1_01:0` | that door's interact script |
+                | `door:he1_01:0:init` | that door's init script |
+                | `door:he1_01:0:move` | that door's move script |
+
+                A door selector is
+                `door:<map>:<index>[:interact|init|move]`. The last part
+                picks one of the door's three scripts and defaults to
+                `interact` — the script that runs when the player uses the
+                door. `bleck` finds the door by loading the map's data,
+                walking its init script for the call that registers the
+                map's doors, and indexing the array it registers.
+
+                The index is a **position in that list, in registration
+                order**, not an id — the game gives no way to look a door up
+                by name. The list lives in the game's data, so the index
+                cannot be checked while building: one past the end resolves
+                to nothing and reports status `4` at run time rather than
+                writing anywhere.
             - `at` — word offset into the script where the instruction begins.
             - `expect` — the opcode you expect to find there. **Required.**
               An opcode name (`"DEBUG_PUT_MSG"`), a name with its argument
@@ -180,6 +201,11 @@ Every mod has a `mod.json` at its root.
                 would be there. A wrong offset then leaves the game untouched
                 and reports a status, instead of corrupting a script.
 
+                Doors have no sensible default to offer here: `he1_01`'s first
+                door opens its interact script with `MULF`, a float multiply,
+                rather than the `USER_FUNC` you might expect. Read the word
+                that is actually there and put it in `expect`.
+
             The replacement is a `USER_FUNC` declaring the **same argument
             count** as the instruction it overwrites, so it is always the same
             size: your function pointer takes the first argument word and the
@@ -194,9 +220,14 @@ Every mod has a `mod.json` at its root.
                 scripts, so several ids share one. `bleck_patch_shared[]`
                 reports how many entries point at the script your patch hit.
 
-                An item's use script runs only when a player uses that item, so
-                an `item:` patch is checked as far as "resolved the right script
-                and wrote into it". Confirm the rest by hand.
+            !!! note "Item and door patches are checked less far than map ones"
+
+                An item's use script runs only when a player uses that item, and
+                a door's interact script only when a player uses that door. Both
+                kinds of patch are checked as far as "resolved the right script
+                and wrote into it" — your function has not been observed
+                running. Read `bleck_patch_status[]`, then confirm the rest by
+                hand.
 
             A patch is applied when the module loads and stays applied for the
             rest of the session, including maps you enter later. Your C can
@@ -205,7 +236,8 @@ Every mod has a `mod.json` at its root.
             ```c
             extern unsigned int bleck_patch_status[];
             /* 1 pending, 2 applied, 3 refused by the guard,
-               4 no script, 5 no such item id in the table */
+               4 no script -- including a door index the map does not have,
+               5 no such item id in the table */
 
             extern unsigned int bleck_patch_shared[];
             /* 0xFFFFFFFF where nothing counted, e.g. every map patch */

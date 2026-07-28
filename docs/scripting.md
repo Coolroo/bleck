@@ -255,13 +255,15 @@ are carried through untouched, which for a `USER_FUNC` target reads as *redirect
 the call, keep its arguments*. The only size `bleck` refuses at build time is a
 **one-word** instruction, where the function pointer would not fit (D91, D92).
 
-Two selector kinds resolve: `map:<name>` through `mapDataPtr`, and `item:<id>`
-through `itemEventDataTable`. ⚠️ Item scripts are shared — 22 distinct scripts
-across 33 entries — so patching one id can change several; the generated code
-reports how many in `bleck_patch_shared[]`. ⛔ `door:` is deferred: `DoorDesc`
-has no lookup by name (D91), and although the descriptor array *is* registered
-from a map init script — readable straight out of the bytecode (D101) — the argc
-of those calls is 🔶 unmeasured, and a replacement must match it (D92).
+Three selector kinds resolve: `map:<name>` through `mapDataPtr`, `item:<id>`
+through `itemEventDataTable`, and `door:<map>:<index>[:interact|init|move]`
+through the map's init script (D103, D104). ⚠️ Item scripts are shared — 22
+distinct scripts across 33 entries — so patching one id can change several; the
+generated code reports how many in `bleck_patch_shared[]`. ⛔ `door:` was
+deferred and is not any more: `DoorDesc` still has no lookup by name (D91), so
+the index is a **position** in the array the map registers, walked out of the
+init script's bytecode. ⚠️ A door interact script opens with `MULF`, so `expect`
+must be measured per door. ⛔ `npcdrv:` is still not a selector.
 
 ⚠️ **The guard is not optional, and it is the point.** A patch that writes into
 an unexpected script is the failure mode worth designing out: without it, a
@@ -288,15 +290,14 @@ Honest scope, because the ceiling is real:
   them by name (D95), or run C `before`/`after` it with the original intact
   (D97). Both are C-side features; the language gained nothing.
   ✅ Attaching to a **map** no longer needs C at all: `code.maps` does it
-  (D51). ✅ A *vanilla* map or item script can be made to call a mod's C with
-  `code.patches` (D90, D92) — but the thing it calls is C, so that route does not
-  remove the requirement, it only removes the hand-written patch. ⚠️ **Doors are
-  reachable after all** — a door's descriptor array is registered by a
-  `USER_FUNC` call in a map's init script, so `code.patches`' route applies to
-  them (D101). ⛔ The sentence here used to read "doors are not reachable by
-  either route (D93, D94)"; both entries are superseded. ⛔ `door:` is still
-  refused by the manifest until the argc of those calls is measured (D92).
-  NPCs are untested.
+  (D51). ✅ A *vanilla* map, item **or door** script can be made to call a mod's C
+  with `code.patches` (D90, D92, D103, D104) — but the thing it calls is C, so
+  that route does not
+  remove the requirement, it only removes the hand-written patch. ⛔ This bullet
+  used to read "doors are not reachable by either route (D93, D94)", and then
+  "`door:` is still refused pending the argc"; **both are superseded** — the
+  descriptor setters take argc 3 (D102) and `door:<map>:<index>` ships (D103,
+  D104). NPCs are untested.
 - **`USER_FUNC` is the only escape hatch today.** Whatever the game's builtins
   can do, a script can do; nothing else. ⚠️ The VM *also* has `SET_RAM`/`GET_RAM`
   for arbitrary memory, but **the language exposes no syntax for them** — an

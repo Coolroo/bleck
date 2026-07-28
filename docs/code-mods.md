@@ -285,31 +285,76 @@ declarative since D90:
 |---|---|---|
 | `map:he1_01` | `mapDataPtr("he1_01")->initScript` | ✅ measured end to end (D89, D90, D92) |
 | `item:0x41` | the `itemEventDataTable` entry with that `itemId`, then its `useScript` | ✅ resolves, guard matches, bytes change (D92). 🔶 the hook has never been observed *entering* |
-| `door:` | — | ⛔ deferred, **but no longer for the old reason**: the descriptor array's address is a `USER_FUNC` argument in a map's init script, readable with D89's mechanism alone (D101). What is missing is the calls' **argc** — see below |
+| `door:he1_01:0` | `mapDataPtr(map)->initScript`, walked for `evt_door_set_door_descs`, then `descs[index].interactScript` | ✅ resolves, guard matches, bytes change (D103). 🔶 the hook has never been observed *entering* |
+| `door:he1_01:0:init` | the same door's `initScript` (+0x50); `move` is +0x54 | ✅ the three pointers cross-check against D102 (D104). 🔶 never entered |
 
-⛔ **Why `door:` is still refused, correctly.** `DoorDesc` has no lookup by name,
-so a door patch has to find the descriptor array the map registers. ✅ It does
-register one: one 90 s `mods/door-scan` run counted `evt_door_set_door_descs` ×1,
-`evt_door_set_map_door_descs` ×3 and `evt_door_set_dokan_descs` ×3 across map
-init scripts, positive control 8 hits, and read `MapDoorDesc[0].destMapName` back
-as the string **`he1_02`** — a real map name, so the pointer is genuinely a
-descriptor array (D101). ⛔ **D93 and D94 said doors were unreachable and are
-superseded**: D93's walker matched a single function at a single argc — taken
-from `evt_door.h`'s `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)`, which
-contradicts the comment above it reading `(DoorDesc *descs, s32 count)` — and
-D94 hooked the function while loading `mac_01`, `aa4_01` and `ls4_12`, none of
-which contain the call that was later found in `he1_01`.
+⛔ **`DEFERRED_PATCH_KINDS` is now empty.** `door` was its only member; it is a
+real kind. The dict stays as the shape for the next kind that is explained and
+refused.
 
-🔶 **The blocker is now one number: the calls' argc.** A replacement carries the
-original instruction's argument count (D92), so a `door:` patch written at the
-wrong size **corrupts** the script rather than being refused. `door:` stays out
-of the manifest until that is measured, and `DEFERRED_PATCH_KINDS` still cites
-D91. 🔶 Five maps is also not the game.
+### `door:<map>:<index>[:interact|init|move]`
 
-⚠️ Two descriptor types, and the *second* is probably the interesting one:
-`DoorDesc` is 0x58 bytes with `interactScript` +0x40, `initScript` +0x50 and
-`moveScript` +0x54; `MapDoorDesc` is 0x20 bytes with `destMapName` +0x14 and
-`destDoorName` +0x18 — the **loading zone** descriptor.
+```json
+{ "script": "door:he1_01:0",      "at": 0, "expect": "MULF", "call": "on_door" }
+{ "script": "door:he1_01:0:init", "at": 0, "expect": "...",  "call": "on_door" }
+```
+
+The fourth part names which of a `DoorDesc`'s three `EvtScriptCode *` fields the
+patch means. **Omitting it means `interact`** — the script that runs when the
+player uses the door, and what "change what this door does" usually means. The
+selector is split on *every* colon, so a fifth part is refused rather than
+ignored, and a near miss is suggested (`innit` → "Did you mean 'init'?").
+
+⛔ **The index is a position, not an id.** `DoorDesc` has no lookup by name
+(D91): the index is a place in the array the map registers, in registration
+order. `mods/door-scan` reports how many a map registers.
+
+⛔ **It is not bounds-checked at build time, and cannot be.** How many doors a
+map registers is game data. The generated code compares the index against the
+`count` argument sitting beside the array in the bytecode and reports
+`NO_SCRIPT`.
+
+No interception, no trampoline, no `code.hooks` — the resolution is a chain of
+reads, which is what D89 already proved is enough.
+
+⚠️ **A door interact script opens with `MULF`.** `he1_01` door 0's
+`interactScript` starts `0x0002003C` — opcode `0x3C`, a float multiply, argc 2.
+Not a `USER_FUNC`, not a `DEBUG_PUT_MSG`. So **`expect` must be measured per
+door**; there is no useful default, and the guard is what makes a wrong guess
+`REFUSED` rather than destructive. 🔶 What `init` and `move` open with is not
+recorded.
+
+✅ **Measured in-game** (D103), with two patches on purpose — `door:he1_01:0`
+and `door:he1_01:9`, one index past the end, because a run where both rows say
+the same thing proves nothing:
+
+| | guessed `expect` | measured `expect` |
+|---|---|---|
+| `status[0]` | **3 REFUSED** | **2 APPLIED** |
+| `status[1]` | 4 NO_SCRIPT | 4 NO_SCRIPT |
+| script word 0 | `0x0002003C` (`MULF`) | **`0x0002005C`** (`USER_FUNC`) |
+| script word 1 | `0xFE363C80` | **`0x80F660F0`** → the mod's function |
+| script word 2 | `0xF1B1E5C7` | `0xF1B1E5C7` unchanged |
+
+⚠️ REFUSED is not a failure — it means the resolver walked the init script,
+found the array, indexed the door and reached a real script, and *then* the
+guard declined. NO_SCRIPT on the same row would have meant resolution failed.
+
+🔶 **The hook has never been *entered*.** A door interact script runs when the
+player uses the door, which needs a controller (D48) — the same standing gap as
+`item:` (D92).
+
+⚠️ Two descriptor types, and only one has a selector: `DoorDesc` is 0x58 bytes
+with `interactScript` +0x40, `initScript` +0x50 and `moveScript` +0x54, and is
+what `door:` reaches. `MapDoorDesc` is 0x20 bytes with `destMapName` +0x14 and
+`destDoorName` +0x18 — the **loading zone** descriptor, and has no selector yet.
+
+⚠️ **`spm-headers` is a reference, not ground truth.** `evt_door.h` declares
+`EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` — argc 2 — while the comment
+directly above it reads `(DoorDesc *descs, s32 count)`. ✅ The game uses **argc
+3** (D102): the comment. D93 trusted the macro and recorded zero calls, and two
+entries followed from it. Where a header's claim is load-bearing — an argc, an
+offset, a size — it is a hypothesis 🔶 until measured.
 
 ⚠️ **Item ids share scripts.** 22 distinct scripts across the 33 table entries
 (D91), so patching one id can change several — `item:0x41` was measured to hit a
@@ -370,7 +415,9 @@ extern unsigned int bleck_patch_shared[];   /* how many things point at that scr
 extern const unsigned int bleck_patch_count;
 
 /* status: 1 pending, 2 applied, 3 refused by the guard,
-           4 the script pointer was null, 5 no such item id in the table */
+           4 the script pointer was null -- also how a `door:` index past the
+             map's own `count` reports, since it resolves to nothing,
+           5 no such item id in the table */
 /* shared: 0xFFFFFFFF where nothing counted (every `map:` patch) */
 ```
 
@@ -386,16 +433,17 @@ reads a final value.
   loader (D51). This mutates the bytecode the pointer already refers to, which
   creates no new `EvtEntry`.
 - ⛔ **No dispatcher or opcode changes**, as `evtpatch` does.
-- ⛔ **No `door:`**, and no `npcdrv.h` scripts. Deferred with a reason, not
-  merely unimplemented — and ⚠️ the reason changed in D101: doors *are* reached
-  from map init scripts, and the outstanding question is the calls' argc. See
-  the selector table.
+- ⛔ **No `npcdrv.h` scripts**, and no `MapDoorDesc` (loading zone) selector.
+  Deferred with a reason, not merely unimplemented. ⚠️ **"No `door:`" used to be
+  this bullet and is gone** — `door:<map>:<index>` ships (D103, D104), and
+  `npcdrv`'s registration-from-a-script shape is the thing to look for next.
 - ⚠️ **A patch lasts the whole session**, including maps entered later. It is
   applied once, at load, and not re-applied per arrival.
-- 🔶 **A patched item hook has never been seen running.** An item use script
-  only runs when the player uses that item, which needs menu navigation, and
-  controller input cannot be injected (D48). Settling it needs a save state plus
-  `scripts/keys.py`, which is Windows-only and attended.
+- 🔶 **A patched item or door hook has never been seen running.** An item use
+  script only runs when the player uses that item and a door interact script
+  when the player uses that door — both need input, and controller input cannot
+  be injected (D48). Settling either needs a save state plus `scripts/keys.py`,
+  which is Windows-only and attended.
 - No cache flush is needed. This is bytecode read as *data*, unlike patching
   PowerPC instructions, which needs `dcbst`/`sync`/`icbi` — see below.
 
@@ -723,7 +771,8 @@ costing ~9 ticks is not credible on a real 750, which has to drain the pipeline.
   superseded by D101**, which found the registration in `he1_01` — a map D94
   never loaded. The route that works needs no hook at all: the descriptor
   address is a `USER_FUNC` argument in the map's init script, read with D89's
-  mechanism (D101). `door:` stays refused pending the calls' argc.
+  mechanism (D101). ✅ `door:<map>:<index>` now ships on exactly that route
+  (D103, D104) — no hook anywhere in it.
 - ⛔ **Do not stub `effMain`.** It hangs the map-change sequence (D94).
 - 🔶 **Hardware.** Dolphin reproduced the stale instruction fetch, which is the
   interesting direction, but its cache emulation is not the Wii's.

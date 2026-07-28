@@ -141,13 +141,45 @@ refuses is a single-word instruction, where the pointer would not fit.
 ### Which scripts you can reach
 
 ```json
-{ "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
-{ "script": "item:0x41",  "at": 0, "expect": "USER_FUNC 4",   "call": "on_item_use" }
+{ "script": "map:he1_01",  "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+{ "script": "item:0x41",   "at": 0, "expect": "USER_FUNC 4",   "call": "on_item_use" }
+{ "script": "door:he1_01:0", "at": 0, "expect": "MULF",        "call": "on_door" }
 ```
 
-`map:<name>` is a map's init script; `item:<id>` is an item's use script.
-`door:` is not supported — the game gives no way to look a door's scripts up by
-name.
+`map:<name>` is a map's init script, `item:<id>` is an item's use script, and
+`door:<map>:<index>` is a door's script.
+
+#### Doors
+
+A door selector is `door:<map>:<index>[:interact|init|move]`. The last part
+picks which of the door's three scripts you mean, and leaving it off means
+`interact` — the script that runs when the player uses the door.
+
+```json
+{ "script": "door:he1_01:0",      "at": 0, "expect": "MULF", "call": "on_use" }
+{ "script": "door:he1_01:0:init", "at": 0, "expect": "...",  "call": "on_init" }
+{ "script": "door:he1_01:0:move", "at": 0, "expect": "...",  "call": "on_move" }
+```
+
+`bleck` finds the door by loading the map's data, walking its init script for
+the call that registers the map's doors, and indexing the array it registers.
+
+!!! warning "A door index is a position, not an id"
+
+    The game gives no way to look a door up by name. The index is a place in the
+    list the map registers, in registration order — `door:he1_01:0` is the first
+    door `he1_01` registers.
+
+    That list lives in the game's data, so `bleck` cannot check the index while
+    building. An index past the end resolves to nothing and reports status `4`
+    at run time instead of writing anywhere.
+
+!!! warning "Measure `expect` for each door"
+
+    There is no sensible default. `he1_01`'s first door opens its interact
+    script with `MULF`, a float multiply — not the `USER_FUNC` you might expect.
+    Guessing is safe but unproductive: a guess that is wrong reports status `3`
+    and writes nothing.
 
 !!! warning "Items share scripts"
 
@@ -155,19 +187,22 @@ name.
     patching one item id can change other items too. `bleck_patch_shared[]`
     tells you how many entries point at the script you hit.
 
-!!! note "Item patches are less exercised than map patches"
+!!! note "Item and door patches are less exercised than map patches"
 
     A map's init script runs the moment the map loads, so a map patch shows its
     effect on any boot. An item's use script runs only when a player *uses* that
-    item, which no automated test here can do — so an item patch is checked as
-    far as "resolved the right script and wrote into it", and no further. Read
-    `bleck_patch_status[]`, then try it by hand.
+    item, and a door's interact script only when a player *uses* that door —
+    neither of which an automated test here can do. Those patches are checked as
+    far as "resolved the right script and wrote into it": your function has not
+    been observed running. Read `bleck_patch_status[]`, then try it by hand.
 
 Your code can read what happened:
 
 ```c
 extern unsigned int bleck_patch_status[];
-/* 1 pending, 2 applied, 3 refused by the guard, 4 no script, 5 no such item id */
+/* 1 pending, 2 applied, 3 refused by the guard,
+   4 no script -- including a door index the map does not have,
+   5 no such item id */
 
 extern unsigned int bleck_patch_shared[];
 /* how many things point at that script; 0xFFFFFFFF where nothing counted */

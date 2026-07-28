@@ -1,0 +1,35 @@
+-- DIAGNOSTIC 5: the same switch, but `main` does not end.
+--
+-- Five runs have now frozen the game, and the bisection ruled out every
+-- hypothesis in turn: the sequence hooks, the global constructor, the `switch`
+-- statement, and C++ itself -- a script-only build froze too.
+--
+-- What every frozen build shares is a `script main` that RUNS ONCE AND ENDS.
+-- The control that has never frozen, `door-scan`, has no script at all, and
+-- `coin-tick`'s main is `loop { wait_ms(...) }` -- it never returns.
+--
+-- So this is the same switch with a trailing wait loop. If the game now walks
+-- aa4_01 -> ls4_12, the fault is a main that terminates, and `switch` was never
+-- implicated.
+
+script main {
+    gw[21] = 3
+
+    switch gw[21] {
+        case 1 { gw[22] = 0x11 }
+        case 2 { gw[22] = 0x22 }
+        case 3 { gw[22] = 0x33 }
+        else { gw[22] = 0xEE }
+    }
+
+    gw[23] = 9
+    switch gw[23] {
+        case 1 { gw[24] = 0x11 }
+        case 2 { gw[24] = 0x22 }
+        else { gw[24] = 0xDD }
+    }
+
+    loop {
+        wait_ms(10000)
+    }
+}

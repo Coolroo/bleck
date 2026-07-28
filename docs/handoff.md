@@ -175,7 +175,8 @@ than trusting a number written here.
 | ⛔ **Still no trampoline** | interception restores/re-installs instead — two cache flushes per call (D97) |
 | ⛔ **More than eight integer arguments cannot be intercepted** | they live in the caller's frame; not checked and cannot be (D97) |
 | ✅ **A function can be traced with the original still running** | restore, call, re-arm — `effMain` through four map changes (D96) |
-| ✅ **Door descriptors *are* registered from map init scripts** | `set_door_descs` ×1, `set_map_door_descs` ×3, `set_dokan_descs` ×3 in 90 s; `MapDoorDesc[0].destMapName` read back as `he1_02` (D101). ⛔ D93 and D94 said the opposite and are superseded — D93 searched one function at one argc, D94 loaded maps without the call. 🔶 `door:` still refused pending the calls' argc |
+| ✅ **Door scripts are reachable, and `door:` ships** | `door:<map>:<index>[:interact\|init\|move]` resolved and APPLIED in-game; word 0 `0x0002003C` → `0x0002005C`, word 2 untouched (D103, D104). ⛔ D91 ("needs interception, not a lookup") and D93/D94 ("unreachable") are all superseded — the setters take **argc 3**, not the argc 2 `evt_door.h` declares (D102). 🔶 The hook has never been *entered* |
+| ⚠️ **`spm-headers` can be simply wrong** | `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` contradicts the comment above it and the game; it cost two decision entries (D102). A load-bearing argc, offset or size from a header is a hypothesis 🔶 until measured |
 | ✅ **C++ code mods build** | `.ctors` survives `-r --gc-sections` and elf2rel; markers checked at link (D85) |
 | 🔶 **No C++ code mod has run in-game** | every D85 claim is about the ELF and REL on disk |
 | ✅ **Riivolution output boots in Dolphin** | loader travels in the patched `main.dol`; negative isolates one XML element (D86) |
@@ -367,19 +368,20 @@ per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
    remaining gap in the language.
    ⚠️ **Maps did *not* need it** (D51): `code.maps` watches the map-change work
    instead, because repointing a pointer the game owns deadlocked it. Expect the
-   same trap for NPCs — read D51 first. ⚠️ Doors do **not** need it: D101 reads
-   the descriptor array's address straight out of the map init script's
-   bytecode, with D89's mechanism. ⛔ The sentence here used to say D93 and D94
-   had shown door registration unreachable; both are superseded.
-3. **Measure the argc of the door descriptor setters** — the cheapest open
-   experiment here, and the only thing between `door:` and a working selector.
-   ✅ The calls exist (D101: `set_door_descs` ×1, `set_map_door_descs` ×3,
-   `set_dokan_descs` ×3, positive control 8 hits,
-   `MapDoorDesc[0].destMapName` = `he1_02`). 🔶 Their argument count is not
-   known, and D92's replacement matches the original's argc — at the wrong size
-   a patch **corrupts** the script rather than failing, so ⛔ the manifest keeps
-   refusing `door:` until this is measured. 🔶 Which map holds the
-   `set_door_descs` call was not recorded either, and five maps is not the game.
+   same trap for NPCs — read D51 first. ⚠️ Doors do **not** need it: the
+   descriptor array's address is read straight out of the map init script's
+   bytecode with D89's mechanism, and `door:` ships on that route (D103, D104).
+   ⛔ The sentence here used to say D93 and D94 had shown door registration
+   unreachable; both are superseded.
+3. ✅ ~~**Measure the argc of the door descriptor setters**~~ — *done, and the
+   selector with it.* The setters take **argc 3** (D102), not the argc 2
+   `evt_door.h`'s macro declares — its own comment, `(DoorDesc *descs, s32
+   count)`, was right and the macro was wrong. `door:<map>:<index>` and its
+   `:interact|init|move` suffix are built and measured APPLIED in-game (D103,
+   D104), `DEFERRED_PATCH_KINDS` is empty, and `he1_01` is the map that holds
+   the `set_door_descs` call. 🔶 What is *not* done: the hook has never been
+   entered, `init`/`move` opening opcodes are unrecorded, and five maps is still
+   not the game. ⛔ `npcdrv:` is still not a selector.
 4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need
@@ -813,19 +815,27 @@ What to know before extending it:
   mutates the bytecode the pointer already refers to.
 - ⚠️ A patch lasts the **whole session** — applied once at load, never
   re-applied per arrival.
-- ✅ **Two selectors: `map:<name>` and `item:<id>`** (D92). ⛔ `door:` is refused
-  with a reason, not merely unimplemented — ⚠️ but the reason is now the
-  unmeasured **argc** of the descriptor setters (D101), not the old "doors are
-  unreachable" (D93, D94, both superseded). See the code section below.
+- ✅ **Three selectors: `map:<name>`, `item:<id>` and
+  `door:<map>:<index>[:interact|init|move]`** (D92, D103, D104). ⛔ Every earlier
+  claim that `door:` is refused is superseded, and `DEFERRED_PATCH_KINDS` is now
+  **empty** — it stays as the shape for the next kind that is explained and
+  refused. ⚠️ A door index is a *position* in the array the map registers, not an
+  id, and cannot be bounds-checked at build time; the runtime compares it against
+  the setter's own `count` and reports NO_SCRIPT. ⚠️ A door interact script opens
+  with `MULF`, so `expect` has no useful default.
 - ⚠️ **Item scripts are shared.** 33 table entries, 22 distinct scripts, so
   patching one id can change others. The generated code counts them into
   `bleck_patch_shared[]` rather than pretending an id is a unique target.
 - 🔶 **An item hook has been applied and never *entered*.** Using an item needs
   menu navigation and input cannot be injected (D48). `hook entries` reading `0`
   is the expected value for a working hook and a broken one alike.
-- `mods/evt-patch` and `mods/item-patch` are the worked examples;
-  `mods/door-scan` is the bytecode *walk* that found the door registrations
-  (D101) without patching anything.
+- `mods/evt-patch`, `mods/item-patch` and `mods/door-patch` are the worked
+  examples; `mods/door-scan` is the bytecode *walk* that found the door
+  registrations (D101) and `mods/door-argc` is what measured their argc (D102),
+  neither patching anything.
+  ⚠️ **Fix `door-patch`'s report layout before reusing it** (D104): `STATUS(i)`
+  was `probe[2 + i]`, so `STATUS(3)` collided with `GAME_FRAMES` at `probe[5]`
+  and one row's status was overwritten every frame.
 
 ---
 
@@ -894,12 +904,13 @@ What to know before extending it:
     `afterSaw = 0x901D6248`, and `result − arg = 0xD8`, independently
     reproducing D96's `GetBasicPlayer` finding. 26,996 SEQ_GAME frames, map names
     readable as text. 🔶 Dolphin only, as ever.
-- ⛔ **"Doors are still not reachable" — superseded by D101.** The zero-entry
-  hook on `evt_door_set_door_descs` is real, but the run loaded `mac_01`,
-  `aa4_01` and `ls4_12`, and the registration is in `he1_01`. ✅ Doors are
-  reached from map init scripts without any hook at all — the descriptor
-  address is a `USER_FUNC` argument (D101). ⚠️ The lesson to keep: a passing
-  control shows the instrument works, not that it is aimed at the right thing.
+- ⛔ **"Doors are still not reachable" — superseded by D101/D102/D103.** The
+  zero-entry hook on `evt_door_set_door_descs` is real, but the run loaded
+  `mac_01`, `aa4_01` and `ls4_12`, and the registration is in `he1_01`. ✅ Doors
+  are reached from map init scripts without any hook at all — the descriptor
+  address is a `USER_FUNC` argument, and `door:` is now a `code.patches`
+  selector on exactly that route. ⚠️ The lesson to keep: a passing control shows
+  the instrument works, not that it is aimed at the right thing.
 - ⛔ **Do not stub `effMain`** — it hangs the map-change sequence. Use
   `npcDispMain` as a hot-function control; it is a draw pass. ⚠️ *Tracing*
   `effMain` is fine — see below.

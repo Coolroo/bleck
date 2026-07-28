@@ -101,7 +101,7 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | `script` | evt source, compiled to the game's own VM |
 | `sources` | native C (`.c`) and C++ (`.cpp`, `.cc`, `.cxx`), compiled into the same module. Files or directories |
 | `maps` | map name → script name; runs on arrival there (D51) |
-| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>` and `item:<id>` selectors; same-size, any size from two words up (D89, D90, D92). ⛔ `door:` is still refused — but for a *narrower* reason than it used to be: door descriptors **are** registered from map init scripts (D101, superseding D93), and what is missing is the calls' argc (D91) |
+| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>`, `item:<id>` and `door:<map>:<index>[:interact\|init\|move]` selectors; same-size, any size from two words up (D89, D90, D92, D103, D104). ✅ `DEFERRED_PATCH_KINDS` is now **empty** — ⛔ the claim that `door:` is refused is superseded (D101, D102). ⚠️ A door index is a position in the array the map registers, not an id, and cannot be bounds-checked at build time |
 | `hooks` | intercepts a *game C function*, named from the symbol list, with one of this mod's. The guard word is derived from the base disc's `main.dol` (D95). `mode` is `replace` (the original never runs), `before` or `after` (it does, and its return value is what the caller gets) — all three verified (D97). ⚠️ Under `before`/`after` an address the DOL does not map is a build **error**, not a warning |
 | `combos` | button-combination name → script name; combinations are named in `bleck.yml` (D77) |
 | `boot` | a map to start the game at instead of the attract demo (D64) |

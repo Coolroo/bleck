@@ -7165,3 +7165,106 @@ were about. Fix the layout before reusing `door-patch`.
   reading `mod.c` does not require knowing that 80 means `initScript`.
 
 809 tests (797 before), pylint 10.00/10.
+
+---
+
+---
+
+## D105 — ⛔ An evt `script main` that RETURNS freezes the game (2026-07-28)
+
+Two 🔶 were meant to close here — C++ in-game and `switch` in-game — and both
+did. But the run that was supposed to close them **froze the game**, and the
+six-run bisection that followed is the actual finding.
+
+### ⛔ The bug
+
+**A `script main` that runs to completion hangs the game.** Not the compiler,
+not the module: the game stops advancing a few frames after the script ends.
+Symptoms are quiet and easy to misread — every value the script wrote is
+*correct*, and then nothing moves again. `SEQ_GAME` frames stick at 1 and the
+attract demo never leaves `aa4_01`.
+
+🔶 Cause not yet established. The generated runtime re-starts the entry script
+after anything that resets evt state (`docs/hook-points.md`), and a `main` that
+returns immediately plausibly re-enters that path without yielding — but that is
+a hypothesis, not a measurement.
+
+⚠️ **Every worked example in this repo hides it.** `coin-tick` is
+`loop { wait_ms(10000) }`; `copy-race` waits then changes map. Nothing that
+ships ends its `main`, so nothing has ever exercised the case, and a first-time
+user writing the obvious "do a thing" script hits it immediately.
+
+### The bisection, and what it cost
+
+Five wrong hypotheses, each eliminated by one run:
+
+| removed | result |
+|---|---|
+| the sequence hooks | still froze |
+| the global C++ constructor | still froze |
+| the `switch` statement | still froze |
+| C++ entirely (script-only build) | still froze |
+| — control: `door-scan`, C sources, **no script** | ✅ reached `ls4_12` at t+9s |
+
+⚠️ **The control is what turned this around.** Four runs pointed at C++ because
+C++ was the new thing, and a C++ mod really did freeze every time. The pure-C
+control passing in the same session is what proved the rig was sound; the
+script-only build freezing is what proved C++ was innocent. Both were needed —
+and `door-scan` differs from every frozen build in having **no script at all**,
+which is the observation the whole thing turned on.
+
+⚠️ I nearly recorded the first run as a clean success. Its C++ and `switch`
+numbers were all correct, and only `GAME_FRAMES` stuck at 1 gave it away. A
+report block whose other fields all read "good" is exactly the shape D101 warned
+about.
+
+### ✅ Closes D85's 🔶 "Nothing C++ has run in-game"
+
+Re-measured with a `main` that loops, so the game stays up:
+
+| | |
+|---|---|
+| constructed field | **`0x0C70FA11`** — the ctor ran; `.bss` would read 0 |
+| virtual call | **`0x1234`** — the vtable relocated |
+| constructors counted | **1** |
+| SEQ_GAME frames | **13,119 and climbing** |
+
+So a C++ module loads, its static constructors run, `bleck_run_ctors`' laundered
+bounds are right, a virtual call through a relocated vtable works, and sequence
+hooks installed from C++ keep running. ⚠️ The earlier readings were never wrong —
+they were taken at `mod_prolog`, before the script starts — but a capability
+should not be recorded from a build that dies afterwards.
+
+### ✅ Closes D84's 🔶 "no switch has been run in-game"
+
+| | |
+|---|---|
+| `gw[21] = 3` → `gw[22]` | **51 = `0x33`** — `case 3` |
+| `gw[23] = 9` → `gw[24]` | **221 = `0xDD`** — the `else` arm |
+
+⚠️ Each arm writes a **different** value, and 3 is deliberately not the first
+case: the failure a broken `SWITCH`/`CASE` lowering degrades to is
+first-arm-always, which would have written `0x11`. "Did the switch run" could not
+tell those apart. The `else` arm was tested with a value matching no case,
+because a default that is present is not a default that is reached.
+
+✅ Confirmed twice — once in a frozen build and once in a healthy one, with the
+same values.
+
+### What to do about it
+
+🔶 Unresolved. Options, none yet chosen:
+
+- **Warn at build time** when a compiled `main` can reach its end — the compiler
+  knows, and this is the same shape as the `--align-files` class of trap.
+- **Emit a trailing wait** so a returning `main` parks instead of falling off.
+  ⚠️ Silently changing what a user wrote is the kind of fix this project usually
+  refuses.
+- Find the actual cause first, which is the honest order.
+
+### Housekeeping
+
+- Script comments are `--`, not `#`; the default arm is `else`, not `default`;
+  `gw` is `GW(0)..GW(31)` and the compiler refuses higher.
+- C++ facts and `switch` facts are read by **different mechanisms** — the probe
+  block and `ingame.py --watch-gw` — so one cannot be misread as the other.
