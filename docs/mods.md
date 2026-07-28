@@ -373,14 +373,17 @@ Staging is disposable and gitignored. The base is opened read-only throughout.
 ⚠️ **Setup files exist in two byte-identical copies** (D13): standalone in
 `setup/` *and* embedded inside some map archives.
 
-✅ **Settled (D53): the game reads the embedded copy.** The standalone
-`files/setup/*.dat` is loaded into MEM2 and never used, so **a mod that edits
-only the standalone copy does nothing at all** — and looks exactly like a mod
-that failed to build.
+✅ **Settled (D62): the game reads the STANDALONE `files/setup/<map>.dat`.**
+The copy inside the map archive is loaded but ignored.
+
+⚠️ **D53 concluded the exact opposite and this page said so for a month.** Its
+measurement was sound — the embedded copy is the one in MEM1 — but "in MEM1"
+does not mean "in use". D62 settled it by giving each copy a different enemy and
+seeing which spawned.
 
 `bleck mod build` warns when an overlay touches either copy and names the one
-that matters. Edit the copy inside the map archive; edit both if you want them
-consistent.
+that matters. Better still, declare the change under `setup` in `mod.json` and
+let `bleck` write both.
 
 ✅ **Compression is not bit-exact, and that is fine** (D16, D25). A rebuilt
 archive is ~0.25% larger than Nintendo's with different token boundaries, and a

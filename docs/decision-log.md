@@ -2967,6 +2967,11 @@ log costs nothing. Do not truncate probe output.
 
 ## D53 — D13 settled: the game reads the *embedded* setup copy (2026-07-27)
 
+> ⛔ **SUPERSEDED BY D62 — this conclusion is wrong.** The game reads the
+> **standalone** `files/setup/<map>.dat`. The measurement below is sound;
+> the inference from "in MEM1" to "in use" is not. Kept unedited, because
+> a plausible wrong turn is the most reusable thing in this log.
+
 ✅ **The copy inside the map archive is the one the game uses. The standalone
 `files/setup/*.dat` is read from disc but parked in MEM2 and never reaches
 working memory.**

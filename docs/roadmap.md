@@ -26,8 +26,15 @@ this file is forward-looking only.
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
+| **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
+| **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
+| **Several code mods on one disc** | ✅ Merged at compile time; both run (D78). The loader's one-REL limit is untouched |
+| **Enemy placement editing** | ✅ Declared in `mod.json`, verified in game (D80) |
+| **A JSON API** | ✅ `bleck mod export/import`, `setup show/apply`, versioned, schema-published |
+| **A single-file binary** | ✅ `pyinstaller bleck.spec`; CI builds three platforms. 🔶 The workflow has never run |
+| Map geometry / archive contents | ⛔ **Not decoded.** The prize, and a research problem before an editing one |
 | **Reaching any map unattended** | ✅ `evt_seq_mapchange` from a map hook — no controller needed (D52) |
-| **Setup files: which copy the game reads** | ✅ **Settled** — the one embedded in the map archive (D53) |
+| **Setup files: which copy the game reads** | ✅ **Settled** — the **standalone** `files/setup/*.dat`. ⚠️ D53 concluded the opposite and was wrong; D62 measured it |
 | Windows 11 | ✅ **Fully verified** — tests, linters, `extract`, `verify`, `mod build`, boot (D33, D35, D36) |
 | `map.dat` internals | ⛔ Deliberately deferred — see below |
 
@@ -45,80 +52,61 @@ compile but nothing has run on them.
 
 ## In rough order of value
 
+**Everything is measured against "does this get us to the base app"**
+([`vision.md`](./vision.md)). Licensing, packaging polish and breadth of
+game-version support are explicitly deferred — nothing is shared until there is
+an application worth sharing.
+
 **Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent
 
-### Needs no emulator at all
+### 🟢 More editing surfaces through the API
 
-1. 🟢 **A `setup` reader/writer — the clearest next feature.** Turns `bleck`
-   from "runs code" into "changes the game". Enemy and item placement is the
-   most obviously moddable thing on the disc after textures, and no `bleck` code
-   touches it yet.
+Placement editing is done end to end because its format is *fully decoded*. The
+same treatment for anything else needs the format understood first — which makes
+this a research question wearing an engineering hat.
 
-   Both former blockers are gone: the container is fully specified in
-   [`disc-layout.md`](./disc-layout.md) (a fixed 100-entry array, stride by
-   version), and D53 settled which of the two copies to write.
+⛔ **The map archive is not decoded.** It is the prize, and until someone reads
+it there is nothing to build an editor on. Do not plan GUI work around it yet.
 
-   ⚠️ **The real work is the entry *fields*.** Only position and enemy ID are
-   known, out of 112 bytes. `he1_01` is a good subject: 3 used entries out of
-   100, and reachable unattended (D52).
+### 🟢 A GUI over the JSON contract
 
-2. 🟡 **Use the decomp symbol table for validation.** Reading, merging and
-   exporting it is ✅ done (D60): `bleck symbols`. ⚠️ D39's "~9,566" was wrong —
-   it is **4,584 human-named, 3,960 functions**, a ~4.7x gain over the lst.
+`bleck mod export | edit | import` already round-trips every mod in the tree. A
+frontend can be any language; the schema is published. This is the first thing
+that turns `bleck` into an *app* rather than a toolchain.
 
-   What remains is wiring the *types* into the compiler, so calling something
-   that is data rather than a function fails at compile time.
+### 🔵 A save state
 
-   ⛔ Two lst addresses are wrong (`strlen`, `evt_fairy_flag_onoff`) — see D60.
+Driving into a map leaves **Mario invisible** — no save, no profile (D63). Fine
+for reading enemy placement, useless for anything touching player state.
+`--state` is wired into both `bleck launch` and `ingame.py`; it needs a human to
+play far enough once and press F1.
 
-3. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; `var a = -30000000`
-   is a compile error and need not be.
+### 🟢 The rest of the scripting language
 
-### Testable unattended, now that D52 landed
+`SETI` for ambiguous literals, `switch`, `IF_FLAG`, detached `spawn`,
+`SET_PRI`/`SET_SPD`, and `peek`/`poke` for `SET_RAM`/`GET_RAM`. The language
+reaches 39 of the VM's 120 opcodes.
 
-4. 🟢 **`peek`/`poke`, then doors, NPCs and items.** The remaining event
-   surfaces — maps are done (`code.maps`, D51).
-   ⚠️ **Read D51 first.** Patching a pointer the game owns deadlocked the map
-   loader while passing every mechanical check; the design that works watches
-   state instead. Expect the same trap here.
+⚠️ Raw memory access is what would let a script write an `EvtScriptCode *` into
+a **door, NPC or item** — but expect D51's trap: patching a pointer the game
+owns deadlocked the map loader, and maps ended up watching `seqWork.p0` instead.
 
-5. 🟢 **More opcodes**: `switch`, `IF_FLAG`, detached `spawn`, `SET_PRI`/
-   `SET_SPD`. The language reaches 39 of the VM's 120. Unwritten, not blocked.
+### 🔶 Remaining button masks
 
-### Bigger swings
+`plus`, `minus`, `home` and the d-pad. One `button-probe` run each; `a`, `b`,
+`1`, `2` are confirmed (D68).
 
-6. 🟢 **Multiple code mods.** ⚠️ **Unclaimed across the entire scene** (D39):
-   `chainrel` is a stub with its loader body in `#if 0`, and both major
-   distributions tell users to run one REL mod at a time. Highest
-   differentiation, highest risk, and no user-visible payoff until it works.
+### 🟡 Speed, only if profiling names it
 
-7. 🟢 **Verify beyond `eu0`.** Everything so far has run on one build. Other
-   versions compile; nothing has booted. `spm-porter` ships `pal0→us0` match
-   CSVs.
+The LZ77 compressor is ~12 s/MB (D16) — the one place language choice shows as a
+user-visible problem. The recorded answer is a PyO3 port of *just the
+compressor*, not a rewrite. Eighty decision entries of hard-won behaviour do not
+live in the language, and a rewrite re-discovers every bug.
 
-### Needs a human
+### 🟡 Licensing — deferred, not forgotten
 
-8. 🔵 **Confirm the `mod_loaded` banner.** Parked on `feat/mod-banner` because
-   nothing here can see the screen and the title screen is unreachable
-   unattended (D47, D48). `work/out/banner-probe.wbfs` is already built — boot
-   it and check the text lands bottom-right, unclipped.
-
-9. 🟡 **Settle the `LICENSE`.** Now the **only** thing between this and being
-   shareable. `README.md` credits every upstream project and states that no game
-   data is included, but `bleck` itself is all-rights-reserved by default while
-   `docs-site` tells people to clone it. MIT would match `spm-headers`, whose
-   material we resolve against.
-
-### Done this cycle
-
-| | |
-|---|---|
-| ✅ Bake the Gecko loader into the DOL | D44 — verified with Dolphin's cheat config removed. 🔶 Console untested |
-| ✅ Native hooks in `bleck mod build` | D46, D47. ⚠️ C++ still unavailable — `g++-powerpc-linux-gnu` not installed |
-| ✅ Event mods (`code.maps`) | D51 |
-| ✅ Reach any map unattended | D52 |
-| ✅ Settle D13 | D53 |
-| ✅ Credit upstream projects | D54 |
+Blocks sharing and nothing else. Must be settled before any release, since
+`docs-site` tells people to clone a repo that is all-rights-reserved by default.
 
 ---
 
@@ -239,9 +227,14 @@ Shipping a broken multi-mod story is worse than declining to support it.
 
 Booting works, so questions that needed a running game are answerable:
 
-### ✅ ~~Settle the setup-file duplication (D13)~~ — *done (D53)*
+### ✅ ~~Settle the setup-file duplication (D13)~~ — *done (D62)*
 
-The game reads the copy **embedded in the map archive**. The standalone
+⛔ **The paragraph below is the superseded D53 answer**, kept because the
+wrong turn is the useful part. The game reads the **standalone**
+`files/setup/<map>.dat`; D53's measurement was right and its inference was
+not.
+
+> The game reads the copy **embedded in the map archive**. The standalone
 `files/setup/*.dat` is loaded into MEM2 but never used, so editing it alone is a
 silent no-op — `bleck` now says so at build time. Proven with a control run:
 swapping which copy carried which marker left both buffer addresses unchanged.

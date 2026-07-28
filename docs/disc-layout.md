@@ -161,6 +161,11 @@ A disc carrying a different enemy in each copy spawned the standalone one's.
 embedded copy is the one loaded into MEM1 — but "in MEM1" did not mean "in use".
 
 > ✅ ~~Settled (D53): the game reads the copy embedded in the map archive.~~
+>
+> ⛔ **Everything in this quoted block is superseded.** It is kept because
+> the wrong turn is the useful part of the record — the measurement was
+> right and only the inference from it was wrong. **The game reads the
+> standalone `files/setup/<map>.dat` (D62).**
 
 The embedded copy is loaded into MEM1 at its own aligned buffer; the standalone
 `files/setup/*.dat` is read from disc but parked in MEM2 and never used. Proven
