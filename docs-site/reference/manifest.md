@@ -146,6 +146,51 @@ Every mod has a `mod.json` at its root.
             `main` is what runs continuously during gameplay, and a map hook has
             its own way to start.
 
+        `code.patches` <span class="pf-type">list of objects</span>
+
+        :   Replaces one instruction of a script **the game already ships**
+            with a call into your own C, so vanilla content can run your code:
+
+            ```json
+            "patches": [
+              {
+                "script": "map:he1_01",
+                "at": 0,
+                "expect": "DEBUG_PUT_MSG",
+                "call": "on_map_init"
+              }
+            ]
+            ```
+
+            - `script` — which script, as `map:<name>`. That is the map's init
+              script; `map:` is the only kind supported.
+            - `at` — word offset into the script where the instruction begins.
+            - `expect` — the opcode you expect to find there. **Required.**
+              A raw header word such as `"0x00010072"` also works.
+            - `call` — a function in your own `code.sources`, with the
+              signature `s32 f(EvtEntry *entry, bool firstCall)`. Return `2`
+              so the script carries on.
+
+            !!! warning "`expect` is a guard, not a comment"
+
+                Nothing is written unless the word at `at` is what you said
+                would be there. A wrong offset then leaves the game untouched
+                and reports a status, instead of corrupting a script.
+
+            The replacement is always `USER_FUNC <call>`, which is two words,
+            so `expect` must name an instruction that takes exactly one
+            argument — `bleck` refuses anything else at build time. Patches
+            cannot insert or delete instructions.
+
+            A patch is applied when the module loads and stays applied for the
+            rest of the session, including maps you enter later. Your C can
+            read what happened:
+
+            ```c
+            extern unsigned int bleck_patch_status[];
+            /* 1 pending, 2 applied, 3 refused by the guard, 4 no script */
+            ```
+
         `code.boot` <span class="pf-type">string</span>
 
         :   A map to start the game at, instead of the attract demo:

@@ -226,6 +226,41 @@ way out.
 the next arrival. Nothing survives a map change; plan for it rather than around
 it.
 
+### ✅ It *does* patch the bytecode that pointer refers to
+
+The ⛔ above is about **swapping the pointer**. Mutating the bytecode it already
+points at is a different mechanism, and it works — measured with a control in
+D89, and available declaratively as `code.patches` since D90:
+
+```json
+"code": {
+  "sources": ["src"],
+  "patches": [
+    { "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+  ]
+}
+```
+
+`bleck` generates prolog code that reads the word at `at`, compares it to the
+header `expect` decodes to, and only then writes `USER_FUNC <call>` over it. The
+loader still builds its `EvtEntry` from the same address with the same identity,
+so the deadlock above is never created.
+
+⚠️ **Same size only.** `USER_FUNC f` with no arguments is two words, so `expect`
+must name an instruction that takes exactly one argument. Anything else moves
+labels, and `jumptable[]` is cached per `EvtEntry` when a script starts (D87).
+`bleck` rejects a wrong-sized opcode at build time.
+
+⚠️ **The guard is not optional, and it is the point.** A patch that writes into
+an unexpected script is the failure mode worth designing out: without it, a
+wrong offset is an undiagnosable freeze rather than a status a mod can read.
+
+⚠️ **Applied at load, so it lasts the session** — including maps entered later.
+It is not re-applied per arrival. Whether it needs to be is 🔶 untested.
+
+Details, including the status table and what is still ruled out:
+[`code-mods.md`](code-mods.md#patching-the-games-own-scripts).
+
 ## What this is not
 
 Honest scope, because the ceiling is real:

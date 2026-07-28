@@ -146,6 +146,147 @@ class Opcode(IntEnum):
     DEBUG_BP = 0x77
 
 
+#: How many argument words each opcode takes, from the `EVT_HELPER_CMD(n, op)`
+#: macros in `spm-headers/mod/evt_cmd.h`. The game's own scripts were assembled
+#: with those macros, so this is the arity a vanilla instruction has.
+#: `USER_FUNC` is absent because it is variadic: one word for the function
+#: pointer plus one per argument.
+ARGUMENT_COUNTS = {
+    Opcode.NEXT: 0,
+    Opcode.END_SCRIPT: 0,
+    Opcode.END_EVT: 0,
+    Opcode.LBL: 1,
+    Opcode.GOTO: 1,
+    Opcode.DO: 1,
+    Opcode.WHILE: 0,
+    Opcode.DO_BREAK: 0,
+    Opcode.DO_CONTINUE: 0,
+    Opcode.WAIT_FRM: 1,
+    Opcode.WAIT_MSEC: 1,
+    Opcode.HALT: 1,
+    Opcode.IF_STR_EQUAL: 2,
+    Opcode.IF_STR_NOT_EQUAL: 2,
+    Opcode.IF_STR_SMALL: 2,
+    Opcode.IF_STR_LARGE: 2,
+    Opcode.IF_STR_SMALL_EQUAL: 2,
+    Opcode.IF_STR_LARGE_EQUAL: 2,
+    Opcode.IFF_EQUAL: 2,
+    Opcode.IFF_NOT_EQUAL: 2,
+    Opcode.IFF_SMALL: 2,
+    Opcode.IFF_LARGE: 2,
+    Opcode.IFF_SMALL_EQUAL: 2,
+    Opcode.IFF_LARGE_EQUAL: 2,
+    Opcode.IF_EQUAL: 2,
+    Opcode.IF_NOT_EQUAL: 2,
+    Opcode.IF_SMALL: 2,
+    Opcode.IF_LARGE: 2,
+    Opcode.IF_SMALL_EQUAL: 2,
+    Opcode.IF_LARGE_EQUAL: 2,
+    Opcode.IF_FLAG: 2,
+    Opcode.IF_NOT_FLAG: 2,
+    Opcode.ELSE: 0,
+    Opcode.END_IF: 0,
+    Opcode.SWITCH: 1,
+    Opcode.SWITCHI: 1,
+    Opcode.CASE_EQUAL: 1,
+    Opcode.CASE_NOT_EQUAL: 1,
+    Opcode.CASE_SMALL: 1,
+    Opcode.CASE_LARGE: 1,
+    Opcode.CASE_SMALL_EQUAL: 1,
+    Opcode.CASE_LARGE_EQUAL: 1,
+    Opcode.CASE_ETC: 0,
+    Opcode.CASE_OR: 1,
+    Opcode.CASE_AND: 1,
+    Opcode.CASE_FLAG: 1,
+    Opcode.CASE_END: 0,
+    Opcode.CASE_BETWEEN: 2,
+    Opcode.SWITCH_BREAK: 0,
+    Opcode.END_SWITCH: 0,
+    Opcode.SET: 2,
+    Opcode.SETI: 2,
+    Opcode.SETF: 2,
+    Opcode.ADD: 2,
+    Opcode.SUB: 2,
+    Opcode.MUL: 2,
+    Opcode.DIV: 2,
+    Opcode.MOD: 2,
+    Opcode.ADDF: 2,
+    Opcode.SUBF: 2,
+    Opcode.MULF: 2,
+    Opcode.DIVF: 2,
+    Opcode.SET_READ: 1,
+    Opcode.READ: 1,
+    Opcode.READ2: 2,
+    Opcode.READ3: 3,
+    Opcode.READ4: 4,
+    Opcode.READ_N: 2,
+    Opcode.SET_READF: 1,
+    Opcode.READF: 1,
+    Opcode.READF2: 2,
+    Opcode.READF3: 3,
+    Opcode.READF4: 4,
+    Opcode.READF_N: 2,
+    Opcode.CLAMP_INT: 3,
+    Opcode.SET_USER_WRK: 1,
+    Opcode.SET_USER_FLG: 1,
+    Opcode.ALLOC_USER_WRK: 1,
+    Opcode.AND: 3,
+    Opcode.ANDI: 3,
+    Opcode.OR: 3,
+    Opcode.ORI: 3,
+    Opcode.SET_FRAME_FROM_MSEC: 2,
+    Opcode.SET_MSEC_FROM_FRAME: 2,
+    Opcode.SET_RAM: 2,
+    Opcode.SET_RAMF: 2,
+    Opcode.GET_RAM: 2,
+    Opcode.GET_RAMF: 2,
+    Opcode.SETR: 2,
+    Opcode.SETRF: 2,
+    Opcode.GETR: 2,
+    Opcode.GETRF: 2,
+    Opcode.RUN_EVT: 1,
+    Opcode.RUN_EVT_ID: 2,
+    Opcode.RUN_CHILD_EVT: 1,
+    Opcode.DELETE_EVT: 1,
+    Opcode.RESTART_EVT: 1,
+    Opcode.SET_PRI: 1,
+    Opcode.SET_SPD: 1,
+    Opcode.SET_TYPE: 1,
+    Opcode.STOP_ALL: 1,
+    Opcode.START_ALL: 1,
+    Opcode.STOP_OTHER: 1,
+    Opcode.START_OTHER: 1,
+    Opcode.STOP_ID: 1,
+    Opcode.START_ID: 1,
+    Opcode.CHK_EVT: 2,
+    Opcode.INLINE_EVT: 0,
+    Opcode.INLINE_EVT_ID: 1,
+    Opcode.END_INLINE: 0,
+    Opcode.BROTHER_EVT: 0,
+    Opcode.BROTHER_EVT_ID: 1,
+    Opcode.END_BROTHER: 0,
+    Opcode.DEBUG_PUT_MSG: 1,
+    Opcode.DEBUG_MSG_CLEAR: 0,
+    Opcode.DEBUG_PUT_REG: 1,
+    Opcode.DEBUG_NAME: 1,
+    Opcode.DEBUG_REM: 1,
+    Opcode.DEBUG_BP: 0,
+}
+
+
+def opcode_named(name: str) -> Opcode | None:
+    """Look an opcode up by name, case-insensitively. None if there is none."""
+    try:
+        return Opcode[name.strip().upper()]
+    except KeyError:
+        return None
+
+
+def argument_count(opcode: Opcode) -> int | None:
+    """How many argument words `opcode` takes, or None when it is variadic."""
+    return ARGUMENT_COUNTS.get(opcode)
+
+
 @dataclass(frozen=True)
 class StorageClass:
     """One of `evt`'s variable families, and the numeric window that encodes it.

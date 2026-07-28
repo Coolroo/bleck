@@ -98,6 +98,52 @@ void mod_prolog(void)
 Function names are resolved by `elf2rel` against the symbol list, exactly like
 a script's builtin calls, so no addresses appear in your source.
 
+## Making the game's own scripts call your code
+
+Super Paper Mario runs its own event scripts for things like map setup, and a
+mod can take one of their instructions over. Declare it and `bleck` writes the
+code:
+
+```json title="mod.json"
+"code": {
+  "sources": ["src"],
+  "patches": [
+    {
+      "script": "map:he1_01",
+      "at": 0,
+      "expect": "DEBUG_PUT_MSG",
+      "call": "on_map_init"
+    }
+  ]
+}
+```
+
+```c title="src/hooks.c"
+/* evt's user-func signature. Return 2 so the script carries on. */
+int on_map_init(void *entry, int firstCall)
+{
+    /* ... */
+    return 2;
+}
+```
+
+`expect` is the instruction you believe is at that offset, and it is a guard:
+nothing is written unless the word actually there matches. So a wrong offset
+costs you a status rather than a corrupted script.
+
+The replacement is `USER_FUNC <call>`, two words, so `expect` has to name an
+instruction that takes exactly one argument — patches replace, they never insert
+or delete. `bleck` says so at build time if you pick something else.
+
+Your code can read what happened:
+
+```c
+extern unsigned int bleck_patch_status[];
+/* 1 pending, 2 applied, 3 refused by the guard, 4 no script */
+```
+
+Full field reference: [`code.patches`](../reference/manifest.md).
+
 ## C++
 
 `code.sources` takes `.cpp`, `.cc` and `.cxx` as well as `.c`, and a mod may mix

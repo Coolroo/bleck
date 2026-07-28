@@ -117,6 +117,30 @@ MAX_COMBOS = 32
 
 
 @dataclass(frozen=True)
+class ScriptPatch:
+    """One instruction of a vanilla script replaced by a call into the module.
+
+    Everything is already resolved: the manifest's selector has become a kind
+    and a name the generated C can look up, and `expect` a header word.
+    """
+
+    kind: str
+    """Which family of script `target` names. `map` is the only one emitted."""
+
+    target: str
+    at: int
+    expect: int
+    """The header word the guard compares against before writing anything."""
+
+    call: str
+    """A C function in the mod's own sources, with evt's user-func signature."""
+
+    @property
+    def comment(self) -> str:
+        return f"/* {self.kind}:{self.target} +{self.at} -> {self.call} */"
+
+
+@dataclass(frozen=True)
 class Scaffolding:
     """Everything the generated module does besides run its entry script.
 
@@ -134,6 +158,9 @@ class Scaffolding:
 
     combos: list[ComboHook] = field(default_factory=list)
     """Button combinations that start scripts."""
+
+    patches: list[ScriptPatch] = field(default_factory=list)
+    """Instructions replaced in the game's own scripts, applied at `_prolog`."""
 
     prefix: str = _PREFIX
     """Namespace for per-program identifiers, so merged mods do not collide.
@@ -156,4 +183,5 @@ class Scaffolding:
             and not self.map_hooks
             and not self.boot_script
             and not self.combos
+            and not self.patches
         )

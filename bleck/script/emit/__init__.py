@@ -26,6 +26,7 @@ from bleck.script.emit.scaffold import (
     ComboHook,
     MapHook,
     Scaffolding,
+    ScriptPatch,
     mod_slug,
     prefix_for,
 )
@@ -46,6 +47,7 @@ __all__ = [
     "MapHook",
     "ModPart",
     "Scaffolding",
+    "ScriptPatch",
     "boot_source",
     "generate",
     "generate_bare",

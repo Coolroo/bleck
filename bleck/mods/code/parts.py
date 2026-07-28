@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck.backends import languages, toolchain
@@ -225,6 +225,67 @@ def combo_hooks_for(mod: Mod, spec, settings) -> list[emit.ComboHook]:
     return hooks
 
 
+#: A function *definition*: same shape as `_MOD_PROLOG_DEFINITION`, but for any
+#: name, so a typo can be matched against what the sources actually define.
+#: One level of nesting, so a function-pointer parameter still matches. A
+#: definition produced by a macro will not -- that costs a build error naming
+#: what was found, not a silent miss.
+_ANY_DEFINITION = re.compile(r"\b([A-Za-z_]\w*)\s*\((?:[^()]|\([^()]*\))*\)\s*\{")
+
+#: `if (x) {` matches the pattern above and is not a function.
+_NOT_A_FUNCTION = frozenset({"if", "for", "while", "switch", "catch", "return"})
+
+
+def _defined_functions(sources: list[Path]) -> list[str]:
+    """Every function these sources define, in order, comments stripped."""
+    names: list[str] = []
+    for source in sources:
+        try:
+            text = source.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for match in _ANY_DEFINITION.finditer(_C_COMMENT.sub(" ", text)):
+            if match[1] not in names and match[1] not in _NOT_A_FUNCTION:
+                names.append(match[1])
+    return names
+
+
+def patches_for(mod: Mod, spec, sources: list[Path]) -> list[emit.ScriptPatch]:
+    """Resolve `code.patches` for the emitter, checking each `call` exists.
+
+    Without this the typo reaches `elf2rel`, which reports it as a missing
+    *game* symbol -- the mod's own function looks like an address it should
+    have found in the symbol list.
+    """
+    if not spec.patches:
+        return []
+    defined = _defined_functions(sources)
+    for index, patch in enumerate(spec.patches):
+        if patch.call in defined:
+            continue
+        listed = ", ".join(defined) or "none"
+        close = difflib.get_close_matches(patch.call, defined, n=1, cutoff=0.6)
+        hint = f"\n  Did you mean {close[0]!r}?" if close else ""
+        raise CodeError(
+            f"{mod.name}: 'code.patches[{index}].call' names {patch.call!r}, but "
+            f"this mod's sources define no such function "
+            f"(they define: {listed}).{hint}\n"
+            f"  A patched instruction calls a function with evt's user-func "
+            f"signature -- `s32 f(EvtEntry *entry, bool firstCall)` -- which "
+            f"must return 2 for the script to advance."
+        )
+    return [
+        emit.ScriptPatch(
+            kind=patch.kind,
+            target=patch.target,
+            at=patch.at,
+            expect=patch.expect_word,
+            call=patch.call,
+        )
+        for patch in spec.patches
+    ]
+
+
 def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     """The on-screen label this mod should draw, if any.
 
@@ -284,6 +345,7 @@ class Part:
     sources: list[Path]
     boot_map: str
     combos: list[emit.ComboHook]
+    patches: list[emit.ScriptPatch] = field(default_factory=list)
 
     @property
     def scripts(self) -> list[str]:
@@ -325,14 +387,16 @@ def prepare(mod: Mod, override: CodeOverride | None) -> Part:
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(source.where)}") from exc
 
+    sources = collect_sources(mod, spec)
     return Part(
         mod=mod,
         spec=spec,
         source=source,
         program=program,
-        sources=collect_sources(mod, spec),
+        sources=sources,
         boot_map=boot_map,
         combos=combo_hooks_for(mod, spec, project_config.load()),
+        patches=patches_for(mod, spec, sources),
     )
 
 

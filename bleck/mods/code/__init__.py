@@ -32,6 +32,7 @@ from bleck.mods.code.parts import (  # noqa: F401
     map_hooks_for,
     mods_defining_mod_prolog,
     needs_ctor_walk,
+    patches_for,
     prepare,
     script_text,
 )
@@ -135,6 +136,9 @@ def build_merged(
             + ", ".join(part.name for part in contributions),
             banner=banner,
             run_cxx_ctors=any(needs_ctor_walk(part.sources) for part in parts),
+            # Every mod's, not just the ones with a script: patches name C
+            # functions, so a native-only mod contributes them too.
+            patches=[patch for part in parts for patch in part.patches],
         )
     except ScriptError as exc:
         raise CodeError(f"merging {len(mods)} code mods:\n{exc}") from exc
@@ -164,6 +168,7 @@ def build_mod(
     sources = collect_sources(mod, spec)
     banner = banner_for(mod, spec)
     combos = combo_hooks_for(mod, spec, project_config.load())
+    patches = patches_for(mod, spec, sources)
     source = script_text(mod, spec, boot_map)
     compiled = None
 
@@ -178,6 +183,7 @@ def build_mod(
                     combos=combos,
                     boot_script=emit.BOOT_SCRIPT if boot_map else "",
                     run_cxx_ctors=needs_ctor_walk(sources),
+                    patches=patches,
                 ),
                 symbol_table=table,
             )
@@ -190,6 +196,7 @@ def build_mod(
             origin=f"{mod.name} native sources",
             banner=banner,
             run_cxx_ctors=needs_ctor_walk(sources),
+            patches=patches,
         ).text
 
     headers = env.path(env.HEADERS_DIR)

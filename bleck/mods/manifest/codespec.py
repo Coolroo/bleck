@@ -4,11 +4,12 @@ and banner.
 
 from __future__ import annotations
 
+import difflib
 import re
 from dataclasses import dataclass, field
 
 from bleck.mods.errors import ManifestError
-from bleck.script import emit
+from bleck.script import emit, evt
 
 #: Where a compiled code mod lands. Fixed: the Gecko loader opens this exact
 #: path. One path, not one mod — several mods merge into it at compile time
@@ -81,6 +82,51 @@ class MapHook:
     """Which script in the mod's source runs when the map loads."""
 
 
+#: Selector kinds `code.patches[].script` accepts. Only `map` is implemented;
+#: `item:` and `door:` scripts are reachable by other means and untested (D89).
+PATCH_KINDS = ("map",)
+
+
+@dataclass(frozen=True)
+class _Selector:
+    """A `code.patches[].script` value split into its two halves."""
+
+    kind: str
+    target: str
+
+
+@dataclass(frozen=True)
+class ScriptPatch:
+    """One instruction of a vanilla `evt` script replaced by a call into the mod.
+
+    Same-size replacement only: `USER_FUNC f` with no arguments is two words, so
+    the instruction it overwrites must be two words too. Anything else moves
+    labels, and `jumptable[]` is cached per `EvtEntry` (D87).
+    """
+
+    kind: str
+    """Which family of script `target` names. Only `map` today."""
+
+    target: str
+    """The script's name in that family, e.g. the map `he1_01`."""
+
+    at: int
+    """Word offset into the script where the replaced instruction begins."""
+
+    expect: str
+    """The opcode expected there, as written: a name or a raw header word."""
+
+    expect_word: int
+    """`expect` resolved to the header word the guard compares against."""
+
+    call: str
+    """A function in this mod's own sources, with evt's user-func signature."""
+
+    @property
+    def selector(self) -> str:
+        return f"{self.kind}:{self.target}"
+
+
 @dataclass(frozen=True)
 class CodeSpec:
     """A mod's compiled-code half: a script, native C/C++ sources, or both.
@@ -114,6 +160,9 @@ class CodeSpec:
     combos: list[ComboBinding] = field(default_factory=list)
     """Scripts bound to button combinations named in `bleck.yml`."""
 
+    patches: list[ScriptPatch] = field(default_factory=list)
+    """Instructions replaced in the game's own scripts, in place."""
+
     banner: BannerSpec = field(default_factory=BannerSpec)
     """The on-screen label naming this mod."""
 
@@ -130,6 +179,10 @@ class CodeSpec:
     @property
     def has_combos(self) -> bool:
         return bool(self.combos)
+
+    @property
+    def has_patches(self) -> bool:
+        return bool(self.patches)
 
     @property
     def has_maps(self) -> bool:
@@ -155,6 +208,16 @@ class CodeSpec:
             body["maps"] = {hook.map_name: hook.script for hook in self.maps}
         if self.combos:
             body["combos"] = {b.combo: b.script for b in self.combos}
+        if self.patches:
+            body["patches"] = [
+                {
+                    "script": patch.selector,
+                    "at": patch.at,
+                    "expect": patch.expect,
+                    "call": patch.call,
+                }
+                for patch in self.patches
+            ]
         if self.boot_map:
             body["boot"] = self.boot_map
         # Written only when it differs from the default.
@@ -179,6 +242,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
 
     boot = _parse_boot(raw.get("boot"), source)
     combos = _parse_combos(raw.get("combos"), source)
+    patches = _parse_patches(raw.get("patches"), source)
 
     if not script and not sources and not boot:
         raise ManifestError(
@@ -203,6 +267,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         module_id=module_id,
         maps=_parse_maps(raw.get("maps"), source),
         combos=combos,
+        patches=patches,
         banner=_parse_banner(raw.get("banner"), source),
         boot_map=boot,
     )
@@ -320,3 +385,152 @@ def _parse_combos(raw: object, source: str) -> list[ComboBinding]:
             )
         bindings.append(ComboBinding(combo=str(combo), script=script))
     return bindings
+
+
+#: A C identifier, since `call` is emitted into generated C verbatim.
+_C_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+#: The replacement is always `USER_FUNC f` with no extra arguments: the header
+#: `EVT_HELPER_CMD(1, 92)` and the pointer. Two words, so the instruction it
+#: overwrites must declare exactly one argument too.
+PATCH_ARGUMENT_COUNT = 1
+
+#: Why a different size is not offered, said once and quoted by the errors.
+_SAME_SIZE_ONLY = (
+    "  Only same-size replacement is supported: a shorter or longer "
+    "instruction moves every label after it, and each running script caches "
+    "its jump table when it starts (D87)."
+)
+
+
+def _parse_patches(raw: object, source: str) -> list[ScriptPatch]:
+    """Read `code.patches`, a list of in-place bytecode replacements."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ManifestError(
+            f"{source}: 'code.patches' must be a list of patch objects, e.g. "
+            f'[{{"script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", '
+            f'"call": "on_map_init"}}]'
+        )
+    return [
+        _parse_patch(entry, f"{source}: 'code.patches[{i}]'")
+        for i, entry in enumerate(raw)
+    ]
+
+
+def _parse_patch(raw: object, where: str) -> ScriptPatch:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where} must be an object")
+    unknown = sorted(set(raw) - {"script", "at", "expect", "call"})
+    if unknown:
+        raise ManifestError(
+            f"{where} has unknown field(s): {', '.join(unknown)}\n"
+            f"  A patch takes 'script', 'at', 'expect' and 'call'."
+        )
+    for name in ("script", "expect", "call"):
+        if not isinstance(raw.get(name), str) or not raw[name]:
+            raise ManifestError(f"{where} needs a non-empty {name!r} string")
+    at = raw.get("at")
+    if not isinstance(at, int) or isinstance(at, bool):
+        raise ManifestError(
+            f"{where}: 'at' must be a whole number of words from the start of "
+            f"the script, not {type(at).__name__}"
+        )
+    return build_patch(
+        str(raw["script"]), at, str(raw["expect"]), str(raw["call"]), where
+    )
+
+
+def build_patch(script: str, at: int, expect: str, call: str, where: str) -> ScriptPatch:
+    """Validate one patch's four fields and resolve `expect` to a header word.
+
+    Shared with the JSON API so both surfaces reject the same things.
+    """
+    selector = _parse_selector(script, where)
+    if at < 0:
+        raise ManifestError(
+            f"{where}: 'at' is {at}, but a word offset cannot be negative"
+        )
+    if not _C_NAME_RE.match(call):
+        raise ManifestError(
+            f"{where}: 'call' is {call!r}, which is not a C function name.\n"
+            f"  It names a function in this mod's own sources, e.g. 'on_map_init'."
+        )
+    return ScriptPatch(
+        kind=selector.kind,
+        target=selector.target,
+        at=at,
+        expect=expect,
+        expect_word=_parse_expect(expect, where),
+        call=call,
+    )
+
+
+def _parse_selector(raw: str, where: str) -> _Selector:
+    """Split `map:he1_01` into its kind and its target.
+
+    The prefix is what leaves room for `item:` and `door:` scripts later, which
+    are known to exist but are untested (D89).
+    """
+    kind, _, target = raw.partition(":")
+    supported = ", ".join(f"{name}:<name>" for name in PATCH_KINDS)
+    if kind not in PATCH_KINDS or not target:
+        raise ManifestError(
+            f"{where}: 'script' is {raw!r}, which names no script bleck can "
+            f"reach.\n  Supported selectors: {supported}.\n"
+            f"  'map:he1_01' patches that map's init script."
+        )
+    if not _MAP_NAME_RE.match(target):
+        raise ManifestError(
+            f"{where}: {target!r} is not a map name. They look like 'he1_01' -- "
+            f"lowercase letters, digits and underscores.\n"
+            f"  `bleck maps` lists all 383 of them."
+        )
+    return _Selector(kind=kind, target=target)
+
+
+def _parse_expect(raw: str, where: str) -> int:
+    """Resolve `expect` -- an opcode name or a raw header word -- to a word."""
+    text = raw.strip()
+    if text.lower().startswith("0x"):
+        try:
+            word = int(text, 16)
+        except ValueError:
+            raise ManifestError(
+                f"{where}: 'expect' is {raw!r}, which is neither an opcode name "
+                f"nor a hexadecimal header word like '0x00010072'"
+            ) from None
+        if not 0 <= word <= 0xFFFFFFFF:
+            raise ManifestError(f"{where}: 'expect' {raw!r} is not a 32-bit word")
+        if (word >> 16) != PATCH_ARGUMENT_COUNT:
+            raise ManifestError(
+                f"{where}: 'expect' is {raw!r}, which declares {word >> 16} "
+                f"argument(s) and so is {(word >> 16) + 1} words, but the "
+                f"USER_FUNC that replaces it is always 2.\n{_SAME_SIZE_ONLY}"
+            )
+        return word
+
+    opcode = evt.opcode_named(text)
+    if opcode is None:
+        names = [op.name for op in evt.Opcode]
+        close = difflib.get_close_matches(text.upper(), names, n=1, cutoff=0.6)
+        hint = (
+            f"\n  Did you mean {close[0]!r}?"
+            if close
+            else "\n  Names come from spm/evtmgr_cmd.h, such as 'DEBUG_PUT_MSG'."
+        )
+        raise ManifestError(
+            f"{where}: 'expect' is {raw!r}, which names no evt opcode.{hint}\n"
+            f'  Or give the header word directly, e.g. "0x00010072".'
+        )
+
+    argc = evt.argument_count(opcode)
+    if argc is not None and argc != PATCH_ARGUMENT_COUNT:
+        raise ManifestError(
+            f"{where}: 'expect' is {opcode.name}, which takes {argc} argument(s) "
+            f"and so is {argc + 1} words, but the USER_FUNC that replaces it is "
+            f"always 2.\n{_SAME_SIZE_ONLY}\n"
+            f"  Pick an instruction that takes exactly one argument."
+        )
+    return evt.instruction_header(opcode, PATCH_ARGUMENT_COUNT)

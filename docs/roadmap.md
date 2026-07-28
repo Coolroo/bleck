@@ -25,6 +25,7 @@ this file is forward-looking only.
 | **Scripting language** | ✅ **Working end to end** — compiles, links, and runs in-game at 60 iterations/sec, surviving map changes (D37, D43) |
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
+| **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size only; `map:` selectors only |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -91,6 +92,14 @@ reaches 50 of the VM's 120 opcodes.
 ⚠️ Raw memory access is what would let a script write an `EvtScriptCode *` into
 a **door, NPC or item** — but expect D51's trap: patching a pointer the game
 owns deadlocked the map loader, and maps ended up watching `seqWork.p0` instead.
+
+### 🔶 `item:` and `door:` patch selectors
+
+`code.patches` reaches `map:<name>` only (D90). `getItemUseEvt`, `evt_door.h`
+and `npcdrv.h` also hold script pointers, and the selector prefix exists so they
+can be added without reshaping the field. Each needs one `ingame.py` run to
+find a two-word instruction and confirm the guard matches — the generated
+machinery is already there.
 
 ### 🔶 Remaining button masks
 

@@ -729,6 +729,40 @@ stopped being true. If a third is ever added, check that page.
 - 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
   REL-relative addresses, 33 have no known address anywhere.
 
+## ✅ Done: patching the game's own scripts (D89, D90)
+
+A **vanilla** Super Paper Mario script can now call into `mod.rel`, declared in
+the manifest rather than written by hand:
+
+```json
+"code": {
+  "sources": ["src"],
+  "patches": [
+    { "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+  ]
+}
+```
+
+`bleck` generates prolog code that checks the word at `at` against what `expect`
+decodes to and **writes nothing on a mismatch**. Measured both ways in D90: the
+guard applied and the hook ran once, and — same build, wrong `expect` — refused,
+left the script byte-for-byte intact, and the map ran anyway.
+
+What to know before extending it:
+
+- **Same-size replacement only.** `USER_FUNC f` is two words, so `expect` must
+  take exactly one argument. `bleck` refuses anything else at build time, from
+  the arity table in `evt.ARGUMENT_COUNTS`.
+- ⛔ Pointer swapping is still ruled out (D51 froze the map loader). This
+  mutates the bytecode the pointer already refers to.
+- ⚠️ A patch lasts the **whole session** — applied once at load, never
+  re-applied per arrival.
+- 🔶 Only `map:` selectors exist. `item:` and `door:` are one run each; the
+  selector prefix is there so they need no field change.
+- `mods/evt-patch` is the worked example, and the mod both D90 runs used.
+
+---
+
 ## Next, toward the base app
 
 1. **More editing surfaces through the API.** Placement is done because its

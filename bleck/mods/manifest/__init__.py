@@ -21,6 +21,7 @@ from bleck.mods.manifest.codespec import (  # noqa: F401
     CodeSpec,
     ComboBinding,
     MapHook,
+    ScriptPatch,
     _parse_code,
 )
 from bleck.mods.manifest.placements import (  # noqa: F401

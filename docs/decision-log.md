@@ -5459,3 +5459,101 @@ build time, never shipped as baked bytes (`vision.md`). The guard used here
 (refuse unless the target word is what was decoded) should be part of it: a
 patch that silently writes into an unexpected script is the failure mode worth
 designing out.
+
+---
+
+## D90 — ✅ `code.patches`: evt patching as a declaration, with its guard (2026-07-28)
+
+D89 proved the mechanism by hand. This makes it a manifest field, and re-proves
+it **through the declarative path** — positive and negative, two runs.
+
+### The shape
+
+```json
+"code": {
+  "sources": ["src"],
+  "patches": [
+    { "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+  ]
+}
+```
+
+`script` is a `<kind>:<name>` selector so `item:` and `door:` can be added
+without reshaping the field; only `map:` is implemented, and anything else is
+rejected naming what is supported. `call` names a function in the mod's own
+sources with evt's user-func signature.
+
+⛔ **Rejected: a flat `"map": "he1_01"` field.** It reads better today and boxes
+the feature into one script family — the three other patchable surfaces (D87)
+are already known to exist.
+
+### ✅ The guard, at both ends
+
+`expect` is required, and it is the whole design. The replacement is
+`USER_FUNC f` with one argument — two words — so the instruction it overwrites
+must declare argc 1, header `(1 << 16) | opcode`. That makes the check
+**decidable at build time**, from the `EVT_HELPER_CMD(n, opcode)` macros in
+`spm-headers/mod/evt_cmd.h`; the arity table is now `evt.ARGUMENT_COUNTS`.
+
+So `bleck` refuses, before the toolchain runs:
+
+- an opcode name it does not know (with a `difflib` suggestion);
+- an opcode of any other size, quoting why — *"a shorter or longer instruction
+  moves every label after it, and each running script caches its jump table
+  when it starts (D87)"*;
+- a `call` no collected source defines, listing what they do define. This reuses
+  the comment-stripping already there for `mod_prolog` detection rather than
+  adding a second C parser.
+
+A raw header word (`"expect": "0x00010072"`) is the escape hatch for an opcode
+absent from the table; it is still size-checked.
+
+At run time the generated code compares the word at `at` and **writes nothing on
+a mismatch**. Status lands in `bleck_patch_status[]`, which a mod's own C reads:
+1 pending, 2 applied, 3 refused, 4 no script. Patches are applied from `_prolog`
+*before* `mod_prolog`, so that read is final.
+
+### ✅ Both runs, `mods/evt-patch`, 60 s each
+
+`uv run python scripts/ingame.py evt-patch --map he1_01 --words 12 --seconds 60`
+
+Identical builds. The **only** difference is `expect`: `DEBUG_PUT_MSG` (what is
+actually at word 0) versus `WAIT_FRM` (what is not).
+
+| Report field | `expect: DEBUG_PUT_MSG` | `expect: WAIT_FRM` |
+|---|---|---|
+| `initScript` | `80D2FF10` | `80D2FF10` |
+| status | `2` applied | `3` refused |
+| word 0, read back | `0001005C` | `00010072` *(untouched)* |
+| word 1, read back | `80F66038` | `80CB3798` *(untouched)* |
+| **hook entries** | **1** | **0** |
+| sentinel | `B1ECB1EC` | `0` |
+| map, 60 s | `he1_01`, frames `0x9A`→`0x4D8E` | `he1_01`, frames `0xAD`→`0x4CC4` |
+
+Both addresses match D89's by-hand run exactly — `80D2FF10` for the script and
+`80CB3798` for the message pointer it replaced. The negative is what makes the
+positive mean anything: **a guard that cannot fail where it runs proves
+nothing** (D83), and this one demonstrably fails on demand while leaving the
+script byte-for-byte intact and the map running.
+
+### ✅ A patch-free mod generates byte-identical C
+
+Checked, not assumed: SHA-256 of the generated translation unit for all 18
+pre-existing mods, before and after. All 18 unchanged. The no-patch paths
+short-circuit before `_patch_block` is ever called, and `PLAIN_PROLOG` is still
+returned verbatim for a mod with nothing to schedule.
+
+680 tests pass (654 before, 26 new in `tests/test_patches.py`); ruff and pylint
+clean at 10.00/10.
+
+### Unchanged, and still ⛔
+
+- Instruction insertion or deletion (moves labels; `jumptable[]` is cached per
+  `EvtEntry`), pointer swapping (D51 froze), and adding opcodes to the
+  dispatcher as `evtpatch` does.
+- ⚠️ A patch is applied once at load and therefore lasts the **whole session**,
+  including maps entered later. D89 left this open; the decision here is to
+  document it rather than solve it. Re-applying per arrival needs a reason to
+  exist first, and nothing has produced one.
+- 🔶 Only `MapData.initScript` has been patched, by anyone, on this project.
+  `getItemUseEvt`, `evt_door.h` and `npcdrv.h` remain untested.

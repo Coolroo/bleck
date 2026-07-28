@@ -66,6 +66,39 @@ class Banner(BaseModel):
         )
 
 
+class Patch(BaseModel):
+    """One instruction of a vanilla evt script replaced by a call into the mod."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    script: str = Field(
+        description="Which script, as `map:<name>`. Only `map:` is supported."
+    )
+    at: int = Field(ge=0, description="Word offset where the instruction begins.")
+    expect: str = Field(
+        description=(
+            "The opcode expected there, e.g. 'DEBUG_PUT_MSG', or a raw header "
+            "word such as '0x00010072'. ⚠️ The guard: nothing is written on a "
+            "mismatch. It must take exactly one argument, so the replacement "
+            "USER_FUNC is the same two words."
+        )
+    )
+    call: str = Field(
+        description="A function in the mod's sources: `s32 f(EvtEntry *, bool)`."
+    )
+
+    @classmethod
+    def of(cls, patch: codespec.ScriptPatch) -> Patch:
+        return cls(
+            script=patch.selector, at=patch.at, expect=patch.expect, call=patch.call
+        )
+
+    def to_manifest(self) -> codespec.ScriptPatch:
+        return codespec.build_patch(
+            self.script, self.at, self.expect, self.call, "code.patches[]"
+        )
+
+
 class Code(BaseModel):
     """A mod's compiled half: what it builds and what the module then does."""
 
@@ -92,6 +125,10 @@ class Code(BaseModel):
         default_factory=dict,
         description="Combination name (from bleck.yml) to the script it starts.",
     )
+    patches: list[Patch] = Field(
+        default_factory=list,
+        description="In-place replacements in the game's own evt scripts.",
+    )
     boot: str = Field(
         default="",
         description="A map to start the game at instead of the attract demo.",
@@ -107,6 +144,7 @@ class Code(BaseModel):
             module_id=spec.module_id,
             maps={hook.map_name: hook.script for hook in spec.maps},
             combos={binding.combo: binding.script for binding in spec.combos},
+            patches=[Patch.of(patch) for patch in spec.patches],
             boot=spec.boot_map,
             banner=Banner.of(spec.banner),
         )
@@ -125,6 +163,7 @@ class Code(BaseModel):
                 codespec.ComboBinding(combo=name, script=script)
                 for name, script in self.combos.items()
             ],
+            patches=[patch.to_manifest() for patch in self.patches],
             boot_map=self.boot,
             banner=self.banner.to_manifest(),
         )

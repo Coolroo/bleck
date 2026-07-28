@@ -250,6 +250,75 @@ Manifest gains a `code` block:
 
 `bleck mod build` compiles before staging, so code and assets ship together.
 
+## Patching the game's own scripts
+
+A code mod can also make a **vanilla** `evt` script call into `mod.rel`, without
+that script ever having been decompiled. ✅ Measured with a control (D89) and
+declarative since D90:
+
+```json
+"code": {
+  "sources": ["src"],
+  "patches": [
+    { "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+  ]
+}
+```
+
+| Field | What |
+|---|---|
+| `script` | which script, as `<kind>:<name>`. Only `map:` today — it resolves to `mapDataPtr("<name>")->initScript` |
+| `at` | word offset into the script where the replaced instruction begins |
+| `expect` | the opcode expected there. **Required**, and it is the guard |
+| `call` | a function in this mod's own sources: `s32 f(EvtEntry *entry, bool firstCall)`, returning **2** so the script advances |
+
+`expect` also takes a raw header word — `"expect": "0x00010072"` — for an opcode
+whose name is not in `bleck/script/evt.py`.
+
+### The guard, at build time and at run time
+
+**Build time.** The replacement is `USER_FUNC f` with one argument, which is two
+words, so the expected instruction must be two words as well: argc 1, header
+`(1 << 16) | opcode`. `bleck` therefore refuses an unknown opcode name (with a
+suggestion), an opcode of any other size, and a `call` that no collected source
+defines.
+
+**Run time.** The generated code reads the word at `at` and writes nothing
+unless it matches. This is what turns a wrong offset from an undiagnosable
+freeze into a clean no-op — D51 spent a long time being exactly that freeze.
+
+### Reading the outcome
+
+A small table is generated beside the patches, so "did my patch take" is
+answerable without a debugger:
+
+```c
+extern unsigned int bleck_patch_status[];   /* one per patch, in manifest order */
+extern const unsigned int bleck_patch_count;
+
+/* 1 pending, 2 applied, 3 refused by the guard, 4 the script pointer was null */
+```
+
+Patches are applied from `_prolog`, **before** `mod_prolog`, so a mod's own C
+reads a final value.
+
+### What this does not do
+
+- ⛔ **No insertion or deletion.** Same-size replacement only: anything else
+  moves labels, and `jumptable[]` is cached per `EvtEntry` when a script starts
+  (D87).
+- ⛔ **No pointer swapping.** Repointing `MapData.initScript` deadlocked the map
+  loader (D51). This mutates the bytecode the pointer already refers to, which
+  creates no new `EvtEntry`.
+- ⛔ **No dispatcher or opcode changes**, as `evtpatch` does.
+- ⚠️ **A patch lasts the whole session**, including maps entered later. It is
+  applied once, at load, and not re-applied per arrival.
+- 🔶 Only `MapData.initScript` is reachable. `getItemUseEvt`, `evt_door.h` and
+  `npcdrv.h` scripts are untested; the `<kind>:` prefix exists so they can be
+  added without reshaping the field.
+- No cache flush is needed. This is bytecode read as *data*, unlike patching
+  PowerPC instructions, which needs `dcbst`/`sync`/`icbi`.
+
 ### ⚠️ The single-slot problem — this needs a decision
 
 **The Gecko loader loads exactly one file: `/mod/mod.rel`.** Our mod system

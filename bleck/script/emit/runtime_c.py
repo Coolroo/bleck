@@ -486,6 +486,129 @@ static void bleck_start_entry(u32 seq)
 }}
 """
 
+#: Replacing one instruction of a vanilla `evt` script with a call into this
+#: module. ✅ Measured (D89): the VM read the mutated bytecode, called into
+#: `mod.rel` and the map ran normally for 90 s.
+PATCH_BLOCK = """
+/*
+    evt script patches.
+
+    A vanilla script's instruction is overwritten in place with `USER_FUNC f`,
+    where `f` is a function in the mod's own sources. The script's *pointer* is
+    left alone -- repointing it is what deadlocked the map loader in D51, and is
+    still ruled out. Mutating the bytecode it already refers to creates no new
+    `EvtEntry`, so that condition never arises (D87, D89).
+
+    Same size only. `USER_FUNC f` with no arguments is two words, so the
+    instruction replaced declares exactly one argument. A different size would
+    move every label after it, and `jumptable[]` is cached per `EvtEntry` when
+    the script starts.
+
+    THE GUARD IS THE POINT. The word at the offset must be the header the
+    manifest named, or nothing is written. A wrong offset then costs a status
+    of REFUSED rather than an undiagnosable freeze.
+
+    NOTE: No cache flush. This is bytecode read as *data*, unlike patching PowerPC
+    instructions, which needs dcbst/sync/icbi.
+
+    NOTE: Applied once, at load. The mutation therefore lasts the whole session,
+    including maps entered later; it is not re-applied per arrival.
+
+    A mod reads the outcome with:
+
+        extern unsigned int bleck_patch_status[];
+*/
+
+extern void *mapDataPtr(const char *name);
+
+/* spm/map_data.h: MapData.initScript. */
+#define BLECK_MAP_INIT_SCRIPT 0x18
+
+/* EVT_HELPER_CMD(1, 92) -- USER_FUNC, one argument: the pointer itself. */
+#define BLECK_USER_FUNC_1 0x0001005Cu
+
+#define BLECK_PATCH_MAP 0
+
+/* bleck_patch_status[] values. */
+#define BLECK_PATCH_PENDING 1
+#define BLECK_PATCH_APPLIED 2
+#define BLECK_PATCH_REFUSED 3
+#define BLECK_PATCH_NO_SCRIPT 4
+
+#define BLECK_PATCH_COUNT {count}
+
+typedef struct
+{{
+    u32 kind;
+    const char *target;
+    u32 at;
+    u32 expect;
+    const void *call;
+}} BleckPatch;
+{decls}
+static const BleckPatch bleck_patches[BLECK_PATCH_COUNT] = {{
+{rows}}};
+
+/*
+    Not static: a mod's own C reads this to answer "did my patch take" without a
+    debugger. Initialised to PENDING rather than 0 so it lands in .data -- the
+    loader allocates this module's bss but does not document zeroing it.
+*/
+u32 bleck_patch_status[BLECK_PATCH_COUNT] = {{
+{pending}}};
+
+const u32 bleck_patch_count = BLECK_PATCH_COUNT;
+
+static u32 *bleck_patch_script(const BleckPatch *patch)
+{{
+    unsigned char *data;
+
+    if (patch->kind == BLECK_PATCH_MAP)
+    {{
+        /* Populated and stable at _prolog, for maps never loaded as much as
+           for loaded ones -- measured, D88. */
+        data = (unsigned char *) mapDataPtr(patch->target);
+        if (data == 0)
+            return 0;
+        return *(u32 **) (data + BLECK_MAP_INIT_SCRIPT);
+    }}
+    return 0;
+}}
+
+static void bleck_apply_patches(void)
+{{
+    u32 i;
+    u32 *script;
+    const BleckPatch *patch;
+
+    for (i = 0; i < BLECK_PATCH_COUNT; i++)
+    {{
+        patch = &bleck_patches[i];
+        script = bleck_patch_script(patch);
+        if (script == 0)
+        {{
+            bleck_patch_status[i] = BLECK_PATCH_NO_SCRIPT;
+            continue;
+        }}
+        if (script[patch->at] != patch->expect)
+        {{
+            bleck_patch_status[i] = BLECK_PATCH_REFUSED;
+            continue;
+        }}
+        script[patch->at] = BLECK_USER_FUNC_1;
+        script[patch->at + 1] = (u32) patch->call;
+        bleck_patch_status[i] = BLECK_PATCH_APPLIED;
+    }}
+}}
+"""
+
+#: One patched script's name, held out of the table so it is a real string.
+PATCH_TARGET = "static const char bleck_patch_target_{index}[] = {name};"
+
+#: The mod's own hook, declared for its address only -- exactly as game
+#: functions called by USER_FUNC are declared.
+PATCH_CALL = "extern void {name}(void);"
+
 #: A banner above each mod's own section of the merged module.
 MOD_SECTION = """
 /* ------------------------------------------------------------------------

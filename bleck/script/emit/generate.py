@@ -35,6 +35,7 @@ from bleck.script.emit.scaffold import (  # noqa: F401
     ComboHook,
     MapHook,
     Scaffolding,
+    ScriptPatch,
     mod_slug,
     prefix_for,
 )
@@ -176,6 +177,44 @@ def _map_block(hooks: list[BoundHook], namespace: str = _PREFIX) -> str:
     )
 
 
+#: Selector kinds the generated C can resolve, and the constant each becomes.
+_PATCH_KINDS = {"map": "BLECK_PATCH_MAP"}
+
+
+def _patch_block(patches: list[ScriptPatch]) -> str:
+    """The patch table, the guard, and the status a mod's C can read."""
+    decls: list[str] = []
+    seen: set[str] = set()
+    for index, patch in enumerate(patches):
+        if patch.kind not in _PATCH_KINDS:
+            raise ScriptError(
+                f"patch selector kind {patch.kind!r} has no generated form; "
+                f"bleck knows {', '.join(sorted(_PATCH_KINDS))}. This is a bug "
+                f"in bleck.",
+                Position(),
+            )
+        decls.append(
+            runtime_c.PATCH_TARGET.format(index=index, name=_c_string(patch.target))
+        )
+    for patch in patches:
+        if patch.call not in seen:
+            seen.add(patch.call)
+            decls.append(runtime_c.PATCH_CALL.format(name=patch.call))
+
+    rows = "".join(
+        f"    {{{_PATCH_KINDS[patch.kind]}, bleck_patch_target_{index}, "
+        f"{patch.at}u, 0x{patch.expect:08X}u, (const void *) &{patch.call}}},"
+        f"  {patch.comment}\n"
+        for index, patch in enumerate(patches)
+    )
+    return runtime_c.PATCH_BLOCK.format(
+        count=len(patches),
+        decls="\n" + "\n".join(decls) + "\n",
+        rows=rows,
+        pending="".join("    BLECK_PATCH_PENDING,\n" for _ in patches),
+    )
+
+
 def _banner_block(banner: Banner) -> str:
     return runtime_c.BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
@@ -233,6 +272,9 @@ class Runtime:
     run_cxx_ctors: bool = False
     """Whether `_prolog` walks `.ctors`. See `runtime_c.CTOR_BLOCK`."""
 
+    patches: list[ScriptPatch] = field(default_factory=list)
+    """In-place edits to the game's own scripts, applied from `_prolog`."""
+
 
 def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
     """Assemble the shared runtime, from the pieces the module needs.
@@ -242,15 +284,27 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     per-frame hook shares the one set installed here.
     """
     banner, boot, combos = runtime.banner, runtime.boot, list(runtime.combos)
+    patches = list(runtime.patches)
+    # Before `mod_prolog`, so a mod's own C can read `bleck_patch_status[]`.
+    apply_patches = "    bleck_apply_patches();\n" if patches else ""
+    run_ctors = "    bleck_run_ctors();\n" if runtime.run_cxx_ctors else ""
+
     if not entries and not hooks and banner is None and not boot and not combos:
-        if not runtime.run_cxx_ctors:
+        if not runtime.run_cxx_ctors and not patches:
             return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
-        return runtime_c.CTOR_BLOCK + runtime_c.PLAIN_CTOR_PROLOG + runtime_c.ENTRY_POINTS
+        head = runtime_c.CTOR_BLOCK if runtime.run_cxx_ctors else ""
+        head += _patch_block(patches) if patches else ""
+        return (
+            head + f"\nvoid _prolog(void)\n{{\n{run_ctors}{apply_patches}"
+            f"    mod_prolog();\n}}\n" + runtime_c.ENTRY_POINTS
+        )
 
     parts = [runtime_c.SEQ_TABLE]
     body = ""
     if runtime.run_cxx_ctors:
         parts.append(runtime_c.CTOR_BLOCK)
+    if patches:
+        parts.append(_patch_block(patches))
 
     if banner is not None:
         parts.append(_banner_block(banner))
@@ -289,10 +343,9 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     )
     parts.append(runtime_c.SEQ_STUBS)
     # Constructors run before `mod_prolog`, as statics do before `main`.
-    run_ctors = "    bleck_run_ctors();\n" if runtime.run_cxx_ctors else ""
     parts.append(
         f"\nvoid _prolog(void)\n{{\n{runtime_c.SEQ_INSTALL}"
-        f"{run_ctors}    mod_prolog();\n}}\n"
+        f"{run_ctors}{apply_patches}    mod_prolog();\n}}\n"
     )
     parts.append(runtime_c.ENTRY_POINTS)
     return "".join(parts)
@@ -328,6 +381,7 @@ def generate_bare(
     origin: str = "native sources",
     banner: Banner | None = None,
     run_cxx_ctors: bool = False,
+    patches: list[ScriptPatch] | None = None,
 ) -> GeneratedSource:
     """Scaffolding for a mod that ships only native sources.
 
@@ -338,7 +392,15 @@ def generate_bare(
         runtime_c.HEADER.format(origin=origin)
         + "\n"
         + runtime_c.MOD_HOOK
-        + _footer([], [], Runtime(banner=banner, run_cxx_ctors=run_cxx_ctors))
+        + _footer(
+            [],
+            [],
+            Runtime(
+                banner=banner,
+                run_cxx_ctors=run_cxx_ctors,
+                patches=list(patches or []),
+            ),
+        )
     )
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
@@ -384,6 +446,7 @@ def generate(
                 combos=_bind_combos(plan.combos, plan.prefix),
                 namespace=plan.prefix,
                 run_cxx_ctors=plan.run_cxx_ctors,
+                patches=list(plan.patches),
             ),
         )
     )
@@ -443,6 +506,7 @@ def generate_merged(
     origin: str = "several mods",
     banner: Banner | None = None,
     run_cxx_ctors: bool = False,
+    patches: list[ScriptPatch] | None = None,
 ) -> GeneratedSource:
     """Render several mods' programs as one C translation unit.
 
@@ -450,6 +514,9 @@ def generate_merged(
     time rather than via runtime REL chaining (D39). Each mod keeps its own
     namespace; the shared runtime is emitted once, with hook tables that are the
     **union** across mods.
+
+    `patches` is that union already: a patch names C functions rather than
+    compiled scripts, so it needs no namespace and is passed whole.
     """
     if not parts:
         raise ScriptError("no mods to merge", Position())
@@ -505,7 +572,13 @@ def generate_merged(
     footer = _footer(
         entries,
         hooks,
-        Runtime(banner=banner, boot=boot, combos=combos, run_cxx_ctors=run_cxx_ctors),
+        Runtime(
+            banner=banner,
+            boot=boot,
+            combos=combos,
+            run_cxx_ctors=run_cxx_ctors,
+            patches=list(patches or []),
+        ),
     )
     text = "\n\n".join(head + sections + [footer])
     _require_ascii(text)
