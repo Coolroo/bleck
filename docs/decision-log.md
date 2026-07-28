@@ -4467,3 +4467,39 @@ Two things would have caught it much earlier:
 
 ⚠️ **Before trusting a negative result, show the instrument can produce a
 positive one.** Nothing in this project's rules said that yet. It does now.
+
+---
+
+## D77 — Button combinations, confirmed by hand (2026-07-27)
+
+✅ **The whole chain works, verified by a human playing the game.**
+
+`mods/warp-combo`: the disc boots itself into Lineland, and pressing **1+2**
+warps to Flipside. Observed on screen, not inferred.
+
+```
+bleck.yml    combos: {start_map: [1, 2]}
+mod.json     "combos": {"start_map": "warp_home"}
+             "boot": "he1_01"
+generated    0x00000300u,  /* start_map */
+in game      Lineland on its own; 1+2 -> Flipside
+```
+
+Every layer is now verified by direct observation rather than by argument:
+
+| Layer | How it was settled |
+|---|---|
+| Button masks | pressed one at a time, read back from the game (D68) |
+| Reading the pad | `wpadGetWork` from the per-frame hook (D67) |
+| Combination detected | `gw` write, with a no-press control (D69) |
+| Config -> manifest -> C | `0x0300` in the generated table, from `[1, 2]` |
+| The script's effect | map change seen on screen and in `seq_mapchange_wp` |
+
+⚠️ `code.boot` and `code.combos` in one mod is the configuration D70 and D73
+claimed was broken. It was never broken; the rig could not see map changes
+(D76). This is the same build those entries condemned.
+
+### Known limitation, unchanged
+
+Mario is invisible in a map entered this way -- no save profile (D63). It is a
+property of arriving without loading a save, not of combinations.

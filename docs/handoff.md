@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D65)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D77)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -150,6 +150,10 @@ trying it.
 | ✅ **The game reads the *embedded* setup copy** | control run: swapping markers left both addresses unchanged (D53) |
 | ✅ **Any map is reachable unattended** | `evt_seq_mapchange` from a map hook (D52) |
 | ✅ **A disc can start itself in any map** | `--map` / `code.boot`, confirmed in game (D64) |
+| ✅ **A button combination runs a script** | `bleck.yml` + `code.combos`, played by hand (D77) |
+| ✅ **A mod can read the controller** | `wpadGetWork`; D48 was about *injecting*, not reading (D66) |
+| ✅ **The four face-button masks** | a=0x0800 b=0x0400 1=0x0200 2=0x0100, one press each (D68) |
+| ⚠️ **The rig's map field was wrong until D76** | it read `seqWork.p0`; four entries were retracted |
 | ⛔ **`SEQ_LOGO` cannot be cut short** | black screen after the controller warning (D65) |
 | ⛔ **Emulation speed cannot be restored mid-run** | `--fast` uncaps the whole session (D64) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
