@@ -4038,3 +4038,52 @@ being live, so it now records in every sequence.
 
 Both failures produced the same shape of wrong conclusion: **an instrument
 looking away, mistaken for the thing not happening.**
+
+---
+
+## D69 — Button combinations work in game (2026-07-27)
+
+✅ **Pressing a combination starts a script.** Verified with a control.
+
+```
+with 1+2 pressed          without
+[t+45s] GAME  gw[31]=0    [t+45s] GAME  gw[31]=0
+[t+49s] TITLE gw[31]=1    [t+96s] MAPCHANGE gw[31]=0
+                          [t+99s] GAME  gw[31]=0
+```
+
+`gw[31] = 1` is the first statement of `warp_home` in `mods/warp-combo`. It
+goes high within four seconds of the press and stays 0 for a whole run without
+one. The control is what makes this a finding rather than a coincidence: gw
+slots are shared with the game (a contended slot produced a nearly-false
+conclusion once before), so "it changed" means nothing without "and it does not
+change on its own".
+
+The whole chain is now proven end to end:
+
+    bleck.yml   combos: {start_map: [1, 2]}
+    mod.json    "combos": {"start_map": "warp_home"}
+    generated   0x00000300u    <- the masks verified in D68
+    in game     script runs on the press
+
+### 🔶 The map change in that script did *not* land
+
+`warp_home` sets `gw[31]` and then calls `evt_seq_mapchange("mac_01", 0)`. The
+first happened; the game went to `SEQ_TITLE` rather than to Flipside.
+
+🔶 **Most likely the game's own response to the same input.** Any button press
+during the attract demo exits it, and a sequence change tears down evt state
+(D43) -- so the script was very likely destroyed between its first statement and
+its second. Not confirmed: an equally live possibility is that
+`evt_seq_mapchange` needs something that is not true during the demo.
+
+⚠️ Do not record either as fact without separating them. The clean test is a
+combination pressed from *real gameplay* rather than from the attract demo,
+which needs a save state -- the outstanding item from D63.
+
+### The rig can now press combinations itself
+
+`--press 1+2` holds both keys at once, down in order and up in reverse, rather
+than pressing them in sequence. That distinction is the feature: a mod tests
+`(held & mask) == mask` within a single frame, so a fast sequence of individual
+presses would exercise nothing and pass for the wrong reason.

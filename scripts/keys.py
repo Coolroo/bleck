@@ -236,27 +236,42 @@ def wait_until_foreground(pid: int, seconds: float = 30.0) -> bool:
     return False
 
 
-def press(
-    button: str, hold: float = 0.35, gap: float = 0.9
-) -> PressResult:
-    """Press and release one button, then pause.
+def press(button: str, hold: float = 0.35, gap: float = 0.9) -> PressResult:
+    """Press and release one button or one combination, then pause.
 
-    `hold` is generous on purpose. The game samples once per frame and the probe
-    records a value only when it changes, so a press shorter than a frame or two
-    can be missed entirely — and a missing press is indistinguishable from a
-    wrong mapping when the results are read back.
+    `a` presses a single button; `1+2` holds both together and releases both.
+    A combination has to be *simultaneous* — the whole point of the feature is
+    that a mod tests `(held & mask) == mask` in one frame, so pressing the
+    buttons in sequence exercises nothing.
+
+    `hold` is generous on purpose. The game samples once per frame, so a press
+    shorter than a frame or two can be missed entirely — and a missed press is
+    indistinguishable from the feature not working when results are read back.
     """
     if not IS_WINDOWS:
         return PressResult(button, False, "keystroke injection is Windows-only")
-    scan = SCAN_CODES.get(button.lower())
-    if scan is None:
-        valid = ", ".join(sorted(SCAN_CODES))
-        return PressResult(button, False, f"no key mapped for {button!r} ({valid})")
 
-    if not _send(scan, keyup=False):
-        return PressResult(button, False, "SendInput refused the key-down")
+    names = [part.strip().lower() for part in button.split("+") if part.strip()]
+    scans = []
+    for name in names:
+        scan = SCAN_CODES.get(name)
+        if scan is None:
+            valid = ", ".join(sorted(SCAN_CODES))
+            return PressResult(button, False, f"no key mapped for {name!r} ({valid})")
+        scans.append(scan)
+    if not scans:
+        return PressResult(button, False, "nothing to press")
+
+    # Down in order, up in reverse, so the combination is genuinely held at
+    # once rather than being a fast sequence of individual presses.
+    for scan in scans:
+        if not _send(scan, keyup=False):
+            for done in reversed(scans):
+                _send(done, keyup=True)
+            return PressResult(button, False, "SendInput refused the key-down")
     time.sleep(hold)
-    if not _send(scan, keyup=True):
-        return PressResult(button, False, "SendInput refused the key-up")
+    for scan in reversed(scans):
+        if not _send(scan, keyup=True):
+            return PressResult(button, False, "SendInput refused the key-up")
     time.sleep(gap)
     return PressResult(button, True)
