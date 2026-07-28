@@ -4656,3 +4656,73 @@ because the mod's manifest was read first.
 
 **A placement test needs `--map` on the build**, or it measures the wrong map
 and says so confidently.
+
+---
+
+## D81 — Release packaging, and the exec bit that upload-artifact drops (2026-07-28)
+
+The repository is public, so the two things that were blocked on that are now
+unblocked: GitHub Pages (free on public repos, paid on private) and publishing
+release binaries.
+
+### The Pages workflow comes back to `main`
+
+`docs.yml` was parked on the `docs/github-pages` branch by an earlier commit
+("Park the GitHub Pages workflow on a branch") for exactly one reason: deploying
+Pages needed a paid plan while the repo was private. That reason is gone, so the
+file is restored to `main` and the branch deleted. Nothing about its content had
+to change.
+
+Kept as-is from the parked version, because both were learned the hard way:
+
+- ✅ `--strict`, so a broken internal link fails the build instead of shipping.
+- ⛔ `configure-pages` with `enablement: true`. The default `GITHUB_TOKEN` lacks
+  repo-admin rights, so the call fails with "Resource not accessible by
+  integration" — and it *errors* rather than warning, taking the job down.
+  **Pages must be enabled by hand once**, Settings → Pages → Source → GitHub
+  Actions.
+
+### ✅ Archives are built in the platform job, not the release job
+
+The obvious shape for a release job is: download the three binaries, tar them
+up, attach them. That shape is wrong, and quietly.
+
+`actions/upload-artifact`'s README states it plainly:
+
+> "File permissions are not maintained during zipped artifact upload. All
+> directories will have `755` and all files will have `644`. For example, if you
+> make a file executable using `chmod` and then upload that file [...] post-
+> download the file is no longer guaranteed to be set as an executable."
+
+So a Linux or macOS binary that makes the round trip through an artifact arrives
+non-executable. Tarring it *after* that produces a release asset that fails with
+"permission denied" for every user, on a path nobody tests — the maintainer
+already has a working local build.
+
+Each platform job therefore archives before uploading (`tar czf` on Unix,
+`Compress-Archive` on Windows) and the exec bit travels inside the tarball. The
+release job only renames and attaches.
+
+Rejected: `chmod +x` in the release job. It works, but it encodes the knowledge
+in the *recovery* rather than in the design, and it silently does nothing on the
+day someone adds a second executable to the archive.
+
+### Smaller choices
+
+- **`gh release create`, not a third-party action.** `gh` is preinstalled on
+  runners, needs no version pinning, and adds no supply-chain surface to a
+  step that holds `contents: write`.
+- **`--verify-tag`**, so a mistyped tag fails instead of being invented.
+- **A hyphen in the tag means pre-release** (`v0.2.0-rc1`). This is what makes
+  the whole publish path testable without the result appearing as the current
+  version on the repository front page.
+- **`needs: [binary, checks]`** — a binary that builds but fails the test suite
+  is never published.
+- **Checksums list `bleck-*`, not `*`**, so `SHA256SUMS` cannot end up listing
+  itself.
+
+### 🔶 Still unproven
+
+Neither workflow has ever run. Every version number in them was checked against
+the live GitHub API rather than recalled, but "the action exists" and "the job
+passes" are different claims. The first push is the test.

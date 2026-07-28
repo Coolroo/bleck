@@ -8,17 +8,53 @@ the Python package. Either way it shells out to two external tools for disc I/O.
 
 ## The binary
 
-Download the build for your platform from the repository's Actions artifacts and
-run it — there is nothing to install and no Python needed.
+Download the archive for your platform from the
+[latest release](https://github.com/Coolroo/bleck/releases/latest), unpack it,
+and run it — there is nothing to install and no Python needed.
 
-```bash
-./bleck --help
-```
+=== "Linux / macOS"
 
-Builds are produced for Linux x86-64, Windows x86-64 and macOS arm64 on every
-change, and each is smoke-tested before it is published: a packaging mistake
-produces a binary that starts happily and then reports an empty catalog, which
-looks like a corrupt install rather than a build bug.
+    ```bash
+    tar -xzf bleck-*-linux-x86_64.tar.gz
+    ./bleck --help
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Expand-Archive bleck-*-windows-x86_64.zip -DestinationPath .
+    .\bleck.exe --help
+    ```
+
+Builds are produced for Linux x86-64, Windows x86-64 and macOS arm64, and each
+is smoke-tested before it is published: a packaging mistake produces a binary
+that starts happily and then reports an empty catalog, which looks like a
+corrupt install rather than a build bug.
+
+Each release also carries a `SHA256SUMS` file, so a download can be checked
+before it is run:
+
+=== "Linux / macOS"
+
+    ```bash
+    sha256sum -c SHA256SUMS --ignore-missing
+    ```
+
+=== "Windows"
+
+    ```powershell
+    Get-FileHash bleck-*-windows-x86_64.zip -Algorithm SHA256
+    ```
+
+!!! note "The builds are unsigned"
+
+    macOS will refuse a downloaded binary until the quarantine flag is cleared
+    (`xattr -d com.apple.quarantine ./bleck`), and Windows SmartScreen shows a
+    warning the first time. Code signing needs a paid certificate on both
+    platforms; building from source avoids it entirely.
+
+Untagged builds of `main` are also available as Actions artifacts, if you want
+a change before it is released.
 
 ## The Python package
 
@@ -44,6 +80,23 @@ has no published build. Python 3.10+, and two small runtime dependencies
 
 <div class="grid cards" markdown>
 
+-   :material-linux: **[Linux](linux.md)**
+
+    ---
+
+    Package manager or a source build for `wit`; Dolphin from Flatpak.
+
+-   :material-apple: **[macOS](macos.md)**
+
+    ---
+
+    Homebrew for both tools. `DolphinTool` lives inside `Dolphin.app`.
+
+-   :material-microsoft-windows: **[Windows](windows.md)**
+
+    ---
+
+    Where emulation testing happens. Both tools are plain `.exe` downloads.
 
 </div>
 

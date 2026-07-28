@@ -1,10 +1,7 @@
 name: build
 
-# Binaries for the three platforms bleck supports, built the same way on each.
-#
-# ⚠️ Deploying to GitHub Pages needs a paid plan on a private repository, which
-# is why the docs workflow lives on the `docs/github-pages` branch. Uploading
-# build artifacts has no such limit, so this one stays on main.
+# Binaries for the three platforms bleck supports, built the same way on each,
+# and published as a GitHub Release when a `v*` tag is pushed.
 
 on:
   push:
@@ -34,9 +31,9 @@ jobs:
     name: ${{ matrix.name }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
 
@@ -54,12 +51,25 @@ jobs:
       - name: Smoke test the artifact
         run: uv run python scripts/smoke_binary.py dist/bleck
 
+      # ⚠️ Packaging happens *here*, in the platform job, not in `release`.
+      # upload-artifact zips what it is given and documents that "file
+      # permissions are not maintained during zipped artifact upload... the
+      # file is no longer guaranteed to be set as an executable". Archiving
+      # first carries the exec bit through inside the tarball; downloading three
+      # bare binaries and tarring them in the release job would ship Linux and
+      # macOS executables that will not run until the user chmods them.
+      - name: Package
+        if: runner.os != 'Windows'
+        run: tar -czf "bleck-${{ matrix.name }}.tar.gz" -C dist bleck
+
+      - name: Package
+        if: runner.os == 'Windows'
+        run: Compress-Archive dist/bleck.exe "bleck-${{ matrix.name }}.zip"
+
       - uses: actions/upload-artifact@v4
         with:
           name: bleck-${{ matrix.name }}
-          path: |
-            dist/bleck
-            dist/bleck.exe
+          path: bleck-${{ matrix.name }}.*
           if-no-files-found: error
           retention-days: 30
 
@@ -68,10 +78,65 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
       - run: uv sync --extra dev
       - run: uv run pytest -q
       - run: uv run python scripts/lint.py
+
+  release:
+    # Tags only. `checks` is a dependency rather than a parallel job so that a
+    # binary which builds but fails the test suite is never published.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [binary, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: bleck-*
+          # Three jobs upload three separate artifacts; flatten them into one
+          # directory so the release step has a single glob to publish.
+          merge-multiple: true
+
+      # An asset called `bleck-linux-x86_64.tar.gz` collides with itself in a
+      # downloads folder the moment someone keeps two versions. The tag is
+      # clean here in a way it is not on a branch or PR build, which is why the
+      # rename lives in this job rather than in `Package`.
+      - name: Name each archive after the tag
+        run: |
+          mkdir release
+          for file in artifacts/bleck-*; do
+            mv "$file" "release/$(basename "$file" | sed "s/^bleck-/bleck-$GITHUB_REF_NAME-/")"
+          done
+          ls -l release
+
+      # Named explicitly rather than with `*` so the checksum file cannot end up
+      # listing itself.
+      - name: Checksums
+        run: cd release && sha256sum bleck-* > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A tag with a hyphen -- v0.2.0-rc1 -- is a pre-release. This is what
+          # makes it possible to exercise the whole path without the result
+          # showing up as the current version on the repository front page.
+          case "$GITHUB_REF_NAME" in
+            *-*) prerelease=--prerelease ;;
+            *)   prerelease= ;;
+          esac
+          # --verify-tag refuses to invent a tag that is not on the remote, so a
+          # typo fails here instead of creating a release nothing points at.
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            $prerelease
