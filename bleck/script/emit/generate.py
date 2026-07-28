@@ -18,7 +18,7 @@ from bleck.script.compiler.ir import (
     SymbolWord,
     Word,
 )
-from bleck.script.emit import runtime_c
+from bleck.script.emit import runtime_c, runtime_trace
 
 # Re-exported as `emit.MapHook` and friends.
 # pylint: disable=unused-import
@@ -266,11 +266,17 @@ def _hook_block(hooks: list[FunctionHook]) -> str:
         f"  {hook.comment}\n"
         for hook in hooks
     )
-    return runtime_c.HOOK_BLOCK.format(
+    block = runtime_c.HOOK_BLOCK.format(
         count=len(hooks),
         decls="\n" + "\n".join(decls) + "\n",
         rows=rows,
         pending="".join("    BLECK_HOOK_PENDING,\n" for _ in hooks),
+    )
+    # Emitted unconditionally beside the table: a trace needs the derived guard
+    # word that is already there, and `--gc-sections` drops the lot for a mod
+    # that only replaces. Nothing declares a trace, so nothing can ask for it.
+    return block + runtime_trace.TRACE_BLOCK.format(
+        traces="".join(runtime_trace.TRACE_ROW for _ in hooks)
     )
 
 

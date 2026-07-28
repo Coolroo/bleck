@@ -6175,3 +6175,305 @@ misaligned from out of range.
   pylint 10.00/10.
 - `generate_merged`'s optional arguments became keyword-only; it had reached six
   positional.
+
+---
+
+## D96 — ✅ The self-healing detour: tracing a function without replacing it (2026-07-28)
+
+D95 shipped `code.hooks`, and its largest ⛔ was that `replace` is the whole
+feature: hooking a function means destroying it. A trace has to do the opposite
+— see the arguments, see the **return value**, and leave the function working.
+
+This does that without a trampoline, and then uses it. **Four unattended runs**
+(one of them discarded, and that one is the most useful part); transcripts in
+`work/build/ingame.log`, `ingame-guard.log` and `ingame-somewhere.log`.
+
+### The mechanism
+
+Per call, in the mod's own handler:
+
+1. record the arguments;
+2. **restore** the original first instruction (write + flush);
+3. call the function through its own symbol — now unpatched, so control reaches
+   the real body instead of coming straight back;
+4. **re-install** the branch (write + flush);
+5. record the return value and hand it to the caller.
+
+The word restored in step 2 is the one `bleck` already read out of the base
+disc's `main.dol` — the same derived guard `bleck_install_hooks` compares
+against (D95). Nothing is re-derived at run time, and a hook with no derived
+guard cannot be traced at all: `bleck_trace_open` returns 0 rather than
+inventing a word.
+
+⛔ **This is still not a trampoline**, and the difference matters. A trampoline
+relocates the displaced instruction, which is why D37 records upstream's
+`hookFunction` breaking on a function that starts with a PC-relative one.
+Nothing here is relocated — the word goes back where it belongs — so **a
+function whose first instruction is a branch traces like any other.** Not
+hypothetical: `func_800cd554`'s first word is `4BFF480C` = `b 0x800C1D60`, and
+it was hooked, restored and re-armed with no special handling.
+
+### A pattern, not a manifest feature — and why
+
+A declaration exists so a *user* can express an edit. A trace is an instrument
+for answering one question about the game, used once and thrown away; a
+`code.trace` key would have to invent a schema for "which arguments, what shape,
+where do they go" before anyone knew what shape the answers take.
+
+So what landed is five runtime helpers emitted beside the hook table, plus three
+probe mods showing the pattern. **Nothing in `mod.json` changed.**
+
+```c
+void *traceMapDataPtr(const char *mapName)
+{
+    void *result = 0;
+
+    bleck_trace_args(0, (u32) mapName, 0, 0, 0);
+    if (bleck_trace_open(0))
+    {
+        result = mapDataPtr(mapName);   /* unpatched right now */
+        bleck_trace_close(0);
+    }
+    bleck_trace_result(0, (u32) result);
+    return result;
+}
+```
+
+⛔ **Rejected: `"mode": "trace"` in `code.hooks`.** It reads well and is wrong
+today — `mode` says how the mod's function *relates* to the original, and a
+trace is a body, not a relationship. It would also mean generating the handler,
+which means knowing the traced function's signature, which is the one thing the
+build cannot know. A surface can follow once something has earned one.
+
+✅ **Byte-identical for every existing mod.** `--gc-sections` drops all of it
+unless a mod's C calls in: `fn-hook-probe`, `fn-hook-guard` and
+`door-hook-probe` rebuilt to the same `mod.rel` from the tree before and after
+(`6ce1dba6…`, `cc9b3847…`, `06b34cbe…`).
+
+### Reentrancy — safe by ordering, not by skipping
+
+`bleck_trace_open` **restores before it counts**. That is the whole argument:
+the only window in which a second entry can reach the handler at all is between
+the branch being live and the restore landing, because for the rest of the call
+the branch is not there. A second entry in that window writes the same word
+again — the store is idempotent — and `bleck_trace_close` re-arms the branch
+only when the depth returns to zero, so an inner frame cannot re-arm it
+underneath an outer one.
+
+⛔ **"Skip the trace when already inside" was rejected**, and it is the obvious
+design. It cannot work: skipping still has to return something, and the handler
+cannot produce the original's return value without calling it — while calling it
+with the branch installed recurses until the stack runs out. Nesting is made
+safe instead, and counted.
+
+⚠️ What nesting still costs: **while the detour is open the function is not
+hooked**, so a call it makes to itself runs the original directly and is not
+counted. A recursive function's `calls` is its outermost calls only.
+
+`depth` is reported because the ordering cannot cover the last case: if a traced
+function never returns — a longjmp, a frozen frame — `close` never runs, the
+branch is never re-installed, and `calls` silently stops climbing. **A non-zero
+`depth` at rest means the transcript is not to be trusted.** It read 0 on every
+hook of every run below.
+
+🔶 **Not atomic.** `depth` is a plain word, so two threads entering the same
+handler could interleave. The worst outcome available is a window with the
+branch absent — undercounting — because both writes put back one of two valid
+words. `nested` counted 0 everywhere, including on `GetBasicPlayer`, which is
+`nw4r::snd` code, so nothing was seen; nothing was proven either.
+
+### ⚠️ What a trace cannot see
+
+- **Float arguments.** The EABI passes the first eight integer or pointer
+  arguments in r3–r10 and floats separately in f1–f8. `bleck_trace_args` takes
+  words, so a float is never recorded. Worse, the handler's prototype must still
+  match the traced function exactly, because the handler *forwards* — a
+  mismatched prototype corrupts the call rather than merely mis-recording it.
+- 🔶 Float arguments do nonetheless *survive* the detour, by construction rather
+  than by care: f1–f8 are assigned independently of r3–r10, and a handler holding
+  no floating-point code never writes them. Inferred from the EABI and from
+  `fn-trace-somewhere` compiling to no FPR use; not separately measured.
+- **Float and struct returns.** `bleck_trace_result` records r3. A float return
+  is in f1; a struct returned by value is not in a register at all.
+- **Arguments past the eighth**, which sit on the caller's stack. The handler
+  builds its own frame before forwarding.
+- ⛔ **Variadic functions.** The EABI uses CR bit 6 to say whether float
+  arguments were passed, and a non-variadic handler clears it.
+- ⚠️ **Registers are not arguments.** A handler declared with eight `u32`s
+  records eight words whatever the function's real arity is. `effMain` takes
+  none, and all four of its recorded "arguments" read `8050A128` — residue, not
+  data — while its recorded "return value" is residue too, and drifts. **Only as
+  many arguments as the function actually has mean anything.**
+- ⚠️ **A captured pointer is dereferenced later, not at the call.** The
+  `mapDataPtr` run below is the worked example: both the first and the most
+  recent call recorded the *same* pointer, so both name columns render whatever
+  that buffer holds now.
+
+### ✅ Run 1 — `mapDataPtr`, and why that target
+
+`uv run python scripts/ingame.py fn-trace-probe --words 28 --seconds 120`
+
+`mapDataPtr` (`0x800294e0`) was chosen because each of three properties closes
+off a different way of being fooled: the game cannot load a map without it, so a
+broken detour breaks the game visibly rather than reporting a plausible zero;
+its argument is a `const char *` map name, so a *correct* capture is readable as
+text and "plausible-looking garbage" is not available to it; and its result is a
+pointer that can be checked against the DOL's section table.
+
+| Report field | Value |
+|---|---|
+| `bleck_hook_status[0]` | `2` installed |
+| derived guard, generated into the table | `9421FFE0` = `stwu r1,-0x20(r1)` |
+| word at `mapDataPtr`, read back every frame | `48F3CE8C` = `b 0x80F6636C` |
+| `&traceMapDataPtr` | `80F6636C` — the same address |
+| **calls** | **19** |
+| `nested` / `blind` / `depth` | `0` / `0` / `0` |
+| **captured names** | **`aa4_01`**, **`ls4_12`**, **`title`** |
+| first result / last result | `803FFF14` / `80402DE4` |
+| SEQ_GAME frames | `0x69E1` = 27,105 |
+| maps reached | `aa4_01`, `ls4_12`, `title`, `aa4_01`, `ls4_12` — 5 changes |
+
+The strings are the point, and they were copied **into the report block** rather
+than reported as pointers, because an address proves nothing: the transcript
+holds `6161345F 30310000`, which is `aa4_01` as bytes.
+
+⚠️ `mapDataPtr` is **not** called constantly — 19 calls in two minutes, a
+handful per map change. The premise that it is was wrong and did not matter,
+because 19 is not 0.
+
+### ✅ Run 2 — the negative
+
+`uv run python scripts/ingame.py fn-trace-guard --words 24 --seconds 75`
+
+Two hooks on the **same** function, so the derived guard fails without editing
+anything `bleck` generated: hook 0 installs and writes the branch, and hook 1
+then reads that branch where it expected the prologue.
+
+| Report field | Value |
+|---|---|
+| `bleck_hook_count` | `2` |
+| `bleck_hook_status[0]` / `[1]` | `2` installed / **`3` refused** |
+| trace 0: calls | `15` |
+| **trace 1: calls / blind / nested** | **`0` / `0` / `0`** |
+| word at `mapDataPtr` | `48F3CC80` → `80F66160` = `&traceMapDataPtr` |
+| `&traceNever` | `80F661F8` — *not* what the branch points at |
+| game, 75 s | `aa4_01` → `ls4_12`, 2 map changes, 15,753 SEQ_GAME frames |
+
+`blind` is `0`, not merely `calls`: a refused hook's handler is never entered at
+all, rather than entered and turned away. And the branch points at the *applied*
+hook's function, 0x98 away from the refused one, so "refused" and "wrote
+something harmless" stay distinguishable rather than assumed apart (D83).
+
+⚠️ This build also **materialises the hook table**. With one hook GCC folds the
+row into constants (D95, re-checked here with `powerpc-eabi-objdump`); with two
+it must index `bleck_function_hooks`, so the trace helpers are exercised against
+a real array and not only against constant-folded copies of one.
+
+### ⚠️ Run 3, first attempt — the control read zero, so the run said nothing
+
+`fn-trace-somewhere` first hooked `func_800b426c`, `func_800cd554` and
+`marioCheckStatusPauseMot`, the last as a positive control. All three installed,
+all three branches confirmed by readback, game healthy for 110 s — and **all
+three counters read zero**.
+
+That is not a finding, it is an unusable run. A rig never shown seeing a call
+happen cannot report that one did not; that is the whole of D94's stage-2 lesson
+and of the project-instruction rule. The run was thrown away and the control replaced with
+one that had already been measured.
+
+### ✅ Run 3 — with a control that fires
+
+`uv run python scripts/ingame.py fn-trace-somewhere --words 62 --seconds 110`
+
+`effMain` is that control, and it is also the demonstration: D94 recorded ⛔ *do
+not stub `effMain`*, because replacing it wedged the game in `SEQ_MAPCHANGE` for
+90 s. Tracing it calls the original.
+
+| Hook | Function | Status | Calls | `nested` | `depth` |
+|---|---|---|---|---|---|
+| 0 | `func_800b426c` | installed | **0** | 0 | 0 |
+| 1 | `func_800cd554` | installed | **0** | 0 | 0 |
+| 2 | `GetBasicPlayer` | installed | **24,406** | 0 | 0 |
+| 3 | `effMain` | installed | **28,635** | 0 | 0 |
+
+**4 map changes completed**, `aa4_01` and `ls4_12` both reached, 24,435 SEQ_GAME
+frames. That is the strongest evidence here that the original body really runs:
+the function whose *replacement* hangs the map-change sequence was traced through
+four map changes.
+
+### ✅ The fact: `GetBasicPlayer` returns its argument plus `0xD8`
+
+`GetBasicPlayer` (`0x8030AFC0`) is listed in `spm.eu0.lst` under `// nw4r::snd.cpp`
+and appears in **no header** under `work/upstream/spm-headers`. Its first word is
+`386300D8` = `addi r3,r3,0xD8`, which reads like a leaf that offsets a pointer.
+The trace says it is exactly that and nothing else.
+
+| Sample | argument 0 | result | difference |
+|---|---|---|---|
+| first call | `901D6170` | `901D6248` | `0xD8` |
+| a later call | `901D5634` | `901D570C` | `0xD8` |
+| last call | `901D6170` | `901D6248` | `0xD8` |
+
+Two distinct objects, the same offset, across 24,406 calls. Also measured: it is
+called **24,406 times against 24,435 SEQ_GAME frames** — almost exactly once per
+frame — and its objects live in **MEM2** (`0x901D…`), not MEM1.
+
+🔶 The reading is a C++ base-subobject accessor: `nw4r::snd`'s basic sound player
+at `+0xD8` inside a larger object. That fits the name, the `nw4r::snd.cpp`
+grouping and the shape of the code, but it is inference. What is measured is the
+arithmetic.
+
+⚠️ **Its second recorded "argument" is not one.** It read `0x4D3`, later
+`0x2032`, drifting: a function that only touches r3 leaves r4 as whatever the
+caller had. Written down so the number is not mistaken for data later.
+
+### ✅ And a negative that is now worth something
+
+⛔ **`func_800b426c` and `func_800cd554` are not called during the attract
+demo.** Zero entries across 110 s while two controls in the *same build* counted
+24,406 and 28,635. Both sit in the effect-driver neighbourhood (`effHappyFlower`
+… `effMapBlockDelEntry`, and past `effNiceEntry`), and `func_800cd554` is
+statically `b effSmallStarEntry` — an alternate entry point to `0x800C1D60`,
+readable straight out of the DOL and confirmed by the guard word the build
+derived.
+
+🔶 Two maps, not the game. An effect nobody triggers is not an effect that does
+not exist.
+
+### 🔶 Cost — measured, and it is a Dolphin number
+
+Each handler brackets the detour with `mftb`, so the flush pair is timed apart
+from the traced body.
+
+| Traced function | calls | ticks per open+close | ticks in the original |
+|---|---|---|---|
+| `mapDataPtr` | 19 | **6.7** | 792 |
+| `effMain` | 28,635 | **9.0** | 791 |
+| `GetBasicPlayer` | 24,406 | **10.4** | **0** |
+
+So the detour costs 7–10 time-base ticks per call — roughly 110–170 ns if the
+Wii's 60.75 MHz time base is what is being counted. Against `effMain` that is
+**1.1% overhead**; against `mapDataPtr`, 0.85%. No frame-rate change was visible
+at any point across the three runs.
+
+⚠️ **`GetBasicPlayer`'s body measures zero ticks**, because it is one `addi` and
+a `blr`. That is the honest shape of the answer: **the detour's cost is fixed and
+the traced function's is not**, so on a hot leaf the relative overhead is
+unbounded. Trace one knowing that.
+
+🔶 **This is Dolphin's cycle accounting, not hardware.** Two `sync` instructions
+costing ~9 ticks is not credible on a real 750, which has to drain the pipeline;
+Dolphin does not model that. The *shape* — fixed cost, small against a real
+function, unbounded against a leaf — should hold. The number will not.
+
+### Housekeeping
+
+- `TRACE_BLOCK` lives in `bleck/script/emit/runtime_trace.py`, split out because
+  `runtime_c.py` crossed pylint's 1000-line limit. It is an instrument rather
+  than part of the base runtime, so the split follows a seam that was already
+  there.
+- 754 tests pass (746 before, 8 new in `tests/test_hooks.py::TestTrace`). ruff
+  clean, pylint 10.00/10.
+- New: `docs/function-behaviour.md`, for what the game's own functions do when
+  measured rather than read off a header. Three mods: `fn-trace-probe`,
+  `fn-trace-guard`, `fn-trace-somewhere`.

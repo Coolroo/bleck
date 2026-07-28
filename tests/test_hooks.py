@@ -139,6 +139,74 @@ class TestGeneratedCode:
         assert "bleck_install_hooks" not in emit.generate_bare(origin="x").text
 
 
+class TestTrace:
+    """The self-healing detour: watching a hooked function rather than
+    replacing it (D96).
+
+    Nothing declares a trace -- it is a pattern over `code.hooks` plus these
+    helpers -- so what is checked here is that the helpers exist beside the
+    table, that the restore uses the *derived* word, and that the ordering the
+    reentrancy argument depends on is the ordering emitted.
+    """
+
+    def test_the_helpers_ride_along_with_the_table(self):
+        out = generated()
+        for name in (
+            "u32 bleck_trace_open(u32 index)",
+            "void bleck_trace_close(u32 index)",
+            "void bleck_trace_args(u32 index",
+            "void bleck_trace_result(u32 index",
+            "u32 bleck_hook_original(u32 index)",
+        ):
+            assert name in out
+
+    def test_a_record_exists_per_hook_and_stays_out_of_bss(self):
+        out = generated([HOOK, emit.FunctionHook(call="other", address=0x800618B0)])
+        rows = out.split("BleckTrace bleck_traces[BLECK_HOOK_COUNT] = {")[1]
+        assert rows.split("};")[0].count("BLECK_TRACE_MAGIC") == 2
+        assert "static BleckTrace bleck_traces" not in out
+
+    @staticmethod
+    def _body(signature: str) -> str:
+        """The definition's body. The last match, because the block's own
+        header comment shows each prototype first."""
+        return generated().split(signature)[-1].split("\n}")[0]
+
+    def test_the_restore_puts_back_the_derived_word(self):
+        """Not a word read at run time: the same guard the install compared."""
+        body = self._body("u32 bleck_trace_open(u32 index)")
+        assert "bleck_code_write(hook->at, hook->expect);" in body
+
+    def test_it_restores_before_it_counts(self):
+        """The whole reentrancy argument. A second entry can only land before
+        the restore, where repeating the same store is harmless."""
+        body = self._body("u32 bleck_trace_open(u32 index)")
+        assert body.index("bleck_code_write") < body.index("trace->depth += 1")
+
+    def test_an_unguarded_hook_cannot_be_traced(self):
+        """There is no original word to put back, so the original must not be
+        called -- its first instruction is still the branch."""
+        body = self._body("u32 bleck_trace_open(u32 index)")
+        assert "if (!hook->guarded" in body
+        assert "trace->blind += 1;" in body
+        assert "return 0;" in body
+
+    def test_the_branch_is_re_armed_only_at_depth_zero(self):
+        body = self._body("void bleck_trace_close(u32 index)")
+        assert body.index("trace->depth -= 1") < body.index("bleck_code_hook")
+        assert "if (trace->depth == 0)" in body
+
+    def test_the_float_hazard_is_written_down_where_it_is_used(self):
+        """A float argument silently reading as nothing is exactly the sort of
+        thing that becomes a wrong recorded fact."""
+        out = generated()
+        assert "FLOAT ARGUMENTS" in out
+        assert "FLOAT AND STRUCT RETURNS" in out
+
+    def test_nothing_is_emitted_without_hooks(self):
+        assert "bleck_trace_open" not in emit.generate_bare(origin="x").text
+
+
 class TestMerging:
     def _part(self, name):
         return emit.ModPart(

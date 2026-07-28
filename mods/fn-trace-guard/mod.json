@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "fn-trace-guard",
+  "version": "0.1.0",
+  "description": "The negative for the trace detour: a second hook on mapDataPtr is refused and its record stays empty (D96)",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "hooks": [
+      { "function": "mapDataPtr", "call": "traceMapDataPtr", "mode": "replace" },
+      { "function": "mapDataPtr", "call": "traceNever", "mode": "replace" }
+    ]
+  }
+}

@@ -26,7 +26,7 @@ this file is forward-looking only.
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
-| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ⛔ Branch *replacement* only — no trampoline, so the original never runs |
+| **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ⛔ Branch *replacement* only — no trampoline. ✅ A mod can still keep the original by restoring it around the call: the self-healing detour records arguments **and** return values, and traced `mapDataPtr` and `effMain` live (D96) |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -138,8 +138,16 @@ more than the coverage — a trampoline that silently mis-relocates is worse tha
 none. `bleck/backends/dol.py` already reads the words to decide from.
 
 This is the single largest thing standing between `code.hooks` and being usable
-for anything other than a probe: today, hooking a function means taking over its
-entire job.
+for anything other than a probe: today, *declaring* a hook means taking over the
+function's entire job.
+
+⚠️ **Partly answered from an unexpected direction (D96).** The *self-healing
+detour* keeps the original running without relocating anything: restore the
+first instruction, call the function, re-install the branch. Measured through
+four map changes on `effMain` — the function D94 says must not be stubbed. So
+"intercept without breaking" is no longer unproven; what a trampoline would add
+is doing it **without two cache flushes per call**, and without the mod having to
+write the handler by hand. Rank it accordingly.
 
 ### 🔶 Remaining button masks
 

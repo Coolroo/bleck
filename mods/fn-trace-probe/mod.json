@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "fn-trace-probe",
+  "version": "0.1.0",
+  "description": "Self-healing detour: record mapDataPtr's argument and result without replacing it (D96)",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "hooks": [
+      { "function": "mapDataPtr", "call": "traceMapDataPtr", "mode": "replace" }
+    ]
+  }
+}

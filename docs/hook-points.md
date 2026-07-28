@@ -239,6 +239,37 @@ calling `evtEntry`, rather than inferring it from a missing effect.
 
 ---
 
+## A fifth timing: inside any function, by name
+
+✅ D95, D96. `code.hooks` writes a branch over a named function's first
+instruction from `_prolog`, so a mod's own C runs **whenever the game calls that
+function** — a hook point chosen by name rather than from the four fixed
+timings above.
+
+Two shapes, and the difference is the whole thing:
+
+| | `replace` | trace |
+|---|---|---|
+| Original body | never runs | runs, every call |
+| Return value | the mod invents one | the original's, recorded |
+| Declared in `mod.json` | yes, `code.hooks` | no — a pattern over one |
+| Cost per call | none | two cache flushes, 7–10 time-base ticks |
+
+The trace restores the original instruction, calls the function through its own
+symbol, and re-installs the branch — so it is available on functions that
+`replace` breaks. ⛔ Stubbing `effMain` wedges `SEQ_MAPCHANGE` (D94); **tracing**
+it ran through four map changes (D96).
+
+⚠️ Safe timings still apply *inside* a hook. The hook fires whenever the game
+calls the function, which may be long before evt is alive — so `evtEntry` from a
+hook on something early is the same mistake as `evtEntry` from `_prolog`.
+
+[`code-mods.md`](./code-mods.md#tracing-a-function-instead-of-replacing-it) has
+the pattern and its hazards; [`function-behaviour.md`](./function-behaviour.md)
+has what it has found.
+
+---
+
 ## Open questions
 
 - ✅ ~~Does `seq_data[SEQ_GAME].main` work?~~ Yes (D43).
@@ -258,3 +289,5 @@ calling `evtEntry`, rather than inferring it from a missing effect.
   scene survey that confirmed the `seq_data` technique is prior art)
 - [`scripting.md`](./scripting.md) — the language, and what it cannot do
 - [`code-mods.md`](./code-mods.md) — native hooks, the other half of the story
+- [`function-behaviour.md`](./function-behaviour.md) — what traced functions
+  turned out to do

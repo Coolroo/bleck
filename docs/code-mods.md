@@ -507,12 +507,111 @@ extern const unsigned int bleck_hook_count;
 Hooks install from `_prolog`, **before** `mod_prolog`, so a mod's own C reads a
 final answer.
 
+### Tracing a function instead of replacing it
+
+✅ Measured, D96. A hook replaces, so a handler can record the arguments and
+never the return value — and disables the function it is studying. The
+**self-healing detour** gets both back without a trampoline:
+
+1. record the arguments;
+2. **restore** the original first instruction (write + flush);
+3. call the function through its own symbol — now unpatched, so control reaches
+   the real body instead of coming straight back;
+4. **re-install** the branch (write + flush);
+5. record the return value and return it.
+
+The word put back in step 2 is the guard `bleck` derived from `main.dol` at
+build time. Nothing is re-derived at run time, and **a hook with no derived
+guard cannot be traced**: `bleck_trace_open` returns 0 rather than inventing a
+word, and the original must then not be called at all.
+
+There is **no manifest surface** for this — deliberately. It is an instrument
+for answering a question, not an edit a user declares. What exists is five
+helpers emitted beside the hook table and dropped by `--gc-sections` unless a
+mod calls them:
+
+```c
+extern void bleck_trace_args(u32 index, u32 a0, u32 a1, u32 a2, u32 a3);
+extern u32  bleck_trace_open(u32 index);      /* 0 = do NOT call the original */
+extern void bleck_trace_close(u32 index);
+extern void bleck_trace_result(u32 index, u32 value);
+extern u32  bleck_hook_original(u32 index);   /* the derived guard word */
+extern BleckTrace bleck_traces[];             /* calls, nested, blind, depth,
+                                                 first[4], last[4], results */
+```
+
+```c
+void *traceMapDataPtr(const char *mapName)
+{
+    void *result = 0;
+
+    bleck_trace_args(0, (u32) mapName, 0, 0, 0);
+    if (bleck_trace_open(0))
+    {
+        result = mapDataPtr(mapName);   /* unpatched right now */
+        bleck_trace_close(0);
+    }
+    bleck_trace_result(0, (u32) result);
+    return result;
+}
+```
+
+`mods/fn-trace-probe` is the worked example, `mods/fn-trace-guard` the negative,
+`mods/fn-trace-somewhere` a three-target investigation. What they found is in
+[`function-behaviour.md`](function-behaviour.md).
+
+#### ⚠️ What a trace cannot see
+
+- **Float arguments.** The EABI passes the first eight integer or pointer
+  arguments in r3–r10 and floats separately in f1–f8. `bleck_trace_args` takes
+  words, so a float is never recorded — and the handler's prototype must *still*
+  match the traced function exactly, because the handler forwards. A mismatched
+  prototype corrupts the call rather than merely mis-recording it.
+- **Float and struct returns.** Only r3 is recorded.
+- **Arguments past the eighth**, which are on the caller's stack; the handler
+  builds its own frame before forwarding.
+- ⛔ **Variadic functions.** CR bit 6 carries "were float arguments passed", and
+  a non-variadic handler clears it.
+- ⚠️ **Registers are not arguments.** A handler declared with eight `u32`s
+  records eight words whatever the function's arity is. `effMain` takes none and
+  all four of its recorded arguments read the same residue value.
+- ⚠️ **A captured pointer is dereferenced later, not at the call.** Copy the
+  bytes at call time if a specific call's string matters.
+
+#### Reentrancy
+
+`bleck_trace_open` **restores before it counts**, so the only window in which a
+second entry can reach the handler is between the branch being live and the
+restore landing — where writing the same word again is harmless. `close` re-arms
+the branch only at depth 0, so an inner frame cannot re-arm it under an outer
+one. Skipping the trace when already inside was rejected: it would still have to
+return something, and the handler cannot produce the original's return value
+without calling it.
+
+While the detour is open the function is **not** hooked, so a recursive call
+runs the original directly and is not counted.
+
+⚠️ `depth` should be 0 at rest. A non-zero one means a frame never returned, the
+branch was never re-installed, and the counts stopped climbing silently.
+
+#### 🔶 Cost
+
+7–10 time-base ticks per call for the two flushes — about 1.1% on top of
+`effMain`, and **infinite** relative overhead on a leaf: `GetBasicPlayer` is one
+`addi` and a `blr`, and its own body measured 0 ticks. The detour's cost is
+fixed; the traced function's is not.
+
+These are Dolphin's cycle accounting, not hardware. Two `sync` instructions
+costing ~9 ticks is not credible on a real 750, which has to drain the pipeline.
+
 ### What this does not do yet
 
 - ⛔ **No trampoline.** This is branch *replacement*: the original body never
-  runs. Intercepting a function *without* breaking it is unproven, and upstream's
-  `hookFunction` is not a drop-in — it blindly copies instruction[0], so it
-  breaks on any function starting with a PC-relative instruction (D37).
+  runs, unless the mod restores it around the call itself (see the trace above).
+  Upstream's `hookFunction` is not a drop-in either — it blindly copies
+  instruction[0], so it breaks on any function starting with a PC-relative
+  instruction (D37). Nothing here relocates an instruction, which is why a
+  function beginning with a branch traces normally.
 - ⛔ **No build-time range check.** The loader chooses where the module lands, so
   "can this branch be encoded" is only answerable at run time. The encoder
   refuses rather than masking, and the status says which way it failed.

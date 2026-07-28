@@ -800,13 +800,35 @@ What to know before extending it:
   successfully and entered **zero** times while Flipside loaded and ran 90 s,
   with a control hook firing 62,480 times in the same window. 🔶 Two maps only.
 - ⛔ **Do not stub `effMain`** — it hangs the map-change sequence. Use
-  `npcDispMain` as a hot-function control; it is a draw pass.
+  `npcDispMain` as a hot-function control; it is a draw pass. ⚠️ *Tracing*
+  `effMain` is fine — see below.
+- ✅ **A function can be traced rather than replaced** (D96). Restore the
+  original instruction, call the function through its symbol, re-install the
+  branch — so arguments **and the return value** are recorded and the function
+  keeps working. Deliberately **not** a manifest feature: it is an instrument,
+  and a `code.trace` key would have to know the target's signature, which the
+  build cannot.
+
+  ```c
+  extern u32  bleck_trace_open(u32 index);   /* 0 = do NOT call the original */
+  extern void bleck_trace_close(u32 index);
+  extern void bleck_trace_args(u32 index, u32 a0, u32 a1, u32 a2, u32 a3);
+  extern void bleck_trace_result(u32 index, u32 value);
+  ```
+
+  ⚠️ Floats are invisible to it — arguments in f1–f8, returns in f1 — and the
+  handler's prototype must match the target exactly or it corrupts the call.
+  ⚠️ Two cache flushes per call, 7–10 time-base ticks; that is ~1% on `effMain`
+  and larger than the whole function on a leaf.
 - ✅ Existing mods are byte-identical: `--gc-sections` drops the helpers unless
-  a module calls one.
+  a module calls one. Re-verified when the trace landed.
 - `mods/code-patch-probe` (the mechanism, with the no-flush control),
   `mods/door-hook-probe` (live game code, by hand), `mods/fn-hook-probe` (the
-  declaration) and `mods/fn-hook-guard` (its negative control) are the worked
-  examples.
+  declaration), `mods/fn-hook-guard` (its negative control),
+  `mods/fn-trace-probe` (the trace, on `mapDataPtr`), `mods/fn-trace-guard` (its
+  negative) and `mods/fn-trace-somewhere` (three undocumented functions) are the
+  worked examples. What the last one found is in
+  [`function-behaviour.md`](./function-behaviour.md).
 
 ---
 

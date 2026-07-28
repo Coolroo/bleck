@@ -227,6 +227,70 @@ Hooks install before your `mod_prolog`, so that read is final.
 
 Full field reference: [`code.hooks`](../reference/manifest.md).
 
+## Watching a function instead of taking it over
+
+Sometimes the question is "what is this function handed, and what does it hand
+back" — and replacing it destroys the answer. There is no manifest key for this;
+it is a pattern you write over a `code.hooks` entry, using helpers `bleck`
+generates beside the hook table.
+
+Your handler restores the original instruction, calls the function normally
+while it is unpatched, and puts the branch back:
+
+```c
+extern void bleck_trace_args(unsigned index, unsigned a0, unsigned a1,
+                             unsigned a2, unsigned a3);
+extern unsigned bleck_trace_open(unsigned index);   /* 0 = do NOT call it */
+extern void bleck_trace_close(unsigned index);
+extern void bleck_trace_result(unsigned index, unsigned value);
+
+extern void *mapDataPtr(const char *mapName);
+
+void *traceMapDataPtr(const char *mapName)
+{
+    void *result = 0;
+
+    bleck_trace_args(0, (unsigned) mapName, 0, 0, 0);
+    if (bleck_trace_open(0))
+    {
+        result = mapDataPtr(mapName);   /* unpatched right now */
+        bleck_trace_close(0);
+    }
+    bleck_trace_result(0, (unsigned) result);
+    return result;
+}
+```
+
+`bleck_traces[]` then holds, per hook: the call count, the first call's
+arguments, the most recent call's arguments, both return values, and counters
+for anything that went wrong. Read them from a per-frame hook into a probe block
+and `scripts/ingame.py --words` prints them.
+
+`bleck_trace_open` returns 0 when there is nothing to restore — an unguarded
+hook, or one the guard refused. **Do not call the original then**: its first
+instruction is still the branch back into your handler.
+
+!!! danger "Your handler's prototype must match the function exactly"
+
+    The handler *forwards* its arguments to the original, so a wrong prototype
+    corrupts the call rather than merely mis-recording it.
+
+    Only integer and pointer arguments are recorded, and only the first four.
+    **Floating-point arguments are invisible** — the ABI passes them in separate
+    registers — and so is a floating-point return value. So is anything past the
+    eighth integer argument. Do not trace a variadic function.
+
+    A handler declared with more parameters than the function actually takes
+    records leftover register contents for the extras. They are not arguments.
+
+!!! warning "It costs two cache flushes per call"
+
+    Fine on a function called a few times per map load; measurable on one called
+    every frame; and on a one-instruction leaf the overhead is larger than the
+    function. Measure rather than assume.
+
+`mods/fn-trace-probe` in the repository is the worked example.
+
 ## Writing the branch yourself
 
 `code.hooks` covers the declarative case. The same helpers are available
