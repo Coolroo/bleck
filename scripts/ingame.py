@@ -471,13 +471,21 @@ def main() -> int:
             # listening, and a timer would drift with load times.
             if args.press and not pressed and result.snapshot.sequence == SEQ_GAME:
                 pressed = True
-                say(f"[t+{elapsed:>3}s] pressing {' '.join(args.press)} ...")
-                if not keys.focus(session.process.pid):
-                    say("    could not focus Dolphin -- keys would go elsewhere")
-                else:
-                    for button in args.press:
-                        outcome = keys.press(button)
-                        say(f"    {button}: {'sent' if outcome.sent else outcome.problem}")
+                say(f"[t+{elapsed:>3}s] ready to press {' '.join(args.press)}")
+                # Politely first; Windows usually refuses a background process,
+                # so fall back to waiting for a human to click the window. Keys
+                # are never sent to an unfocused Dolphin -- they would land in
+                # whatever *is* focused, which is nobody's idea of a test.
+                if not keys.focus(session.process.pid) and not keys.is_foreground(
+                    session.process.pid
+                ):
+                    say("    >>> CLICK THE DOLPHIN WINDOW NOW (waiting up to 30s)")
+                    if not keys.wait_until_foreground(session.process.pid, 30):
+                        say("    Dolphin never came to the front; sent nothing")
+                        continue
+                for button in args.press:
+                    outcome = keys.press(button)
+                    say(f"    {button}: {'sent' if outcome.sent else outcome.problem}")
 
             line = result.snapshot.render()
             # A heartbeat, because "no output" otherwise means both "nothing

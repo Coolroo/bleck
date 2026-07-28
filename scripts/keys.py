@@ -118,19 +118,80 @@ def windows_for_pid(pid: int) -> list[int]:
 
 
 def focus(pid: int) -> bool:
-    """Bring a process's window to the front.
+    """Bring a process's window to the front, and confirm it got there.
 
     Injected input goes to whatever is focused, so this is not cosmetic: sending
     keys to an unfocused Dolphin types them into whatever *is* focused, which on
-    a developer's machine is usually an editor.
+    a developer's machine is usually an editor or a terminal.
+
+    ⚠️ `SetForegroundWindow` alone does not work from a background script.
+    Windows only grants it to a process that already owns the foreground or
+    handled the most recent input, specifically to stop programs stealing focus
+    — measured here: it returned false every time and no key was ever sent.
+
+    The sanctioned way round it is `AttachThreadInput`: attach to the thread
+    that currently owns the foreground, which makes the two share an input
+    queue and puts this process inside the permitted set for as long as the
+    attachment lasts. Detached again immediately, because leaving two threads
+    sharing an input queue is a good way to deadlock both.
+
+    Returns whether the window is *actually* frontmost afterwards, not whether
+    the call claimed success — the two differ, and only the first one is safe
+    to send keystrokes on.
     """
     if not IS_WINDOWS:
         return False
     user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+
     for hwnd in windows_for_pid(pid):
         user32.ShowWindow(hwnd, 9)  # SW_RESTORE, in case it is minimised
-        if user32.SetForegroundWindow(hwnd):
+
+        current = kernel32.GetCurrentThreadId()
+        foreground = user32.GetForegroundWindow()
+        owner = user32.GetWindowThreadProcessId(foreground, None) if foreground else 0
+
+        attached = bool(owner) and owner != current
+        if attached:
+            attached = bool(user32.AttachThreadInput(current, owner, True))
+        try:
+            user32.BringWindowToTop(hwnd)
+            user32.SetForegroundWindow(hwnd)
+        finally:
+            if attached:
+                user32.AttachThreadInput(current, owner, False)
+
+        if user32.GetForegroundWindow() == hwnd:
             return True
+    return False
+
+
+def is_foreground(pid: int) -> bool:
+    if not IS_WINDOWS:
+        return False
+    return ctypes.windll.user32.GetForegroundWindow() in windows_for_pid(pid)
+
+
+def wait_until_foreground(pid: int, seconds: float = 30.0) -> bool:
+    """Wait for a window of `pid` to become frontmost, however it gets there.
+
+    ⚠️ Deliberately cooperative. Windows blocks a background process from
+    stealing focus, and `AttachThreadInput` did not get around it here —
+    measured: the call is accepted and the foreground never changes.
+
+    It *can* be forced, by setting `SPI_SETFOREGROUNDLOCKTIMEOUT` to zero and
+    turning off the protection system-wide. That is not done, and should not
+    be: quietly disabling an operating system's defence against focus theft is
+    a bigger imposition than synthesising a keystroke, and it would persist
+    beyond this process. One click is cheaper than that trade.
+    """
+    if not IS_WINDOWS:
+        return False
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if is_foreground(pid):
+            return True
+        time.sleep(0.5)
     return False
 
 
