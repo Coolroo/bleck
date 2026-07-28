@@ -7,6 +7,7 @@ and that the build-time guards reject what cannot work.
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -18,6 +19,11 @@ from bleck.script import compile_source, emit
 
 PATCH = emit.ScriptPatch(
     kind="map", target="he1_01", at=0, expect=0x00010072, call="on_map_init"
+)
+
+#: Item script 0's opening instruction: `USER_FUNC f, a, b, c`, argc 4 (D91).
+ITEM_PATCH = emit.ScriptPatch(
+    kind="item", target="0x41", at=0, expect=0x0004005C, call="on_item_use", item_id=0x41
 )
 
 
@@ -39,13 +45,36 @@ class TestGeneratedCode:
         out = generated()
         assert "#define BLECK_MAP_INIT_SCRIPT 0x18" in out
         assert 'static const char bleck_patch_target_0[] = "he1_01";' in out
-        assert "mapDataPtr(patch->target)" in out
+        assert "bleck_map_init_script(patch->target)" in out
 
-    def test_the_replacement_is_a_two_word_user_func(self):
+    def test_the_replacement_carries_the_replaced_argument_count(self):
+        """Same size by construction: the count comes from the matched header."""
         out = generated()
-        assert "#define BLECK_USER_FUNC_1 0x0001005Cu" in out
-        assert "script[patch->at] = BLECK_USER_FUNC_1;" in out
+        assert "#define BLECK_USER_FUNC 0x005Cu" in out
+        assert "#define BLECK_ARGC_MASK 0xFFFF0000u" in out
+        assert (
+            "script[patch->at] = (patch->expect & BLECK_ARGC_MASK) "
+            "| BLECK_USER_FUNC;" in out
+        )
         assert "script[patch->at + 1] = (u32) patch->call;" in out
+
+    def test_at_one_argument_it_is_byte_for_byte_d90(self):
+        """The general form must still emit D90's measured 0x0001005C."""
+        out = generated()
+        constants = dict(
+            re.findall(
+                r"#define (BLECK_USER_FUNC|BLECK_ARGC_MASK) (0x[0-9A-Fa-f]+)u", out
+            )
+        )
+        word = (0x00010072 & int(constants["BLECK_ARGC_MASK"], 16)) | int(
+            constants["BLECK_USER_FUNC"], 16
+        )
+        assert word == 0x0001005C
+
+    def test_only_the_header_and_the_pointer_are_written(self):
+        """Words 2..M are the original's arguments, carried through untouched."""
+        body = generated().split("static void bleck_apply_patches")[1]
+        assert "patch->at + 2" not in body
 
     def test_the_guard_refuses_rather_than_writing_blind(self):
         """A wrong offset must cost a status, not an undiagnosable freeze."""
@@ -54,11 +83,22 @@ class TestGeneratedCode:
         body = out.split("static void bleck_apply_patches")[1]
         refuse = body.index("BLECK_PATCH_REFUSED")
         assert body.index("if (script[patch->at] != patch->expect)") < refuse
-        assert refuse < body.index("script[patch->at] = BLECK_USER_FUNC_1;")
+        assert refuse < body.index("script[patch->at] = (patch->expect")
 
     def test_a_null_script_is_its_own_status(self):
         """Otherwise "not linked yet" and "wrong instruction" look the same."""
         assert "BLECK_PATCH_NO_SCRIPT" in generated()
+
+    def test_the_item_resolver_is_absent_from_a_map_only_module(self):
+        """So a map patch leaves `itemEventDataTable` unreferenced."""
+        out = generated()
+        assert "itemEventDataTable" not in out
+        assert "BLECK_PATCH_ITEM" in out  # the constant still exists
+
+    def test_the_map_resolver_is_absent_from_an_item_only_module(self):
+        out = generated([ITEM_PATCH])
+        assert "mapDataPtr" not in out
+        assert "itemEventDataTable[index].useScript" in out
 
     def test_the_status_table_is_readable_from_a_mod(self):
         out = generated()
@@ -129,36 +169,24 @@ class TestManifest:
     def test_absent_when_unset(self):
         assert "patches" not in mod_manifest.CodeSpec(script="a.evt").to_json()
 
-    def test_a_raw_header_word_is_accepted(self):
-        parsed = manifest({**WHOLE, "expect": "0x00010072"})
-        assert parsed.code.patches[0].expect_word == 0x00010072
-
     def test_an_unknown_selector_names_what_is_supported(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:
             manifest({**WHOLE, "script": "npc:goomba"})
-        assert "map:<name>" in str(caught.value)
+        message = str(caught.value)
+        assert "map:<name>" in message
+        assert "item:<id>" in message
 
     def test_a_bare_name_is_not_a_selector(self):
         with pytest.raises(mod_manifest.ManifestError, match="map:<name>"):
             manifest({**WHOLE, "script": "he1_01"})
 
-    def test_an_unknown_opcode_suggests(self):
+    def test_door_is_refused_with_its_reason(self):
+        """Deferred, not merely unimplemented: there is no lookup by name (D91)."""
         with pytest.raises(mod_manifest.ManifestError) as caught:
-            manifest({**WHOLE, "expect": "DEBUG_PUT_MSSG"})
-        assert "DEBUG_PUT_MSG" in str(caught.value)
-
-    def test_an_opcode_of_the_wrong_size_is_refused(self):
-        """SET takes two arguments, so it is three words; USER_FUNC is two."""
-        with pytest.raises(mod_manifest.ManifestError) as caught:
-            manifest({**WHOLE, "expect": "SET"})
+            manifest({**WHOLE, "script": "door:front"})
         message = str(caught.value)
-        assert "3 words" in message
-        assert "same-size" in message
-        assert "jump table" in message
-
-    def test_a_raw_word_of_the_wrong_size_is_refused(self):
-        with pytest.raises(mod_manifest.ManifestError, match="same-size"):
-            manifest({**WHOLE, "expect": "0x00020032"})
+        assert "evt_door_set_door_descs" in message
+        assert "item:<id>" in message
 
     def test_a_negative_offset_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError, match="cannot be negative"):
@@ -168,11 +196,88 @@ class TestManifest:
         with pytest.raises(mod_manifest.ManifestError, match="unknown field"):
             manifest({**WHOLE, "with": "1"})
 
+    def test_an_item_selector_resolves_to_an_id(self):
+        parsed = manifest(
+            {**WHOLE, "script": "item:0x41", "expect": "USER_FUNC 4"}
+        ).code.patches[0]
+        assert parsed.kind == "item"
+        assert parsed.item_id == 0x41
+        assert parsed.selector == "item:0x41"
+
+    def test_a_decimal_item_id_works_too(self):
+        parsed = manifest(
+            {**WHOLE, "script": "item:65", "expect": "USER_FUNC 4"}
+        ).code.patches[0]
+        assert parsed.item_id == 65
+
+    def test_a_map_patch_has_no_item_id(self):
+        assert manifest(WHOLE).code.patches[0].item_id == -1
+
+    def test_a_non_numeric_item_id_is_refused(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "script": "item:fire-burst"})
+        assert "item:0x41" in str(caught.value)
+
     def test_an_object_instead_of_a_list_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError, match=r"code\.patches"):
             mod_manifest.Manifest.from_json(
                 '{"name": "m", "code": {"script": "s", "patches": {}}}'
             )
+
+
+class TestExpect:
+    """`expect` resolves to a header word, and sizes the replacement with it."""
+
+    def test_a_raw_header_word_is_accepted(self):
+        parsed = manifest({**WHOLE, "expect": "0x00010072"})
+        assert parsed.code.patches[0].expect_word == 0x00010072
+
+    def test_an_unknown_opcode_suggests(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "expect": "DEBUG_PUT_MSSG"})
+        assert "DEBUG_PUT_MSG" in str(caught.value)
+
+    def test_a_multi_word_opcode_is_now_accepted(self):
+        """SET is three words. D90 refused it; the replacement now matches."""
+        assert manifest({**WHOLE, "expect": "SET"}).code.patches[0].expect_word == (
+            0x00020032
+        )
+
+    def test_a_one_word_opcode_is_refused_for_want_of_room(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "expect": "END_IF"})
+        message = str(caught.value)
+        assert "one word" in message
+        assert "no room for the pointer" in message
+        assert "jump table" in message
+
+    def test_a_raw_one_word_header_is_refused(self):
+        with pytest.raises(mod_manifest.ManifestError, match="no room for the pointer"):
+            manifest({**WHOLE, "expect": "0x00000021"})
+
+    def test_a_variadic_opcode_needs_its_count(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "expect": "USER_FUNC"})
+        assert "variadic" in str(caught.value)
+        assert "USER_FUNC 4" in str(caught.value)
+
+    def test_a_variadic_opcode_with_a_count_resolves(self):
+        parsed = manifest({**WHOLE, "expect": "USER_FUNC 4"})
+        assert parsed.code.patches[0].expect_word == 0x0004005C
+        assert parsed.code.patches[0].argument_count == 4
+
+    def test_a_count_that_contradicts_the_table_is_refused(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "expect": "DEBUG_PUT_MSG 3"})
+        assert "always takes 1 argument" in str(caught.value)
+
+    def test_a_count_that_matches_the_table_is_allowed(self):
+        parsed = manifest({**WHOLE, "expect": "DEBUG_PUT_MSG 1"})
+        assert parsed.code.patches[0].expect_word == 0x00010072
+
+    def test_a_non_numeric_count_says_what_it_is_for(self):
+        with pytest.raises(mod_manifest.ManifestError, match="argument count"):
+            manifest({**WHOLE, "expect": "USER_FUNC four"})
 
 
 class TestCallResolution:
@@ -232,7 +337,13 @@ class TestApi:
         assert document.patches[0].script == "map:he1_01"
         assert document.to_manifest().patches == spec.patches
 
+    def test_an_item_patch_round_trips(self):
+        spec = manifest({**WHOLE, "script": "item:0x41", "expect": "USER_FUNC 4"}).code
+        document = v1.Code.of(spec)
+        assert document.patches[0].script == "item:0x41"
+        assert document.to_manifest().patches == spec.patches
+
     def test_the_contract_rejects_what_the_manifest_rejects(self):
-        bad = v1.Patch(script="map:he1_01", at=0, expect="SET", call="hook")
-        with pytest.raises(mod_manifest.ManifestError, match="same-size"):
+        bad = v1.Patch(script="map:he1_01", at=0, expect="END_IF", call="hook")
+        with pytest.raises(mod_manifest.ManifestError, match="no room"):
             bad.to_manifest()

@@ -162,11 +162,14 @@ Every mod has a `mod.json` at its root.
             ]
             ```
 
-            - `script` — which script, as `map:<name>`. That is the map's init
-              script; `map:` is the only kind supported.
+            - `script` — which script, as `<kind>:<name>`. Two kinds:
+              `map:he1_01` for a map's init script, `item:0x41` for an item's
+              use script. `door:` is not supported.
             - `at` — word offset into the script where the instruction begins.
             - `expect` — the opcode you expect to find there. **Required.**
-              A raw header word such as `"0x00010072"` also works.
+              An opcode name (`"DEBUG_PUT_MSG"`), a name with its argument
+              count where the opcode is variadic (`"USER_FUNC 4"`), or a raw
+              header word (`"0x00010072"`).
             - `call` — a function in your own `code.sources`, with the
               signature `s32 f(EvtEntry *entry, bool firstCall)`. Return `2`
               so the script carries on.
@@ -177,10 +180,19 @@ Every mod has a `mod.json` at its root.
                 would be there. A wrong offset then leaves the game untouched
                 and reports a status, instead of corrupting a script.
 
-            The replacement is always `USER_FUNC <call>`, which is two words,
-            so `expect` must name an instruction that takes exactly one
-            argument — `bleck` refuses anything else at build time. Patches
-            cannot insert or delete instructions.
+            The replacement is a `USER_FUNC` declaring the **same argument
+            count** as the instruction it overwrites, so it is always the same
+            size: your function pointer takes the first argument word and the
+            original's remaining arguments are carried through untouched,
+            reaching your code through the `EvtEntry`. Patches cannot insert or
+            delete instructions, and a one-word instruction is refused at build
+            time because the function pointer would not fit.
+
+            !!! warning "One item id can change several items"
+
+                The game's item table holds 33 entries but only 22 distinct
+                scripts, so several ids share one. `bleck_patch_shared[]`
+                reports how many entries point at the script your patch hit.
 
             A patch is applied when the module loads and stays applied for the
             rest of the session, including maps you enter later. Your C can
@@ -188,7 +200,11 @@ Every mod has a `mod.json` at its root.
 
             ```c
             extern unsigned int bleck_patch_status[];
-            /* 1 pending, 2 applied, 3 refused by the guard, 4 no script */
+            /* 1 pending, 2 applied, 3 refused by the guard,
+               4 no script, 5 no such item id in the table */
+
+            extern unsigned int bleck_patch_shared[];
+            /* 0xFFFFFFFF where nothing counted, e.g. every map patch */
             ```
 
         `code.boot` <span class="pf-type">string</span>

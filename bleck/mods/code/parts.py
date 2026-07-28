@@ -281,6 +281,7 @@ def patches_for(mod: Mod, spec, sources: list[Path]) -> list[emit.ScriptPatch]:
             at=patch.at,
             expect=patch.expect_word,
             call=patch.call,
+            item_id=patch.item_id,
         )
         for patch in spec.patches
     ]

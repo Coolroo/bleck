@@ -487,22 +487,33 @@ static void bleck_start_entry(u32 seq)
 """
 
 #: Replacing one instruction of a vanilla `evt` script with a call into this
-#: module. ✅ Measured (D89): the VM read the mutated bytecode, called into
+#: module. ✅ Measured (D89, D90): the VM read the mutated bytecode, called into
 #: `mod.rel` and the map ran normally for 90 s.
 PATCH_BLOCK = """
 /*
     evt script patches.
 
-    A vanilla script's instruction is overwritten in place with `USER_FUNC f`,
-    where `f` is a function in the mod's own sources. The script's *pointer* is
-    left alone -- repointing it is what deadlocked the map loader in D51, and is
+    A vanilla script's instruction is overwritten in place with a `USER_FUNC`
+    calling a function in the mod's own sources. The script's *pointer* is left
+    alone -- repointing it is what deadlocked the map loader in D51, and is
     still ruled out. Mutating the bytecode it already refers to creates no new
     `EvtEntry`, so that condition never arises (D87, D89).
 
-    Same size only. `USER_FUNC f` with no arguments is two words, so the
-    instruction replaced declares exactly one argument. A different size would
-    move every label after it, and `jumptable[]` is cached per `EvtEntry` when
-    the script starts.
+    SAME SIZE, ANY SIZE. An instruction is a header declaring M argument words,
+    then those M words. The replacement is a USER_FUNC header declaring the same
+    M, then the function pointer, then the original's words 2..M carried through
+    untouched. M is read out of the header the guard just matched, so the
+    replacement cannot be a different length -- which is what keeps every label
+    where it was, and `jumptable[]` is cached per `EvtEntry` when a script
+    starts.
+
+    At M = 1 that is `USER_FUNC f` with no arguments and the original's single
+    argument is lost; at M = 4 -- an item script's opening
+    `USER_FUNC g, a, b, c` -- it redirects the call and keeps its arguments.
+
+    The hook reads those carried-through arguments from its EvtEntry:
+    `pCurData` (spm/evtmgr.h +0x14) points at the instruction's argument words,
+    and `curDataLength` (+0x09) says how many there are.
 
     THE GUARD IS THE POINT. The word at the offset must be the header the
     manifest named, or nothing is written. A wrong offset then costs a status
@@ -517,23 +528,29 @@ PATCH_BLOCK = """
     A mod reads the outcome with:
 
         extern unsigned int bleck_patch_status[];
+        extern unsigned int bleck_patch_shared[];
 */
 
-extern void *mapDataPtr(const char *name);
-
-/* spm/map_data.h: MapData.initScript. */
-#define BLECK_MAP_INIT_SCRIPT 0x18
-
-/* EVT_HELPER_CMD(1, 92) -- USER_FUNC, one argument: the pointer itself. */
-#define BLECK_USER_FUNC_1 0x0001005Cu
+/*
+    USER_FUNC is opcode 0x5C, and a header's top half is its argument count --
+    `EVT_HELPER_CMD(n, 92)` in spm-headers/mod/evt_cmd.h. The count is taken
+    from the matched word, so the replacement is the same size by construction.
+*/
+#define BLECK_USER_FUNC 0x005Cu
+#define BLECK_ARGC_MASK 0xFFFF0000u
 
 #define BLECK_PATCH_MAP 0
+#define BLECK_PATCH_ITEM 1
 
 /* bleck_patch_status[] values. */
 #define BLECK_PATCH_PENDING 1
 #define BLECK_PATCH_APPLIED 2
 #define BLECK_PATCH_REFUSED 3
 #define BLECK_PATCH_NO_SCRIPT 4
+#define BLECK_PATCH_NOT_FOUND 5
+
+/* bleck_patch_shared[] where nothing counted. */
+#define BLECK_PATCH_UNCOUNTED 0xFFFFFFFFu
 
 #define BLECK_PATCH_COUNT {count}
 
@@ -541,6 +558,7 @@ typedef struct
 {{
     u32 kind;
     const char *target;
+    s32 itemId;
     u32 at;
     u32 expect;
     const void *call;
@@ -557,24 +575,20 @@ static const BleckPatch bleck_patches[BLECK_PATCH_COUNT] = {{
 u32 bleck_patch_status[BLECK_PATCH_COUNT] = {{
 {pending}}};
 
+/*
+    How many places point at the script each patch hit, or UNCOUNTED where
+    nothing counted it.
+
+    WARNING: item use scripts are shared. 22 distinct scripts across the 33
+    table entries (D91), so a value above 1 means this patch changed other items
+    too. Counted even when the patch is refused, so the number is readable
+    either way.
+*/
+u32 bleck_patch_shared[BLECK_PATCH_COUNT] = {{
+{uncounted}}};
+
 const u32 bleck_patch_count = BLECK_PATCH_COUNT;
-
-static u32 *bleck_patch_script(const BleckPatch *patch)
-{{
-    unsigned char *data;
-
-    if (patch->kind == BLECK_PATCH_MAP)
-    {{
-        /* Populated and stable at _prolog, for maps never loaded as much as
-           for loaded ones -- measured, D88. */
-        data = (unsigned char *) mapDataPtr(patch->target);
-        if (data == 0)
-            return 0;
-        return *(u32 **) (data + BLECK_MAP_INIT_SCRIPT);
-    }}
-    return 0;
-}}
-
+{resolvers}
 static void bleck_apply_patches(void)
 {{
     u32 i;
@@ -584,7 +598,8 @@ static void bleck_apply_patches(void)
     for (i = 0; i < BLECK_PATCH_COUNT; i++)
     {{
         patch = &bleck_patches[i];
-        script = bleck_patch_script(patch);
+        script = 0;
+{resolve}
         if (script == 0)
         {{
             bleck_patch_status[i] = BLECK_PATCH_NO_SCRIPT;
@@ -595,11 +610,106 @@ static void bleck_apply_patches(void)
             bleck_patch_status[i] = BLECK_PATCH_REFUSED;
             continue;
         }}
-        script[patch->at] = BLECK_USER_FUNC_1;
+        /* Header, then the pointer. Words at + 2 .. at + argc are the
+           original's own arguments and are deliberately left alone. */
+        script[patch->at] = (patch->expect & BLECK_ARGC_MASK) | BLECK_USER_FUNC;
         script[patch->at + 1] = (u32) patch->call;
         bleck_patch_status[i] = BLECK_PATCH_APPLIED;
     }}
 }}
+"""
+
+#: Resolving `map:<name>`. Emitted only when a map patch is declared, so an
+#: item-only module leaves `mapDataPtr` unreferenced.
+PATCH_MAP_RESOLVER = """
+extern void *mapDataPtr(const char *name);
+
+/* spm/map_data.h: MapData.initScript. Populated and stable at _prolog, for maps
+   never loaded as much as for loaded ones -- measured, D88. */
+#define BLECK_MAP_INIT_SCRIPT 0x18
+
+static u32 *bleck_map_init_script(const char *name)
+{
+    unsigned char *data = (unsigned char *) mapDataPtr(name);
+
+    if (data == 0)
+        return 0;
+    return *(u32 **) (data + BLECK_MAP_INIT_SCRIPT);
+}
+"""
+
+#: The one line `bleck_apply_patches` needs for map patches.
+PATCH_MAP_RESOLVE = """        if (patch->kind == BLECK_PATCH_MAP)
+            script = bleck_map_init_script(patch->target);
+"""
+
+#: Resolving `item:<id>`. ✅ The table's shape and contents are measured (D91);
+#: 🔶 nothing has yet observed a patched item script being *entered*.
+PATCH_ITEM_RESOLVER = """
+/*
+    Item use scripts.
+
+    `itemEventDataTable` is 33 entries of {itemId, useScript, useMsgName} living
+    in the DOL's own static data, so the pointer is valid at _prolog with no map
+    resident -- an easier target than a map's init script (D91).
+
+    RULED OUT: calling `getItemUseEvt`. item_event_data.h says it returns "a
+    fallback if the item isn't in there", so an id the table does not hold would
+    silently patch a script shared by everything. The table is walked instead,
+    and an absent id gets its own status.
+
+    WARNING: entries share scripts -- 22 distinct across 33. Patching one item
+    id can change several, so the sharers are counted into
+    bleck_patch_shared[].
+*/
+
+#define BLECK_ITEM_COUNT 33
+
+typedef struct
+{
+    s32 itemId;
+    u32 *useScript;
+    const char *useMsgName;
+} BleckItemEventData;
+
+extern BleckItemEventData itemEventDataTable[];
+
+static s32 bleck_item_index(s32 itemId)
+{
+    s32 i;
+
+    for (i = 0; i < BLECK_ITEM_COUNT; i++)
+        if (itemEventDataTable[i].itemId == itemId)
+            return i;
+    return -1;
+}
+
+static u32 bleck_item_sharers(const u32 *script)
+{
+    s32 i;
+    u32 sharers = 0;
+
+    for (i = 0; i < BLECK_ITEM_COUNT; i++)
+        if (itemEventDataTable[i].useScript == script)
+            sharers++;
+    return sharers;
+}
+"""
+
+#: The item arm of `bleck_apply_patches`. "No such id" is its own status: it is
+#: a different mistake from "the guard refused".
+PATCH_ITEM_RESOLVE = """        if (patch->kind == BLECK_PATCH_ITEM)
+        {
+            s32 index = bleck_item_index(patch->itemId);
+
+            if (index < 0)
+            {
+                bleck_patch_status[i] = BLECK_PATCH_NOT_FOUND;
+                continue;
+            }
+            script = itemEventDataTable[index].useScript;
+            bleck_patch_shared[i] = bleck_item_sharers(script);
+        }
 """
 
 #: One patched script's name, held out of the table so it is a real string.

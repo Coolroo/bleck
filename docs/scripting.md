@@ -246,10 +246,20 @@ header `expect` decodes to, and only then writes `USER_FUNC <call>` over it. The
 loader still builds its `EvtEntry` from the same address with the same identity,
 so the deadlock above is never created.
 
-⚠️ **Same size only.** `USER_FUNC f` with no arguments is two words, so `expect`
-must name an instruction that takes exactly one argument. Anything else moves
-labels, and `jumptable[]` is cached per `EvtEntry` when a script starts (D87).
-`bleck` rejects a wrong-sized opcode at build time.
+⚠️ **Same size, any size.** The replacement is a `USER_FUNC` declaring the *same*
+argument count as the instruction it overwrites — the count is taken from the
+header the guard just matched — so it is never a different length, and no label
+moves (`jumptable[]` is cached per `EvtEntry` when a script starts, D87). The
+pointer to `call` takes the first argument word; the original's remaining words
+are carried through untouched, which for a `USER_FUNC` target reads as *redirect
+the call, keep its arguments*. The only size `bleck` refuses at build time is a
+**one-word** instruction, where the function pointer would not fit (D91, D92).
+
+Two selector kinds resolve: `map:<name>` through `mapDataPtr`, and `item:<id>`
+through `itemEventDataTable`. ⚠️ Item scripts are shared — 22 distinct scripts
+across 33 entries — so patching one id can change several; the generated code
+reports how many in `bleck_patch_shared[]`. ⛔ `door:` is deferred: `DoorDesc`
+has no lookup by name (D91).
 
 ⚠️ **The guard is not optional, and it is the point.** A patch that writes into
 an unexpected script is the failure mode worth designing out: without it, a

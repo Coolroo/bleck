@@ -5624,3 +5624,161 @@ different shape from `map:` and `item:`, and unproven.
 
 **`door:` is therefore deferred**, not merely unimplemented. The `<kind>:<name>`
 selector still accommodates it later; what it does not have is a mechanism.
+
+---
+
+## D92 — ✅ argc-matching replacement, and the `item:` selector (2026-07-28)
+
+D91 said the fixed two-word replacement could not reach items and proposed the
+generalisation. Both halves are now built and measured: **five in-game runs, one
+positive and one negative for each selector kind, plus one for the new
+"unknown item id" status.**
+
+### ✅ The replacement now matches the argument count
+
+An instruction is a header declaring M argument words, then those M words. The
+replacement is a `USER_FUNC` header declaring the *same* M, then the pointer to
+`call`, then the original's words 2..M **untouched**. M is masked out of the
+header the guard just matched:
+
+```c
+script[patch->at] = (patch->expect & 0xFFFF0000u) | 0x005Cu;  /* USER_FUNC */
+script[patch->at + 1] = (u32) patch->call;
+```
+
+So the size cannot diverge by construction, no label moves, and D87's cached
+`jumptable[]` constraint is satisfied with no size check at run time at all.
+
+✅ **At M = 1 this is byte-for-byte D90.** `(0x00010072 & 0xFFFF0000) | 0x005C`
+is `0x0001005C` — D90's `BLECK_USER_FUNC_1` constant, unchanged. Checked in the
+generated C by test (the constants are parsed back out of the emitted text), and
+re-measured in-game: Run A read back the same `0001005C` word D89 and D90 both
+recorded.
+
+### ✅ Run A — the map case still works end to end
+
+`uv run python scripts/ingame.py evt-patch --map he1_01 --words 14 --seconds 60`
+
+| Report field | Value |
+|---|---|
+| `initScript` | `80D2FF10` — as D88, D89, D90 |
+| status | `2` applied |
+| word 0, read back | `0001005C` |
+| word 1, read back | `80F66038` — identical to D90's run |
+| **hook entries** | **1** |
+| sentinel | `B1ECB1EC` |
+| `bleck_patch_shared[0]` | `FFFFFFFF` (uncounted, correct for a map) |
+| map, 60 s | `he1_01`, frames `0xE8` → `0x4FE5` |
+
+### ✅ How a hook reaches carried-through arguments — measured, not assumed
+
+The same run captured `EvtEntry` fields from inside the hook, because "the
+arguments arrive somehow" was about to be written down as a claim:
+
+    pCurData (+0x14)        80D2FF18   = &script[2], one past the function pointer
+    pCurData[0]             0005005C   = the *next* instruction's header
+    entry+0x08              01005C00   = flags 01, curDataLength 00, curOpcode 5C
+
+✅ For a `USER_FUNC` of argc 1 the function pointer has been **consumed**:
+`pCurData` sits one word past it and `curDataLength` is `0`, not `1`. Both
+numbers agree on one mechanism — the dispatcher takes the pointer and leaves
+`pCurData` at the first user argument, with `curDataLength` counting only those.
+
+🔶 **That `pCurData[0..M-2]` are the arguments for M > 1 is still untested.**
+M = 1 has no user arguments to observe, so the reading above is the only one
+consistent with both numbers but is not itself a measurement. Settling it needs
+a hook that is actually entered on an M > 1 instruction — see the item 🔶 below.
+
+### ✅ Run B — `item:0x41` resolves, matches and writes
+
+`uv run python scripts/ingame.py item-patch --words 14 --seconds 90`
+
+| Report field | Value |
+|---|---|
+| resolved script | `803FC918` — exactly D91's entry 0 `useScript` |
+| status | `2` applied |
+| **`bleck_patch_shared[0]`** | **`3`** — three of the 33 entries share this script |
+| word 0 | `0004005C` (header, argc 4, unchanged — it was already `USER_FUNC`) |
+| word 1 | `80F66084` — **was `80025250`**, now this mod's hook |
+| words 2, 3, 4 | `00000000`, `FE363C80`, `0000000B` — carried through, unchanged |
+| hook entries | `0` |
+| game, 90 s | attract demo `aa4_01` → `ls4_12`, frames `0x347` → `0x480E` |
+
+Words 2 and 3 match D91's dump exactly, which is what makes "carried through" a
+measurement rather than an intention.
+
+⚠️ **Note what word 0 does *not* prove.** For a `USER_FUNC` target the header is
+unchanged by the patch, so word 0 alone cannot distinguish "applied" from
+"refused". Word 1 is the discriminator, and the negative below is what turns it
+into evidence.
+
+### 🔶 What Run B does NOT show, and why
+
+**The hook has never been entered.** An item use script runs only when the
+player uses that item, which needs menu navigation, and controller input cannot
+be injected (D48). `hook entries` read `0`, and that says *nothing* either way —
+it is the expected reading for a working hook and a broken one alike.
+
+Settling it needs a save state with the item in the inventory plus
+`scripts/keys.py` (Windows, attended). Until that run exists, "a patched item
+script calls into `mod.rel`" stays 🔶. Everything upstream of it — selector,
+guard, write, and the game surviving afterwards — is ✅.
+
+### ✅ Run C — the negatives, one per kind, plus the new status
+
+Identical builds; the **only** difference is `expect`, or the id.
+
+| Run | Change | status | script bytes | game |
+|---|---|---|---|---|
+| C1 map | `expect: SET` (argc 2, wrong) | `3` refused | `00010072 80CB3798` — D89's exact untouched pair | `he1_01`, frames `0x11B` → `0x36CA`, 45 s |
+| C2 item | `expect: USER_FUNC 3` (wrong argc) | `3` refused | word 1 still `80025250` | attract demo, frames → `0x32DD`, 60 s |
+| C3 item | `item:0x7F` (not in the table) | **`5` not found** | untouched, `shared` stays `FFFFFFFF` | attract demo, frames → `0x279F`, 45 s |
+
+C1 is doubly useful: `SET` is three words, which D90 **rejected at build time**.
+That it now compiles and is refused at run time is the generalisation and the
+guard demonstrated in one run. C2 shows the guard compares the whole header,
+argument count included. C3 is the reason status `5` exists at all — an unknown
+id is a different mistake from a mismatched instruction, and a status that had
+only ever been reasoned about is exactly the kind of never-exercised check this
+log keeps getting caught by.
+
+### ⚠️ Item scripts are shared, and the code says so
+
+D91 measured 22 distinct scripts across 33 entries. Rather than only documenting
+it, the generated code counts the entries pointing at whatever it patched into
+`bleck_patch_shared[]` — measured at **3** for item `0x41`. It is counted even
+when the patch is refused, so the number is readable either way, and it is
+`0xFFFFFFFF` (uncounted) for every `map:` patch rather than a fabricated `1`.
+
+⛔ **Still not calling `getItemUseEvt`.** `item_event_data.h` says it returns "a
+fallback if the item isn't in there", so an unknown id would silently patch a
+script shared by everything. The table is walked instead, which is what makes
+status `5` possible.
+
+### Decisions, and the alternatives ruled out
+
+- ⛔ **A separate `argc` manifest field.** `expect` already carries the count in
+  its top half, and a second field could contradict it. A variadic opcode is
+  written `"USER_FUNC 4"` instead — name and count in one string — and a count
+  that contradicts the arity table is refused.
+- ⛔ **Deriving the replacement's argc from the manifest rather than from the
+  matched word.** Taking it from `patch->expect` at run time means the size is
+  right *because* the guard passed; there is no second source of truth to drift.
+- ⛔ **A `door:` selector.** D91's reason stands and is now the error text:
+  `DoorDesc` has no lookup by name. Asking for `door:` gets that reason rather
+  than "unsupported".
+- ⛔ **Emitting both resolvers always.** A map-only module never references
+  `itemEventDataTable` and vice versa, so `elf2rel` binds only what is used.
+
+### ✅ Housekeeping
+
+- A patch-free mod still generates a byte-identical translation unit: SHA-256
+  over all 19 patch-free code mods, unchanged. Only `evt-patch` — the one
+  pre-existing mod that declares a patch — differs, as it must.
+- 699 tests pass (683 before). ruff clean, pylint 10.00/10.
+
+### Unchanged, and still ⛔
+
+Instruction insertion or deletion, pointer swapping (D51), and adding opcodes to
+the dispatcher as `evtpatch` does. ⚠️ A patch is still applied once at load and
+lasts the whole session.

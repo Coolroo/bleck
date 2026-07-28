@@ -82,9 +82,24 @@ class MapHook:
     """Which script in the mod's source runs when the map loads."""
 
 
-#: Selector kinds `code.patches[].script` accepts. Only `map` is implemented;
-#: `item:` and `door:` scripts are reachable by other means and untested (D89).
-PATCH_KINDS = ("map",)
+#: Selector kinds `code.patches[].script` accepts. `map:<name>` resolves through
+#: `mapDataPtr` (D88); `item:<id>` walks `itemEventDataTable` (D91).
+PATCH_KINDS = ("map", "item")
+
+#: Kinds known to exist that have no mechanism yet, and why. Named separately so
+#: asking for one gets the reason rather than "unsupported".
+#: Rendered into every "that selector is not a thing" error.
+_SUPPORTED_SELECTORS = "map:<name>, item:<id>"
+
+DEFERRED_PATCH_KINDS = {
+    "door": (
+        "a door script cannot be looked up by name: `DoorDesc` carries the "
+        "scripts, but the descriptor array is registered per map by "
+        "`evt_door_set_door_descs`, and `evtDoorGetActiveDoorDesc` returns only "
+        "the door currently in use. Reaching one needs interception, not a "
+        "lookup (D91)."
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -99,16 +114,17 @@ class _Selector:
 class ScriptPatch:
     """One instruction of a vanilla `evt` script replaced by a call into the mod.
 
-    Same-size replacement only: `USER_FUNC f` with no arguments is two words, so
-    the instruction it overwrites must be two words too. Anything else moves
-    labels, and `jumptable[]` is cached per `EvtEntry` (D87).
+    Same-size replacement only: the replacement is a `USER_FUNC` carrying the
+    **same argument count** as the instruction it overwrites, so any instruction
+    of two words or more is patchable and no label moves — `jumptable[]` is
+    cached per `EvtEntry` (D87, D91).
     """
 
     kind: str
-    """Which family of script `target` names. Only `map` today."""
+    """Which family of script `target` names: `map` or `item`."""
 
     target: str
-    """The script's name in that family, e.g. the map `he1_01`."""
+    """The script's name in that family: a map like `he1_01`, or an item id."""
 
     at: int
     """Word offset into the script where the replaced instruction begins."""
@@ -125,6 +141,17 @@ class ScriptPatch:
     @property
     def selector(self) -> str:
         return f"{self.kind}:{self.target}"
+
+    @property
+    def argument_count(self) -> int:
+        """Argument words the replaced instruction declares. The replacement
+        carries the same count, so both are `argument_count + 1` words."""
+        return self.expect_word >> 16
+
+    @property
+    def item_id(self) -> int:
+        """The item id `target` names, or -1 when this is not an `item:` patch."""
+        return int(self.target, 0) if self.kind == "item" else -1
 
 
 @dataclass(frozen=True)
@@ -390,16 +417,17 @@ def _parse_combos(raw: object, source: str) -> list[ComboBinding]:
 #: A C identifier, since `call` is emitted into generated C verbatim.
 _C_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-#: The replacement is always `USER_FUNC f` with no extra arguments: the header
-#: `EVT_HELPER_CMD(1, 92)` and the pointer. Two words, so the instruction it
-#: overwrites must declare exactly one argument too.
-PATCH_ARGUMENT_COUNT = 1
+#: The replacement is `USER_FUNC` with the replaced instruction's own argument
+#: count: `EVT_HELPER_CMD(n, 92)`, the pointer to `call`, then the original's
+#: words 2..n unchanged. So `n` must leave room for the pointer.
+MIN_ARGUMENT_COUNT = 1
 
-#: Why a different size is not offered, said once and quoted by the errors.
+#: Why the size is fixed, said once and quoted by the errors.
 _SAME_SIZE_ONLY = (
-    "  Only same-size replacement is supported: a shorter or longer "
-    "instruction moves every label after it, and each running script caches "
-    "its jump table when it starts (D87)."
+    "  bleck replaces an instruction with a USER_FUNC declaring the same "
+    "number of arguments, so the patch is exactly the same size: a shorter or "
+    "longer instruction moves every label after it, and each running script "
+    "caches its jump table when it starts (D87)."
 )
 
 
@@ -468,19 +496,23 @@ def build_patch(script: str, at: int, expect: str, call: str, where: str) -> Scr
 
 
 def _parse_selector(raw: str, where: str) -> _Selector:
-    """Split `map:he1_01` into its kind and its target.
-
-    The prefix is what leaves room for `item:` and `door:` scripts later, which
-    are known to exist but are untested (D89).
-    """
+    """Split `map:he1_01` or `item:0x41` into its kind and its target."""
     kind, _, target = raw.partition(":")
-    supported = ", ".join(f"{name}:<name>" for name in PATCH_KINDS)
+    if kind in DEFERRED_PATCH_KINDS:
+        raise ManifestError(
+            f"{where}: 'script' is {raw!r}, and bleck has no mechanism for "
+            f"{kind!r} scripts.\n  {DEFERRED_PATCH_KINDS[kind]}\n"
+            f"  Supported selectors: {_SUPPORTED_SELECTORS}."
+        )
     if kind not in PATCH_KINDS or not target:
         raise ManifestError(
             f"{where}: 'script' is {raw!r}, which names no script bleck can "
-            f"reach.\n  Supported selectors: {supported}.\n"
-            f"  'map:he1_01' patches that map's init script."
+            f"reach.\n  Supported selectors: {_SUPPORTED_SELECTORS}.\n"
+            f"  'map:he1_01' patches that map's init script; 'item:0x41' "
+            f"patches that item's use script."
         )
+    if kind == "item":
+        return _Selector(kind=kind, target=_parse_item_id(target, where))
     if not _MAP_NAME_RE.match(target):
         raise ManifestError(
             f"{where}: {target!r} is not a map name. They look like 'he1_01' -- "
@@ -490,47 +522,111 @@ def _parse_selector(raw: str, where: str) -> _Selector:
     return _Selector(kind=kind, target=target)
 
 
+def _parse_item_id(raw: str, where: str) -> str:
+    """Check an `item:` target is a whole number, and hand it back as written.
+
+    ⚠️ Membership is not checked here: `itemEventDataTable` lives in the game's
+    data, so "is there such an item" is a run-time question. The generated code
+    answers it with a NOT_FOUND status rather than patching a fallback.
+    """
+    try:
+        value = int(raw, 0)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: {raw!r} is not an item id. Write a number, decimal or "
+            f"hexadecimal -- 'item:65' or 'item:0x41'.\n"
+            f"  `mods/item-probe` reports the ids itemEventDataTable holds."
+        ) from None
+    if value < 0:
+        raise ManifestError(f"{where}: item id {raw!r} cannot be negative")
+    return raw
+
+
 def _parse_expect(raw: str, where: str) -> int:
-    """Resolve `expect` -- an opcode name or a raw header word -- to a word."""
+    """Resolve `expect` -- a header word, or an opcode name and argument count.
+
+    `DEBUG_PUT_MSG` takes its count from the arity table. A variadic opcode has
+    no entry there, so `USER_FUNC 4` says the count outright.
+    """
     text = raw.strip()
     if text.lower().startswith("0x"):
-        try:
-            word = int(text, 16)
-        except ValueError:
-            raise ManifestError(
-                f"{where}: 'expect' is {raw!r}, which is neither an opcode name "
-                f"nor a hexadecimal header word like '0x00010072'"
-            ) from None
-        if not 0 <= word <= 0xFFFFFFFF:
-            raise ManifestError(f"{where}: 'expect' {raw!r} is not a 32-bit word")
-        if (word >> 16) != PATCH_ARGUMENT_COUNT:
-            raise ManifestError(
-                f"{where}: 'expect' is {raw!r}, which declares {word >> 16} "
-                f"argument(s) and so is {(word >> 16) + 1} words, but the "
-                f"USER_FUNC that replaces it is always 2.\n{_SAME_SIZE_ONLY}"
-            )
-        return word
+        return _parse_expect_word(text, raw, where)
 
-    opcode = evt.opcode_named(text)
-    if opcode is None:
-        names = [op.name for op in evt.Opcode]
-        close = difflib.get_close_matches(text.upper(), names, n=1, cutoff=0.6)
-        hint = (
-            f"\n  Did you mean {close[0]!r}?"
-            if close
-            else "\n  Names come from spm/evtmgr_cmd.h, such as 'DEBUG_PUT_MSG'."
-        )
-        raise ManifestError(
-            f"{where}: 'expect' is {raw!r}, which names no evt opcode.{hint}\n"
-            f'  Or give the header word directly, e.g. "0x00010072".'
-        )
+    parts = text.split()
+    opcode = evt.opcode_named(parts[0]) if parts else None
+    if opcode is None or len(parts) > 2:
+        raise ManifestError(_unknown_opcode(text, raw, where))
+    declared = _parse_declared_count(parts[1], raw, where) if len(parts) == 2 else None
 
     argc = evt.argument_count(opcode)
-    if argc is not None and argc != PATCH_ARGUMENT_COUNT:
+    if argc is None:
+        if declared is None:
+            raise ManifestError(
+                f"{where}: 'expect' is {opcode.name}, which is variadic -- it "
+                f"declares its own argument count, so bleck cannot infer the "
+                f"instruction's size.\n"
+                f'  Say how many: "expect": "{opcode.name} 4".\n'
+                f"  Counting: USER_FUNC's first argument is the function "
+                f"pointer, so `USER_FUNC f, a, b, c` declares 4."
+            )
+        argc = declared
+    elif declared is not None and declared != argc:
         raise ManifestError(
-            f"{where}: 'expect' is {opcode.name}, which takes {argc} argument(s) "
-            f"and so is {argc + 1} words, but the USER_FUNC that replaces it is "
-            f"always 2.\n{_SAME_SIZE_ONLY}\n"
-            f"  Pick an instruction that takes exactly one argument."
+            f"{where}: 'expect' is {raw!r}, but {opcode.name} always takes "
+            f"{argc} argument(s), not {declared}.\n"
+            f"  Drop the count, or give the header word directly."
         )
-    return evt.instruction_header(opcode, PATCH_ARGUMENT_COUNT)
+    _check_room_for_pointer(argc, raw, where)
+    return evt.instruction_header(opcode, argc)
+
+
+def _parse_expect_word(text: str, raw: str, where: str) -> int:
+    try:
+        word = int(text, 16)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: 'expect' is {raw!r}, which is neither an opcode name "
+            f"nor a hexadecimal header word like '0x00010072'"
+        ) from None
+    if not 0 <= word <= 0xFFFFFFFF:
+        raise ManifestError(f"{where}: 'expect' {raw!r} is not a 32-bit word")
+    _check_room_for_pointer(word >> 16, raw, where)
+    return word
+
+
+def _parse_declared_count(text: str, raw: str, where: str) -> int:
+    try:
+        return int(text, 0)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: 'expect' is {raw!r}; the part after the opcode name is "
+            f'its argument count, e.g. "USER_FUNC 4"'
+        ) from None
+
+
+def _unknown_opcode(name: str, raw: str, where: str) -> str:
+    names = [op.name for op in evt.Opcode]
+    close = difflib.get_close_matches(name.upper(), names, n=1, cutoff=0.6)
+    hint = (
+        f"\n  Did you mean {close[0]!r}?"
+        if close
+        else "\n  Names come from spm/evtmgr_cmd.h, such as 'DEBUG_PUT_MSG'."
+    )
+    return (
+        f"{where}: 'expect' is {raw!r}, which names no evt opcode.{hint}\n"
+        f'  Write an opcode name, optionally with its argument count ("USER_FUNC '
+        f'4"), or the header word directly ("0x00010072").'
+    )
+
+
+def _check_room_for_pointer(argc: int, raw: str, where: str) -> None:
+    """Refuse a one-word instruction: the pointer to `call` has nowhere to go."""
+    if argc >= MIN_ARGUMENT_COUNT:
+        return
+    raise ManifestError(
+        f"{where}: 'expect' is {raw!r}, which declares no arguments and so is "
+        f"one word. The replacement is a USER_FUNC header plus the pointer to "
+        f"'call', which needs two words at least -- there is no room for the "
+        f"pointer.\n{_SAME_SIZE_ONLY}\n"
+        f"  Pick an instruction of two words or more."
+    )

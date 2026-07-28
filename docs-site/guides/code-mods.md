@@ -131,15 +131,38 @@ int on_map_init(void *entry, int firstCall)
 nothing is written unless the word actually there matches. So a wrong offset
 costs you a status rather than a corrupted script.
 
-The replacement is `USER_FUNC <call>`, two words, so `expect` has to name an
-instruction that takes exactly one argument — patches replace, they never insert
-or delete. `bleck` says so at build time if you pick something else.
+The replacement is a `USER_FUNC` calling your function, and it declares the
+**same number of arguments** as the instruction it overwrites — so it is always
+exactly the same size, and patches never insert or delete. Your function pointer
+takes the first argument slot; the original's remaining arguments stay where
+they are and reach your code through the `EvtEntry`. The one thing `bleck`
+refuses is a single-word instruction, where the pointer would not fit.
+
+### Which scripts you can reach
+
+```json
+{ "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
+{ "script": "item:0x41",  "at": 0, "expect": "USER_FUNC 4",   "call": "on_item_use" }
+```
+
+`map:<name>` is a map's init script; `item:<id>` is an item's use script.
+`door:` is not supported — the game gives no way to look a door's scripts up by
+name.
+
+!!! warning "Items share scripts"
+
+    The game's item table has 33 entries but only 22 distinct scripts, so
+    patching one item id can change other items too. `bleck_patch_shared[]`
+    tells you how many entries point at the script you hit.
 
 Your code can read what happened:
 
 ```c
 extern unsigned int bleck_patch_status[];
-/* 1 pending, 2 applied, 3 refused by the guard, 4 no script */
+/* 1 pending, 2 applied, 3 refused by the guard, 4 no script, 5 no such item id */
+
+extern unsigned int bleck_patch_shared[];
+/* how many things point at that script; 0xFFFFFFFF where nothing counted */
 ```
 
 Full field reference: [`code.patches`](../reference/manifest.md).

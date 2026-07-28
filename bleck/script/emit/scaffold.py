@@ -125,19 +125,27 @@ class ScriptPatch:
     """
 
     kind: str
-    """Which family of script `target` names. `map` is the only one emitted."""
+    """Which family of script `target` names: `map` or `item`."""
 
     target: str
     at: int
     expect: int
-    """The header word the guard compares against before writing anything."""
+    """The header word the guard compares against before writing anything.
+
+    Its top half is the argument count, which the replacement `USER_FUNC`
+    reuses -- so the patch is the same size as what it overwrites.
+    """
 
     call: str
     """A C function in the mod's own sources, with evt's user-func signature."""
 
+    item_id: int = -1
+    """The item `target` names, for `item` patches. -1 otherwise."""
+
     @property
     def comment(self) -> str:
-        return f"/* {self.kind}:{self.target} +{self.at} -> {self.call} */"
+        argc = self.expect >> 16
+        return f"/* {self.kind}:{self.target} +{self.at} -> {self.call}, argc {argc} */"
 
 
 @dataclass(frozen=True)

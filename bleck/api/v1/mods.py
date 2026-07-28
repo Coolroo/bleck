@@ -72,15 +72,22 @@ class Patch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     script: str = Field(
-        description="Which script, as `map:<name>`. Only `map:` is supported."
+        description=(
+            "Which script: `map:<name>` for a map's init script, `item:<id>` "
+            "for an item's use script. ⚠️ Item ids share scripts -- 22 distinct "
+            "scripts across 33 table entries -- so patching one id can change "
+            "several. `bleck_patch_shared[]` reports how many at run time."
+        )
     )
     at: int = Field(ge=0, description="Word offset where the instruction begins.")
     expect: str = Field(
         description=(
-            "The opcode expected there, e.g. 'DEBUG_PUT_MSG', or a raw header "
-            "word such as '0x00010072'. ⚠️ The guard: nothing is written on a "
-            "mismatch. It must take exactly one argument, so the replacement "
-            "USER_FUNC is the same two words."
+            "The opcode expected there: a name ('DEBUG_PUT_MSG'), a name with "
+            "its argument count for a variadic opcode ('USER_FUNC 4'), or a raw "
+            "header word ('0x00010072'). ⚠️ The guard: nothing is written on a "
+            "mismatch. The replacement is a USER_FUNC declaring the same "
+            "argument count, so it is the same size; a one-word instruction is "
+            "refused since the function pointer would not fit."
         )
     )
     call: str = Field(

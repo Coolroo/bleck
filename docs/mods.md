@@ -101,7 +101,7 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | `script` | evt source, compiled to the game's own VM |
 | `sources` | native C (`.c`) and C++ (`.cpp`, `.cc`, `.cxx`), compiled into the same module. Files or directories |
 | `maps` | map name → script name; runs on arrival there (D51) |
-| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C (D89, D90) |
+| `patches` | replaces one instruction of a *vanilla* script with a call into this mod's C. `map:<name>` and `item:<id>` selectors; same-size, any size (D89, D90, D92) |
 | `target` | which version's symbol list resolves game functions. Default `eu0` |
 | `module_id` | REL module id. The game's own REL is 1, so mods start at 2 |
 

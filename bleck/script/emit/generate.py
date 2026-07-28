@@ -177,8 +177,32 @@ def _map_block(hooks: list[BoundHook], namespace: str = _PREFIX) -> str:
     )
 
 
-#: Selector kinds the generated C can resolve, and the constant each becomes.
-_PATCH_KINDS = {"map": "BLECK_PATCH_MAP"}
+@dataclass(frozen=True)
+class _PatchKind:
+    """What one selector kind contributes to the generated patch block."""
+
+    constant: str
+    resolver: str
+    """The lookup helper, emitted once when any patch uses this kind."""
+
+    resolve: str
+    """The lines inside `bleck_apply_patches` that call it."""
+
+
+#: Selector kinds the generated C can resolve. A kind absent here is a bug in
+#: `bleck`: the manifest rejects unsupported selectors long before this.
+_PATCH_KINDS = {
+    "map": _PatchKind(
+        constant="BLECK_PATCH_MAP",
+        resolver=runtime_c.PATCH_MAP_RESOLVER,
+        resolve=runtime_c.PATCH_MAP_RESOLVE,
+    ),
+    "item": _PatchKind(
+        constant="BLECK_PATCH_ITEM",
+        resolver=runtime_c.PATCH_ITEM_RESOLVER,
+        resolve=runtime_c.PATCH_ITEM_RESOLVE,
+    ),
+}
 
 
 def _patch_block(patches: list[ScriptPatch]) -> str:
@@ -201,9 +225,13 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
             seen.add(patch.call)
             decls.append(runtime_c.PATCH_CALL.format(name=patch.call))
 
+    # Only the kinds actually used, so an item-only module never references
+    # `mapDataPtr` and vice versa. Declaration order stays stable.
+    used = [name for name in _PATCH_KINDS if any(p.kind == name for p in patches)]
     rows = "".join(
-        f"    {{{_PATCH_KINDS[patch.kind]}, bleck_patch_target_{index}, "
-        f"{patch.at}u, 0x{patch.expect:08X}u, (const void *) &{patch.call}}},"
+        f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
+        f"{patch.item_id}, {patch.at}u, 0x{patch.expect:08X}u, "
+        f"(const void *) &{patch.call}}},"
         f"  {patch.comment}\n"
         for index, patch in enumerate(patches)
     )
@@ -212,6 +240,9 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
         decls="\n" + "\n".join(decls) + "\n",
         rows=rows,
         pending="".join("    BLECK_PATCH_PENDING,\n" for _ in patches),
+        uncounted="".join("    BLECK_PATCH_UNCOUNTED,\n" for _ in patches),
+        resolvers="".join(_PATCH_KINDS[name].resolver for name in used),
+        resolve="".join(_PATCH_KINDS[name].resolve for name in used),
     )
 
 

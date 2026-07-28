@@ -267,25 +267,73 @@ declarative since D90:
 
 | Field | What |
 |---|---|
-| `script` | which script, as `<kind>:<name>`. Only `map:` today — it resolves to `mapDataPtr("<name>")->initScript` |
+| `script` | which script, as `<kind>:<name>` — see the selectors below |
 | `at` | word offset into the script where the replaced instruction begins |
 | `expect` | the opcode expected there. **Required**, and it is the guard |
 | `call` | a function in this mod's own sources: `s32 f(EvtEntry *entry, bool firstCall)`, returning **2** so the script advances |
 
-`expect` also takes a raw header word — `"expect": "0x00010072"` — for an opcode
-whose name is not in `bleck/script/evt.py`.
+`expect` takes three forms:
+
+- `"DEBUG_PUT_MSG"` — an opcode whose arity `bleck/script/evt.py` knows;
+- `"USER_FUNC 4"` — an opcode name *and* its argument count, for a variadic
+  opcode where the count is not inferable;
+- `"0x00010072"` — the raw header word, for an opcode absent from the table.
+
+### Selectors
+
+| Selector | Resolves to | State |
+|---|---|---|
+| `map:he1_01` | `mapDataPtr("he1_01")->initScript` | ✅ measured end to end (D89, D90, D92) |
+| `item:0x41` | the `itemEventDataTable` entry with that `itemId`, then its `useScript` | ✅ resolves, guard matches, bytes change (D92). 🔶 the hook has never been observed *entering* |
+| `door:` | — | ⛔ deferred: `DoorDesc` has no lookup by name, and would need `evt_door_set_door_descs` intercepted (D91) |
+
+⚠️ **Item ids share scripts.** 22 distinct scripts across the 33 table entries
+(D91), so patching one id can change several — `item:0x41` was measured to hit a
+script three entries point at. The generated code counts them into
+`bleck_patch_shared[]`, so a mod can read the number rather than guess it.
+
+`itemEventDataTable` is walked directly rather than calling `getItemUseEvt`,
+which `item_event_data.h` says returns *"a fallback if the item isn't in
+there"* — an unknown id would otherwise silently patch a shared fallback. An id
+the table does not hold gets its own status, `5`, not a refusal.
+
+### Same size, any size
+
+An instruction is a header declaring **M** argument words, then those M words.
+The replacement is a `USER_FUNC` header declaring the *same* M, then the pointer
+to `call`, then the original's words 2..M carried through untouched. M is read
+out of the header the guard just matched, so the replacement cannot be a
+different length — which is what keeps every label where it was.
+
+    M = 1   DEBUG_PUT_MSG msg          ->  USER_FUNC f
+            00010072 80CB3798              0001005C 80F66038
+            (the original's one argument is lost)
+
+    M = 4   USER_FUNC g, a, b, c       ->  USER_FUNC f, a, b, c
+            0004005C 80025250 ...          0004005C 80F66084 ...
+            (a, b and c are not touched: for a USER_FUNC target this reads as
+             "redirect the call, keep its arguments")
+
+The hook reads those carried-through arguments from its `EvtEntry` the way any
+of the game's own user funcs does: `pCurData` (`spm/evtmgr.h` +0x14) points at
+the first argument and `curDataLength` (+0x09) counts them. ✅ Measured at M = 1
+(D92): `pCurData` sat one word past the function pointer with `curDataLength` 0,
+so the pointer is consumed and what remains is the user arguments. 🔶 That
+`pCurData[0..M-2]` are the arguments for M > 1 is the only reading consistent
+with both numbers, but M = 1 has no arguments to observe, so it is untested.
 
 ### The guard, at build time and at run time
 
-**Build time.** The replacement is `USER_FUNC f` with one argument, which is two
-words, so the expected instruction must be two words as well: argc 1, header
-`(1 << 16) | opcode`. `bleck` therefore refuses an unknown opcode name (with a
-suggestion), an opcode of any other size, and a `call` that no collected source
-defines.
+**Build time.** The only size `bleck` refuses is a **one-word** instruction
+(argc 0): the replacement needs a second word for the function pointer, and
+there is nowhere to put it. It also refuses an unknown opcode name (with a
+suggestion), a variadic opcode with no count, a count that contradicts the arity
+table, and a `call` that no collected source defines.
 
 **Run time.** The generated code reads the word at `at` and writes nothing
 unless it matches. This is what turns a wrong offset from an undiagnosable
 freeze into a clean no-op — D51 spent a long time being exactly that freeze.
+Note the guard compares the *whole* header, argument count included.
 
 ### Reading the outcome
 
@@ -294,9 +342,12 @@ answerable without a debugger:
 
 ```c
 extern unsigned int bleck_patch_status[];   /* one per patch, in manifest order */
+extern unsigned int bleck_patch_shared[];   /* how many things point at that script */
 extern const unsigned int bleck_patch_count;
 
-/* 1 pending, 2 applied, 3 refused by the guard, 4 the script pointer was null */
+/* status: 1 pending, 2 applied, 3 refused by the guard,
+           4 the script pointer was null, 5 no such item id in the table */
+/* shared: 0xFFFFFFFF where nothing counted (every `map:` patch) */
 ```
 
 Patches are applied from `_prolog`, **before** `mod_prolog`, so a mod's own C
@@ -311,11 +362,14 @@ reads a final value.
   loader (D51). This mutates the bytecode the pointer already refers to, which
   creates no new `EvtEntry`.
 - ⛔ **No dispatcher or opcode changes**, as `evtpatch` does.
+- ⛔ **No `door:`**, and no `npcdrv.h` scripts. Deferred with a reason, not
+  merely unimplemented — see the selector table.
 - ⚠️ **A patch lasts the whole session**, including maps entered later. It is
   applied once, at load, and not re-applied per arrival.
-- 🔶 Only `MapData.initScript` is reachable. `getItemUseEvt`, `evt_door.h` and
-  `npcdrv.h` scripts are untested; the `<kind>:` prefix exists so they can be
-  added without reshaping the field.
+- 🔶 **A patched item hook has never been seen running.** An item use script
+  only runs when the player uses that item, which needs menu navigation, and
+  controller input cannot be injected (D48). Settling it needs a save state plus
+  `scripts/keys.py`, which is Windows-only and attended.
 - No cache flush is needed. This is bytecode read as *data*, unlike patching
   PowerPC instructions, which needs `dcbst`/`sync`/`icbi`.
 

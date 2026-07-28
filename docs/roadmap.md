@@ -25,7 +25,7 @@ this file is forward-looking only.
 | **Scripting language** | ✅ **Working end to end** — compiles, links, and runs in-game at 60 iterations/sec, surviving map changes (D37, D43) |
 | **Native code mods** | ✅ **Working** — `code.sources` compiles C into the same module and it runs in-game (D46, D47) |
 | **Event mods** | ✅ **Working** — `code.maps` runs a script on arrival at a named map (D51) |
-| **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size only; `map:` selectors only |
+| **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
 | **Button combinations** | ✅ `bleck.yml` + `code.combos`, played by hand (D77). ⚠️ D48 never ruled this out — it is about *injecting* input (D66) |
@@ -93,13 +93,23 @@ reaches 50 of the VM's 120 opcodes.
 a **door, NPC or item** — but expect D51's trap: patching a pointer the game
 owns deadlocked the map loader, and maps ended up watching `seqWork.p0` instead.
 
-### 🔶 `item:` and `door:` patch selectors
+### 🔶 Seeing a patched item hook actually run
 
-`code.patches` reaches `map:<name>` only (D90). `getItemUseEvt`, `evt_door.h`
-and `npcdrv.h` also hold script pointers, and the selector prefix exists so they
-can be added without reshaping the field. Each needs one `ingame.py` run to
-find a two-word instruction and confirm the guard matches — the generated
-machinery is already there.
+`item:<id>` is built and its patch is measured as applied (D92) — but an item
+use script only runs when the player uses that item, which needs menu
+navigation, and controller input cannot be injected unattended (D48). What would
+settle it: a save state with the item in the inventory plus `scripts/keys.py`
+(Windows, attended). Until then the hook's *execution* stays 🔶.
+
+### ⛔ `door:` and `npcdrv:` patch selectors
+
+Deferred with a reason, not merely unimplemented. `DoorDesc` carries
+`initScript`/`interactScript`/`moveScript` but has **no lookup by name**: the
+descriptor array is registered per map by `evt_door_set_door_descs`, and
+`evtDoorGetActiveDoorDesc` returns only the door in use, which is null at
+`mod_prolog`. A door patch would have to *intercept* that registration — a
+different shape from `map:` and `item:`, and unproven (D91). 🔶 The same likely
+applies to `npcdrv.h`'s `templateinitScript`.
 
 ### 🔶 Remaining button masks
 
