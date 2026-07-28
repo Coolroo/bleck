@@ -247,6 +247,35 @@ def find_bytes(dme, pattern: bytes) -> list[int]:  # pylint: disable=container-r
     return hits
 
 
+def running_dolphins() -> list[int]:
+    """PIDs of Dolphin processes already running.
+
+    ⚠️ An existing instance breaks a run in a way that reads as the mod being
+    broken. `dolphin-memory-engine` attaches to *a* Dolphin process, not to the
+    one this script launched -- and if it picks an idle one, with no game
+    emulating, `hook()` simply fails and every read reports nothing.
+
+    An idle Dolphin left over from an earlier session cost two rounds of
+    debugging exactly this way. `docs/handoff.md` has warned about it for a
+    while; a warning nobody is shown at the moment it matters is not a control.
+    """
+    try:
+        found = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq Dolphin.exe", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return []  # not Windows, or no tasklist -- not worth failing over
+    pids = []
+    for line in found.stdout.splitlines():
+        parts = [field.strip('"') for field in line.split('","')]
+        if len(parts) > 1 and parts[1].isdigit():
+            pids.append(int(parts[1]))
+    return pids
+
+
 def build(mod: str, image: Path, boot_map: str = "") -> None:
     command = ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"]
     if boot_map:
@@ -306,6 +335,12 @@ def main() -> int:
         "--state", help="a Dolphin save state to load instead of booting cold"
     )
     parser.add_argument(
+        "--allow-other-dolphins",
+        action="store_true",
+        help="start even if Dolphin is already running (the reader may attach "
+        "to the wrong one, and report nothing at all)",
+    )
+    parser.add_argument(
         "--log", help="where to write the full transcript (default: work/build/ingame.log)"
     )
     parser.add_argument(
@@ -350,6 +385,17 @@ def main() -> int:
         print(line)
         log.write(line + "\n")
         log.flush()
+
+    existing = running_dolphins()
+    if existing:
+        listed = ", ".join(str(pid) for pid in existing)
+        say(f"*** {len(existing)} Dolphin process(es) already running: {listed}")
+        say("    The memory reader attaches to *a* Dolphin, not necessarily the")
+        say("    one this launches. If one of those is idle, every read fails and")
+        say("    the run reports nothing. Close them:")
+        say(f"      Stop-Process -Id {existing[0]} -Force")
+        if not args.allow_other_dolphins:
+            raise SystemExit("refusing to start; pass --allow-other-dolphins to override")
 
     say(f"booting {image.name} ...   (full log: {log_path})")
     seen = ""
