@@ -50,8 +50,14 @@ def cmd_show(args: argparse.Namespace) -> int:
             f"the container is readable"
         )
 
+    names = setup.load_names()
     for enemy in data.enemies if args.all else data.used:
-        print(f"  {enemy.describe()}")
+        line = enemy.describe()
+        if names and enemy.documented and not enemy.is_empty:
+            species = names.lookup(enemy.template)
+            if species is not None:
+                line += f"  {species.describe()}"
+        print(f"  {line}")
 
     for item in data.items:
         print(f"  item: {item.describe()}")

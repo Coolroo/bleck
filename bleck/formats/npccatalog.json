@@ -1,0 +1,5292 @@
+{
+ "templates": [
+  {
+   "id": 0,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30b3\u30fc\u30c9"
+  },
+  {
+   "id": 1,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 2,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 3,
+   "tribe": 4,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 4,
+   "tribe": 7,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 5,
+   "tribe": 1,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 6,
+   "tribe": 5,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30af\u30ea\u30dc\u30fc\uff08\u843d\u3061\u306a\u3044\uff09"
+  },
+  {
+   "id": 7,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 8,
+   "tribe": 11,
+   "name": "",
+   "japanese": "\u30ce\u30b3\u30ce\u30b3"
+  },
+  {
+   "id": 9,
+   "tribe": 14,
+   "name": "",
+   "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u8d64\uff09"
+  },
+  {
+   "id": 10,
+   "tribe": 465,
+   "name": "",
+   "japanese": "\u30a6\u30e9\u30ce\u30b3"
+  },
+  {
+   "id": 11,
+   "tribe": 18,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30ce\u30b3"
+  },
+  {
+   "id": 12,
+   "tribe": 15,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30ce\u30b3\u30ce\u30b3"
+  },
+  {
+   "id": 13,
+   "tribe": 466,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30ce\u30b3"
+  },
+  {
+   "id": 14,
+   "tribe": 20,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30d1\u30bf"
+  },
+  {
+   "id": 15,
+   "tribe": 22,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30d1\u30bf\uff08\u8d64\uff09"
+  },
+  {
+   "id": 16,
+   "tribe": 468,
+   "name": "",
+   "japanese": "\u30a6\u30e9\u30d1\u30bf"
+  },
+  {
+   "id": 17,
+   "tribe": 23,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30d1\u30bf\u30d1\u30bf"
+  },
+  {
+   "id": 18,
+   "tribe": 469,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30d1\u30bf"
+  },
+  {
+   "id": 19,
+   "tribe": 94,
+   "name": "",
+   "japanese": "\u30ac\u30dc\u30f3\u3078\u3044"
+  },
+  {
+   "id": 20,
+   "tribe": 173,
+   "name": "",
+   "japanese": "\u30d1\u30c8\u30cb\u30e3\u30f3"
+  },
+  {
+   "id": 21,
+   "tribe": 174,
+   "name": "",
+   "japanese": "\u30d5\u30e9\u30a4\u30cb\u30e3\u30f3"
+  },
+  {
+   "id": 22,
+   "tribe": 175,
+   "name": "",
+   "japanese": "\u30c9\u30ab\u30cb\u30e3\u30f3"
+  },
+  {
+   "id": 23,
+   "tribe": 176,
+   "name": "",
+   "japanese": "\u30dc\u30e0\u30cb\u30e3\u30f3(\u30c9\u30e0\u30cb\u30e3\u30f3\u306e\u7206\u5f3e)"
+  },
+  {
+   "id": 24,
+   "tribe": 45,
+   "name": "",
+   "japanese": "\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 25,
+   "tribe": 88,
+   "name": "",
+   "japanese": "\u30d7\u30af\u30d7\u30af"
+  },
+  {
+   "id": 26,
+   "tribe": 91,
+   "name": "",
+   "japanese": "\u3052\u3063\u305d\u30fc"
+  },
+  {
+   "id": 27,
+   "tribe": 265,
+   "name": "",
+   "japanese": "\u30c9\u30c3\u30b9\u30f3"
+  },
+  {
+   "id": 28,
+   "tribe": 121,
+   "name": "",
+   "japanese": "\u30d0\u30d6\u30eb"
+  },
+  {
+   "id": 29,
+   "tribe": 266,
+   "name": "",
+   "japanese": "\u30b4\u30ed\u30f3"
+  },
+  {
+   "id": 30,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 31,
+   "tribe": 77,
+   "name": "",
+   "japanese": "\u30d1\u30c3\u30af\u30f3\u30d5\u30e9\u30ef\u30fc"
+  },
+  {
+   "id": 32,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 33,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 34,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 35,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 36,
+   "tribe": 39,
+   "name": "",
+   "japanese": "\u30ab\u30ed\u30f3"
+  },
+  {
+   "id": 37,
+   "tribe": 283,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc\uff12"
+  },
+  {
+   "id": 38,
+   "tribe": 41,
+   "name": "",
+   "japanese": "\u30db\u30cd\u30ce\u30b3"
+  },
+  {
+   "id": 39,
+   "tribe": 51,
+   "name": "",
+   "japanese": "\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 40,
+   "tribe": 57,
+   "name": "",
+   "japanese": "\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 41,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 42,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 43,
+   "tribe": 313,
+   "name": "",
+   "japanese": "\u30ba\u30f3\u30d0\u30d0"
+  },
+  {
+   "id": 44,
+   "tribe": 314,
+   "name": "",
+   "japanese": "\u30b6\u30f3\u30d0\u30d0"
+  },
+  {
+   "id": 45,
+   "tribe": 92,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u3052\u3063\u305d\u30fc"
+  },
+  {
+   "id": 46,
+   "tribe": 47,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 47,
+   "tribe": 267,
+   "name": "",
+   "japanese": "\u30b3\u30ed\u30f3"
+  },
+  {
+   "id": 48,
+   "tribe": 482,
+   "name": "",
+   "japanese": "\u30d1\u30c3\u30af\u30f3\u30d5\u30e9\u30ef\u30fc\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 49,
+   "tribe": 78,
+   "name": "",
+   "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3"
+  },
+  {
+   "id": 50,
+   "tribe": 483,
+   "name": "",
+   "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 51,
+   "tribe": 80,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3"
+  },
+  {
+   "id": 52,
+   "tribe": 484,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 53,
+   "tribe": 25,
+   "name": "",
+   "japanese": "\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 54,
+   "tribe": 26,
+   "name": "",
+   "japanese": "\u30e1\u30c3\u30c8\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 55,
+   "tribe": 470,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 56,
+   "tribe": 27,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 57,
+   "tribe": 30,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 58,
+   "tribe": 31,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30c8\u30b2\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 59,
+   "tribe": 36,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30be\u30fc"
+  },
+  {
+   "id": 60,
+   "tribe": 472,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30be\u30fc\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 61,
+   "tribe": 34,
+   "name": "",
+   "japanese": "\u30b8\u30e5\u30b2\u30e0"
+  },
+  {
+   "id": 62,
+   "tribe": 35,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30b8\u30e5\u30b2\u30e0"
+  },
+  {
+   "id": 63,
+   "tribe": 17,
+   "name": "",
+   "japanese": "\u30dc\u30b9\u30ce\u30b3\u30ce\u30b3"
+  },
+  {
+   "id": 64,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 65,
+   "tribe": 122,
+   "name": "",
+   "japanese": "\u30ef\u30f3\u30ef\u30f3"
+  },
+  {
+   "id": 66,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 67,
+   "tribe": 89,
+   "name": "",
+   "japanese": "\u30d7\u30af\u30d7\u30af\uff08\u8d64\uff09"
+  },
+  {
+   "id": 68,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 69,
+   "tribe": 90,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30d7\u30af\u30d7\u30af"
+  },
+  {
+   "id": 70,
+   "tribe": 108,
+   "name": "",
+   "japanese": "\u30d0\u30b5\u30d0\u30b5"
+  },
+  {
+   "id": 71,
+   "tribe": 16,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ce\u30b3"
+  },
+  {
+   "id": 72,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 73,
+   "tribe": 13,
+   "name": "",
+   "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u7121\u9650\u5897\u6b96\u7528\uff09"
+  },
+  {
+   "id": 74,
+   "tribe": 495,
+   "name": "",
+   "japanese": "\u30d2\u30f3\u30cb\u30e3\u2212"
+  },
+  {
+   "id": 75,
+   "tribe": 113,
+   "name": "",
+   "japanese": "\u30cf\u30f3\u30cb\u30e3\u30fc"
+  },
+  {
+   "id": 76,
+   "tribe": 496,
+   "name": "",
+   "japanese": "\u30d8\u30f3\u30cb\u30e3\u30fc"
+  },
+  {
+   "id": 77,
+   "tribe": 99,
+   "name": "",
+   "japanese": "\u30b7\u30f3\u30ce\u30b9\u30b1"
+  },
+  {
+   "id": 78,
+   "tribe": 100,
+   "name": "",
+   "japanese": "\u30b7\u30f3\u30a8\u30e2\u30f3"
+  },
+  {
+   "id": 79,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 80,
+   "tribe": 63,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af"
+  },
+  {
+   "id": 81,
+   "tribe": 64,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
+  },
+  {
+   "id": 82,
+   "tribe": 65,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u9752\uff09"
+  },
+  {
+   "id": 83,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 84,
+   "tribe": 9,
+   "name": "",
+   "japanese": "\u30ba\u30c4\u30ad\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 85,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 86,
+   "tribe": 194,
+   "name": "",
+   "japanese": "\u30d0\u30ea\u30d0\u30fc"
+  },
+  {
+   "id": 87,
+   "tribe": 195,
+   "name": "",
+   "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 88,
+   "tribe": 200,
+   "name": "",
+   "japanese": "\u30d6\u30fc\u30c1\u30e7"
+  },
+  {
+   "id": 89,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 90,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 91,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 92,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 93,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 94,
+   "tribe": 268,
+   "name": "",
+   "japanese": "\u30ad\u30e9\u30fc\u30ad\u30ce\u30b3"
+  },
+  {
+   "id": 95,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 96,
+   "tribe": 32,
+   "name": "",
+   "japanese": "\u30b9\u30c8\u30fc\u30f3\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 97,
+   "tribe": 188,
+   "name": "",
+   "japanese": "\u30ab\u30c3\u30af\u30f3"
+  },
+  {
+   "id": 98,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 99,
+   "tribe": 37,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30be\u30fc"
+  },
+  {
+   "id": 100,
+   "tribe": 150,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30af\u30f3"
+  },
+  {
+   "id": 101,
+   "tribe": 471,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 102,
+   "tribe": 310,
+   "name": "",
+   "japanese": "\u30e9\u30b9\u30c8\u30d0\u30c8\u30eb\u30d6\u30ed\u30c3\u30af"
+  },
+  {
+   "id": 103,
+   "tribe": 311,
+   "name": "",
+   "japanese": "\u30c0\u30df\u30fc"
+  },
+  {
+   "id": 104,
+   "tribe": 260,
+   "name": "",
+   "japanese": "\u30d0\u30f3\u30b1\u30f3"
+  },
+  {
+   "id": 105,
+   "tribe": 261,
+   "name": "",
+   "japanese": "\u30c0\u30a4\u30d0\u30f3\u30b1\u30f3"
+  },
+  {
+   "id": 106,
+   "tribe": 82,
+   "name": "",
+   "japanese": "\u30ad\u30e9\u30fc"
+  },
+  {
+   "id": 107,
+   "tribe": 83,
+   "name": "",
+   "japanese": "\u30ad\u30e9\u30fc\u305f\u3044\u307b\u3046"
+  },
+  {
+   "id": 108,
+   "tribe": 502,
+   "name": "",
+   "japanese": "\u30b9\u30fc\u30d1\u30fc\u30ad\u30e9\u30fc"
+  },
+  {
+   "id": 109,
+   "tribe": 503,
+   "name": "",
+   "japanese": "\u30b9\u30fc\u30d1\u30fc\u30ad\u30e9\u30fc\u305f\u3044\u307b\u3046"
+  },
+  {
+   "id": 110,
+   "tribe": 84,
+   "name": "",
+   "japanese": "\u30c6\u30ec\u30b5"
+  },
+  {
+   "id": 111,
+   "tribe": 85,
+   "name": "",
+   "japanese": "\u30c0\u30fc\u30af\u30c6\u30ec\u30b5"
+  },
+  {
+   "id": 112,
+   "tribe": 87,
+   "name": "",
+   "japanese": "\u30a2\u30c8\u30df\u30c3\u30af\u30c6\u30ec\u30b5"
+  },
+  {
+   "id": 113,
+   "tribe": 498,
+   "name": "",
+   "japanese": "\u30c0\u30fc\u30af\u30a2\u30c8\u30df\u30c3\u30af\u30c6\u30ec\u30b5"
+  },
+  {
+   "id": 114,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 115,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 116,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 117,
+   "tribe": 96,
+   "name": "",
+   "japanese": "\u30c1\u30e7\u30ed\u30dc\u30f3"
+  },
+  {
+   "id": 118,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 119,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 120,
+   "tribe": 97,
+   "name": "",
+   "japanese": "\u30d4\u30f3\u30af\u30c1\u30e7\u30ed\u30dc\u30f3"
+  },
+  {
+   "id": 121,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 122,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 123,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 124,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 125,
+   "tribe": 493,
+   "name": "",
+   "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3"
+  },
+  {
+   "id": 126,
+   "tribe": 102,
+   "name": "",
+   "japanese": "\u30b5\u30f3\u30dc"
+  },
+  {
+   "id": 127,
+   "tribe": 104,
+   "name": "",
+   "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc"
+  },
+  {
+   "id": 128,
+   "tribe": 69,
+   "name": "",
+   "japanese": "\u30b3\u30a6\u30e9\u30b7\u30e5\u30fc\u30bf\u30fc"
+  },
+  {
+   "id": 129,
+   "tribe": 70,
+   "name": "",
+   "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9"
+  },
+  {
+   "id": 130,
+   "tribe": 280,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff12\uff09"
+  },
+  {
+   "id": 131,
+   "tribe": 280,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\u7121\u6575\uff09"
+  },
+  {
+   "id": 132,
+   "tribe": 315,
+   "name": "",
+   "japanese": "\u30af\u30c3\u30d1"
+  },
+  {
+   "id": 133,
+   "tribe": 93,
+   "name": "",
+   "japanese": "\u30d5\u30b0\u30e2\u30c9\u30ad"
+  },
+  {
+   "id": 134,
+   "tribe": 318,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30ec\u30b4\u30f3"
+  },
+  {
+   "id": 135,
+   "tribe": 177,
+   "name": "",
+   "japanese": "\u30dc\u30e0\u30cb\u30e3\u30f3\uff08\u30ea\u30e2\u30b3\u30f3\u30bf\u30a4\u30d7\uff09"
+  },
+  {
+   "id": 136,
+   "tribe": 317,
+   "name": "",
+   "japanese": "\u30c0\u30a4\u30aa\u30fc\u3052\u3063\u305d\u30fc"
+  },
+  {
+   "id": 137,
+   "tribe": 295,
+   "name": "",
+   "japanese": "\u30df\u30b9\u30bf\u30fc\uff2c"
+  },
+  {
+   "id": 138,
+   "tribe": 296,
+   "name": "",
+   "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc"
+  },
+  {
+   "id": 139,
+   "tribe": 297,
+   "name": "",
+   "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30df\u30b5\u30a4\u30eb"
+  },
+  {
+   "id": 140,
+   "tribe": 301,
+   "name": "",
+   "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u3072\u3052"
+  },
+  {
+   "id": 141,
+   "tribe": 168,
+   "name": "",
+   "japanese": "\u30b8\u30e3\u30de\u30c9\u30f3"
+  },
+  {
+   "id": 142,
+   "tribe": 286,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff13\uff09"
+  },
+  {
+   "id": 143,
+   "tribe": 288,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5"
+  },
+  {
+   "id": 144,
+   "tribe": 134,
+   "name": "",
+   "japanese": "\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 145,
+   "tribe": 135,
+   "name": "",
+   "japanese": "\u30b3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 146,
+   "tribe": 281,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc"
+  },
+  {
+   "id": 147,
+   "tribe": 156,
+   "name": "",
+   "japanese": "\u30d0\u30af\u30fc"
+  },
+  {
+   "id": 148,
+   "tribe": 126,
+   "name": "",
+   "japanese": "\u30c6\u30c8\u30e9\u30dd\u30f3"
+  },
+  {
+   "id": 149,
+   "tribe": 127,
+   "name": "",
+   "japanese": "\u30aa\u30af\u30bf\u30ed\u306e\u77f3"
+  },
+  {
+   "id": 150,
+   "tribe": 319,
+   "name": "",
+   "japanese": "\u30ad\u30f3\u30b0\u30fb\u30cf\u30ca\u30fc\u30f3"
+  },
+  {
+   "id": 151,
+   "tribe": 245,
+   "name": "",
+   "japanese": "\u30ce\u30ed\u30a4\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 152,
+   "tribe": 254,
+   "name": "",
+   "japanese": "\u30c7\u30b9\u30c7\u30b9"
+  },
+  {
+   "id": 153,
+   "tribe": 142,
+   "name": "",
+   "japanese": "\u30aa\u30f3\u30d1\u30fc"
+  },
+  {
+   "id": 154,
+   "tribe": 191,
+   "name": "",
+   "japanese": "\u30d8\u30ea\u30f3"
+  },
+  {
+   "id": 155,
+   "tribe": 320,
+   "name": "",
+   "japanese": "\u8594\u8587\u30d4\u30f3\u30af"
+  },
+  {
+   "id": 156,
+   "tribe": 321,
+   "name": "",
+   "japanese": "\u8594\u8587\u30aa\u30ec\u30f3\u30b8"
+  },
+  {
+   "id": 157,
+   "tribe": 322,
+   "name": "",
+   "japanese": "\u8594\u8587\u30d6\u30eb\u30fc"
+  },
+  {
+   "id": 158,
+   "tribe": 143,
+   "name": "",
+   "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 159,
+   "tribe": 109,
+   "name": "",
+   "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3"
+  },
+  {
+   "id": 160,
+   "tribe": 163,
+   "name": "",
+   "japanese": "\u30bf\u30a4\u30fc\u30eb\uff27"
+  },
+  {
+   "id": 161,
+   "tribe": 164,
+   "name": "",
+   "japanese": "\u30bf\u30a4\u30fc\u30eb\uff22"
+  },
+  {
+   "id": 162,
+   "tribe": 165,
+   "name": "",
+   "japanese": "\u30bf\u30a4\u30fc\u30eb\uff32"
+  },
+  {
+   "id": 163,
+   "tribe": 166,
+   "name": "",
+   "japanese": "\u30bf\u30a4\u30fc\u30eb\uff39"
+  },
+  {
+   "id": 164,
+   "tribe": 159,
+   "name": "",
+   "japanese": "\u30dd\u30a4\u30dd\u30a4"
+  },
+  {
+   "id": 165,
+   "tribe": 48,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc"
+  },
+  {
+   "id": 166,
+   "tribe": 54,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3"
+  },
+  {
+   "id": 167,
+   "tribe": 60,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2"
+  },
+  {
+   "id": 168,
+   "tribe": 172,
+   "name": "",
+   "japanese": "\u30c7\u30ab\u30cb\u30e3\u30f3"
+  },
+  {
+   "id": 169,
+   "tribe": 182,
+   "name": "",
+   "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3"
+  },
+  {
+   "id": 170,
+   "tribe": 178,
+   "name": "",
+   "japanese": "\u30b8\u30a7\u30eb\u30eb"
+  },
+  {
+   "id": 171,
+   "tribe": 179,
+   "name": "",
+   "japanese": "\u30d5\u30a9\u30c8\u30f3"
+  },
+  {
+   "id": 172,
+   "tribe": 181,
+   "name": "",
+   "japanese": "\u30ef\u30fc\u30d7\u30ef\u30fc\u30d7"
+  },
+  {
+   "id": 173,
+   "tribe": 257,
+   "name": "",
+   "japanese": "\u30de\u30f3\u30e2\u30fc"
+  },
+  {
+   "id": 174,
+   "tribe": 272,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff15\u30fb\u305d\u306e\uff12\uff09"
+  },
+  {
+   "id": 175,
+   "tribe": 203,
+   "name": "",
+   "japanese": "\u30ed\u30c3\u30af\u4eba\uff08\u25bd\u982d\uff09"
+  },
+  {
+   "id": 176,
+   "tribe": 204,
+   "name": "",
+   "japanese": "\u30ed\u30c3\u30af\u4eba\uff08\u25cb\u982d\uff09"
+  },
+  {
+   "id": 177,
+   "tribe": 515,
+   "name": "",
+   "japanese": "\u30d6\u30d6\u30c9\u30fc"
+  },
+  {
+   "id": 178,
+   "tribe": 211,
+   "name": "",
+   "japanese": "\u30ca\u30f3\u30b8\u30e3"
+  },
+  {
+   "id": 179,
+   "tribe": 323,
+   "name": "",
+   "japanese": "\u8594\u8587\u30ab\u30c3\u30bf\u30fc"
+  },
+  {
+   "id": 180,
+   "tribe": 180,
+   "name": "",
+   "japanese": "\u30d5\u30a9\u30c8\u30f3\u306e\u7389"
+  },
+  {
+   "id": 181,
+   "tribe": 270,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff11\uff09"
+  },
+  {
+   "id": 182,
+   "tribe": 271,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff15\uff09"
+  },
+  {
+   "id": 183,
+   "tribe": 273,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff18\uff09"
+  },
+  {
+   "id": 184,
+   "tribe": 274,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u5c0f)"
+  },
+  {
+   "id": 185,
+   "tribe": 275,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u4e2d)"
+  },
+  {
+   "id": 186,
+   "tribe": 276,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u5927)"
+  },
+  {
+   "id": 187,
+   "tribe": 282,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff16\uff09"
+  },
+  {
+   "id": 188,
+   "tribe": 300,
+   "name": "",
+   "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc\uff3a"
+  },
+  {
+   "id": 189,
+   "tribe": 327,
+   "name": "",
+   "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9"
+  },
+  {
+   "id": 190,
+   "tribe": 328,
+   "name": "",
+   "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u306e\u5f3e"
+  },
+  {
+   "id": 191,
+   "tribe": 329,
+   "name": "",
+   "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u306e\u30c4\u30e9\u30e9"
+  },
+  {
+   "id": 192,
+   "tribe": 212,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\u306e\u624b\u88cf\u5263"
+  },
+  {
+   "id": 193,
+   "tribe": 213,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\u306e\u7206\u5f3e"
+  },
+  {
+   "id": 194,
+   "tribe": 223,
+   "name": "",
+   "japanese": "\u30ac\u30a4\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 195,
+   "tribe": 226,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 196,
+   "tribe": 305,
+   "name": "",
+   "japanese": "\u30ce\u30ef\u30fc\u30eb\u4f2f\u7235"
+  },
+  {
+   "id": 197,
+   "tribe": 306,
+   "name": "",
+   "japanese": "\u6b21\u5143\u4f2f\u7235\u30df\u30cb\u6697\u9ed2\u7a7a\u9593"
+  },
+  {
+   "id": 198,
+   "tribe": 307,
+   "name": "",
+   "japanese": "\u6b21\u5143\u4f2f\u7235\u6697\u9ed2\u7a7a\u9593"
+  },
+  {
+   "id": 199,
+   "tribe": 46,
+   "name": "",
+   "japanese": "\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc"
+  },
+  {
+   "id": 200,
+   "tribe": 304,
+   "name": "",
+   "japanese": "\u30ca\u30b9\u30bf\u30b7\u30a2"
+  },
+  {
+   "id": 201,
+   "tribe": 308,
+   "name": "",
+   "japanese": "\u6b21\u5143\u4f2f\u7235\u30c0\u30df\u30fc"
+  },
+  {
+   "id": 202,
+   "tribe": 52,
+   "name": "",
+   "japanese": "\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3"
+  },
+  {
+   "id": 203,
+   "tribe": 58,
+   "name": "",
+   "japanese": "\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2"
+  },
+  {
+   "id": 204,
+   "tribe": 103,
+   "name": "",
+   "japanese": "\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53"
+  },
+  {
+   "id": 205,
+   "tribe": 105,
+   "name": "",
+   "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53"
+  },
+  {
+   "id": 206,
+   "tribe": 246,
+   "name": "",
+   "japanese": "\u30e2\u30c9\u30eb\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 207,
+   "tribe": 247,
+   "name": "",
+   "japanese": "\u30ef\u30b6\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 208,
+   "tribe": 248,
+   "name": "",
+   "japanese": "\u30aa\u30e2\u30a4\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 209,
+   "tribe": 249,
+   "name": "",
+   "japanese": "\u30b5\u30ab\u30b5\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 210,
+   "tribe": 184,
+   "name": "",
+   "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u30d7\u30e9\u30b9"
+  },
+  {
+   "id": 211,
+   "tribe": 183,
+   "name": "",
+   "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u8d64\uff09"
+  },
+  {
+   "id": 212,
+   "tribe": 185,
+   "name": "",
+   "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u7dd1\uff09"
+  },
+  {
+   "id": 213,
+   "tribe": 324,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3"
+  },
+  {
+   "id": 214,
+   "tribe": 325,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\uff08\u9752\uff09"
+  },
+  {
+   "id": 215,
+   "tribe": 326,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\uff08\u9ec4\uff09"
+  },
+  {
+   "id": 216,
+   "tribe": 123,
+   "name": "",
+   "japanese": "\u30ec\u30c3\u30c9\u30ef\u30f3\u30ef\u30f3"
+  },
+  {
+   "id": 217,
+   "tribe": 115,
+   "name": "",
+   "japanese": "\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
+  },
+  {
+   "id": 218,
+   "tribe": 116,
+   "name": "",
+   "japanese": "\u30d1\u30f3\u30b8\u30fc\u3055\u3093\u306e\u97f3\u7b26"
+  },
+  {
+   "id": 219,
+   "tribe": 79,
+   "name": "",
+   "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3\u306e\u606f"
+  },
+  {
+   "id": 220,
+   "tribe": 81,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3\u306e\u606f"
+  },
+  {
+   "id": 221,
+   "tribe": 232,
+   "name": "",
+   "japanese": "\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u904b\u3073\u30bf\u30a4\u30d7\uff09"
+  },
+  {
+   "id": 222,
+   "tribe": 229,
+   "name": "",
+   "japanese": "\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u982d\u30bf\u30a4\u30d7\uff09"
+  },
+  {
+   "id": 223,
+   "tribe": 234,
+   "name": "",
+   "japanese": "\u30ab\u30c3\u30c1\u30b3\u30c3\u30c1"
+  },
+  {
+   "id": 224,
+   "tribe": 235,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30ab\u30c3\u30c1\u30b3\u30c3\u30c1"
+  },
+  {
+   "id": 225,
+   "tribe": 289,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff15\uff09"
+  },
+  {
+   "id": 226,
+   "tribe": 292,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff18\uff09"
+  },
+  {
+   "id": 227,
+   "tribe": 231,
+   "name": "",
+   "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u624b\u4e0b\u9854"
+  },
+  {
+   "id": 228,
+   "tribe": 236,
+   "name": "",
+   "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u624b\u4e0b\u30bf\u30b3\u306e\u606f"
+  },
+  {
+   "id": 229,
+   "tribe": 239,
+   "name": "",
+   "japanese": "\u30a2\u30ab\u30de\u30b8\u30fc\u30eb"
+  },
+  {
+   "id": 230,
+   "tribe": 237,
+   "name": "",
+   "japanese": "\u30a2\u30aa\u30de\u30b8\u30fc\u30eb"
+  },
+  {
+   "id": 231,
+   "tribe": 241,
+   "name": "",
+   "japanese": "\u30ad\u30de\u30b8\u30fc\u30eb"
+  },
+  {
+   "id": 232,
+   "tribe": 240,
+   "name": "",
+   "japanese": "\u8d64\u9b54\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 233,
+   "tribe": 238,
+   "name": "",
+   "japanese": "\u9752\u9b54\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 234,
+   "tribe": 242,
+   "name": "",
+   "japanese": "\u9ec4\u9b54\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 235,
+   "tribe": 3,
+   "name": "",
+   "japanese": "\u30e4\u30df\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 236,
+   "tribe": 42,
+   "name": "",
+   "japanese": "\u30db\u30cd\u30ce\u30b3\u30fb\u9aa8"
+  },
+  {
+   "id": 237,
+   "tribe": 12,
+   "name": "",
+   "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u30b0\u30e9\u30b5\u30f3\u306a\u3057\uff09"
+  },
+  {
+   "id": 238,
+   "tribe": 21,
+   "name": "",
+   "japanese": "\u30d1\u30bf\u30d1\u30bf\uff08\u30b0\u30e9\u30b5\u30f3\u306a\u3057\uff09"
+  },
+  {
+   "id": 239,
+   "tribe": 205,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u30fc\u30f3"
+  },
+  {
+   "id": 240,
+   "tribe": 206,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u65cf\u306e\u9996"
+  },
+  {
+   "id": 241,
+   "tribe": 334,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30c6\u30e0\u30b3\u30a6\u30e9\u30fb\u5927"
+  },
+  {
+   "id": 242,
+   "tribe": 335,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30c6\u30e0\u30b3\u30a6\u30e9\u30fb\u5c0f"
+  },
+  {
+   "id": 243,
+   "tribe": 207,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u30fc\u30f3\uff08\u7d2b\uff09"
+  },
+  {
+   "id": 244,
+   "tribe": 208,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u65cf\u306e\u9996\uff08\u7d2b\uff09"
+  },
+  {
+   "id": 245,
+   "tribe": 209,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u30fc\u30f3\uff08\u8d64\uff09"
+  },
+  {
+   "id": 246,
+   "tribe": 210,
+   "name": "",
+   "japanese": "\u30cf\u30ca\u65cf\u306e\u9996\uff08\u8d64\uff09"
+  },
+  {
+   "id": 247,
+   "tribe": 262,
+   "name": "",
+   "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff11\uff09"
+  },
+  {
+   "id": 248,
+   "tribe": 263,
+   "name": "",
+   "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff12\uff09"
+  },
+  {
+   "id": 249,
+   "tribe": 264,
+   "name": "",
+   "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff13\uff09"
+  },
+  {
+   "id": 250,
+   "tribe": 125,
+   "name": "",
+   "japanese": "\u30c6\u30c8\u30e9"
+  },
+  {
+   "id": 251,
+   "tribe": 128,
+   "name": "",
+   "japanese": "\u30c6\u30c8\u30e9\u30c9\u30f3"
+  },
+  {
+   "id": 252,
+   "tribe": 129,
+   "name": "",
+   "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u7dd1\uff09\u306e\u77f3"
+  },
+  {
+   "id": 253,
+   "tribe": 28,
+   "name": "",
+   "japanese": "\u30c8\u30b2\u30e1\u30c3\u30c8\uff08\u9006\u3055\uff09"
+  },
+  {
+   "id": 254,
+   "tribe": 11,
+   "name": "",
+   "japanese": "\u5149\u30ce\u30b3\u30ce\u30b3"
+  },
+  {
+   "id": 255,
+   "tribe": 309,
+   "name": "",
+   "japanese": "\u30b9\u30fc\u30d1\u30fc\u30c7\u30a3\u30e1\u30fc\u30f3"
+  },
+  {
+   "id": 256,
+   "tribe": 312,
+   "name": "",
+   "japanese": "\u30c9\u30c3\u30c8\u30eb\u30a4\u30fc\u30b8"
+  },
+  {
+   "id": 257,
+   "tribe": 336,
+   "name": "",
+   "japanese": "kinkai"
+  },
+  {
+   "id": 258,
+   "tribe": 337,
+   "name": "",
+   "japanese": "kinkai3"
+  },
+  {
+   "id": 259,
+   "tribe": 214,
+   "name": "",
+   "japanese": "\u30c1\u30e5\u30fc\u30ca\u30f3\u30b8\u30e3"
+  },
+  {
+   "id": 260,
+   "tribe": 215,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e2d\u5fcd\uff09\u306e\u624b\u88cf\u5263"
+  },
+  {
+   "id": 261,
+   "tribe": 216,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e2d\u5fcd\uff09\u306e\u7206\u5f3e"
+  },
+  {
+   "id": 262,
+   "tribe": 217,
+   "name": "",
+   "japanese": "\u30b8\u30e7\u30fc\u30ca\u30f3\u30b8\u30e3"
+  },
+  {
+   "id": 263,
+   "tribe": 218,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u624b\u88cf\u5263"
+  },
+  {
+   "id": 264,
+   "tribe": 219,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u7206\u5f3e"
+  },
+  {
+   "id": 265,
+   "tribe": 255,
+   "name": "",
+   "japanese": "\u30c7\u30b9\u30c7\u30b9\u30c7\u30b9"
+  },
+  {
+   "id": 266,
+   "tribe": 160,
+   "name": "",
+   "japanese": "\u30dd\u30ed\u30dd\u30ed"
+  },
+  {
+   "id": 267,
+   "tribe": 161,
+   "name": "",
+   "japanese": "\u30dc\u30ed\u30dc\u30ed"
+  },
+  {
+   "id": 268,
+   "tribe": 71,
+   "name": "",
+   "japanese": "\u30c4\u30a4\u30f3\u30b7\u30e5\u30fc\u30bf\u30fc"
+  },
+  {
+   "id": 269,
+   "tribe": 72,
+   "name": "",
+   "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\u5144\u5f1f"
+  },
+  {
+   "id": 270,
+   "tribe": 73,
+   "name": "",
+   "japanese": "\u30b9\u30fc\u30d1\u30fc\u30b7\u30e5\u30fc\u30bf\u30fc"
+  },
+  {
+   "id": 271,
+   "tribe": 74,
+   "name": "",
+   "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\uff08\u5f37\uff09"
+  },
+  {
+   "id": 272,
+   "tribe": 269,
+   "name": "",
+   "japanese": "\u30db\u30e9\u30fc\u30ad\u30ce\u30b3"
+  },
+  {
+   "id": 273,
+   "tribe": 189,
+   "name": "",
+   "japanese": "\u30ac\u30c3\u30af\u30f3"
+  },
+  {
+   "id": 274,
+   "tribe": 144,
+   "name": "",
+   "japanese": "\u30a6\u30a7\u30fc\u30d3\u30fc"
+  },
+  {
+   "id": 275,
+   "tribe": 145,
+   "name": "",
+   "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u4e2d\uff09"
+  },
+  {
+   "id": 276,
+   "tribe": 504,
+   "name": "",
+   "japanese": "\u30d6\u30fc\u30df\u30fc"
+  },
+  {
+   "id": 277,
+   "tribe": 505,
+   "name": "",
+   "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 278,
+   "tribe": 192,
+   "name": "",
+   "japanese": "\u30b3\u30d7\u30bf"
+  },
+  {
+   "id": 279,
+   "tribe": 506,
+   "name": "",
+   "japanese": "\u30e1\u30ac\u30de\u30f3\u30e2\u30fc"
+  },
+  {
+   "id": 280,
+   "tribe": 152,
+   "name": "",
+   "japanese": "\u304d\u3087\u3046\u3075\u306e\u3081\u3060\u307e"
+  },
+  {
+   "id": 281,
+   "tribe": 151,
+   "name": "",
+   "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 282,
+   "tribe": 153,
+   "name": "",
+   "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0\uff08\u5f37\uff09"
+  },
+  {
+   "id": 283,
+   "tribe": 130,
+   "name": "",
+   "japanese": "\u30c6\u30c8\u30e9\u30b4\u30f3"
+  },
+  {
+   "id": 284,
+   "tribe": 131,
+   "name": "",
+   "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u767d\uff09\u306e\u77f3"
+  },
+  {
+   "id": 285,
+   "tribe": 333,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30af\u30c3\u30d1"
+  },
+  {
+   "id": 286,
+   "tribe": 331,
+   "name": "",
+   "japanese": "\u304b\u3052\u30eb\u30a4\u30fc\u30b8"
+  },
+  {
+   "id": 287,
+   "tribe": 330,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30de\u30ea\u30aa"
+  },
+  {
+   "id": 288,
+   "tribe": 332,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d4\u30fc\u30c1"
+  },
+  {
+   "id": 289,
+   "tribe": 136,
+   "name": "",
+   "japanese": "\u30eb\u30ea\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 290,
+   "tribe": 137,
+   "name": "",
+   "japanese": "\u30eb\u30ea\u30b3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 291,
+   "tribe": 138,
+   "name": "",
+   "japanese": "\u30cf\u30af\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 292,
+   "tribe": 139,
+   "name": "",
+   "japanese": "\u30cf\u30af\u30b3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 293,
+   "tribe": 258,
+   "name": "",
+   "japanese": "\u30e1\u30ac\u30de\u30f3\u30e2\u30fc"
+  },
+  {
+   "id": 294,
+   "tribe": 146,
+   "name": "",
+   "japanese": "\u30d1\u30eb\u30b5\u30fc"
+  },
+  {
+   "id": 295,
+   "tribe": 147,
+   "name": "",
+   "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u767d\uff09"
+  },
+  {
+   "id": 296,
+   "tribe": 169,
+   "name": "",
+   "japanese": "\u30b8\u30e3\u30de\u30b4\u30f3"
+  },
+  {
+   "id": 297,
+   "tribe": 170,
+   "name": "",
+   "japanese": "\u30b8\u30e3\u30de\u30ae\u30e9\u30b9"
+  },
+  {
+   "id": 298,
+   "tribe": 196,
+   "name": "",
+   "japanese": "\u30c1\u30e7\u30d0\u30ea\u30d0\u30fc"
+  },
+  {
+   "id": 299,
+   "tribe": 197,
+   "name": "",
+   "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0\uff08\u5f37\uff09"
+  },
+  {
+   "id": 300,
+   "tribe": 201,
+   "name": "",
+   "japanese": "\u30c8\u30f3\u30c1\u30e7"
+  },
+  {
+   "id": 301,
+   "tribe": 157,
+   "name": "",
+   "japanese": "\u30b4\u30af\u30fc"
+  },
+  {
+   "id": 302,
+   "tribe": 117,
+   "name": "",
+   "japanese": "\u304d\u3089\u3081\u304f\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
+  },
+  {
+   "id": 303,
+   "tribe": 118,
+   "name": "",
+   "japanese": "\u304d\u3089\u3081\u304f\u30d1\u30f3\u30b8\u30fc\u3055\u3093\u306e\u97f3\u7b26"
+  },
+  {
+   "id": 304,
+   "tribe": 3,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30e4\u30df\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 305,
+   "tribe": 499,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b"
+  },
+  {
+   "id": 306,
+   "tribe": 500,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b\uff08\u9752\uff09"
+  },
+  {
+   "id": 307,
+   "tribe": 501,
+   "name": "",
+   "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b\uff08\u9ec4\uff09"
+  },
+  {
+   "id": 308,
+   "tribe": 438,
+   "name": "",
+   "japanese": "\u30b5\u30e0\u30e9\u30a4\u30fb\u5263\u306e\u885d\u6483\u6ce2"
+  },
+  {
+   "id": 309,
+   "tribe": 439,
+   "name": "",
+   "japanese": "\u30b5\u30e0\u30e9\u30a4\u30fb\u5486\u54ee\u306e\u885d\u6483\u6ce2"
+  },
+  {
+   "id": 310,
+   "tribe": 53,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 311,
+   "tribe": 59,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 312,
+   "tribe": 224,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30ac\u30a4\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 313,
+   "tribe": 227,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 314,
+   "tribe": 233,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u904b\u3073\u30bf\u30a4\u30d7\uff09"
+  },
+  {
+   "id": 315,
+   "tribe": 230,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u982d\u30bf\u30a4\u30d7\uff09"
+  },
+  {
+   "id": 316,
+   "tribe": 473,
+   "name": "",
+   "japanese": "\u30b0\u30ea\u30fc\u30f3\u30ab\u30e1\u30c3\u30af"
+  },
+  {
+   "id": 317,
+   "tribe": 474,
+   "name": "",
+   "japanese": "\u30b0\u30ea\u30fc\u30f3\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
+  },
+  {
+   "id": 318,
+   "tribe": 475,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u7dd1\uff09"
+  },
+  {
+   "id": 319,
+   "tribe": 476,
+   "name": "",
+   "japanese": "\u30db\u30ef\u30a4\u30c8\u30ab\u30e1\u30c3\u30af"
+  },
+  {
+   "id": 320,
+   "tribe": 477,
+   "name": "",
+   "japanese": "\u30db\u30ef\u30a4\u30c8\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
+  },
+  {
+   "id": 321,
+   "tribe": 478,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u767d\uff09"
+  },
+  {
+   "id": 322,
+   "tribe": 479,
+   "name": "",
+   "japanese": "\u30ec\u30c3\u30c9\u30ab\u30e1\u30c3\u30af"
+  },
+  {
+   "id": 323,
+   "tribe": 480,
+   "name": "",
+   "japanese": "\u30ec\u30c3\u30c9\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
+  },
+  {
+   "id": 324,
+   "tribe": 481,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u8d64\uff09"
+  },
+  {
+   "id": 325,
+   "tribe": 494,
+   "name": "",
+   "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3\u306e\u96f7"
+  },
+  {
+   "id": 326,
+   "tribe": 110,
+   "name": "",
+   "japanese": "\u30af\u30ed\u30af\u30e2\u30fc\u30f3\u306e\u96f7"
+  },
+  {
+   "id": 327,
+   "tribe": 6,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c8\u30b2\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 328,
+   "tribe": 8,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d1\u30bf\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 329,
+   "tribe": 2,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 330,
+   "tribe": 10,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ba\u30c4\u30ad\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 331,
+   "tribe": 19,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c8\u30b2\u30ce\u30b3"
+  },
+  {
+   "id": 332,
+   "tribe": 467,
+   "name": "",
+   "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30ce\u30b3\uff22"
+  },
+  {
+   "id": 333,
+   "tribe": 24,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d1\u30bf"
+  },
+  {
+   "id": 334,
+   "tribe": 29,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c8\u30b2\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 335,
+   "tribe": 33,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b9\u30c8\u30fc\u30f3\u30e1\u30c3\u30c8"
+  },
+  {
+   "id": 336,
+   "tribe": 38,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c8\u30b2\u30be\u30fc"
+  },
+  {
+   "id": 337,
+   "tribe": 43,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30db\u30cd\u30ce\u30b3"
+  },
+  {
+   "id": 338,
+   "tribe": 44,
+   "name": "",
+   "japanese": "\u30db\u30cd\u30ce\u30b3\u9aa8\uff22"
+  },
+  {
+   "id": 339,
+   "tribe": 49,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 340,
+   "tribe": 55,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 341,
+   "tribe": 61,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
+  },
+  {
+   "id": 342,
+   "tribe": 50,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc\uff22"
+  },
+  {
+   "id": 343,
+   "tribe": 56,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3\uff22"
+  },
+  {
+   "id": 344,
+   "tribe": 62,
+   "name": "",
+   "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2\uff22"
+  },
+  {
+   "id": 345,
+   "tribe": 66,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ab\u30e1\u30c3\u30af"
+  },
+  {
+   "id": 346,
+   "tribe": 67,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
+  },
+  {
+   "id": 347,
+   "tribe": 68,
+   "name": "",
+   "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u8d64\uff09\uff22"
+  },
+  {
+   "id": 348,
+   "tribe": 75,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b7\u30e5\u30fc\u30bf\u30fc"
+  },
+  {
+   "id": 349,
+   "tribe": 76,
+   "name": "",
+   "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\uff08\u5f37\uff09\uff22"
+  },
+  {
+   "id": 350,
+   "tribe": 95,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ac\u30dc\u30f3\u3078\u3044"
+  },
+  {
+   "id": 351,
+   "tribe": 119,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u306e\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
+  },
+  {
+   "id": 352,
+   "tribe": 120,
+   "name": "",
+   "japanese": "\u304d\u3089\u30d1\u30f3\u3055\u3093\u306e\u97f3\u7b26\uff22"
+  },
+  {
+   "id": 353,
+   "tribe": 0,
+   "name": "",
+   "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
+  },
+  {
+   "id": 354,
+   "tribe": 98,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c1\u30e7\u30ed\u30dc\u30f3"
+  },
+  {
+   "id": 355,
+   "tribe": 106,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b5\u30f3\u30dc"
+  },
+  {
+   "id": 356,
+   "tribe": 107,
+   "name": "",
+   "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53\uff22"
+  },
+  {
+   "id": 357,
+   "tribe": 111,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30af\u30e2\u30fc\u30f3"
+  },
+  {
+   "id": 358,
+   "tribe": 112,
+   "name": "",
+   "japanese": "\u30af\u30ed\u30af\u30e2\u30fc\u30f3\u306e\u96f7\uff22"
+  },
+  {
+   "id": 359,
+   "tribe": 114,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30cf\u30f3\u30cb\u30e3\u30fc"
+  },
+  {
+   "id": 360,
+   "tribe": 250,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ce\u30ed\u30a4\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 361,
+   "tribe": 497,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30e2\u30c9\u30eb\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 362,
+   "tribe": 251,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ef\u30b6\u30ce\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 363,
+   "tribe": 252,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30aa\u30e2\u30a4\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 364,
+   "tribe": 253,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b5\u30ab\u30b5\u30ce\u30ed\u30a4"
+  },
+  {
+   "id": 365,
+   "tribe": 124,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ef\u30f3\u30ef\u30f3"
+  },
+  {
+   "id": 366,
+   "tribe": 86,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c6\u30ec\u30b5"
+  },
+  {
+   "id": 367,
+   "tribe": 101,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30a8\u30e2\u30f3"
+  },
+  {
+   "id": 368,
+   "tribe": 158,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d0\u30af\u30fc"
+  },
+  {
+   "id": 369,
+   "tribe": 132,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c6\u30c8\u30e9"
+  },
+  {
+   "id": 370,
+   "tribe": 133,
+   "name": "",
+   "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u7dd1\uff09\u306e\u77f3\uff22"
+  },
+  {
+   "id": 371,
+   "tribe": 140,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 372,
+   "tribe": 141,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b3\u30d4\u30e7\u30f3"
+  },
+  {
+   "id": 373,
+   "tribe": 148,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30aa\u30f3\u30d1\u30fc"
+  },
+  {
+   "id": 374,
+   "tribe": 149,
+   "name": "",
+   "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
+  },
+  {
+   "id": 375,
+   "tribe": 171,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30b8\u30e3\u30de\u30c9\u30f3"
+  },
+  {
+   "id": 376,
+   "tribe": 154,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u3081\u3060\u307e"
+  },
+  {
+   "id": 377,
+   "tribe": 155,
+   "name": "",
+   "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
+  },
+  {
+   "id": 378,
+   "tribe": 162,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30dd\u30a4\u30dd\u30a4"
+  },
+  {
+   "id": 379,
+   "tribe": 167,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30bf\u30a4\u30fc\u30eb"
+  },
+  {
+   "id": 380,
+   "tribe": 186,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d5\u30ec\u30fc\u30b4\u30f3"
+  },
+  {
+   "id": 381,
+   "tribe": 187,
+   "name": "",
+   "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u7dd1\uff09\uff22"
+  },
+  {
+   "id": 382,
+   "tribe": 190,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ab\u30c3\u30af\u30f3"
+  },
+  {
+   "id": 383,
+   "tribe": 198,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d0\u30ea\u30d0\u30fc"
+  },
+  {
+   "id": 384,
+   "tribe": 199,
+   "name": "",
+   "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
+  },
+  {
+   "id": 385,
+   "tribe": 202,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30d6\u30fc\u30c1\u30e7"
+  },
+  {
+   "id": 386,
+   "tribe": 193,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u3078\u30ea\u30f3"
+  },
+  {
+   "id": 387,
+   "tribe": 259,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30de\u30f3\u30e2\u30fc"
+  },
+  {
+   "id": 388,
+   "tribe": 220,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ca\u30f3\u30b8\u30e3"
+  },
+  {
+   "id": 389,
+   "tribe": 221,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u624b\u88cf\u5263\uff22"
+  },
+  {
+   "id": 390,
+   "tribe": 222,
+   "name": "",
+   "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u7206\u5f3e\uff22"
+  },
+  {
+   "id": 391,
+   "tribe": 225,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30ac\u30a4\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 392,
+   "tribe": 228,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c8\u30b2\u30b3\u30c3\u30c4"
+  },
+  {
+   "id": 393,
+   "tribe": 256,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c7\u30b9\u30c7\u30b9"
+  },
+  {
+   "id": 394,
+   "tribe": 243,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30de\u30b8\u30fc\u30eb"
+  },
+  {
+   "id": 395,
+   "tribe": 244,
+   "name": "",
+   "japanese": "\u9ec4\u9b54\u30d3\u30fc\u30e0\uff22"
+  },
+  {
+   "id": 396,
+   "tribe": 302,
+   "name": "",
+   "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc\uff3a\u306e\u30d1\u30f3\u30c1"
+  },
+  {
+   "id": 397,
+   "tribe": 284,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff18\uff09"
+  },
+  {
+   "id": 398,
+   "tribe": 316,
+   "name": "",
+   "japanese": "\u30af\u30c3\u30d1(stg7)"
+  },
+  {
+   "id": 399,
+   "tribe": 277,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u5c0f)"
+  },
+  {
+   "id": 400,
+   "tribe": 278,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u4e2d)"
+  },
+  {
+   "id": 401,
+   "tribe": 279,
+   "name": "",
+   "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u5927)"
+  },
+  {
+   "id": 402,
+   "tribe": 285,
+   "name": "",
+   "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc"
+  },
+  {
+   "id": 403,
+   "tribe": 291,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5stg5"
+  },
+  {
+   "id": 404,
+   "tribe": 294,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5stg8"
+  },
+  {
+   "id": 405,
+   "tribe": 287,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3"
+  },
+  {
+   "id": 406,
+   "tribe": 290,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff15\uff09"
+  },
+  {
+   "id": 407,
+   "tribe": 293,
+   "name": "",
+   "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff18\uff09"
+  },
+  {
+   "id": 408,
+   "tribe": 298,
+   "name": "",
+   "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30d3\u30fc\u30e0"
+  },
+  {
+   "id": 409,
+   "tribe": 440,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3"
+  },
+  {
+   "id": 410,
+   "tribe": 441,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 411,
+   "tribe": 442,
+   "name": "",
+   "japanese": "\u30dd\u30a4\u30ba\u30f3\u30c1\u30a7\u30ea\u30ea\u30f3"
+  },
+  {
+   "id": 412,
+   "tribe": 443,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 413,
+   "tribe": 444,
+   "name": "",
+   "japanese": "\u30a2\u30a4\u30b9\u30c1\u30a7\u30ea\u30ea\u30f3"
+  },
+  {
+   "id": 414,
+   "tribe": 445,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3B\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 415,
+   "tribe": 446,
+   "name": "",
+   "japanese": "\u30ab\u30b2\u30c1\u30a7\u30ea\u30ea\u30f3"
+  },
+  {
+   "id": 416,
+   "tribe": 447,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 417,
+   "tribe": 448,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 418,
+   "tribe": 449,
+   "name": "",
+   "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
+  },
+  {
+   "id": 419,
+   "tribe": 450,
+   "name": "",
+   "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0R"
+  },
+  {
+   "id": 420,
+   "tribe": 451,
+   "name": "",
+   "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0"
+  },
+  {
+   "id": 421,
+   "tribe": 452,
+   "name": "",
+   "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0\u306e\u77f3"
+  },
+  {
+   "id": 422,
+   "tribe": 453,
+   "name": "",
+   "japanese": "HMG\u30de\u30ea\u30aa"
+  },
+  {
+   "id": 423,
+   "tribe": 454,
+   "name": "",
+   "japanese": "HMG\u30de\u30ea\u30aa"
+  },
+  {
+   "id": 424,
+   "tribe": 455,
+   "name": "",
+   "japanese": "HMG_LUIGI"
+  },
+  {
+   "id": 425,
+   "tribe": 456,
+   "name": "",
+   "japanese": "HMG_LUIGI"
+  },
+  {
+   "id": 426,
+   "tribe": 457,
+   "name": "",
+   "japanese": "HMG\u30b5\u30e0\u30e9\u30a4"
+  },
+  {
+   "id": 427,
+   "tribe": 458,
+   "name": "",
+   "japanese": "KHG\u30de\u30ea\u30aa"
+  },
+  {
+   "id": 428,
+   "tribe": 459,
+   "name": "",
+   "japanese": "KHG_LUIGI"
+  },
+  {
+   "id": 429,
+   "tribe": 460,
+   "name": "",
+   "japanese": "KHG_PEACH"
+  },
+  {
+   "id": 430,
+   "tribe": 461,
+   "name": "",
+   "japanese": "KHG_KOOPA"
+  },
+  {
+   "id": 431,
+   "tribe": 462,
+   "name": "",
+   "japanese": "KHG\u30b7\u30e5\u30fc\u30bf\u30fc"
+  },
+  {
+   "id": 432,
+   "tribe": 463,
+   "name": "",
+   "japanese": "KHG\u30b3\u30a6\u30e9"
+  },
+  {
+   "id": 433,
+   "tribe": 299,
+   "name": "",
+   "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30df\u30b5\u30a4\u30eb\u30c6\u30b9\u30c8"
+  },
+  {
+   "id": 434,
+   "tribe": 303,
+   "name": "",
+   "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dcII\u30df\u30b5\u30a4\u30eb"
+  }
+ ],
+ "tribes": [
+  {
+   "id": 0,
+   "name": "e_kuribo",
+   "english": "Goomba"
+  },
+  {
+   "id": 1,
+   "name": "e_kuribo",
+   "english": "Flip Goomba"
+  },
+  {
+   "id": 2,
+   "name": "e_kuribo",
+   "english": "Dark Goomba"
+  },
+  {
+   "id": 3,
+   "name": "e_kuribo_y",
+   "english": "Gloomba"
+  },
+  {
+   "id": 4,
+   "name": "e_kuribo",
+   "english": "Spiked Goomba"
+  },
+  {
+   "id": 5,
+   "name": "e_kuribo",
+   "english": "Unused Spiked Goomba"
+  },
+  {
+   "id": 6,
+   "name": "e_kuribo",
+   "english": "Dark Spiked Goomba"
+  },
+  {
+   "id": 7,
+   "name": "e_kuribo",
+   "english": "Paragoomba"
+  },
+  {
+   "id": 8,
+   "name": "e_kuribo",
+   "english": "Dark Paragoomba"
+  },
+  {
+   "id": 9,
+   "name": "e_z_kuribo",
+   "english": "Headbonk Goomba"
+  },
+  {
+   "id": 10,
+   "name": "e_z_kuribo",
+   "english": "Dark Headbonk Goomba"
+  },
+  {
+   "id": 11,
+   "name": "e_nokoteki",
+   "english": "Koopa Troopa"
+  },
+  {
+   "id": 12,
+   "name": "n_noko_2",
+   "english": "Koopa Troopa Stg3"
+  },
+  {
+   "id": 13,
+   "name": "e_nokoteki",
+   "english": "Koopa Troopa No Bounce"
+  },
+  {
+   "id": 14,
+   "name": "e_nokoteki_r",
+   "english": "Red Koopa"
+  },
+  {
+   "id": 15,
+   "name": "e_nokoteki_r",
+   "english": "Flip Red Koopa"
+  },
+  {
+   "id": 16,
+   "name": "e_nokoteki",
+   "english": "Dark Koopa"
+  },
+  {
+   "id": 17,
+   "name": "e_big_nok",
+   "english": "Mega Koopa"
+  },
+  {
+   "id": 18,
+   "name": "e_togenoko",
+   "english": "Koopatrol"
+  },
+  {
+   "id": 19,
+   "name": "e_togenoko",
+   "english": "Dark Koopatrol"
+  },
+  {
+   "id": 20,
+   "name": "e_nokoteki",
+   "english": "Paratroopa"
+  },
+  {
+   "id": 21,
+   "name": "n_noko_2",
+   "english": "Paratroopa Stg3"
+  },
+  {
+   "id": 22,
+   "name": "e_nokoteki_r",
+   "english": "Red Paratroopa"
+  },
+  {
+   "id": 23,
+   "name": "e_nokoteki_r",
+   "english": "Flip Red Paratroopa"
+  },
+  {
+   "id": 24,
+   "name": "e_nokoteki",
+   "english": "Dark Paratroopa"
+  },
+  {
+   "id": 25,
+   "name": "e_met",
+   "english": "Buzzy Beetle"
+  },
+  {
+   "id": 26,
+   "name": "e_met",
+   "english": "Ceiling Buzzy Beetle"
+  },
+  {
+   "id": 27,
+   "name": "e_met",
+   "english": "Spike Top"
+  },
+  {
+   "id": 28,
+   "name": "e_met",
+   "english": "Ceiling Spike Top"
+  },
+  {
+   "id": 29,
+   "name": "e_met",
+   "english": "Dark Spike Top"
+  },
+  {
+   "id": 30,
+   "name": "e_met",
+   "english": "Parabuzzy"
+  },
+  {
+   "id": 31,
+   "name": "e_met",
+   "english": "Spiky Parabuzzy"
+  },
+  {
+   "id": 32,
+   "name": "e_stonemet",
+   "english": "Stone Buzzy"
+  },
+  {
+   "id": 33,
+   "name": "e_stonemet",
+   "english": "Dark Stone Buzzy"
+  },
+  {
+   "id": 34,
+   "name": "e_jugemu",
+   "english": "Lakitu"
+  },
+  {
+   "id": 35,
+   "name": "e_jugemu",
+   "english": "Flip Lakitu"
+  },
+  {
+   "id": 36,
+   "name": "e_togezo",
+   "english": "Spiny"
+  },
+  {
+   "id": 37,
+   "name": "e_togezo",
+   "english": "Flip Spiny"
+  },
+  {
+   "id": 38,
+   "name": "e_togezo",
+   "english": "Dark Spiny"
+  },
+  {
+   "id": 39,
+   "name": "e_karon",
+   "english": "Dry Bones"
+  },
+  {
+   "id": 40,
+   "name": "e_karon",
+   "english": "Dry Bones Proj"
+  },
+  {
+   "id": 41,
+   "name": "e_karon_g",
+   "english": "Dull Bones"
+  },
+  {
+   "id": 42,
+   "name": "e_karon_g",
+   "english": "Dull Bones Proj"
+  },
+  {
+   "id": 43,
+   "name": "e_karon_g",
+   "english": "Dark Dull Bones"
+  },
+  {
+   "id": 44,
+   "name": "e_karon_g",
+   "english": "Dark Dull Bones Proj"
+  },
+  {
+   "id": 45,
+   "name": "e_burosu_h",
+   "english": "Hammer Bro"
+  },
+  {
+   "id": 46,
+   "name": "e_burosu_h",
+   "english": "Hammer Bro Proj"
+  },
+  {
+   "id": 47,
+   "name": "e_burosu_h",
+   "english": "Flip Hammer Bro"
+  },
+  {
+   "id": 48,
+   "name": "e_burosu_h",
+   "english": "Flip Hammer Bro Proj"
+  },
+  {
+   "id": 49,
+   "name": "e_burosu_h",
+   "english": "Dark Hammer Bro"
+  },
+  {
+   "id": 50,
+   "name": "e_burosu_h",
+   "english": "Dark Hammer Bro Proj"
+  },
+  {
+   "id": 51,
+   "name": "e_burosu_b",
+   "english": "Boomerang Bro"
+  },
+  {
+   "id": 52,
+   "name": "e_burosu_b",
+   "english": "Boomerang Bro Proj"
+  },
+  {
+   "id": 53,
+   "name": "e_burosu_b",
+   "english": "Flip Boomerang Bro"
+  },
+  {
+   "id": 54,
+   "name": "e_burosu_b",
+   "english": "Flip Boomerang Bro Proj"
+  },
+  {
+   "id": 55,
+   "name": "e_burosu_b",
+   "english": "Dark Boomerang Bro"
+  },
+  {
+   "id": 56,
+   "name": "e_burosu_b",
+   "english": "Dark Boomerang Bro Proj"
+  },
+  {
+   "id": 57,
+   "name": "e_burosu_f",
+   "english": "Fire Bro"
+  },
+  {
+   "id": 58,
+   "name": "e_burosu_f",
+   "english": "Fire Bro Proj"
+  },
+  {
+   "id": 59,
+   "name": "e_burosu_f",
+   "english": "Flip Fire Bro"
+  },
+  {
+   "id": 60,
+   "name": "e_burosu_f",
+   "english": "Flip Fire Bro Proj"
+  },
+  {
+   "id": 61,
+   "name": "e_burosu_f",
+   "english": "Dark Fire Bro"
+  },
+  {
+   "id": 62,
+   "name": "e_burosu_f",
+   "english": "Dark Fire Bro Proj"
+  },
+  {
+   "id": 63,
+   "name": "e_kamek",
+   "english": "Magikoopa"
+  },
+  {
+   "id": 64,
+   "name": "e_kamek",
+   "english": "Broom Magikoopa"
+  },
+  {
+   "id": 65,
+   "name": "",
+   "english": "Magikoopa Proj"
+  },
+  {
+   "id": 66,
+   "name": "e_kamek",
+   "english": "Dark Magikoopa"
+  },
+  {
+   "id": 67,
+   "name": "e_kamek",
+   "english": "Dark Broom Magikoopa"
+  },
+  {
+   "id": 68,
+   "name": "",
+   "english": "Broom Magikoopa Proj"
+  },
+  {
+   "id": 69,
+   "name": "e_k_shooter",
+   "english": "Koopa Striker"
+  },
+  {
+   "id": 70,
+   "name": "e_k_shooter_k",
+   "english": "Koopa Striker Proj"
+  },
+  {
+   "id": 71,
+   "name": "e_k_shooter2",
+   "english": "Toopa Striker"
+  },
+  {
+   "id": 72,
+   "name": "e_k_shooter_k",
+   "english": "Toopa Striker Proj"
+  },
+  {
+   "id": 73,
+   "name": "e_k_shooter3",
+   "english": "Soopa Striker"
+  },
+  {
+   "id": 74,
+   "name": "e_k_shooter_k",
+   "english": "Soopa Striker Proj"
+  },
+  {
+   "id": 75,
+   "name": "e_k_shooter",
+   "english": "Dark Striker"
+  },
+  {
+   "id": 76,
+   "name": "e_k_shooter_k",
+   "english": "Dark Striker Proj"
+  },
+  {
+   "id": 77,
+   "name": "e_pakflwr",
+   "english": "Piranha Plant"
+  },
+  {
+   "id": 78,
+   "name": "e_pakflwr_p",
+   "english": "Poison Piranha"
+  },
+  {
+   "id": 79,
+   "name": "",
+   "english": "Poison Piranha Breath"
+  },
+  {
+   "id": 80,
+   "name": "e_pakflwr_i",
+   "english": "Frost Piranha"
+  },
+  {
+   "id": 81,
+   "name": "",
+   "english": "Frost Piranha Breath"
+  },
+  {
+   "id": 82,
+   "name": "e_kilr",
+   "english": "Bullet Bill"
+  },
+  {
+   "id": 83,
+   "name": "e_killtai",
+   "english": "Bill Blaster"
+  },
+  {
+   "id": 84,
+   "name": "e_teresa",
+   "english": "Boo"
+  },
+  {
+   "id": 85,
+   "name": "e_teresa_p",
+   "english": "Dark Boo"
+  },
+  {
+   "id": 86,
+   "name": "e_teresa",
+   "english": "Dark Dark Boo"
+  },
+  {
+   "id": 87,
+   "name": "e_atmic_trs",
+   "english": "Atomic Boo"
+  },
+  {
+   "id": 88,
+   "name": "e_pukupuku_g",
+   "english": "Green Cheep Cheep"
+  },
+  {
+   "id": 89,
+   "name": "e_pukupuku",
+   "english": "Red Cheep Cheep"
+  },
+  {
+   "id": 90,
+   "name": "e_pukupuku_g",
+   "english": "Flip Green Cheep Cheep"
+  },
+  {
+   "id": 91,
+   "name": "e_gesso",
+   "english": "Blooper"
+  },
+  {
+   "id": 92,
+   "name": "e_gesso",
+   "english": "Flip Blooper"
+  },
+  {
+   "id": 93,
+   "name": "e_hugumodoki",
+   "english": "Bittacuda"
+  },
+  {
+   "id": 94,
+   "name": "e_gabon",
+   "english": "Clubba"
+  },
+  {
+   "id": 95,
+   "name": "e_gabon",
+   "english": "Dark Clubba"
+  },
+  {
+   "id": 96,
+   "name": "e_chorobon",
+   "english": "Fuzzy"
+  },
+  {
+   "id": 97,
+   "name": "e_chorobon_f",
+   "english": "Pink Fuzzy"
+  },
+  {
+   "id": 98,
+   "name": "e_chorobon",
+   "english": "Dark Fuzzy"
+  },
+  {
+   "id": 99,
+   "name": "e_sinnosuke",
+   "english": "Bald Cleft"
+  },
+  {
+   "id": 100,
+   "name": "e_sinemon",
+   "english": "Moon Cleft"
+  },
+  {
+   "id": 101,
+   "name": "e_sinemon",
+   "english": "Dark Cleft"
+  },
+  {
+   "id": 102,
+   "name": "e_sanbo",
+   "english": "Pokey"
+  },
+  {
+   "id": 103,
+   "name": "e_sanbo",
+   "english": "Pokey Proj"
+  },
+  {
+   "id": 104,
+   "name": "e_sanbo_m",
+   "english": "Poison Pokey"
+  },
+  {
+   "id": 105,
+   "name": "e_sanbo_m",
+   "english": "Poison Pokey Proj"
+  },
+  {
+   "id": 106,
+   "name": "e_sanbo",
+   "english": "Dark Pokey"
+  },
+  {
+   "id": 107,
+   "name": "e_sanbo_m",
+   "english": "Dark Pokey Proj"
+  },
+  {
+   "id": 108,
+   "name": "e_basabasa",
+   "english": "Swooper"
+  },
+  {
+   "id": 109,
+   "name": "e_kmoon",
+   "english": "Ruff Puff"
+  },
+  {
+   "id": 110,
+   "name": "e_kmo_kaminari",
+   "english": "Ruff Puff Proj"
+  },
+  {
+   "id": 111,
+   "name": "e_kmoon",
+   "english": "Dark Ruff Puff"
+  },
+  {
+   "id": 112,
+   "name": "e_kmo_kaminari",
+   "english": "Dark Ruff Puff Proj"
+  },
+  {
+   "id": 113,
+   "name": "e_hannya",
+   "english": "Spania"
+  },
+  {
+   "id": 114,
+   "name": "e_hannya",
+   "english": "Dark Spania"
+  },
+  {
+   "id": 115,
+   "name": "e_pansy",
+   "english": "Crazee Dayzee"
+  },
+  {
+   "id": 116,
+   "name": "e_pansy",
+   "english": "Crazee Dayzee Proj"
+  },
+  {
+   "id": 117,
+   "name": "e_pansy_k",
+   "english": "Amazy Dayzee"
+  },
+  {
+   "id": 118,
+   "name": "e_pansy_k",
+   "english": "Amazy Dayzee Proj"
+  },
+  {
+   "id": 119,
+   "name": "e_pansy_k",
+   "english": "Dark Dayzee"
+  },
+  {
+   "id": 120,
+   "name": "e_pansy_k",
+   "english": "Dark Dayzee Proj"
+  },
+  {
+   "id": 121,
+   "name": "e_bubble",
+   "english": "Lava Bubble"
+  },
+  {
+   "id": 122,
+   "name": "e_wanwan",
+   "english": "Chain Chomp"
+  },
+  {
+   "id": 123,
+   "name": "e_wanwan_r",
+   "english": "Red Chomp"
+  },
+  {
+   "id": 124,
+   "name": "e_wanwan",
+   "english": "Dark Chomp"
+  },
+  {
+   "id": 125,
+   "name": "e_octa2",
+   "english": "Squiglet"
+  },
+  {
+   "id": 126,
+   "name": "e_octar",
+   "english": "Squig"
+  },
+  {
+   "id": 127,
+   "name": "e_octar",
+   "english": "Squig Proj"
+  },
+  {
+   "id": 128,
+   "name": "e_octa3",
+   "english": "Squog"
+  },
+  {
+   "id": 129,
+   "name": "e_octa3",
+   "english": "Squog Proj"
+  },
+  {
+   "id": 130,
+   "name": "e_octa4",
+   "english": "Squoinker"
+  },
+  {
+   "id": 131,
+   "name": "e_octa4",
+   "english": "Squoinker Proj"
+  },
+  {
+   "id": 132,
+   "name": "e_octar",
+   "english": "Dark Squiglet"
+  },
+  {
+   "id": 133,
+   "name": "e_octar",
+   "english": "Dark Squiglet Proj"
+  },
+  {
+   "id": 134,
+   "name": "e_tekti",
+   "english": "Sproing Oing"
+  },
+  {
+   "id": 135,
+   "name": "e_kotec",
+   "english": "Mini Sproing"
+  },
+  {
+   "id": 136,
+   "name": "e_tekt2",
+   "english": "Boing Oing"
+  },
+  {
+   "id": 137,
+   "name": "e_kote2",
+   "english": "Mini Boing"
+  },
+  {
+   "id": 138,
+   "name": "e_tekt3",
+   "english": "Zoing Oing"
+  },
+  {
+   "id": 139,
+   "name": "e_kote3",
+   "english": "Mini Zoing"
+  },
+  {
+   "id": 140,
+   "name": "e_tekti",
+   "english": "Dark Sproing Oing"
+  },
+  {
+   "id": 141,
+   "name": "e_kotec",
+   "english": "Dark Mini Sproing"
+  },
+  {
+   "id": 142,
+   "name": "e_bolbo",
+   "english": "Boomboxer"
+  },
+  {
+   "id": 143,
+   "name": "e_bolbo",
+   "english": "Boomboxer Proj"
+  },
+  {
+   "id": 144,
+   "name": "e_bolbr",
+   "english": "Beepboxer"
+  },
+  {
+   "id": 145,
+   "name": "e_bolbr",
+   "english": "Beepboxer Proj"
+  },
+  {
+   "id": 146,
+   "name": "e_bolbw",
+   "english": "Blastboxer"
+  },
+  {
+   "id": 147,
+   "name": "e_bolbw",
+   "english": "Blastboxer Proj"
+  },
+  {
+   "id": 148,
+   "name": "e_bolbo",
+   "english": "Dark Boomboxer"
+  },
+  {
+   "id": 149,
+   "name": "e_bolbo",
+   "english": "Dark Boomboxer Proj"
+  },
+  {
+   "id": 150,
+   "name": "e_O_medama_s",
+   "english": "Mister I"
+  },
+  {
+   "id": 151,
+   "name": "e_medama_biimu",
+   "english": "Mister I Proj"
+  },
+  {
+   "id": 152,
+   "name": "e_O_medama_s2",
+   "english": "Red I"
+  },
+  {
+   "id": 153,
+   "name": "e_medama_biimu",
+   "english": "Red I Proj"
+  },
+  {
+   "id": 154,
+   "name": "e_O_medama_s",
+   "english": "Dark I"
+  },
+  {
+   "id": 155,
+   "name": "e_medama_biimu",
+   "english": "Dark I Proj"
+  },
+  {
+   "id": 156,
+   "name": "e_dodon",
+   "english": "Shlurp"
+  },
+  {
+   "id": 157,
+   "name": "e_dodo2",
+   "english": "Shlorp"
+  },
+  {
+   "id": 158,
+   "name": "e_dodon",
+   "english": "Dark Shlurp"
+  },
+  {
+   "id": 159,
+   "name": "e_gii",
+   "english": "Growmeba"
+  },
+  {
+   "id": 160,
+   "name": "e_gii2",
+   "english": "Blomeba"
+  },
+  {
+   "id": 161,
+   "name": "e_gii3",
+   "english": "Chromeba"
+  },
+  {
+   "id": 162,
+   "name": "e_gii",
+   "english": "Dark Growmeba"
+  },
+  {
+   "id": 163,
+   "name": "e_ntile",
+   "english": "Tileoid G"
+  },
+  {
+   "id": 164,
+   "name": "e_ntl_b",
+   "english": "Tileoid B"
+  },
+  {
+   "id": 165,
+   "name": "e_ntl_r",
+   "english": "Tileoid R"
+  },
+  {
+   "id": 166,
+   "name": "e_ntl_y",
+   "english": "Tileoid Y"
+  },
+  {
+   "id": 167,
+   "name": "e_ntile",
+   "english": "Dark Tileoid"
+  },
+  {
+   "id": 168,
+   "name": "e_jyamazo",
+   "english": "Jawbus"
+  },
+  {
+   "id": 169,
+   "name": "e_jyama_r",
+   "english": "Rawbus"
+  },
+  {
+   "id": 170,
+   "name": "e_jyama_w",
+   "english": "Gawbus"
+  },
+  {
+   "id": 171,
+   "name": "e_jyamazo",
+   "english": "Dark Jawbus"
+  },
+  {
+   "id": 172,
+   "name": "n_stg3_dknyan",
+   "english": "Bigmeow"
+  },
+  {
+   "id": 173,
+   "name": "e_ptnyan",
+   "english": "Patrolmeow"
+  },
+  {
+   "id": 174,
+   "name": "e_flnyan",
+   "english": "Airmeow"
+  },
+  {
+   "id": 175,
+   "name": "e_dmnyan",
+   "english": "Surprisemeow"
+  },
+  {
+   "id": 176,
+   "name": "e_kamere_bom2",
+   "english": "Meowbomb Francis"
+  },
+  {
+   "id": 177,
+   "name": "e_kamere_bom",
+   "english": "Meowbomb Surprisemeow"
+  },
+  {
+   "id": 178,
+   "name": "e_u_kurage",
+   "english": "Jellien"
+  },
+  {
+   "id": 179,
+   "name": "e_foton",
+   "english": "Foton"
+  },
+  {
+   "id": 180,
+   "name": "e_foton_b",
+   "english": "Foton Proj"
+  },
+  {
+   "id": 181,
+   "name": "e_warp",
+   "english": "Warpid"
+  },
+  {
+   "id": 182,
+   "name": "e_fregon_h_r",
+   "english": "Eeligon"
+  },
+  {
+   "id": 183,
+   "name": "e_fregon_b_r",
+   "english": "Eeligon Seg"
+  },
+  {
+   "id": 184,
+   "name": "e_fregon_h_g",
+   "english": "Hooligon"
+  },
+  {
+   "id": 185,
+   "name": "e_fregon_b_g",
+   "english": "Hooligon Seg"
+  },
+  {
+   "id": 186,
+   "name": "e_fregon_h_r",
+   "english": "Dark Eeligon"
+  },
+  {
+   "id": 187,
+   "name": "e_fregon_b_r",
+   "english": "Dark Eeligon Seg"
+  },
+  {
+   "id": 188,
+   "name": "e_kakkunn",
+   "english": "Longator"
+  },
+  {
+   "id": 189,
+   "name": "e_kakkunn2",
+   "english": "Longadile"
+  },
+  {
+   "id": 190,
+   "name": "e_kakkunn",
+   "english": "Dark Longator"
+  },
+  {
+   "id": 191,
+   "name": "e_lepat",
+   "english": "Choppa"
+  },
+  {
+   "id": 192,
+   "name": "e_lepa2",
+   "english": "Copta"
+  },
+  {
+   "id": 193,
+   "name": "e_lepat",
+   "english": "Dark Choppa"
+  },
+  {
+   "id": 194,
+   "name": "e_bari",
+   "english": "Barribad"
+  },
+  {
+   "id": 195,
+   "name": "e_bari_beam",
+   "english": "Barribad Proj"
+  },
+  {
+   "id": 196,
+   "name": "e_bari2",
+   "english": "Sobarribad"
+  },
+  {
+   "id": 197,
+   "name": "e_bari_beam",
+   "english": "Sobarribad Proj"
+  },
+  {
+   "id": 198,
+   "name": "e_bari",
+   "english": "Dark Barribad"
+  },
+  {
+   "id": 199,
+   "name": "e_bari_beam",
+   "english": "Dark Barribad Proj"
+  },
+  {
+   "id": 200,
+   "name": "e_mat",
+   "english": "Pigarithm"
+  },
+  {
+   "id": 201,
+   "name": "e_mat2",
+   "english": "Hogarithm"
+  },
+  {
+   "id": 202,
+   "name": "e_mat",
+   "english": "Dark Pigarithm"
+  },
+  {
+   "id": 203,
+   "name": "e_genjin_a",
+   "english": "Floro Cragnien Triangle"
+  },
+  {
+   "id": 204,
+   "name": "e_genjin_b",
+   "english": "Floro Cragnien Circle"
+  },
+  {
+   "id": 205,
+   "name": "e_hanazoku_y",
+   "english": "Floro Sapien Yellow"
+  },
+  {
+   "id": 206,
+   "name": "e_hanazoku_y",
+   "english": "Floro Sapien Yellow Head"
+  },
+  {
+   "id": 207,
+   "name": "e_hanazoku_p",
+   "english": "Floro Sapien Purple"
+  },
+  {
+   "id": 208,
+   "name": "e_hanazoku_p",
+   "english": "Floro Sapien Purple Head"
+  },
+  {
+   "id": 209,
+   "name": "e_hanazoku_r",
+   "english": "Floro Sapien Red"
+  },
+  {
+   "id": 210,
+   "name": "e_hanazoku_r",
+   "english": "Floro Sapien Red Head"
+  },
+  {
+   "id": 211,
+   "name": "e_ninja",
+   "english": "Ninjoe"
+  },
+  {
+   "id": 212,
+   "name": "e_ninja",
+   "english": "Ninjoe Shuriken"
+  },
+  {
+   "id": 213,
+   "name": "FRY_bakudan",
+   "english": "Ninjoe Bomb"
+  },
+  {
+   "id": 214,
+   "name": "e_nin_g",
+   "english": "Ninjohn"
+  },
+  {
+   "id": 215,
+   "name": "e_nin_g",
+   "english": "Ninjohn Shuriken"
+  },
+  {
+   "id": 216,
+   "name": "FRY_bakudan",
+   "english": "Ninjohn Bomb"
+  },
+  {
+   "id": 217,
+   "name": "e_nin_r",
+   "english": "Ninjerry"
+  },
+  {
+   "id": 218,
+   "name": "e_nin_r",
+   "english": "Ninjerry Shuriken"
+  },
+  {
+   "id": 219,
+   "name": "FRY_bakudan",
+   "english": "Ninjerry Bomb"
+  },
+  {
+   "id": 220,
+   "name": "e_ninja",
+   "english": "Dark Ninjoe"
+  },
+  {
+   "id": 221,
+   "name": "e_ninja",
+   "english": "Dark Ninjoe Shuriken"
+  },
+  {
+   "id": 222,
+   "name": "FRY_bakudan",
+   "english": "Dark Ninjoe Bomb"
+  },
+  {
+   "id": 223,
+   "name": "e_tesita_a1",
+   "english": "Skellobit"
+  },
+  {
+   "id": 224,
+   "name": "e_tesita_a1",
+   "english": "Flip Skellobit"
+  },
+  {
+   "id": 225,
+   "name": "e_tesita_a1",
+   "english": "Dark Skellobit"
+  },
+  {
+   "id": 226,
+   "name": "e_tesita_a2",
+   "english": "Spiky Skellobit"
+  },
+  {
+   "id": 227,
+   "name": "e_tesita_a2",
+   "english": "Flip Spiky Skellobit"
+  },
+  {
+   "id": 228,
+   "name": "e_tesita_a2",
+   "english": "Dark Spiky Skellobit"
+  },
+  {
+   "id": 229,
+   "name": "e_tesita_b",
+   "english": "Skellobomber Head"
+  },
+  {
+   "id": 230,
+   "name": "e_tesita_b",
+   "english": "Flip Skellobomber Head"
+  },
+  {
+   "id": 231,
+   "name": "e_tesita_b_k",
+   "english": "Skellobomber Head Proj"
+  },
+  {
+   "id": 232,
+   "name": "e_tesita_b",
+   "english": "Skellobomber With Skellobait"
+  },
+  {
+   "id": 233,
+   "name": "e_tesita_b",
+   "english": "Flip Skellobomber With Skellobait"
+  },
+  {
+   "id": 234,
+   "name": "e_tesita_c",
+   "english": "Skellobait"
+  },
+  {
+   "id": 235,
+   "name": "e_tesita_d",
+   "english": "Spiky Skellobait"
+  },
+  {
+   "id": 236,
+   "name": "",
+   "english": "Skellobait Breath"
+  },
+  {
+   "id": 237,
+   "name": "e_mage_b",
+   "english": "Magiblot B"
+  },
+  {
+   "id": 238,
+   "name": "",
+   "english": "Magiblot B Proj"
+  },
+  {
+   "id": 239,
+   "name": "e_mage_r",
+   "english": "Magiblot R"
+  },
+  {
+   "id": 240,
+   "name": "",
+   "english": "Magiblot R Rpoj"
+  },
+  {
+   "id": 241,
+   "name": "e_mage_y",
+   "english": "Magiblot Y"
+  },
+  {
+   "id": 242,
+   "name": "",
+   "english": "Magiblot Y Proj"
+  },
+  {
+   "id": 243,
+   "name": "e_mage_b",
+   "english": "Dark Magiblot"
+  },
+  {
+   "id": 244,
+   "name": "",
+   "english": "Dark Magiblot Proj"
+  },
+  {
+   "id": 245,
+   "name": "e_noroi",
+   "english": "Cursya"
+  },
+  {
+   "id": 246,
+   "name": "e_nri_m",
+   "english": "Back Cursya"
+  },
+  {
+   "id": 247,
+   "name": "e_nri_p",
+   "english": "Tech Cursya"
+  },
+  {
+   "id": 248,
+   "name": "e_nri_r",
+   "english": "Heavy Cursya"
+  },
+  {
+   "id": 249,
+   "name": "e_nri_y",
+   "english": "Reversya Cursya"
+  },
+  {
+   "id": 250,
+   "name": "e_noroi",
+   "english": "Dark Cursya"
+  },
+  {
+   "id": 251,
+   "name": "e_nri_p",
+   "english": "Dark Tech Cursya"
+  },
+  {
+   "id": 252,
+   "name": "e_nri_r",
+   "english": "Dark Heavy Cursya"
+  },
+  {
+   "id": 253,
+   "name": "e_nri_y",
+   "english": "Dark Reversya Cursya"
+  },
+  {
+   "id": 254,
+   "name": "e_death",
+   "english": "Megabite"
+  },
+  {
+   "id": 255,
+   "name": "e_deat2",
+   "english": "Gigabite"
+  },
+  {
+   "id": 256,
+   "name": "e_deat2",
+   "english": "Dark Megabite"
+  },
+  {
+   "id": 257,
+   "name": "e_manmo",
+   "english": "Muth"
+  },
+  {
+   "id": 258,
+   "name": "e_manm3",
+   "english": "Mega Muth"
+  },
+  {
+   "id": 259,
+   "name": "e_manmo",
+   "english": "Dark Muth"
+  },
+  {
+   "id": 260,
+   "name": "n_stg2_gau",
+   "english": "Gnip Howl"
+  },
+  {
+   "id": 261,
+   "name": "n_stg2_gaubos",
+   "english": "Gnaw Growl"
+  },
+  {
+   "id": 262,
+   "name": "e_ayashii_te",
+   "english": "Underhand Type1"
+  },
+  {
+   "id": 263,
+   "name": "e_ayashii_te",
+   "english": "Underhand Type2"
+  },
+  {
+   "id": 264,
+   "name": "e_ayashii_te",
+   "english": "Underhand Type3"
+  },
+  {
+   "id": 265,
+   "name": "e_dossun",
+   "english": "Thwomp"
+  },
+  {
+   "id": 266,
+   "name": "e_goron",
+   "english": "Spiny Tromp"
+  },
+  {
+   "id": 267,
+   "name": "e_koron",
+   "english": "Spiky Tromp"
+  },
+  {
+   "id": 268,
+   "name": "e_killer_k",
+   "english": "Zombie Shroom"
+  },
+  {
+   "id": 269,
+   "name": "e_killer_k3",
+   "english": "Ghoul Shroom"
+  },
+  {
+   "id": 270,
+   "name": "e_ddtas",
+   "english": "Ochunks Stg1"
+  },
+  {
+   "id": 271,
+   "name": "e_ddtas",
+   "english": "Ochunks Stg5 2"
+  },
+  {
+   "id": 272,
+   "name": "e_ddtas",
+   "english": "Ochunks Stg5 4"
+  },
+  {
+   "id": 273,
+   "name": "e_ddtas",
+   "english": "Ochunks Stg8"
+  },
+  {
+   "id": 274,
+   "name": "MOBJ_dodon_block",
+   "english": "Ochunks Stg5 Block Small"
+  },
+  {
+   "id": 275,
+   "name": "MOBJ_dodon_block",
+   "english": "Ochunks Stg5 Block Medium"
+  },
+  {
+   "id": 276,
+   "name": "MOBJ_dodon_block",
+   "english": "Ochunks Stg5 Block Large"
+  },
+  {
+   "id": 277,
+   "name": "MOBJ_dod_block_stg8",
+   "english": "Ochunks Stg8 Block Small"
+  },
+  {
+   "id": 278,
+   "name": "MOBJ_dod_block_stg8",
+   "english": "Ochunks Stg8 Block Medium"
+  },
+  {
+   "id": 279,
+   "name": "MOBJ_dod_block_stg8",
+   "english": "Ochunks Stg8 Block Large"
+  },
+  {
+   "id": 280,
+   "name": "e_3D_manera",
+   "english": "Mimi Stg2"
+  },
+  {
+   "id": 281,
+   "name": "e_3D_manera_ruby",
+   "english": "Mimi Stg2 Rubee"
+  },
+  {
+   "id": 282,
+   "name": "e_2D_manera7",
+   "english": "Mimi Stg6"
+  },
+  {
+   "id": 283,
+   "name": "e_3D_manera_ruby",
+   "english": "Mimi Stg6 Rubee"
+  },
+  {
+   "id": 284,
+   "name": "e_3D_manera2",
+   "english": "Mimi Stg8"
+  },
+  {
+   "id": 285,
+   "name": "e_3D_manera_ruby",
+   "english": "Mimi Stg8 Rubee"
+  },
+  {
+   "id": 286,
+   "name": "e_dmen",
+   "english": "Dimentio Stg3"
+  },
+  {
+   "id": 287,
+   "name": "e_dmen",
+   "english": "Dimentio Stg3 Clone"
+  },
+  {
+   "id": 288,
+   "name": "",
+   "english": "Dimentio Stg3 Magic"
+  },
+  {
+   "id": 289,
+   "name": "e_dmen",
+   "english": "Dimentio Stg5"
+  },
+  {
+   "id": 290,
+   "name": "e_dmen",
+   "english": "Dimentio Stg5 Clone"
+  },
+  {
+   "id": 291,
+   "name": "",
+   "english": "Dimentio Stg5 Magic"
+  },
+  {
+   "id": 292,
+   "name": "e_dmen",
+   "english": "Dimentio Stg8"
+  },
+  {
+   "id": 293,
+   "name": "e_dmen",
+   "english": "Dimentio Stg8 Clone"
+  },
+  {
+   "id": 294,
+   "name": "",
+   "english": "Dimentio Stg8 Magic"
+  },
+  {
+   "id": 295,
+   "name": "e_dark_luigi",
+   "english": "Mr L"
+  },
+  {
+   "id": 296,
+   "name": "",
+   "english": "Brobot"
+  },
+  {
+   "id": 297,
+   "name": "e_lui_robo_missile",
+   "english": "Brobot Big Missile"
+  },
+  {
+   "id": 298,
+   "name": "",
+   "english": "Brobot Eye Beam"
+  },
+  {
+   "id": 299,
+   "name": "e_lui_robo_missile",
+   "english": "Brobot Small Missile"
+  },
+  {
+   "id": 300,
+   "name": "",
+   "english": "Brobot Ltype"
+  },
+  {
+   "id": 301,
+   "name": "e_lui_robo_hige",
+   "english": "Brobot Ltype Mustache"
+  },
+  {
+   "id": 302,
+   "name": "e_lui_robo_hand",
+   "english": "Brobot Ltype Hand"
+  },
+  {
+   "id": 303,
+   "name": "e_lui_robo_missile",
+   "english": "Brobot Ltype Missile"
+  },
+  {
+   "id": 304,
+   "name": "n_nasta",
+   "english": "Nastasia"
+  },
+  {
+   "id": 305,
+   "name": "e_jigen",
+   "english": "Count Bleck"
+  },
+  {
+   "id": 306,
+   "name": "",
+   "english": "Bleck Small Portal"
+  },
+  {
+   "id": 307,
+   "name": "",
+   "english": "Bleck Large Portal"
+  },
+  {
+   "id": 308,
+   "name": "e_jigen",
+   "english": "Bleck Dummy"
+  },
+  {
+   "id": 309,
+   "name": "",
+   "english": "Super Dimentio"
+  },
+  {
+   "id": 310,
+   "name": "",
+   "english": "Super Dimentio Block"
+  },
+  {
+   "id": 311,
+   "name": "MOBJ_frame_beam",
+   "english": "Super Dimentio Block Proj"
+  },
+  {
+   "id": 312,
+   "name": "p_dot_luigi",
+   "english": "Super Dimentio 8Bit Luigi"
+  },
+  {
+   "id": 313,
+   "name": "",
+   "english": "Fracktail"
+  },
+  {
+   "id": 314,
+   "name": "",
+   "english": "Wracktail"
+  },
+  {
+   "id": 315,
+   "name": "p_wii_kuppa",
+   "english": "Bowser Stg3"
+  },
+  {
+   "id": 316,
+   "name": "p_wii_kuppa",
+   "english": "Bowser Stg7"
+  },
+  {
+   "id": 317,
+   "name": "e_geso",
+   "english": "Big Blooper"
+  },
+  {
+   "id": 318,
+   "name": "e_kamere",
+   "english": "Francis"
+  },
+  {
+   "id": 319,
+   "name": "",
+   "english": "King Croacus"
+  },
+  {
+   "id": 320,
+   "name": "e_bara_tib_p",
+   "english": "Croacus Segment Pink"
+  },
+  {
+   "id": 321,
+   "name": "e_bara_tib_o",
+   "english": "Croacus Segment Orange"
+  },
+  {
+   "id": 322,
+   "name": "e_bara_tib_b",
+   "english": "Croacus Segment Blue"
+  },
+  {
+   "id": 323,
+   "name": "",
+   "english": "Croacus Proj"
+  },
+  {
+   "id": 324,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Red"
+  },
+  {
+   "id": 325,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Blue"
+  },
+  {
+   "id": 326,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Yellow"
+  },
+  {
+   "id": 327,
+   "name": "e_shinigami",
+   "english": "Bonechill"
+  },
+  {
+   "id": 328,
+   "name": "e_shinigami_ice",
+   "english": "Bonechill Ice Bullet"
+  },
+  {
+   "id": 329,
+   "name": "MOBJ_turara",
+   "english": "Bonechill Icicle"
+  },
+  {
+   "id": 330,
+   "name": "p_mario",
+   "english": "Dark Mario"
+  },
+  {
+   "id": 331,
+   "name": "e_dark_luigi",
+   "english": "Dark Luigi"
+  },
+  {
+   "id": 332,
+   "name": "p_peach",
+   "english": "Dark Peach"
+  },
+  {
+   "id": 333,
+   "name": "p_kuppa",
+   "english": "Dark Bowser"
+  },
+  {
+   "id": 334,
+   "name": "e_koura",
+   "english": "Shell Shock Small"
+  },
+  {
+   "id": 335,
+   "name": "e_koura",
+   "english": "Shell Shock Large"
+  },
+  {
+   "id": 336,
+   "name": "etc_gold",
+   "english": "Kinkai"
+  },
+  {
+   "id": 337,
+   "name": "etc_gold3",
+   "english": "Kinkai3"
+  },
+  {
+   "id": 338,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 339,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 340,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 341,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 342,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 343,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 344,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 345,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 346,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 347,
+   "name": "e_smrb1",
+   "english": ""
+  },
+  {
+   "id": 348,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 349,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 350,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 351,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 352,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 353,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 354,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 355,
+   "name": "e_smrc1",
+   "english": ""
+  },
+  {
+   "id": 356,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 357,
+   "name": "e_smrb1",
+   "english": ""
+  },
+  {
+   "id": 358,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 359,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 360,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 361,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 362,
+   "name": "e_smra6",
+   "english": ""
+  },
+  {
+   "id": 363,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 364,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 365,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 366,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 367,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 368,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 369,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 370,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 371,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 372,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 373,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 374,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 375,
+   "name": "e_smrc2",
+   "english": ""
+  },
+  {
+   "id": 376,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 377,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 378,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 379,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 380,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 381,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 382,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 383,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 384,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 385,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 386,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 387,
+   "name": "e_smrb2",
+   "english": ""
+  },
+  {
+   "id": 388,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 389,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 390,
+   "name": "e_smrc2",
+   "english": ""
+  },
+  {
+   "id": 391,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 392,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 393,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 394,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 395,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 396,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 397,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 398,
+   "name": "e_smrb1",
+   "english": ""
+  },
+  {
+   "id": 399,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 400,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 401,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 402,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 403,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 404,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 405,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 406,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 407,
+   "name": "e_smrc3",
+   "english": ""
+  },
+  {
+   "id": 408,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 409,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 410,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 411,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 412,
+   "name": "e_smra6",
+   "english": ""
+  },
+  {
+   "id": 413,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 414,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 415,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 416,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 417,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 418,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 419,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 420,
+   "name": "e_smrb1",
+   "english": ""
+  },
+  {
+   "id": 421,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 422,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 423,
+   "name": "e_smrc3",
+   "english": ""
+  },
+  {
+   "id": 424,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 425,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 426,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 427,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 428,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 429,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 430,
+   "name": "e_smrc3",
+   "english": ""
+  },
+  {
+   "id": 431,
+   "name": "e_smra5",
+   "english": ""
+  },
+  {
+   "id": 432,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 433,
+   "name": "e_smra4",
+   "english": ""
+  },
+  {
+   "id": 434,
+   "name": "e_smra3",
+   "english": ""
+  },
+  {
+   "id": 435,
+   "name": "e_smra2",
+   "english": ""
+  },
+  {
+   "id": 436,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 437,
+   "name": "e_smrb3",
+   "english": ""
+  },
+  {
+   "id": 438,
+   "name": "e_smrw4",
+   "english": ""
+  },
+  {
+   "id": 439,
+   "name": "",
+   "english": ""
+  },
+  {
+   "id": 440,
+   "name": "e_cheririn",
+   "english": "Cherbil"
+  },
+  {
+   "id": 441,
+   "name": "",
+   "english": "Cherbil Proj"
+  },
+  {
+   "id": 442,
+   "name": "e_cheririn_g",
+   "english": "Poison Cherbil"
+  },
+  {
+   "id": 443,
+   "name": "",
+   "english": "Poison Cherbil Proj"
+  },
+  {
+   "id": 444,
+   "name": "e_cheririn_b",
+   "english": "Ice Cherbil"
+  },
+  {
+   "id": 445,
+   "name": "",
+   "english": "Ice Cherbil Proj"
+  },
+  {
+   "id": 446,
+   "name": "e_cheririn",
+   "english": "Dark Cherbil"
+  },
+  {
+   "id": 447,
+   "name": "",
+   "english": "Dark Cherbil Sleep Proj"
+  },
+  {
+   "id": 448,
+   "name": "",
+   "english": "Dark Cherbil Ice Proj"
+  },
+  {
+   "id": 449,
+   "name": "",
+   "english": "Dark Cherbil Poison Proj"
+  },
+  {
+   "id": 450,
+   "name": "e_kozun",
+   "english": "Frackle"
+  },
+  {
+   "id": 451,
+   "name": "e_kozun_w",
+   "english": "Wrackle"
+  },
+  {
+   "id": 452,
+   "name": "e_kozun",
+   "english": "Wrackle Proj"
+  },
+  {
+   "id": 453,
+   "name": "p_mario",
+   "english": ""
+  },
+  {
+   "id": 454,
+   "name": "p_mario_r",
+   "english": ""
+  },
+  {
+   "id": 455,
+   "name": "p_luigi",
+   "english": ""
+  },
+  {
+   "id": 456,
+   "name": "p_luigi",
+   "english": ""
+  },
+  {
+   "id": 457,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 458,
+   "name": "p_mario",
+   "english": ""
+  },
+  {
+   "id": 459,
+   "name": "p_luigi",
+   "english": ""
+  },
+  {
+   "id": 460,
+   "name": "p_peach",
+   "english": ""
+  },
+  {
+   "id": 461,
+   "name": "p_kuppa",
+   "english": ""
+  },
+  {
+   "id": 462,
+   "name": "e_k_shooter",
+   "english": "Unused Koopa Striker"
+  },
+  {
+   "id": 463,
+   "name": "e_k_shooter_k",
+   "english": "Unused Koopa Striker Shell"
+  },
+  {
+   "id": 464,
+   "name": "e_kuribo_y",
+   "english": "Unused Gloomba"
+  },
+  {
+   "id": 465,
+   "name": "e_uranoko",
+   "english": "Shady Koopa"
+  },
+  {
+   "id": 466,
+   "name": "e_uranoko",
+   "english": "Flip Shady Koopa"
+  },
+  {
+   "id": 467,
+   "name": "e_uranoko",
+   "english": "Dark Shady Koopa"
+  },
+  {
+   "id": 468,
+   "name": "e_uranoko",
+   "english": "Shady Paratroopa"
+  },
+  {
+   "id": 469,
+   "name": "e_uranoko",
+   "english": "Flip Shady Paratroopa"
+  },
+  {
+   "id": 470,
+   "name": "e_met",
+   "english": "Flip Buzzy Beetle"
+  },
+  {
+   "id": 471,
+   "name": "e_met",
+   "english": "Flip Spike Top"
+  },
+  {
+   "id": 472,
+   "name": "e_togezo",
+   "english": "Spiny Ceiling"
+  },
+  {
+   "id": 473,
+   "name": "e_kamek_g",
+   "english": "Green Magikoopa"
+  },
+  {
+   "id": 474,
+   "name": "e_kamek_g",
+   "english": "Green Broom Magikoopa"
+  },
+  {
+   "id": 475,
+   "name": "",
+   "english": "Green Magikoopa Proj"
+  },
+  {
+   "id": 476,
+   "name": "e_kamek_w",
+   "english": "White Magikoopa"
+  },
+  {
+   "id": 477,
+   "name": "e_kamek_w",
+   "english": "White Broom Magikoopa"
+  },
+  {
+   "id": 478,
+   "name": "",
+   "english": "White Magikoopa Proj"
+  },
+  {
+   "id": 479,
+   "name": "e_kamek_r",
+   "english": "Red Magikoopa"
+  },
+  {
+   "id": 480,
+   "name": "e_kamek_r",
+   "english": "Red Broom Magikoopa"
+  },
+  {
+   "id": 481,
+   "name": "",
+   "english": "Red Magikoopa Proj"
+  },
+  {
+   "id": 482,
+   "name": "e_pakflwr",
+   "english": "Piranha Plant Upside Down"
+  },
+  {
+   "id": 483,
+   "name": "e_pakflwr_p",
+   "english": "Poison Piranha Upside Down"
+  },
+  {
+   "id": 484,
+   "name": "e_pakflwr_i",
+   "english": "Frost Piranha Upside Down"
+  },
+  {
+   "id": 485,
+   "name": "e_borodo",
+   "english": "Bandit"
+  },
+  {
+   "id": 486,
+   "name": "e_borodo_g",
+   "english": "Badge Bandit"
+  },
+  {
+   "id": 487,
+   "name": "e_borodo_g",
+   "english": "Badge Bandit2"
+  },
+  {
+   "id": 488,
+   "name": "e_paid",
+   "english": "Pider"
+  },
+  {
+   "id": 489,
+   "name": "e_paid",
+   "english": "Pider Proj"
+  },
+  {
+   "id": 490,
+   "name": "e_churant",
+   "english": "Arantula"
+  },
+  {
+   "id": 491,
+   "name": "e_churant",
+   "english": "Arantula Proj"
+  },
+  {
+   "id": 492,
+   "name": "e_chururu",
+   "english": "Swoopula"
+  },
+  {
+   "id": 493,
+   "name": "e_kmoon",
+   "english": "Ruff Puff Unused"
+  },
+  {
+   "id": 494,
+   "name": "e_kmo_kaminari",
+   "english": "Ruff Puff Unused Proj"
+  },
+  {
+   "id": 495,
+   "name": "e_hannya_g",
+   "english": "Spinia"
+  },
+  {
+   "id": 496,
+   "name": "e_hannya_p",
+   "english": "Spunia"
+  },
+  {
+   "id": 497,
+   "name": "e_nri_m",
+   "english": "Dark Back Cursya"
+  },
+  {
+   "id": 498,
+   "name": "e_atmic_trs_p",
+   "english": "Dark Atomic Boo"
+  },
+  {
+   "id": 499,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Red2"
+  },
+  {
+   "id": 500,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Blue2"
+  },
+  {
+   "id": 501,
+   "name": "e_wanwan_3",
+   "english": "Underchomp Yellow2"
+  },
+  {
+   "id": 502,
+   "name": "e_kilr_g",
+   "english": "Bombshell Bill"
+  },
+  {
+   "id": 503,
+   "name": "e_killtai_g",
+   "english": "Bombshell Bill Blaster"
+  },
+  {
+   "id": 504,
+   "name": "e_bolbg",
+   "english": "Green Boomboxer"
+  },
+  {
+   "id": 505,
+   "name": "e_bolbg",
+   "english": "Green Boomboxer Proj"
+  },
+  {
+   "id": 506,
+   "name": "e_manm2",
+   "english": "Purple Muth"
+  },
+  {
+   "id": 507,
+   "name": "tst_gazipio",
+   "english": "Test Gazipio1"
+  },
+  {
+   "id": 508,
+   "name": "tst_gazipio",
+   "english": "Test Gazipio2"
+  },
+  {
+   "id": 509,
+   "name": "tst_gazipio",
+   "english": "Test Gazipio3"
+  },
+  {
+   "id": 510,
+   "name": "e_met",
+   "english": "Spike Top Unused"
+  },
+  {
+   "id": 511,
+   "name": "e_lui_robo_hand",
+   "english": "Brobot Ltype Hand2"
+  },
+  {
+   "id": 512,
+   "name": "e_lui_robo_hand",
+   "english": "Brobot Ltype Hand3"
+  },
+  {
+   "id": 513,
+   "name": "e_lui_robo_foot",
+   "english": "Brobot Ltype Foot1"
+  },
+  {
+   "id": 514,
+   "name": "e_lui_robo_foot",
+   "english": "Brobot Ltype Foot2"
+  },
+  {
+   "id": 515,
+   "name": "e_smra1",
+   "english": ""
+  },
+  {
+   "id": 516,
+   "name": "e_choropu",
+   "english": "Monty Mole"
+  },
+  {
+   "id": 517,
+   "name": "e_choropu",
+   "english": "Monty Mole Proj"
+  },
+  {
+   "id": 518,
+   "name": "e_nagehone",
+   "english": "Dry Bones Parts"
+  },
+  {
+   "id": 519,
+   "name": "e_kuribo",
+   "english": "Goomba Unused1"
+  },
+  {
+   "id": 520,
+   "name": "e_kuribo",
+   "english": "Goomba Unused2"
+  },
+  {
+   "id": 521,
+   "name": "e_bubble",
+   "english": "Lava Bubble Unused1"
+  },
+  {
+   "id": 522,
+   "name": "e_hana_hed",
+   "english": "Wiggler Short"
+  },
+  {
+   "id": 523,
+   "name": "e_hana_hed",
+   "english": "Wiggler Long"
+  },
+  {
+   "id": 524,
+   "name": "e_nokoteki",
+   "english": "Koopa Troopa Unused"
+  },
+  {
+   "id": 525,
+   "name": "e_kuribo",
+   "english": "Goomba Unused3"
+  },
+  {
+   "id": 526,
+   "name": "e_kuribo",
+   "english": "Goomba Unused4"
+  },
+  {
+   "id": 527,
+   "name": "e_kuribo",
+   "english": "Goomba Unused5"
+  },
+  {
+   "id": 528,
+   "name": "e_kami_kuribo",
+   "english": "Kamikaze Goomba"
+  },
+  {
+   "id": 529,
+   "name": "e_karon",
+   "english": "Dry Bones Unused"
+  },
+  {
+   "id": 530,
+   "name": "e_chorobon_y",
+   "english": "Gold Fuzzy"
+  },
+  {
+   "id": 531,
+   "name": "e_chorobon_g",
+   "english": "Green Fuzzy"
+  },
+  {
+   "id": 532,
+   "name": "e_jbasabasa_g",
+   "english": "Swampire"
+  },
+  {
+   "id": 533,
+   "name": "e_elmos",
+   "english": "Ember"
+  },
+  {
+   "id": 534,
+   "name": "e_phantom",
+   "english": "Phantom Ember"
+  }
+ ],
+ "attribution": "Table addresses and field offsets from SeekyCt/spm-headers (npcdrv.h), MIT licensed. Values read from a running game; regenerate with scripts/dump_npcs.py."
+}

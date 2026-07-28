@@ -2995,3 +2995,61 @@ carry a default in an undocumented field (offset 24, usually `300`), so a
 whole-entry test counts 6,438 slots where only ~1,328 place anything.
 
 Template 0 is presumably a sentinel. Untested against the game.
+
+---
+
+## D56 — Setup entries now name what they spawn (2026-07-27)
+
+✅ `bleck setup show` reads `template 250` and says **Squiglet (e_octa2)**.
+
+```
+$ bleck setup show he1_01
+he1_01: version 6, 3/100 enemies
+  [  0] template 2    at (-675, 0, 0)       Goomba (e_kuribo)
+  [  1] template 250  at (662.5, -0, 125)   Squiglet (e_octa2)
+  [  2] template 2    at (-75, 0, -75)      Goomba (e_kuribo)
+```
+
+Two Goombas and a Squiglet on Lineland Road, which is exactly what Chapter 1-1
+contains — an independent sanity check on the whole chain.
+
+### Two hops, and the middle one is where the mistakes are
+
+A setup entry names a **template**; templates name a **tribe**; only the tribe
+has a name:
+
+```
+setup.type -> npcEnemyTemplates[type].tribeId -> npcTribes[tribe].animPoseName
+                                              -> NPC_* constant (English)
+```
+
+Neither table is on the disc — both live behind pointers in the game's own
+memory — so `scripts/dump_npcs.py` reads them from a running game, exactly as
+`mapcatalog.json` was produced (D51). Result: 435 templates, 502 named tribes,
+committed as `bleck/formats/npccatalog.json`.
+
+⚠️ `NPCEnemyTemplate.instanceName` is **null on every one of the 435 templates**,
+so the useful names are the tribe's `animPoseName` (ASCII, `e_kuribo`) and the
+`NPC_*` constants from `npcdrv.h`, which are keyed by tribe.
+
+### ⛔ A regex that was too permissive, caught only by luck
+
+The first merge produced **"Move Walk No Hit (e_kuribo)"** for a Goomba.
+
+`npcdrv.h` has several `NPC_`-prefixed enums, and `NPCMoveMode` begins at
+`NPC_MOVE_WALK_NO_HIT = 0`. A bare `NPC_([A-Z0-9_]+) = (\d+)` swept those up
+alongside `NPCTribeId`, and tribe 0 lost to the collision.
+
+**This was caught only because "Goomba" is recognisable.** A collision on a
+tribe nobody could name on sight would have shipped silently and been believed.
+The parse is now scoped to the `enum NPCTribeId` block and fails loudly if that
+enum is ever renamed, and a test pins `template 2 -> Goomba`.
+
+The general shape is one this log keeps recording: **a pattern that matches more
+than intended is indistinguishable from a correct one until you check a case you
+independently know the answer to.**
+
+### Names are optional by construction
+
+`load_names` returns an empty catalog when the file is absent, and every other
+operation works without it. A convenience should not become a dependency.

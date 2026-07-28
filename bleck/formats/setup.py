@@ -34,6 +34,7 @@ should change what the author asked for and nothing else.
 
 from __future__ import annotations
 
+import json
 import struct
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -68,8 +69,66 @@ _INSTANCE_ID = 0x10
 _GRAVITY_ROTATION = 0x6C
 
 
+#: Template and tribe names, dumped from the game by `scripts/dump_npcs.py`.
+#: Committed rather than recomputed: the names live behind pointers in the
+#: game's own tables and exist only at runtime.
+NPC_CATALOG = Path(__file__).with_name("npccatalog.json")
+
+
 class SetupError(BleckError):
     """A setup file is malformed, or asked to do something it cannot."""
+
+
+@dataclass(frozen=True)
+class Species:
+    """What a template actually spawns."""
+
+    template: int
+    tribe: int
+    english: str = ""
+    """From `npcdrv.h`'s `NPC_*` constants, which are keyed by *tribe*."""
+
+    model: str = ""
+    """The game's internal model name, e.g. `e_kuribo`."""
+
+    def describe(self) -> str:
+        if self.english and self.model:
+            return f"{self.english} ({self.model})"
+        return self.english or self.model or f"template {self.template}"
+
+
+class NpcNames:
+    """Template id -> what it spawns. Empty if the catalog is missing."""
+
+    def __init__(self, templates=None, tribes=None) -> None:
+        self._templates = templates or []
+        self._tribes = tribes or []
+
+    def __bool__(self) -> bool:
+        return bool(self._templates)
+
+    def lookup(self, template: int) -> Species | None:
+        if not 0 <= template < len(self._templates):
+            return None
+        entry = self._templates[template]
+        tribe = entry.get("tribe", -1)
+        row = self._tribes[tribe] if 0 <= tribe < len(self._tribes) else {}
+        return Species(
+            template=template,
+            tribe=tribe,
+            english=row.get("english", ""),
+            model=row.get("name", ""),
+        )
+
+
+def load_names(path: Path | None = None) -> NpcNames:
+    """Read the committed NPC catalog. Absent is not an error -- names are a
+    convenience, and every other operation works without them."""
+    source = path or NPC_CATALOG
+    if not source.is_file():
+        return NpcNames()
+    body = json.loads(source.read_text(encoding="utf-8"))
+    return NpcNames(body.get("templates"), body.get("tribes"))
 
 
 @dataclass(frozen=True)

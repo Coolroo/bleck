@@ -162,3 +162,54 @@ class TestAgainstTheRealDisc:
                 assert data.item_version == setup.ITEM_VERSION, path.name
                 found += 1
         assert found == 14, "disc-layout.md records 14 files with items"
+
+
+class TestNames:
+    """Turning `template 250` into `Squiglet (e_octa2)`.
+
+    Two hops, and the middle one is the easy thing to get wrong: a setup entry
+    names a *template*, templates name a *tribe*, and only the tribe has a name.
+    """
+
+    def test_a_template_resolves_through_its_tribe(self):
+        names = setup.NpcNames(
+            templates=[{"id": 0, "tribe": 7}],
+            tribes=[{}] * 7 + [{"name": "e_kuribo", "english": "Goomba"}],
+        )
+        species = names.lookup(0)
+        assert species.tribe == 7
+        assert species.describe() == "Goomba (e_kuribo)"
+
+    def test_an_unknown_template_is_not_invented(self):
+        assert setup.NpcNames(templates=[{"id": 0, "tribe": 0}]).lookup(99) is None
+
+    def test_a_tribe_with_no_english_name_still_describes(self):
+        names = setup.NpcNames(
+            templates=[{"id": 0, "tribe": 0}], tribes=[{"name": "e_mystery"}]
+        )
+        assert names.lookup(0).describe() == "e_mystery"
+
+    def test_a_nameless_species_falls_back_to_its_number(self):
+        names = setup.NpcNames(templates=[{"id": 0, "tribe": -1}], tribes=[])
+        assert names.lookup(0).describe() == "template 0"
+
+    def test_a_missing_catalog_is_not_an_error(self, tmp_path):
+        # Names are a convenience; everything else must work without them.
+        empty = setup.load_names(tmp_path / "absent.json")
+        assert not empty
+        assert empty.lookup(0) is None
+
+
+@pytest.mark.skipif(not setup.NPC_CATALOG.is_file(), reason="no NPC catalog")
+class TestTheCommittedNpcCatalog:
+    def test_it_covers_every_template(self):
+        names = setup.load_names()
+        assert names
+        # spm-headers: NPCTEMPLATE_MAX is 435.
+        assert names.lookup(434) is not None
+        assert names.lookup(435) is None
+
+    def test_goomba_survives_the_enum_collision(self):
+        """`npcdrv.h` has several `NPC_` enums, and `NPCMoveMode` also starts at
+        0. Parsing them all named tribe 0 "Move Walk No Hit"."""
+        assert setup.load_names().lookup(2).describe() == "Goomba (e_kuribo)"
