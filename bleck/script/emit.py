@@ -15,6 +15,7 @@ with it.
 from __future__ import annotations
 
 import difflib
+import re
 from dataclasses import dataclass, field
 
 from bleck.script import runtime_c
@@ -58,7 +59,50 @@ BOOT_SCRIPT = "bleck_boot"
 #: costs nothing and a deadlock costs a run.
 BOOT_DELAY_FRAMES = 120
 
+#: Namespace for everything this module generates.
+#:
+#: A *program's* identifiers take a per-mod suffix on top of this, so two mods
+#: that each declare `script main` do not both emit `bleck_script_main`. See
+#: `prefix_for` and `docs/plan-merging.md`.
 _PREFIX = "bleck_"
+
+#: One bit per map hook in `bleck_map_pending`, so this is a hard ceiling.
+#:
+#: ⚠️ Exceeding it used to be silent: `1 << i` past bit 31 is undefined
+#: behaviour, and the symptom would be hooks corrupting each other rather than
+#: anything failing. Unreachable while a disc holds one mod; **plausible the
+#: moment several merge**, which is why it is checked now rather than then.
+MAX_MAP_HOOKS = 32
+
+#: Characters allowed in a mod's generated namespace.
+_SLUG_ILLEGAL = re.compile(r"[^a-z0-9_]+")
+
+
+def mod_slug(name: str) -> str:
+    """A mod name reduced to something usable inside a C identifier.
+
+    Readable rather than hashed, deliberately: a build log, a disassembly and a
+    linker error should all still say which mod a symbol came from. `hard-mode`
+    becomes `hard_mode`, not `a3f19c`.
+    """
+    slug = _SLUG_ILLEGAL.sub("_", name.strip().lower()).strip("_")
+    # A leading digit is legal in the middle of an identifier but not at the
+    # start of one, and mod names are otherwise unrestricted.
+    if slug and slug[0].isdigit():
+        slug = f"m{slug}"
+    return slug
+
+
+def prefix_for(name: str) -> str:
+    """The identifier namespace for one mod's generated code."""
+    slug = mod_slug(name)
+    if not slug:
+        raise ScriptError(
+            f"mod name {name!r} has no characters usable in an identifier, so "
+            f"its generated symbols cannot be named.",
+            Position(),
+        )
+    return f"{_PREFIX}{slug}_"
 
 
 @dataclass(frozen=True)
@@ -138,6 +182,20 @@ class Scaffolding:
     combos: list[ComboHook] = field(default_factory=list)
     """Button combinations that start scripts."""
 
+    prefix: str = _PREFIX
+    """Namespace for this program's identifiers.
+
+    Default reproduces what a single-mod build has always emitted, byte for
+    byte. `prefix_for("hard-mode")` gives `bleck_hard_mode_`, which is what
+    merging several mods into one translation unit needs (plan-merging.md).
+
+    Only *per-program* names take it -- scripts, strings, map-name literals.
+    The shared runtime is one-per-disc and keeps its fixed names: `_prolog`,
+    `mod_prolog`, `bleck_after_seq`, `bleck_seq0..5`, and the hook tables. Those
+    are installed once however many mods contribute, so namespacing them would
+    be wrong rather than merely unnecessary.
+    """
+
     require_entry: bool = True
     """Whether a script called `main` must exist.
 
@@ -203,29 +261,29 @@ def _c_string(text: str) -> str:
     return f'"{out}"'
 
 
-def _word_text(word: Word) -> str:
+def _word_text(word: Word, prefix: str = _PREFIX) -> str:
     if isinstance(word, Literal):
         return str(word.value)
     if isinstance(word, SymbolWord):
         return f"(s32) &{word.name}"
     if isinstance(word, StringWord):
-        return f"(s32) {_PREFIX}string_{word.index}"
+        return f"(s32) {prefix}string_{word.index}"
     if isinstance(word, ScriptWord):
-        return f"(s32) {_PREFIX}script_{word.name}"
+        return f"(s32) {prefix}script_{word.name}"
     raise TypeError(f"unknown word type {type(word).__name__}")
 
 
-def _script_array(script: CompiledScript) -> str:
+def _script_array(script: CompiledScript, prefix: str = _PREFIX) -> str:
     lines = [
         f"/* {script.name}: {len(script.words)} words, "
         f"{script.slots_used} of 16 local slots used */",
-        f"const s32 {_PREFIX}script_{script.name}[] = {{",
+        f"const s32 {prefix}script_{script.name}[] = {{",
     ]
     # Four per line: enough to be compact, few enough that a diff points at a
     # small region when bytecode changes.
     row: list[str] = []
     for word in script.words:
-        row.append(_word_text(word))
+        row.append(_word_text(word, prefix))
         if len(row) == 4:
             lines.append("    " + ", ".join(row) + ",")
             row = []
@@ -235,9 +293,16 @@ def _script_array(script: CompiledScript) -> str:
     return "\n".join(lines)
 
 
-def _map_block(hooks: list[MapHook]) -> str:
+def _map_block(hooks: list[MapHook], namespace: str = _PREFIX) -> str:
     """Map names, the scripts they start, and the sequence watcher."""
-    prefix = f"{_PREFIX}map_"
+    if len(hooks) > MAX_MAP_HOOKS:
+        raise ScriptError(
+            f"{len(hooks)} map hooks declared, but at most {MAX_MAP_HOOKS} are "
+            f"supported -- `bleck_map_pending` tracks one bit each in a 32-bit "
+            f"word, and the next one would shift past the end.",
+            Position(),
+        )
+    prefix = f"{namespace}map_"
     tables = "".join(
         runtime_c.MAP_TABLE.format(
             prefix=prefix, index=index, name=_c_string(hook.map_name)
@@ -248,7 +313,7 @@ def _map_block(hooks: list[MapHook]) -> str:
         count=len(hooks),
         tables=tables,
         name_list="".join(f"    {prefix}name_{i},\n" for i in range(len(hooks))),
-        script_list="".join(f"    {_PREFIX}script_{h.script},\n" for h in hooks),
+        script_list="".join(f"    {namespace}script_{h.script},\n" for h in hooks),
     )
 
 
@@ -256,7 +321,7 @@ def _banner_block(banner: Banner) -> str:
     return runtime_c.BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
 
-def _combo_block(hooks: list[ComboHook]) -> str:
+def _combo_block(hooks: list[ComboHook], prefix: str = _PREFIX) -> str:
     """Mask and script tables, plus the per-frame watcher."""
     if len(hooks) > MAX_COMBOS:
         raise ScriptError(
@@ -268,7 +333,7 @@ def _combo_block(hooks: list[ComboHook]) -> str:
     return runtime_c.COMBO_BLOCK.format(
         count=len(hooks),
         masks="".join(f"    0x{hook.mask:08X}u,  {hook.comment}\n" for hook in hooks),
-        scripts="".join(f"    {_PREFIX}script_{hook.script},\n" for hook in hooks),
+        scripts="".join(f"    {prefix}script_{hook.script},\n" for hook in hooks),
     )
 
 
@@ -301,9 +366,11 @@ def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
 def _footer(
     entry: str,
     hooks: list[MapHook],
+    *,
     banner: Banner | None = None,
     boot: str = "",
     combos: list[ComboHook] | None = None,
+    namespace: str = _PREFIX,
 ) -> str:
     """Assemble the scaffolding that runs the mod, from the pieces it needs.
 
@@ -322,10 +389,10 @@ def _footer(
         parts.append(_banner_block(banner))
         body += "    if (bleck_banner_on[seq])\n        bleck_draw_banner();\n"
     if hooks:
-        parts.append(_map_block(hooks))
+        parts.append(_map_block(hooks, namespace))
         body += "    bleck_maps_on_seq(seq);\n"
     if combos:
-        parts.append(_combo_block(combos))
+        parts.append(_combo_block(combos, namespace))
         body += "    bleck_combos_on_seq(seq);\n"
     if entry:
         parts.append(runtime_c.SCRIPT_START % entry)
@@ -364,7 +431,7 @@ def generate_bare(
         runtime_c.HEADER.format(origin=origin)
         + "\n"
         + runtime_c.MOD_HOOK
-        + _footer("", [], banner)
+        + _footer("", [], banner=banner)
     )
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
@@ -400,7 +467,7 @@ def generate(
     if program.strings:
         parts.append(
             "\n".join(
-                f"static const char {_PREFIX}string_{index}[] = {_c_string(text)};"
+                f"static const char {plan.prefix}string_{index}[] = {_c_string(text)};"
                 for index, text in enumerate(program.strings)
             )
         )
@@ -410,19 +477,20 @@ def generate(
         # before any is defined.
         parts.append(
             "\n".join(
-                f"extern const s32 {_PREFIX}script_{script.name}[];"
+                f"extern const s32 {plan.prefix}script_{script.name}[];"
                 for script in program.scripts
             )
         )
 
-    parts.extend(_script_array(script) for script in program.scripts)
+    parts.extend(_script_array(script, plan.prefix) for script in program.scripts)
     parts.append(
         _footer(
-            f"{_PREFIX}script_{entry}" if entry else "",
+            f"{plan.prefix}script_{entry}" if entry else "",
             hooks,
-            plan.banner,
-            boot=f"{_PREFIX}script_{plan.boot_script}" if plan.boot_script else "",
+            banner=plan.banner,
+            boot=(f"{plan.prefix}script_{plan.boot_script}" if plan.boot_script else ""),
             combos=plan.combos,
+            namespace=plan.prefix,
         )
     )
 

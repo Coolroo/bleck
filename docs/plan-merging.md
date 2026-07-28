@@ -139,12 +139,15 @@ perfectly by every mechanical check and still froze.
 
 ## Rollout
 
-1. **Parameterise `_PREFIX`.** Pure refactor; single-mod output must stay
-   byte-identical, which the existing tests already assert.
+1. ✅ **Parameterise `_PREFIX`.** Done. `Scaffolding.prefix` defaults to
+   `bleck_`; `prefix_for("hard-mode")` gives `bleck_hard_mode_`. Single-mod
+   output verified byte-identical on four representative programs, and a
+   real mod still builds to the same size. `tests/test_prefix.py`.
 2. Compile per mod, merge into one translation unit.
 3. Shared runtime block: hooks installed once, all entries started.
 4. Lift the >1 error; union banner, boot map and map hooks.
-5. Handle the 32-hook cap.
+5. ✅ **The 32-hook cap.** Done -- `MAX_MAP_HOOKS` refuses the 33rd with an
+   error saying *why*, so nobody just raises the number.
 6. Verify in-game with two real mods.
 7. `docs-site` + decision-log entry.
 
