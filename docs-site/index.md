@@ -40,9 +40,10 @@ one texture without thinking about compression, archives, or disc layout.
 
 -   **Change the game's own content**
 
-    Point one of the game's existing event scripts at your code, or replace a
-    game function by name. Both are declared in the manifest — no addresses,
-    and a mismatch is refused rather than written.
+    Point one of the game's existing event scripts at your code, or hook a game
+    function by name — running before it, after it, or in place of it. Both are
+    declared in the manifest — no addresses, and a mismatch is refused rather
+    than written.
 
 -   **Run it on a Wii**
 
@@ -63,13 +64,22 @@ one texture without thinking about compression, archives, or disc layout.
 decoded, so editing it means changing bytes without a visualiser to check them
 against.
 
-**A patched function replaces the original.** You can point a game function at
-your own code, but the original does not also run — so your version has to do
-the whole job.
+**Editing a function's *middle*.** A hook takes effect at a function's entry, so
+your code can run before it, after it, or instead of it — but not partway
+through.
 
 ## Requirements
 
 You supply your own disc image. `bleck` does not distribute game data.
+
+!!! warning "No licence yet"
+
+    `bleck` carries no `LICENSE` file, so by default no rights are granted —
+    you can read the source and use it yourself, but not redistribute it or a
+    build of it. This is unsettled rather than decided, and settling it means
+    accounting for the GPLv3 REL loader embedded in every patched `main.dol`.
+
+    Treat the project as **not ready to depend on** until this is resolved.
 
 !!! info
 

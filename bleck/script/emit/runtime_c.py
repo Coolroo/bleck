@@ -718,11 +718,20 @@ HOOK_BLOCK = """
     writes and flushes; the flush is not a formality, and D94 measured a patch
     without one doing nothing at all while looking correct in memory.
 
-    REPLACEMENT, NOT INTERCEPTION. The original body never runs again for the
-    rest of the session. The mod's function is now the whole implementation, and
-    must return whatever the caller expects. `mode` exists so `before` and
-    `after` can be added later; both are refused at build time today rather than
-    silently becoming this.
+    WHICH MODE A ROW IS lives in its comment, not in the table: the branch is
+    the same either way, and only its destination differs.
+
+      replace   the branch lands on the mod's function, and for the rest of the
+                session THE ORIGINAL NEVER RUNS. The mod's function is the whole
+                implementation and must return what the caller expects.
+      before    the branch lands on a generated wrapper, which calls the mod's
+                function and then the original.
+      after     the same wrapper, in the other order.
+
+    Both wrapped forms return the ORIGINAL's value, so a handler cannot change
+    what the caller receives by returning something. They reach the original by
+    restoring this row's `expect` for the duration of the call (D96, D97), which
+    is why interception needs a derived guard and `replace` does not.
 
     THE GUARD IS DERIVED, NOT DECLARED. Nobody can reasonably know the
     instruction word at a function's entry, so `bleck` reads it out of the base

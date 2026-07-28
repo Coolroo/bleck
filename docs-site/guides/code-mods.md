@@ -191,7 +191,7 @@ it loads.
 ```
 
 ```c
-/* Your function takes over completely, so it matches what it replaces. */
+/* Under replace, your function takes over completely. */
 void count_npcs(void) { ... }
 ```
 
@@ -199,7 +199,16 @@ void count_npcs(void) { ... }
   list while the mod builds. A name that is not there fails the build, with a
   suggestion. A raw address (`"0x801adef0"`) works too, for something unnamed.
 - `call` — a function in your own `code.sources`.
-- `mode` — `"replace"`. That is the only one that exists.
+- `mode` — which side of the original your function runs on:
+
+| `mode` | What runs | Your return value |
+|---|---|---|
+| `"replace"` | yours, and the original **never** | is what the caller gets |
+| `"before"` | yours, then the original | discarded |
+| `"after"` | the original, then yours | discarded |
+
+Under `before` and `after` the caller receives the **original's** return value,
+so your function cannot change what the game sees by returning something.
 
 !!! danger "`replace` means the original never runs"
 
@@ -209,9 +218,20 @@ void count_npcs(void) { ... }
     Hooking `npcDispMain` stops NPCs being drawn; hooking something a sequence
     waits on stops the game.
 
-    `"before"` and `"after"` are **refused** at build time rather than quietly
-    treated as `"replace"`. If you want the original to keep running, that is
-    the thing `bleck` cannot do yet, and it will say so.
+    Reach for `before` or `after` when you want to *add* behaviour. `replace` is
+    for when you genuinely mean to delete the original.
+
+!!! warning "Your function must still accept the original's arguments"
+
+    In every mode. `bleck` resolves a hook from a symbol *name*, and nothing in
+    a symbol list carries a signature — so it cannot check this for you, and
+    declaring the wrong one corrupts the call rather than merely reading the
+    wrong thing.
+
+    Two limits follow from the same place: a function taking **more than eight
+    integer arguments** cannot be intercepted, because the rest live in the
+    caller's stack frame; and floating-point arguments reach your function
+    correctly but are not recorded in the trace block below.
 
 You do not write a guard. `bleck` reads the instruction word actually at that
 address out of the base disc's `main.dol` while building, and the hook refuses
@@ -220,6 +240,12 @@ mod built against a different game version, is a clean refusal rather than a
 branch into the middle of something else. If the address is not in the DOL at
 all, the build **warns** that the hook is going in unguarded rather than
 inventing a guard.
+
+`before` and `after` need that word for a second reason — they reach the
+original by putting it back for the duration of the call — so for those, an
+address the DOL does not map is a build **error** rather than a warning. There
+would be nothing to restore, and the hook would branch into itself until the
+stack ran out.
 
 Your C can read what happened:
 
@@ -235,12 +261,12 @@ Hooks install before your `mod_prolog`, so that read is final.
 
 Full field reference: [`code.hooks`](../reference/manifest.md).
 
-## Watching a function instead of taking it over
+## Recording what a function is handed
 
-Sometimes the question is "what is this function handed, and what does it hand
-back" — and replacing it destroys the answer. There is no manifest key for this;
-it is a pattern you write over a `code.hooks` entry, using helpers `bleck`
-generates beside the hook table.
+`before` and `after` let your code run alongside the original. Recording *what
+it was handed and what it handed back* goes one step further, and has no
+manifest key — it is a pattern you write over a `code.hooks` entry, using
+helpers `bleck` generates beside the hook table.
 
 Your handler restores the original instruction, calls the function normally
 while it is unpatched, and puts the branch back:

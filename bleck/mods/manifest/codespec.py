@@ -154,36 +154,28 @@ class ScriptPatch:
         return int(self.target, 0) if self.kind == "item" else -1
 
 
-#: What `code.hooks[].mode` accepts today. The field exists so interception can
-#: be added without reshaping the declaration -- same reasoning as the
-#: `<kind>:<name>` selector in D90.
-HOOK_MODES = ("replace",)
+#: What `code.hooks[].mode` accepts. `replace` takes the function over; the
+#: other two keep it, by restoring its first instruction around the call rather
+#: than relocating it into a trampoline (D96).
+HOOK_MODES = ("replace", "before", "after")
 
-#: Modes known to be wanted that have no mechanism yet. Named separately so
-#: asking for one gets the reason, and gets told what `replace` does instead.
-DEFERRED_HOOK_MODES = {
-    "before": "run the mod's function first, then the original",
-    "after": "run the original first, then the mod's function",
+#: What each mode does, quoted back when one is misspelled.
+HOOK_MODE_MEANS = {
+    "replace": "the mod's function instead of the original, which never runs",
+    "before": "the mod's function first, then the original",
+    "after": "the original first, then the mod's function",
 }
 
-#: Said once, quoted by every mode error. ⚠️ The loudest thing here: `replace`
-#: destroys the original body, so a user reaching for `before` must not get it.
-_REPLACE_MEANS = (
-    "  'replace' is not that: it overwrites the function's first instruction "
-    "with a branch, so THE ORIGINAL NEVER RUNS and the mod's function must do "
-    "the whole job.\n"
-    "  Keeping the original needs a trampoline, which bleck does not have "
-    "(D94): the first instruction has to be relocated, and copying it blindly "
-    "breaks any function starting with a PC-relative instruction (D37)."
-)
+#: Modes that keep the original running, and so need a wrapper and a guard word.
+INTERCEPT_MODES = ("before", "after")
 
 
 @dataclass(frozen=True)
 class FunctionHook:
     """A game function whose first instruction becomes a branch into the mod.
 
-    ⚠️ `replace` only. The original body is destroyed for the session, so the
-    mod's function is now the whole implementation.
+    ⚠️ Under `replace` the original body is destroyed for the session, so the
+    mod's function is the whole implementation. `before` and `after` keep it.
     """
 
     function: str
@@ -197,7 +189,12 @@ class FunctionHook:
     """A function in this mod's own sources, matching what it replaces."""
 
     mode: str = "replace"
-    """How the mod's function relates to the original. Only `replace` exists."""
+    """How the mod's function relates to the original: replace, before, after."""
+
+    @property
+    def intercepts(self) -> bool:
+        """Whether the original still runs. Needs a guard word to be derivable."""
+        return self.mode in INTERCEPT_MODES
 
     @property
     def is_address(self) -> bool:
@@ -751,18 +748,8 @@ def build_hook(function: str, call: str, mode: str, where: str) -> FunctionHook:
 def _check_hook_mode(mode: str, where: str) -> None:
     if mode in HOOK_MODES:
         return
-    if mode in DEFERRED_HOOK_MODES:
-        raise ManifestError(
-            f"{where}: 'mode' is {mode!r}, which bleck cannot do yet -- it "
-            f"would {DEFERRED_HOOK_MODES[mode]}.\n{_REPLACE_MEANS}\n"
-            f"  So {mode!r} is refused rather than quietly given you "
-            f"'replace', which would delete the behaviour you asked to keep."
-        )
-    known = ", ".join(sorted(set(HOOK_MODES) | set(DEFERRED_HOOK_MODES)))
-    raise ManifestError(
-        f"{where}: 'mode' is {mode!r}, which is not a hook mode.\n"
-        f"  Known modes: {known}. Only 'replace' is implemented."
-    )
+    hint = "".join(f"\n    {name}: runs {why}" for name, why in HOOK_MODE_MEANS.items())
+    raise ManifestError(f"{where}: 'mode' is {mode!r}, which is not a hook mode.{hint}")
 
 
 def _check_hook_address(text: str, where: str) -> None:

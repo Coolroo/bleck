@@ -213,8 +213,9 @@ Every mod has a `mod.json` at its root.
 
         `code.hooks` <span class="pf-type">list of objects</span>
 
-        :   Replaces one of the game's **C functions** with one of yours, so
-            every call into it lands in your mod instead:
+        :   Points one of the game's **C functions** at one of yours, so every
+            call into it reaches your mod — before, after, or instead of the
+            original:
 
             ```json
             "hooks": [
@@ -226,15 +227,20 @@ Every mod has a `mod.json` at its root.
             ]
             ```
 
-            - `function` — the game function to replace. A symbol name,
-              resolved against your `code.target`'s symbol list **while the mod
+            - `function` — the game function to hook. A symbol name, resolved
+              against your `code.target`'s symbol list **while the mod
               builds**; a name that is not in the list fails the build, with a
               suggestion. A raw address (`"0x801adef0"`) is accepted for
               something the list does not name.
-            - `call` — a function in your own `code.sources`. It has to match
-              what it replaces: same arguments, same return value.
-            - `mode` — `"replace"`. Optional; it is the default and the only
-              value.
+            - `call` — a function in your own `code.sources`. It has to accept
+              the same arguments as the function it hooks, in every mode.
+            - `mode` — `"replace"` (the default), `"before"` or `"after"`.
+
+            | `mode` | What runs | Your return value |
+            |---|---|---|
+            | `"replace"` | yours, and the original **never** | is what the caller gets |
+            | `"before"` | yours, then the original | discarded |
+            | `"after"` | the original, then yours | discarded |
 
             !!! danger "`replace` means the original never runs"
 
@@ -244,11 +250,20 @@ Every mod has a `mod.json` at its root.
                 drawing function stops that thing being drawn; hooking
                 something a game sequence waits on stops the game.
 
-                `"before"` and `"after"` are **refused** at build time, naming
-                what `replace` does instead. They exist as names so that
-                wrapping a function can be added later without changing this
-                field — but asking for one today is an error, never a silent
-                `replace`.
+                Use `"before"` or `"after"` to *add* behaviour. Under those the
+                caller receives the original's return value, so your function
+                cannot change what the game sees by returning something.
+
+            !!! warning "Nothing checks your function's signature"
+
+                A symbol list carries addresses, not types, so `bleck` cannot
+                verify that `call` accepts what the hooked function is passed.
+                Declaring the wrong signature corrupts the call.
+
+                A function taking **more than eight integer arguments** cannot
+                be used with `"before"` or `"after"` at all — the rest live in
+                the caller's stack frame, which the wrapper does not share.
+                This is not checked either.
 
             You do not write a guard. `bleck` reads the instruction word
             actually at that address out of the base disc's `main.dol` while
@@ -261,8 +276,13 @@ Every mod has a `mod.json` at its root.
 
                 `bleck` only has the base disc's `main.dol` to read from, so an
                 address that is not in it — a REL address, for instance — gets
-                no guard. The build **warns** and the hook installs unchecked.
-                A guard is never invented for one.
+                no guard. Under `"replace"` the build **warns** and the hook
+                installs unchecked. A guard is never invented for one.
+
+                Under `"before"` and `"after"` it is a build **error**. Those
+                reach the original by restoring that word for the duration of
+                the call, so with nothing to restore the hook would branch into
+                itself until the stack ran out.
 
             Hooks install when the module loads, before your `mod_prolog`, so
             your C can read a final answer:

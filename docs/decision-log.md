@@ -6477,3 +6477,135 @@ function, unbounded against a leaf — should hold. The number will not.
 - New: `docs/function-behaviour.md`, for what the game's own functions do when
   measured rather than read off a header. Three mods: `fn-trace-probe`,
   `fn-trace-guard`, `fn-trace-somewhere`.
+
+---
+
+## D97 — ✅ `mode: "before"` and `"after"`: interception without a trampoline (2026-07-28)
+
+**`code.hooks` accepts all three modes now.** `before` runs the mod's function
+and then the original; `after` runs the original and then the mod's function.
+Both return the **original's** value, so a handler cannot change what the caller
+receives by accident.
+
+```json
+"hooks": [
+  { "function": "mapDataPtr",     "call": "beforeMapDataPtr",   "mode": "before" },
+  { "function": "GetBasicPlayer", "call": "afterGetBasicPlayer", "mode": "after" }
+]
+```
+
+### The roadmap's ranking was wrong, and D96 is why
+
+`roadmap.md` called a trampoline "the single largest thing standing between
+`code.hooks` and being usable". That was written before D96. The self-healing
+detour already keeps the original running — restore the first instruction, call
+the function, re-install the branch — so the *mechanism* was not the gap. The
+gap was that a mod author had to hand-write it, with a prototype that must match
+the target exactly or it corrupts the call.
+
+So this is code generation over a proven mechanism, not a new mechanism. ⛔ **A
+real trampoline is still not built**, and the reason to want one is unchanged:
+this pays two cache flushes per call where a trampoline pays none.
+
+### Why the wrapper is assembly
+
+The decision worth recording. `bleck` resolves a hook from a symbol *name*, and
+nothing in the symbol list carries a signature. A generated **C** wrapper would
+therefore have to guess one.
+
+⛔ **Guessing `(u32, u32, u32, u32)` was ruled out, and it is not a near miss.**
+The PowerPC EABI passes floating-point arguments in `f1-f8`, entirely separately
+from `r3-r10`, and a C function that never mentions a float may clobber those
+registers freely. The original would then be called with corrupted arguments —
+silently, and only for the functions that happen to take floats. That is the
+exact failure shape this repository keeps getting caught by: works on what you
+tested, wrong on what you did not.
+
+Assembly does not need the signature. It saves `r3-r10` and `f1-f8`, calls what
+it needs to, and puts them back, so both the handler and the original see what
+the caller actually passed. Nothing in the wrapper interprets an argument.
+
+Rejected alternatives:
+
+- **Declare the signature in the manifest** (`"args": 4`). Cheaper, and it
+  reintroduces the float hazard as a thing a user can get wrong quietly.
+- **A separate `.S` file.** Would work; costs a second generated artifact and
+  new build plumbing. A top-level `asm()` in the generated `mod.c` keeps one
+  readable file, which is the file a user is told to open.
+- **`bl <target>` to reach the original.** A 26-bit relative branch from the
+  module to the DOL, which can be out of range. The address is read from the
+  hook table and called through `CTR` instead.
+
+### The build refuses interception it cannot do
+
+A hook whose address the DOL does not map — a REL address — installs
+**unguarded** under `replace`, with a warning. Under `before`/`after` it is a
+build **error**, because the detour reaches the original by restoring the guard
+word and there is nothing to restore. Left alone it would build cleanly and
+recurse into itself at run time until the stack ran out.
+
+`bleck_trace_open` returning 0 is still handled in the wrapper, which returns
+zero rather than calling the original. That path is unreachable by construction;
+it is there because "unreachable" and "safe" are different claims.
+
+### Measured: `mods/intercept-probe`, one run, 120 s
+
+The probe was built around one question — **can it tell the two modes apart?** A
+hook that installs and a handler that counts prove neither half of the claim:
+both would read identically if the same wrapper were emitted for each, or if the
+original were never called at all, which is what `replace` does and what a
+broken interception degrades to.
+
+The discriminator: the wrapper calls `bleck_trace_result` when the original
+returns, so at handler time `lastResult` holds the previous call's value under
+`before` and this call's under `after`. Each handler records it on first entry.
+
+| Word | Value | |
+|---|---|---|
+| `beforeSaw` | **0** | the original had not run |
+| `afterSaw` | **0x901D6248** | the original had returned |
+| `afterSawArg` | 0x901D6170 | |
+| `afterSaw - arg` | **0xD8** | |
+| `traces[0].lastResult` at rest | 0x80402DE4 | |
+| `blind`, `depth`, both hooks | 0, 0 | |
+| first / last map name | `aa4_01` / `ls4_12` | |
+| SEQ_GAME frames | 26,996 | |
+
+Two things make this evidence rather than a report:
+
+1. ✅ **`beforeSaw = 0` is not vacuous.** `traces[0].lastResult` is `0x80402DE4`
+   at rest, so the field *is* written. Its being 0 when the `before` handler ran
+   means the original genuinely had not run yet — not that the field is dead.
+   Without that control the zero would say nothing, which is D70/D73/D74's
+   lesson restated.
+2. ✅ **`0xD8` independently reproduces D96.** `GetBasicPlayer` returning
+   `arg0 + 0xD8` was measured a different way. A wrapper forwarding corrupted
+   arguments, or returning something other than the original's `r3`, does not
+   land on that constant by chance.
+
+Health check: `mapDataPtr` and `GetBasicPlayer` are both load-bearing, the run
+completed two full `aa4_01` → `ls4_12` cycles, and the captured names spell as
+text. A run that never reached gameplay would have said nothing about ordering
+whatever the words held.
+
+### Still not true
+
+- 🔶 **Hardware, as ever.** Dolphin's cache model, not a 750's.
+- ⛔ **More than eight integer arguments cannot be intercepted.** Those live in
+  the caller's frame; the wrapper builds its own. This is **not checked and
+  cannot be** without signatures.
+- ⚠️ **The handler's prototype must still match the target.** The wrapper
+  protects the *original* from a wrong handler prototype — every register is
+  restored from the frame before the original is called — but the handler itself
+  still reads whatever it declared.
+- ⚠️ `bleck_trace_args` records four **integer** arguments, so the trace record
+  beside an intercepted hook has the usual blind spots. The handler does not:
+  it receives every register untouched.
+
+### Housekeeping
+
+- New `bleck/script/emit/runtime_intercept.py`; `replace` codegen is unchanged
+  and all pre-existing code mods build byte-identical.
+- `DEFERRED_HOOK_MODES` and `_REPLACE_MEANS` deleted from `codespec.py`.
+- 4 tests in `tests/test_hooks.py::TestMode` asserted the old refusal and were
+  rewritten rather than deleted.

@@ -150,16 +150,17 @@ class ScriptPatch:
 
 @dataclass(frozen=True)
 class FunctionHook:
-    """A game function branch-replaced by one of the mod's own.
+    """A game function whose first instruction becomes a branch into the mod.
 
     Everything is resolved: the manifest's symbol name has become an address,
     and the guard word has been read out of the base disc's `main.dol`.
 
-    ⚠️ Replacement, not interception. The original body never runs.
+    ⚠️ `replace` destroys the original for the session. `before` and `after`
+    keep it, at the cost of two cache flushes per call.
     """
 
     call: str
-    """The C function in the mod's sources that takes over."""
+    """The C function in the mod's sources that runs."""
 
     address: int
     """Where the branch is written. -1 when the symbol is left to the linker."""
@@ -177,6 +178,19 @@ class FunctionHook:
     build could not read what is there. The hook then installs unguarded.
     """
 
+    mode: str = "replace"
+    """`replace`, `before` or `after`.
+
+    Anything but `replace` needs a wrapper, and needs `guarded`: the detour
+    restores `expect` to reach the original, so a hook with no derived guard
+    cannot intercept. `parts.function_hooks_for` refuses that combination.
+    """
+
+    @property
+    def intercepts(self) -> bool:
+        """Whether the original still runs, and so whether a wrapper is needed."""
+        return self.mode != "replace"
+
     @property
     def named(self) -> str:
         return self.symbol or f"0x{self.address:08X}"
@@ -184,7 +198,7 @@ class FunctionHook:
     @property
     def comment(self) -> str:
         guard = f"expect {self.expect:08X}" if self.guarded else "UNGUARDED"
-        return f"/* {self.named} -> {self.call}, replace, {guard} */"
+        return f"/* {self.named} -> {self.call}, {self.mode}, {guard} */"
 
 
 @dataclass(frozen=True)

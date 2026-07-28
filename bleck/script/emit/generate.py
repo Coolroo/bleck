@@ -18,7 +18,7 @@ from bleck.script.compiler.ir import (
     SymbolWord,
     Word,
 )
-from bleck.script.emit import runtime_c, runtime_trace
+from bleck.script.emit import runtime_c, runtime_intercept, runtime_trace
 
 # Re-exported as `emit.MapHook` and friends.
 # pylint: disable=unused-import
@@ -260,11 +260,20 @@ def _hook_block(hooks: list[FunctionHook]) -> str:
                 seen.add(name)
                 decls.append(template.format(name=name))
 
+    # An intercepting hook branches to a generated wrapper, which calls both the
+    # mod's function and the original. `replace` keeps branching straight at the
+    # mod's function, so its output is unchanged.
+    for index, hook in enumerate(hooks):
+        if hook.intercepts:
+            decls.append(
+                runtime_c.HOOK_CALL.format(name=runtime_intercept.wrapper_name(index))
+            )
+
     rows = "".join(
         f"    {{{_hook_address(hook)}, 0x{hook.expect:08X}u, "
-        f"{1 if hook.guarded else 0}u, (const void *) &{hook.call}}},"
+        f"{1 if hook.guarded else 0}u, (const void *) &{_hook_branch(index, hook)}}},"
         f"  {hook.comment}\n"
-        for hook in hooks
+        for index, hook in enumerate(hooks)
     )
     block = runtime_c.HOOK_BLOCK.format(
         count=len(hooks),
@@ -275,9 +284,22 @@ def _hook_block(hooks: list[FunctionHook]) -> str:
     # Emitted unconditionally beside the table: a trace needs the derived guard
     # word that is already there, and `--gc-sections` drops the lot for a mod
     # that only replaces. Nothing declares a trace, so nothing can ask for it.
-    return block + runtime_trace.TRACE_BLOCK.format(
+    block += runtime_trace.TRACE_BLOCK.format(
         traces="".join(runtime_trace.TRACE_ROW for _ in hooks)
     )
+    wrappers = [
+        runtime_intercept.wrapper(index, hook.call, hook.mode)
+        for index, hook in enumerate(hooks)
+        if hook.intercepts
+    ]
+    if not wrappers:
+        return block
+    return block + runtime_intercept.INTERCEPT_DECLS.format() + "\n" + "\n".join(wrappers)
+
+
+def _hook_branch(index: int, hook: FunctionHook) -> str:
+    """What the game's first instruction actually branches to."""
+    return runtime_intercept.wrapper_name(index) if hook.intercepts else hook.call
 
 
 def _hook_address(hook: FunctionHook) -> str:

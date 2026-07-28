@@ -341,6 +341,7 @@ def function_hooks_for(
         address = _hook_address(hook, table, where)
         word = dol.word_at(address) if dol is not None else None
         if word is None:
+            _check_interception_possible(hook, address, where)
             warnings.append(_no_guard_warning(hook, address, base, dol, where))
         else:
             warnings += _section_warning(hook, address, dol, where)
@@ -351,9 +352,37 @@ def function_hooks_for(
                 symbol="" if hook.is_address else hook.function,
                 expect=word or 0,
                 guarded=word is not None,
+                mode=hook.mode,
             )
         )
     return ResolvedHooks(hooks=hooks, warnings=warnings)
+
+
+def _check_interception_possible(hook, address: int, where: str) -> None:
+    """`before` and `after` need a guard word; `replace` does not.
+
+    Interception reaches the original by restoring the function's first
+    instruction, calling it, and re-installing the branch (D96). That word comes
+    out of `main.dol` at build time, so an address the DOL does not map -- a REL
+    address, say -- leaves nothing to restore.
+
+    A `replace` hook installs unguarded with a warning, because it never needs to
+    put the original back. Interception would build fine and then recurse into
+    itself at run time until the stack ran out, so it is refused here instead.
+    """
+    if not hook.intercepts:
+        return
+    raise CodeError(
+        f"{where}: 'mode' is {hook.mode!r}, but bleck could not read the "
+        f"instruction at 0x{address:08X} out of the base disc's main.dol.\n"
+        f"  {hook.mode!r} runs the original as well as your function, and it "
+        f"reaches the original by putting that instruction back for the "
+        f"duration of the call. With no word to restore there is nothing to "
+        f"call, and the hook would branch into itself until the stack ran out.\n"
+        f"  Addresses above the DOL belong to a REL, which is loaded per map "
+        f"and is not on the disc as plain code.\n"
+        f"  Use 'replace' if taking the function over is acceptable."
+    )
 
 
 def _check_hook_call(hook, defined: list[str], where: str) -> None:
@@ -371,9 +400,23 @@ def _check_hook_call(hook, defined: list[str], where: str) -> None:
     raise CodeError(
         f"{where}.call names {hook.call!r}, but this mod's sources define no "
         f"such function (they define: {listed}).{hint}\n"
-        f"  A hook *replaces* {hook.function}, so it must take the same "
-        f"arguments and return what the caller expects -- the original never "
-        f"runs."
+        f"  {_signature_rule(hook)}"
+    )
+
+
+def _signature_rule(hook) -> str:
+    """Why the mod's function has to match the one it hooks -- which differs by
+    mode, and gets the reasoning wrong in both directions if it does not."""
+    if not hook.intercepts:
+        return (
+            f"A {hook.mode!r} hook takes {hook.function} over, so it must accept "
+            f"the same arguments AND return what the caller expects -- the "
+            f"original never runs."
+        )
+    return (
+        f"A {hook.mode!r} hook runs alongside {hook.function}, so it must accept "
+        f"the same arguments. Its return value is discarded: the caller receives "
+        f"the original's."
     )
 
 

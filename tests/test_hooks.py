@@ -133,7 +133,9 @@ class TestGeneratedCode:
         assert prolog.index("bleck_install_hooks();") < prolog.index("mod_prolog();")
 
     def test_the_replacement_warning_is_in_the_generated_source(self):
-        assert "REPLACEMENT, NOT INTERCEPTION" in generated()
+        """The generated file is what a user opens when a hook misbehaves, so
+        the mode that destroys the original has to say so there."""
+        assert "THE ORIGINAL NEVER RUNS" in generated()
 
     def test_nothing_is_emitted_without_hooks(self):
         assert "bleck_install_hooks" not in emit.generate_bare(origin="x").text
@@ -205,6 +207,128 @@ class TestTrace:
 
     def test_nothing_is_emitted_without_hooks(self):
         assert "bleck_trace_open" not in emit.generate_bare(origin="x").text
+
+
+class TestInterception:
+    """`before` and `after` wrap the hook rather than replacing it (D97)."""
+
+    def _wrapped(self, mode: str) -> str:
+        hook = emit.FunctionHook(
+            call="watch",
+            address=0x801ADEF0,
+            symbol="npcDispMain",
+            expect=0x9421FE40,
+            guarded=True,
+            mode=mode,
+        )
+        return generated([hook])
+
+    def test_replace_emits_no_wrapper_and_branches_straight_at_the_call(self):
+        out = generated()
+        assert "bleck_hook_wrap_0" not in out
+        assert "(const void *) &count_npcs" in out
+
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_the_game_branches_to_the_wrapper_not_the_handler(self, mode):
+        out = self._wrapped(mode)
+        assert "(const void *) &bleck_hook_wrap_0" in out
+        assert "(const void *) &watch" not in out
+
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_every_argument_register_is_saved_and_restored(self, mode):
+        """The whole reason the wrapper is assembly.
+
+        A generated C wrapper would have to guess a signature, and guessing an
+        integer one drops f1-f8 -- silently, and only for the functions that
+        take floats. If these disappear, that hazard is back.
+        """
+        out = self._wrapped(mode)
+        for reg in range(3, 11):
+            assert f"stw   {reg}," in out
+            assert f"lwz   {reg}," in out
+        for reg in range(1, 9):
+            assert f"stfd  {reg}," in out
+            assert f"lfd   {reg}," in out
+
+    def test_before_runs_the_handler_ahead_of_the_original(self):
+        out = self._wrapped("before")
+        assert out.index("bl    watch") < out.index("bl    bleck_trace_open")
+
+    def test_after_runs_the_handler_behind_the_original(self):
+        out = self._wrapped("after")
+        assert out.index("bl    bleck_trace_close") < out.index("bl    watch")
+
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_the_caller_receives_the_original_s_return_value(self, mode):
+        """The result comes out of the frame slot the ORIGINAL wrote, and is
+        reloaded last. So a handler cannot change what the game sees by
+        returning something, whichever side of the original it runs on."""
+        out = self._wrapped(mode)
+        # Captured straight off the indirect call, from nowhere else.
+        assert 'bctrl\\n"\n    "    stw   3, 0x68(1)' in out
+        assert out.count("stw   3, 0x68(1)") == 1
+        # Reloaded after the handler has had its turn, in both orderings.
+        assert out.rindex("bl    watch") < out.rindex("lwz   3, 0x68(1)")
+
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_the_original_is_called_through_ctr_not_a_branch(self, mode):
+        """A `bl` would be a 26-bit relative branch from the module to the DOL,
+        which can be out of range."""
+        out = self._wrapped(mode)
+        assert "mtctr 0" in out
+        assert "bctrl" in out
+        assert "bl    npcDispMain" not in out
+
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_a_detour_that_cannot_open_does_not_call_the_original(self, mode):
+        """Unreachable by construction -- the build refuses an unguarded
+        interception -- but 'unreachable' and 'safe' are different claims."""
+        out = self._wrapped(mode)
+        assert "cmpwi 3, 0" in out
+        assert "beq   .Lblind_0" in out
+
+    def test_each_hook_gets_its_own_wrapper_and_index(self):
+        first = emit.FunctionHook(
+            call="a",
+            address=0x801ADEF0,
+            symbol="npcDispMain",
+            expect=1,
+            guarded=True,
+            mode="before",
+        )
+        second = emit.FunctionHook(
+            call="b",
+            address=0x800618B0,
+            symbol="effMain",
+            expect=2,
+            guarded=True,
+            mode="after",
+        )
+        out = generated([first, second])
+        assert "bleck_hook_wrap_0:" in out
+        assert "bleck_hook_wrap_1:" in out
+        assert "li    3, 1" in out  # the second wrapper passes its own index
+
+    def test_a_replace_hook_beside_an_intercepting_one_keeps_its_own_shape(self):
+        plain = emit.FunctionHook(
+            call="taken_over",
+            address=0x800618B0,
+            symbol="effMain",
+            expect=2,
+            guarded=True,
+        )
+        watched = emit.FunctionHook(
+            call="watch",
+            address=0x801ADEF0,
+            symbol="npcDispMain",
+            expect=1,
+            guarded=True,
+            mode="before",
+        )
+        out = generated([plain, watched])
+        assert "(const void *) &taken_over" in out
+        assert "(const void *) &bleck_hook_wrap_1" in out
+        assert "bleck_hook_wrap_0" not in out
 
 
 class TestMerging:
@@ -289,24 +413,26 @@ class TestManifest:
 
 
 class TestMode:
-    """`before` and `after` exist as names so adding them is not a breaking
-    change. Until then they are refused, loudly."""
+    """`replace` takes the function over; `before` and `after` keep it."""
 
     @pytest.mark.parametrize("mode", ["before", "after"])
-    def test_the_deferred_modes_say_what_replace_does_instead(self, mode):
-        with pytest.raises(mod_manifest.ManifestError) as caught:
-            manifest({**WHOLE, "mode": mode})
-        message = str(caught.value)
-        assert "cannot do yet" in message
-        assert "THE ORIGINAL NEVER RUNS" in message
-        assert "trampoline" in message
+    def test_the_intercepting_modes_are_accepted(self, mode):
+        hook = manifest({**WHOLE, "mode": mode}).code.hooks[0]
+        assert hook.mode == mode
+        assert hook.intercepts
 
-    def test_a_nonsense_mode_lists_the_known_ones(self):
+    def test_replace_does_not_intercept(self):
+        assert not manifest(WHOLE).code.hooks[0].intercepts
+
+    def test_a_nonsense_mode_says_what_each_real_one_does(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:
             manifest({**WHOLE, "mode": "around"})
         message = str(caught.value)
         assert "not a hook mode" in message
-        assert "Only 'replace' is implemented" in message
+        # The names alone do not say which order they run in, which is the only
+        # thing a reader picking between them needs.
+        assert "the mod's function first, then the original" in message
+        assert "the original first, then the mod's function" in message
 
 
 class TestDol:
@@ -432,6 +558,37 @@ class TestResolution:
         assert not found.hooks
         assert not found.warnings
 
+    @pytest.mark.parametrize("mode", ["before", "after"])
+    def test_interception_without_a_guard_is_refused_not_warned(
+        self, tmp_path, monkeypatch, mode
+    ):
+        """`replace` installs unguarded with a warning; interception cannot.
+
+        The detour reaches the original by restoring the guard word, so with
+        nothing to restore this would build cleanly and then branch into itself
+        at run time until the stack ran out.
+        """
+        with pytest.raises(code.CodeError) as caught:
+            self._resolve(
+                tmp_path,
+                monkeypatch,
+                {**WHOLE, "function": "0x80f60000", "mode": mode},
+                "void count_npcs(void) { }\n",
+            )
+        message = str(caught.value)
+        assert "until the stack ran out" in message
+        assert "'replace'" in message  # what to do instead
+
+    def test_the_mode_reaches_the_emitter(self, tmp_path, monkeypatch):
+        found = self._resolve(
+            tmp_path,
+            monkeypatch,
+            {**WHOLE, "mode": "after"},
+            "void count_npcs(void) { }\n",
+        )
+        assert found.hooks[0].mode == "after"
+        assert found.hooks[0].intercepts
+
 
 class TestApi:
     def test_it_round_trips_through_the_json_contract(self):
@@ -442,6 +599,10 @@ class TestApi:
         assert document.to_manifest().hooks == spec.hooks
 
     def test_the_contract_rejects_what_the_manifest_rejects(self):
-        bad = v1.Hook(function="npcDispMain", call="f", mode="before")
-        with pytest.raises(mod_manifest.ManifestError, match="cannot do yet"):
+        bad = v1.Hook(function="npcDispMain", call="f", mode="around")
+        with pytest.raises(mod_manifest.ManifestError, match="not a hook mode"):
             bad.to_manifest()
+
+    def test_the_contract_carries_an_intercepting_mode_through(self):
+        hook = v1.Hook(function="npcDispMain", call="f", mode="after")
+        assert hook.to_manifest().mode == "after"
