@@ -62,12 +62,14 @@ compile but nothing has run on them.
    known, out of 112 bytes. `he1_01` is a good subject: 3 used entries out of
    100, and reachable unattended (D52).
 
-2. 🟢 **Switch to the decomp symbol table** (D39). ~9,566 named symbols against
-   the lst's 976, with sizes and types — enough to reject a `user_func` target
-   that is actually *data* at compile time, instead of shipping a REL that jumps
-   into a table.
-   ⚠️ `spm-decomp` states **no licence** (D54), so it cannot be vendored. Read a
-   clone the user supplies, exactly as symbol lists already work.
+2. 🟡 **Use the decomp symbol table for validation.** Reading, merging and
+   exporting it is ✅ done (D60): `bleck symbols`. ⚠️ D39's "~9,566" was wrong —
+   it is **4,584 human-named, 3,960 functions**, a ~4.7x gain over the lst.
+
+   What remains is wiring the *types* into the compiler, so calling something
+   that is data rather than a function fails at compile time.
+
+   ⛔ Two lst addresses are wrong (`strlen`, `evt_fairy_flag_onoff`) — see D60.
 
 3. 🟢 **Emit `SETI` for ambiguous literals** (D39). Small; `var a = -30000000`
    is a compile error and need not be.

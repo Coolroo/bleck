@@ -7,13 +7,23 @@ and listing it in `MODULES` — nothing in the CLI core needs to change.
 
 from __future__ import annotations
 
-from . import archive, disc, emulate, inspect, mods, placement, scripts, stream
+from . import (
+    archive,
+    disc,
+    emulate,
+    inspect,
+    mods,
+    placement,
+    scripts,
+    stream,
+    symbols,
+)
 
 # Order determines how commands appear in `bleck --help`: inspection first
 # (what most people reach for), then containers, then mods and the scripts they
 # are built from, then discs, then launching what came out of them, then raw
 # streams.
-MODULES = [inspect, placement, archive, mods, scripts, disc, emulate, stream]
+MODULES = [inspect, placement, symbols, archive, mods, scripts, disc, emulate, stream]
 
 __all__ = [
     "MODULES",
@@ -25,4 +35,5 @@ __all__ = [
     "placement",
     "scripts",
     "stream",
+    "symbols",
 ]

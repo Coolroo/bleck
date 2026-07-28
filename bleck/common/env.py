@@ -156,6 +156,10 @@ HEADERS_DIR = EnvVar(
     default="work/headers",
     description="Include directory for native code mods, e.g. spm-headers/include",
 )
+DECOMP_DIR = EnvVar(
+    "BLECK_DECOMP",
+    description="A spm-decomp clone, for its far richer symbol table",
+)
 SYMBOLS_DIR = EnvVar(
     "BLECK_SYMBOLS_DIR",
     default="work/symbols",
@@ -195,6 +199,7 @@ DECLARED: list[EnvVar] = [
     GECKO_DIR,
     HEADERS_DIR,
     SYMBOLS_DIR,
+    DECOMP_DIR,
     EXTRACT_ROOT,
     NO_COLOR,
     MODS_DIR,

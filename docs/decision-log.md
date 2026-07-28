@@ -3415,3 +3415,68 @@ nothing.
 because `dolphin-memory-engine` attached to a Dolphin the user already had open,
 not the one the script launched — the log showed another mod's probe magic
 entirely. Close other instances before an unattended run.
+
+---
+
+## D60 — The decomp symbol table, and two wrong addresses in the lst (2026-07-27)
+
+✅ **`bleck symbols` reads `spm-decomp`'s table alongside the lst**, and can
+merge them into the format `elf2rel` consumes.
+
+```
+$ bleck symbols list --search pouch --functions
+  8010C698  evt_pouch_set_hp        function  48 bytes
+  8010C6C8  evt_pouch_get_hp        function  76 bytes
+  ...
+98 of 4576 symbols, 4535 named  (function=3959 label=85 object=262)
+```
+
+### ⚠️ D39's figure was wrong, measured rather than repeated
+
+D39 recorded "~9,566 human-named symbols". Parsing the file gives:
+
+| Source | Parsed | Human-named | Of those, functions |
+|---|---|---|---|
+| `config/EU0/symbols.txt` | 34,302 | **4,584** | **3,960** |
+| `config/EU0/relF/symbols.txt` | 30,162 | 216 | 28 |
+| `spm.eu0.lst` | 976 | 927 | untyped |
+
+So the gain is **~4.7x, not 11x** — still the largest available, but the
+roadmap has been quoting a number nobody had checked.
+
+⛔ `relF/symbols.txt` looks tempting at 30,162 lines and is not usable: 216
+human names, at **REL-relative** addresses (`0x000052E4`), which cannot be
+linked the way absolute DOL symbols are.
+
+⛔ ~9,600 lines are `@etb_*` exception-table entries — compiler bookkeeping,
+excluded deliberately.
+
+### ⛔ Two of the lst's addresses are wrong
+
+Comparing the 744 names both sources know found **2 disagreements**, and in both
+the lst points at the *neighbouring* function:
+
+| Name | lst says | What the decomp calls that address |
+|---|---|---|
+| `strlen` | `80267018` | **`TRK_strlen`** — the debugger's own copy |
+| `evt_fairy_flag_onoff` | `800E8214` | **`evt_fairy_flag_onoff_all`** |
+
+The decomp holds *both* symbols in each case, which is what makes this
+diagnosable rather than a coin toss: the lst has not invented an address, it has
+attached the wrong name to a real one.
+
+**A mod calling `strlen` today would jump into the TRK debugger.** Nothing has,
+which is why it went unnoticed.
+
+🔶 Two cases is not a large sample, so "the decomp is always right" is not the
+claim. `merge` prefers the decomp and `compare` prints every disagreement, so
+the choice is visible rather than assumed.
+
+### Deliberately not vendored
+
+`spm-decomp` states no licence (D54). `BLECK_DECOMP` points at a clone the user
+supplies, and every command degrades to the lst alone when it is unset —
+including `mod build`, which is untouched. Exporting a merged lst is opt-in.
+
+✅ `hook-demo` builds identically against the merged table and the original, so
+the merge does not disturb what already worked.
