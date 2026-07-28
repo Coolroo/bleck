@@ -589,19 +589,142 @@ need the same treatment.
 
 ---
 
+---
+
+## The JSON API — how a GUI will talk to this
+
+**`bleck/api/` is the contract other programs integrate against.** The CLI
+prints for people; this is for tools. A GUI cannot shell out to
+`bleck mod build` on every keystroke.
+
+```bash
+bleck setup show <map> --json      # what a map places, names resolved
+bleck setup edits <mod> --json     # what a mod declares about placement
+bleck setup apply <mod> --json -   # write it back; - is stdin
+bleck mod export <name>            # a whole mod: identity, deps, code, setup
+bleck mod import <name> --json -
+bleck mod schema                   # JSON Schema for the above
+```
+
+An entire edit loop without touching `mod.json`:
+
+```bash
+bleck mod export hard-lineland | your-tool | bleck mod import hard-lineland --json -
+```
+
+### The four decisions inside it
+
+⚠️ **It is a wire format, deliberately separate from `bleck/mods/manifest/`.**
+The manifest is what a mod *declares* — tuned for being hand-edited and
+reviewed. The API is what a program *exchanges* — tuned for being unambiguous.
+Keeping them apart means the file format can change without breaking
+integrations. The conversions are round-trip tested against every real mod in
+the tree, because an editor that cannot re-open what it wrote is a converter.
+
+⚠️ **Reading and editing are different shapes.** `show` returns every slot;
+`edits` returns only what a mod changes. Sending a read back as edits would
+rewrite a hundred slots to change one, and lose the difference between "left
+alone" and "deliberately set to what it already was".
+
+⚠️ **Versioned twice.** `api_version` rides inside each top-level document, so
+one written to disk or pasted into a bug report still says what it is — a
+schema is not always to hand. `bleck.api.v1` versions the *code*, so a v2 can
+be added beside v1. `bleck.api` re-exports the current version; pin to
+`bleck.api.v1` to break loudly instead. Nested models carry no version; they are
+never exchanged alone.
+
+⚠️ **`apply`/`import` replace, they do not merge.** Merging needs a rule for
+"the document omits a field — clear it or keep it?", and either answer surprises
+half of callers. An editor holds the whole document anyway.
+
+**Overlay files are not in the API.** A mod's overlay is extracted game assets —
+binary, large, already on disk. An editor lists them from the filesystem.
+
+### Why pydantic
+
+`bleck mod schema`. The schema and the parser are the same declaration, so they
+cannot drift. That is the thing a hand-rolled JSON layer never gets right.
+
+⚠️ pylint cannot see through pydantic's descriptors and reports every field as a
+`FieldInfo` with no members. `pylint-pydantic` is loaded in `pyproject.toml`
+rather than scattering `# pylint: disable=no-member` as the API grows.
+
+---
+
+## Distribution: a binary, and CI that checks it
+
+`pyinstaller bleck.spec` produces **one ~15 MB executable, no Python needed**.
+`.github/workflows/build.yml` builds it for Linux, Windows and macOS on every
+change and runs the same `pytest` and `lint.py` a contributor runs.
+
+### ⚠️ The two packaging traps, both already hit
+
+1. **The three JSON catalogs are found with `Path(__file__).with_name()`**, so
+   they must be bundled at paths mirroring the package. Get it wrong and the
+   binary starts happily and then reports an *empty* catalog — which reads as a
+   corrupt install rather than a build bug.
+2. **`__main__.py` must use an absolute import.** PyInstaller runs it as a
+   top-level script, where `from .cli import ...` fails with "attempted relative
+   import with no known parent package" — a message that says nothing about
+   packaging.
+
+CLI command modules are collected explicitly in the spec: nothing references
+them by name, and PyInstaller follows imports rather than intentions.
+
+### `scripts/smoke_binary.py` is the step that matters
+
+**A PyInstaller build that *builds* proves almost nothing.** Every failure above
+produces a working-looking binary. The smoke test runs six checks against the
+artifact, each covering a different way packaging breaks rather than a different
+feature, and needs no extracted disc — so it runs on a machine that has never
+seen the game.
+
+🔶 **The workflow has never actually run.** The YAML parses and the matrix is
+right, but a runner-specific problem would only show on the first push.
+`macos-latest` is arm64, so that artifact is Apple Silicon only.
+
+---
+
+## Runtime dependencies, and why each exists
+
+`bleck` had none by design for a long time. It now has two, each argued:
+
+| | For | Reversible? |
+|---|---|---|
+| `pyyaml` | `bleck.yml` — hand-editable config wants comments, and YAML is not a format worth hand-rolling | Yes, at the cost of a worse format |
+| `pydantic` | The JSON API: validation, both directions, and a published schema from one declaration | Not really — it is the API's shape |
+
+⚠️ The install docs claimed "no runtime dependencies" for a while after this
+stopped being true. If a third is ever added, check that page.
+
+---
+
 ## Also open
 
-- 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each
-- 🔶 **The unfired-enemy question** (`mods/slot-check`) — untouched today, and
-  worth re-reading in light of D76: it also rests on "nothing appeared"
-- 🟢 **Licensing is deliberately deferred** (2026-07-27). It blocks sharing and
-  nothing else, and nothing is being shared until the base app exists. Do not
-  spend time on it before then — but it *does* have to be settled before the
-  first release, since `docs-site` tells people to clone a repo that is
-  all-rights-reserved by default.
-- 🟡 **PyYAML is now the first runtime dependency**, against a comment in
-  `pyproject.toml` that defended having none. Argued in
-  [`plan-config.md`](./plan-config.md); reversible
-- 🔶 **Diagnostic mods to prune**: `boot-combo` and `boot-observe` exist only to
-  investigate the bug D76 retracted. `button-probe` and `mapchange-probe` are
-  worth keeping
+- 🟢 **Licensing is deliberately deferred.** It blocks sharing and nothing else,
+  and nothing is shared until the base app exists. It *does* have to be settled
+  before the first release.
+- 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each. `a`,
+  `b`, `1`, `2` are confirmed (D68).
+- 🔶 **A save state.** Driving into a map leaves **Mario invisible** — no save,
+  no profile (D63). `--state` is implemented on both `bleck launch` and
+  `ingame.py`; making one needs a human to play far enough and press F1 once.
+- 🔶 **The docs site has never been looked at in a browser.**
+  `mkdocs build --strict` passes and every construct renders to the expected
+  HTML, which is not the same thing — and this session was a long lesson in
+  exactly that distinction.
+- 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
+  REL-relative addresses, 33 have no known address anywhere.
+
+## Next, toward the base app
+
+1. **More editing surfaces through the API.** Placement is done because its
+   format is fully decoded. The map archive is the prize and is *not* decoded —
+   that is a research problem before it is an editing one.
+2. **A GUI over the API.** It can be any language; the contract is JSON and the
+   schema is published.
+3. 🔶 **Speed, if profiling names it.** The LZ77 compressor is ~12 s/MB (D16),
+   the only place language choice shows as a user-visible problem. The recorded
+   answer is a PyO3 port of *just the compressor* — not a rewrite. 80 decision
+   entries of hard-won behaviour do not live in the language, and a rewrite
+   re-discovers every bug.

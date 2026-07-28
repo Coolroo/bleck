@@ -88,6 +88,7 @@ nav:
       - Scripting: guides/scripting.md
       - Testing: guides/testing.md
       - Code mods: guides/code-mods.md
+      - JSON API: guides/json-api.md
   - Reference:
       - CLI: reference/cli.md
       - Manifest: reference/manifest.md
