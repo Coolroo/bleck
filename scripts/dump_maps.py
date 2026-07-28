@@ -26,11 +26,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+from ingame import Session  # noqa: E402
+
+from bleck import platforms  # noqa: E402
 from bleck.backends.disc import DiscError, find_tool  # noqa: E402
 from bleck.mods import registry  # noqa: E402
-from bleck import platforms  # noqa: E402
-
-from ingame import Session  # noqa: E402
 
 #: `mapData` (eu0): MAP_ID_MAX pointers to MapData.
 MAP_DATA = 0x804031B8
@@ -80,7 +80,7 @@ def main() -> int:
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 
-    import dolphin_memory_engine as dme  # noqa: PLC0415
+    import dolphin_memory_engine as dme
 
     entries: list[dict] = []
     print(f"booting {image.name} ...")

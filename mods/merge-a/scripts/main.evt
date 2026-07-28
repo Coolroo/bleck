@@ -1,0 +1,7 @@
+-- Also called `main`. Both mods loop and write different gw slots, so a run
+-- can tell "both ran" from "one ran" -- which no unit test can show.
+script main {
+    gw[28] = 1
+    wait(60)
+    gw[28] = 2
+}

@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "name": "merge-b",
+  "version": "0.1.0",
+  "description": "Second code mod, to prove two merge into one REL",
+  "base": "eu0",
+  "dependencies": [{ "name": "merge-a" }],
+  "code": { "script": "scripts/main.evt", "target": "eu0", "module_id": 2 }
+}

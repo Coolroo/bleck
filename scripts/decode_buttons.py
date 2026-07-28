@@ -85,7 +85,7 @@ def main() -> int:
 
     readings = [
         Reading(button=name.lower(), observed=int(value, 16))
-        for name, value in zip(args.press, args.ring)
+        for name, value in zip(args.press, args.ring, strict=True)
     ]
 
     print("button    observed")

@@ -408,6 +408,53 @@ static void bleck_combos_on_seq(u32 seq)
 }}
 """
 
+#: Starting several mods' entry scripts, when a disc merges more than one.
+#:
+#: The single-mod form above is kept rather than replaced, so a disc holding one
+#: mod emits exactly what it always has. A loop over one element would behave
+#: identically and produce a different file, and "the output changed but only
+#: cosmetically" is a claim nobody can check cheaply.
+SCRIPT_START_MANY = """
+/*
+    Entry scripts, one per mod sharing this module.
+
+    Each mod's `main` is started, and all of them are re-armed together: they
+    are all torn down by the same map change, so there is nothing to track
+    separately (D43).
+*/
+
+#define BLECK_ENTRY_COUNT {count}
+
+static const s32 *const bleck_entries[BLECK_ENTRY_COUNT] = {{
+{entries}}};
+
+static u32 bleck_needs_start = 1;
+
+static void bleck_start_entry(u32 seq)
+{{
+    u32 i;
+
+    if (seq != BLECK_SEQ_GAME)
+    {{
+        bleck_needs_start = 1;
+        return;
+    }}
+    if (bleck_needs_start)
+    {{
+        bleck_needs_start = 0;
+        for (i = 0; i < BLECK_ENTRY_COUNT; i++)
+            evtEntry(bleck_entries[i], 0, 0);
+    }}
+}}
+"""
+
+#: A banner above each mod's own section of the merged module.
+MOD_SECTION = """
+/* ------------------------------------------------------------------------
+   {name}
+   ------------------------------------------------------------------------ */
+"""
+
 #: One trampoline per sequence, because the game passes no index of its own.
 SEQ_STUBS = """
 static void bleck_seq0(void *w) { bleck_after_seq(0, w); }

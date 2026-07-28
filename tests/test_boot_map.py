@@ -178,7 +178,7 @@ class TestBootMapOverride:
         assert built == ["target"]
 
     def test_without_an_override_a_mod_with_no_code_builds_nothing(self, built):
-        assert code.build_chain(self._chain(has_code=False), Path("unused")) == []
+        assert not code.build_chain(self._chain(has_code=False), Path("unused"))
         assert built == []
 
     def test_an_empty_override_changes_nothing(self, built):

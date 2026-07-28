@@ -30,11 +30,11 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "scripts"))
 
+from ingame import Session, find_bytes, running_dolphins  # noqa: E402
+
+from bleck import platforms  # noqa: E402
 from bleck.backends.disc import DiscError, find_tool  # noqa: E402
 from bleck.mods import registry  # noqa: E402
-from bleck import platforms  # noqa: E402
-
-from ingame import Session, find_bytes, running_dolphins  # noqa: E402
 
 
 @dataclass(frozen=True)
@@ -110,7 +110,7 @@ def main() -> int:
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 
-    import dolphin_memory_engine as dme  # noqa: PLC0415
+    import dolphin_memory_engine as dme
 
     with Session(image, dolphin, unlimited=True) as session:
         start = time.time()

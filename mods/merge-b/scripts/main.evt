@@ -1,0 +1,6 @@
+-- Deliberately also called `main`: that is the collision merging has to allow.
+script main {
+    gw[29] = 1
+    wait(60)
+    gw[29] = 2
+}

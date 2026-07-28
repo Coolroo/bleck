@@ -98,8 +98,14 @@ class TestManifestCodeBlock:
             mod_manifest.Manifest.from_json('{"name": "m", "code": "yes"}')
 
 
-class TestOneCodeModPerBuild:
-    """The loader opens exactly one /mod/mod.rel."""
+class TestSeveralCodeMods:
+    """The loader opens exactly one `/mod/mod.rel` — and does not care how many
+    mods went into it.
+
+    Two code mods used to be refused outright. They are now merged at compile
+    time, which satisfies the loader's limit without any runtime REL chaining
+    (`docs/plan-merging.md`).
+    """
 
     def _mod(self, name: str, has_code: bool):
         spec = mod_manifest.CodeSpec(script="s.evt") if has_code else None
@@ -107,17 +113,39 @@ class TestOneCodeModPerBuild:
             manifest=mod_manifest.Manifest(name=name, code=spec), root=Path(name)
         )
 
-    def test_two_code_mods_fail_loudly_and_name_both(self):
+    def test_two_code_mods_take_the_merged_path(self, monkeypatch):
+        """Both reach the compiler, rather than one being refused."""
+        merged: list[list[str]] = []
+
+        def record(mods, _target, _root, _override=None):
+            merged.append([m.name for m in mods])
+
+        monkeypatch.setattr(code, "build_merged", record)
         chain = resolver.Chain(
             entries=[
                 resolver.ChainEntry(self._mod("alpha", True), ""),
                 resolver.ChainEntry(self._mod("beta", True), "alpha"),
             ]
         )
-        with pytest.raises(code.CodeError) as caught:
-            code.build_chain(chain, workroot=Path("unused"))
-        message = str(caught.value)
-        assert "alpha" in message and "beta" in message
+        code.build_chain(chain, workroot=Path("unused"))
+        assert merged == [["alpha", "beta"]]
+
+    def test_one_code_mod_still_takes_the_single_path(self, monkeypatch):
+        """A one-mod disc must keep emitting what it always has, so it must not
+        wander into the merging code at all."""
+        seen: list[str] = []
+
+        def refuse(*_args, **_kwargs):
+            pytest.fail("a single code mod must not take the merged path")
+
+        def record(mod, _root, _override=None):
+            seen.append(mod.name)
+
+        monkeypatch.setattr(code, "build_merged", refuse)
+        monkeypatch.setattr(code, "build_mod", record)
+        chain = resolver.Chain(entries=[resolver.ChainEntry(self._mod("solo", True), "")])
+        code.build_chain(chain, workroot=Path("unused"))
+        assert seen == ["solo"]
 
     def test_one_code_mod_alongside_asset_mods_is_fine(self):
         chain = resolver.Chain(

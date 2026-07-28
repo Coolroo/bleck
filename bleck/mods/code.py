@@ -123,30 +123,28 @@ def build_chain(
     workroot: Path | None = None,
     override: CodeOverride | None = None,
 ) -> list[CodeBuild]:
-    """Compile every code mod in `chain`, newest last.
+    """Compile the chain's code mods into one `mod.rel`.
 
-    Raises before touching anything if the chain contains more than one code
-    mod: the Gecko loader opens exactly one `/mod/mod.rel`, so a second would be
-    silently dropped rather than merged. Failing loudly here is the interim
-    answer to that; chaining several modules together is a separate feature.
+    ⚠️ Several code mods used to be refused outright, because the Gecko loader
+    opens exactly one `/mod/mod.rel`. That limit is real and unchanged — but it
+    is about how many RELs the *loader* opens, not how many mods went into one.
+    Merging at compile time satisfies it without any runtime REL chaining, which
+    is the part nobody in this scene has solved (D39). See `plan-merging.md`.
     """
     coded = mods_with_code(chain)
-    if len(coded) > 1:
-        names = ", ".join(mod.name for mod in coded)
-        raise CodeError(
-            f"this chain contains {len(coded)} code mods ({names}), but the "
-            f"loader can only run one {REL_DISC_PATH}.\n"
-            "  Combine their scripts into a single mod for now."
-        )
 
     # An override can give code to a chain that has none. That is the point:
     # `--map` has to work on a pure asset or placement mod, which is exactly the
     # kind of mod someone wants to look at inside a particular level.
     if not coded and override is not None and not override.is_empty:
         coded = [chain.target]
+    if not coded:
+        return []
 
     root = workroot or mod_registry.build_root()
-    return [build_mod(mod, root, override) for mod in coded]
+    if len(coded) == 1:
+        return [build_mod(coded[0], root, override)]
+    return [build_merged(coded, chain.target, root, override)]
 
 
 def collect_sources(mod: Mod, spec) -> list[Path]:
@@ -268,6 +266,171 @@ def _script_text(mod: Mod, spec, boot_map: str) -> ScriptSource:
         path=path,
         origin=f"{spec.script} + code.boot -> {boot_map}",
     )
+
+
+@dataclass(frozen=True)
+class Part:
+    """One mod compiled but not yet emitted, on its way into a shared module."""
+
+    mod: Mod
+    spec: CodeSpec
+    source: ScriptSource
+    program: object | None
+    """The `CompiledProgram`, or None for a mod that ships only native C."""
+
+    sources: list[Path]
+    boot_map: str
+    combos: list[emit.ComboHook]
+
+    @property
+    def scripts(self) -> list[str]:
+        return [s.name for s in self.program.scripts] if self.program else []
+
+
+def _prepare(mod: Mod, override: CodeOverride | None) -> Part:
+    """Everything up to but not including emitting C.
+
+    Split from emission so one mod and several take the same path to a compiled
+    program, and differ only in what gets generated from it.
+    """
+    spec = mod.manifest.code
+    boot_map = override.boot_map if override else ""
+    if spec is None:
+        if not boot_map:
+            raise CodeError(f"{mod.name} declares no code to build")
+        # Nothing declared, but a boot map was asked for. Defaults are enough:
+        # they name eu0 and module 2, which is all the generated code needs.
+        spec = CodeSpec()
+    boot_map = boot_map or spec.boot_map
+
+    # The same table the link will use, so "that will not link" is said now
+    # rather than after a compile and a toolchain run (D61).
+    table = symbol_tables.best_available(
+        toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
+    )
+    source = _script_text(mod, spec, boot_map)
+    program = None
+    if source.text:
+        try:
+            # No scaffolding here: this pass only needs the compiled program.
+            # What the module *does* with it is decided at emission, which is
+            # the step that differs between one mod and several.
+            program = compile_source(
+                source.text,
+                origin=source.origin,
+                scaffolding=emit.Scaffolding(require_entry=False),
+                symbol_table=table,
+            ).program
+        except ScriptError as exc:
+            raise CodeError(f"{mod.name}:\n{exc.render(source.where)}") from exc
+
+    return Part(
+        mod=mod,
+        spec=spec,
+        source=source,
+        program=program,
+        sources=collect_sources(mod, spec),
+        boot_map=boot_map,
+        combos=combo_hooks_for(mod, spec, project_config.load()),
+    )
+
+
+def _link(generated_c: str, parts: list[Part], owner: Mod, workroot: Path) -> CodeBuild:
+    """Compile the generated C plus every part's native sources into one REL."""
+    headers = env.path(env.HEADERS_DIR)
+    spec = parts[-1].spec
+    sources: list[Path] = []
+    for part in parts:
+        sources += part.sources
+
+    result = toolchain.build_rel(
+        toolchain.BuildRequest(
+            source=generated_c,
+            workdir=workroot / CODE_WORKDIR / owner.name,
+            target=spec.target,
+            module_id=spec.module_id,
+            extra_sources=sources,
+            include_dirs=[headers] if headers and headers.is_dir() else [],
+        )
+    )
+
+    output = owner.overlay / REL_DISC_PATH
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_bytes(result.rel)
+
+    scripts: list[str] = []
+    for part in parts:
+        scripts += part.scripts
+    return CodeBuild(
+        mod=", ".join(part.mod.name for part in parts),
+        script=parts[-1].source.path or owner.root,
+        output=output,
+        size=result.size,
+        toolchain=result.toolchain,
+        scripts=scripts,
+        called_symbols=[],
+        sources=sources,
+        boot_map=next((p.boot_map for p in parts if p.boot_map), ""),
+    )
+
+
+def build_merged(
+    mods: list[Mod], target: Mod, workroot: Path, override: CodeOverride | None = None
+) -> CodeBuild:
+    """Compile several code mods into one `mod.rel`.
+
+    ⚠️ Every mod's `target` must agree. Addresses differ per game version, so a
+    module holding one mod built against `eu0` and another against `us0` would
+    link half its calls to the wrong places — and would do it silently.
+    """
+    parts = [_prepare(mod, override) for mod in mods]
+
+    targets = {part.spec.target for part in parts}
+    if len(targets) > 1:
+        listed = ", ".join(f"{part.mod.name}={part.spec.target}" for part in parts)
+        raise CodeError(
+            f"these mods target different game versions ({listed}), so they "
+            f"cannot share one module.\n"
+            f"  Addresses differ per version; a merged build would bind half "
+            f"its calls wrongly."
+        )
+
+    contributions = [
+        emit.ModPart(
+            name=part.mod.name,
+            program=part.program,
+            map_hooks=map_hooks_for(part.mod),
+            combos=part.combos,
+            boot_script=emit.BOOT_SCRIPT if part.boot_map else "",
+        )
+        for part in parts
+        if part.program is not None
+    ]
+    if not contributions:
+        raise CodeError(
+            "merging needs at least one mod with a script; these ship only "
+            "native sources, which cannot yet be combined."
+        )
+
+    # One banner for the disc, named for the mod that was asked for, so it is
+    # obvious which build is in the drive rather than which dependency it pulled.
+    banner = banner_for(target, target.manifest.code or parts[-1].spec)
+    if banner is not None and len(mods) > 1:
+        banner = emit.Banner(
+            text=f"{banner.text} +{len(mods) - 1}", sequences=banner.sequences
+        )
+
+    try:
+        generated = emit.generate_merged(
+            contributions,
+            origin=f"{len(contributions)} mods: "
+            + ", ".join(part.name for part in contributions),
+            banner=banner,
+        )
+    except ScriptError as exc:
+        raise CodeError(f"merging {len(mods)} code mods:\n{exc}") from exc
+
+    return _link(generated.text, parts, target, workroot)
 
 
 def build_mod(

@@ -293,7 +293,48 @@ def _script_array(script: CompiledScript, prefix: str = _PREFIX) -> str:
     return "\n".join(lines)
 
 
-def _map_block(hooks: list[MapHook], namespace: str = _PREFIX) -> str:
+@dataclass(frozen=True)
+class BoundHook:
+    """A map hook whose script has been resolved to a C identifier.
+
+    The indirection exists because a merged module's hook table is a *union*
+    across mods, and each row's script lives in whichever mod declared it. One
+    namespace cannot name them all, so the symbol is resolved before the table
+    is built rather than during.
+    """
+
+    map_name: str
+    symbol: str
+
+
+@dataclass(frozen=True)
+class BoundCombo:
+    """A combination whose script has been resolved to a C identifier."""
+
+    name: str
+    mask: int
+    symbol: str
+
+    @property
+    def comment(self) -> str:
+        return f"/* {self.name} */"
+
+
+def _bind_maps(hooks: list[MapHook], namespace: str) -> list[BoundHook]:
+    return [
+        BoundHook(map_name=h.map_name, symbol=f"{namespace}script_{h.script}")
+        for h in hooks
+    ]
+
+
+def _bind_combos(combos: list[ComboHook], namespace: str) -> list[BoundCombo]:
+    return [
+        BoundCombo(name=c.name, mask=c.mask, symbol=f"{namespace}script_{c.script}")
+        for c in combos
+    ]
+
+
+def _map_block(hooks: list[BoundHook], namespace: str = _PREFIX) -> str:
     """Map names, the scripts they start, and the sequence watcher."""
     if len(hooks) > MAX_MAP_HOOKS:
         raise ScriptError(
@@ -313,7 +354,7 @@ def _map_block(hooks: list[MapHook], namespace: str = _PREFIX) -> str:
         count=len(hooks),
         tables=tables,
         name_list="".join(f"    {prefix}name_{i},\n" for i in range(len(hooks))),
-        script_list="".join(f"    {namespace}script_{h.script},\n" for h in hooks),
+        script_list="".join(f"    {h.symbol},\n" for h in hooks),
     )
 
 
@@ -321,7 +362,7 @@ def _banner_block(banner: Banner) -> str:
     return runtime_c.BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
 
-def _combo_block(hooks: list[ComboHook], prefix: str = _PREFIX) -> str:
+def _combo_block(hooks: list[BoundCombo]) -> str:
     """Mask and script tables, plus the per-frame watcher."""
     if len(hooks) > MAX_COMBOS:
         raise ScriptError(
@@ -333,7 +374,7 @@ def _combo_block(hooks: list[ComboHook], prefix: str = _PREFIX) -> str:
     return runtime_c.COMBO_BLOCK.format(
         count=len(hooks),
         masks="".join(f"    0x{hook.mask:08X}u,  {hook.comment}\n" for hook in hooks),
-        scripts="".join(f"    {prefix}script_{hook.script},\n" for hook in hooks),
+        scripts="".join(f"    {hook.symbol},\n" for hook in hooks),
     )
 
 
@@ -364,22 +405,26 @@ def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
 
 
 def _footer(
-    entry: str,
-    hooks: list[MapHook],
+    entries: list[str],
+    hooks: list[BoundHook],
     *,
     banner: Banner | None = None,
     boot: str = "",
-    combos: list[ComboHook] | None = None,
+    combos: list[BoundCombo] | None = None,
     namespace: str = _PREFIX,
 ) -> str:
-    """Assemble the scaffolding that runs the mod, from the pieces it needs.
+    """Assemble the shared runtime, from the pieces the module needs.
+
+    Emitted **once** however many mods contributed, which is the whole reason
+    the hook tables are unions rather than per-mod: a second `_prolog` would be
+    a second set of installs fighting over `seq_data`.
 
     A free-running script and a map hook want the same per-frame hook on the
     sequence table -- one to start and re-start itself, the other to notice
     where the game went. A mod using both installs one set of hooks, not two.
     """
     combos = list(combos or [])
-    if not entry and not hooks and banner is None and not boot and not combos:
+    if not entries and not hooks and banner is None and not boot and not combos:
         return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
 
     parts = [runtime_c.SEQ_TABLE]
@@ -392,10 +437,20 @@ def _footer(
         parts.append(_map_block(hooks, namespace))
         body += "    bleck_maps_on_seq(seq);\n"
     if combos:
-        parts.append(_combo_block(combos, namespace))
+        parts.append(_combo_block(combos))
         body += "    bleck_combos_on_seq(seq);\n"
-    if entry:
-        parts.append(runtime_c.SCRIPT_START % entry)
+    if len(entries) == 1:
+        # The single-mod form, kept verbatim so a one-mod disc emits exactly
+        # what it always has.
+        parts.append(runtime_c.SCRIPT_START % entries[0])
+        body += "    bleck_start_entry(seq);\n"
+    elif entries:
+        parts.append(
+            runtime_c.SCRIPT_START_MANY.format(
+                count=len(entries),
+                entries="".join(f"    {name},\n" for name in entries),
+            )
+        )
         body += "    bleck_start_entry(seq);\n"
     # Last, so anything else due this frame has already run: the boot script
     # tears the world down a couple of seconds later.
@@ -419,6 +474,34 @@ def _footer(
     return "".join(parts)
 
 
+def _program_section(program: CompiledProgram, prefix: str) -> list[str]:
+    """One program's strings and script arrays, under its own namespace.
+
+    Split out so the single-mod and merged paths emit *identical* per-program
+    code and differ only in how many sections there are and what shared runtime
+    follows them.
+    """
+    parts: list[str] = []
+    if program.strings:
+        parts.append(
+            "\n".join(
+                f"static const char {prefix}string_{index}[] = {_c_string(text)};"
+                for index, text in enumerate(program.strings)
+            )
+        )
+    if len(program.scripts) > 1:
+        # Scripts may spawn each other in any order, so every array is declared
+        # before any is defined.
+        parts.append(
+            "\n".join(
+                f"extern const s32 {prefix}script_{script.name}[];"
+                for script in program.scripts
+            )
+        )
+    parts.extend(_script_array(script, prefix) for script in program.scripts)
+    return parts
+
+
 def generate_bare(
     origin: str = "native sources", banner: Banner | None = None
 ) -> GeneratedSource:
@@ -431,7 +514,7 @@ def generate_bare(
         runtime_c.HEADER.format(origin=origin)
         + "\n"
         + runtime_c.MOD_HOOK
-        + _footer("", [], banner=banner)
+        + _footer([], [], banner=banner)
     )
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
@@ -464,32 +547,14 @@ def generate(
     )
     parts.append(runtime_c.MOD_HOOK)
 
-    if program.strings:
-        parts.append(
-            "\n".join(
-                f"static const char {plan.prefix}string_{index}[] = {_c_string(text)};"
-                for index, text in enumerate(program.strings)
-            )
-        )
-
-    if len(program.scripts) > 1:
-        # Scripts may spawn each other in any order, so every array is declared
-        # before any is defined.
-        parts.append(
-            "\n".join(
-                f"extern const s32 {plan.prefix}script_{script.name}[];"
-                for script in program.scripts
-            )
-        )
-
-    parts.extend(_script_array(script, plan.prefix) for script in program.scripts)
+    parts.extend(_program_section(program, plan.prefix))
     parts.append(
         _footer(
-            f"{plan.prefix}script_{entry}" if entry else "",
-            hooks,
+            [f"{plan.prefix}script_{entry}"] if entry else [],
+            _bind_maps(hooks, plan.prefix),
             banner=plan.banner,
             boot=(f"{plan.prefix}script_{plan.boot_script}" if plan.boot_script else ""),
-            combos=plan.combos,
+            combos=_bind_combos(plan.combos, plan.prefix),
             namespace=plan.prefix,
         )
     )
@@ -500,6 +565,130 @@ def generate(
         text=text,
         entry_script=entry,
         external_symbols=list(program.called_symbols),
+    )
+
+
+@dataclass(frozen=True)
+class ModPart:
+    """One mod's compiled contribution to a module shared with other mods."""
+
+    name: str
+    program: CompiledProgram
+    map_hooks: list[MapHook] = field(default_factory=list)
+    combos: list[ComboHook] = field(default_factory=list)
+    boot_script: str = ""
+
+    @property
+    def prefix(self) -> str:
+        return prefix_for(self.name)
+
+    @property
+    def entry(self) -> str:
+        """This mod's free-running script, if it declares one.
+
+        Optional here, unlike a single-mod build: a disc with three mods where
+        only one loops is perfectly ordinary, and demanding `main` from the
+        others would be ceremony.
+        """
+        names = [script.name for script in self.program.scripts]
+        return ENTRY_SCRIPT if ENTRY_SCRIPT in names else ""
+
+
+def _check_slugs(parts: list[ModPart]) -> None:
+    """Two mods must not reduce to the same namespace.
+
+    `hard-mode` and `hard mode` both become `hard_mode`, and the result would be
+    two definitions of the same symbol -- a linker error naming a generated
+    identifier nobody wrote, rather than the two mods that actually collided.
+    """
+    seen: dict[str, str] = {}
+    for part in parts:
+        slug = mod_slug(part.name)
+        if slug in seen:
+            raise ScriptError(
+                f"mods {seen[slug]!r} and {part.name!r} both reduce to the "
+                f"namespace {slug!r}, so their generated symbols would collide.\n"
+                f"  Rename one of them.",
+                Position(),
+            )
+        seen[slug] = part.name
+
+
+def generate_merged(
+    parts: list[ModPart],
+    origin: str = "several mods",
+    banner: Banner | None = None,
+) -> GeneratedSource:
+    """Render several mods' programs as one C translation unit.
+
+    ⚠️ The point of the exercise: the Gecko loader opens exactly one
+    `/mod/mod.rel`, but it does not care how many mods went into it. Merging at
+    compile time satisfies that limit without any runtime REL chaining, which
+    is the part nobody in this scene has solved (D39).
+
+    Each mod keeps its own namespace, so two mods may both declare
+    `script main`. What is emitted *once* is the shared runtime: one `_prolog`,
+    one set of sequence hooks, and hook tables that are the **union** across
+    mods rather than one table each.
+    """
+    if not parts:
+        raise ScriptError("no mods to merge", Position())
+    _check_slugs(parts)
+
+    booting = [part for part in parts if part.boot_script]
+    if len(booting) > 1:
+        names = ", ".join(part.name for part in booting)
+        raise ScriptError(
+            f"{len(booting)} mods declare a boot map ({names}), but a disc "
+            f"starts in one place.\n"
+            f"  Keep it on one of them, or pass --map to override for a build.",
+            Position(),
+        )
+
+    sections: list[str] = []
+    entries: list[str] = []
+    hooks: list[BoundHook] = []
+    combos: list[BoundCombo] = []
+    externals: list[str] = []
+    boot = ""
+
+    for part in parts:
+        _check_map_hooks(part.program, part.map_hooks)
+        _check_combo_hooks(part.program, part.combos)
+        _check_boot_script(part.program, part.boot_script)
+
+        sections.append(runtime_c.MOD_SECTION.format(name=part.name))
+        sections.extend(_program_section(part.program, part.prefix))
+
+        if part.entry:
+            entries.append(f"{part.prefix}script_{part.entry}")
+        hooks += _bind_maps(part.map_hooks, part.prefix)
+        combos += _bind_combos(part.combos, part.prefix)
+        if part.boot_script:
+            boot = f"{part.prefix}script_{part.boot_script}"
+        for name in part.program.called_symbols:
+            if name not in externals:
+                externals.append(name)
+
+    head = [runtime_c.HEADER.format(origin=origin)]
+    if externals:
+        head.append(
+            "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
+            + "\n".join(f"extern void {name}(void);" for name in externals)
+        )
+    head.append(
+        "/* Started by the game's script scheduler. */\n"
+        "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
+    )
+    head.append(runtime_c.MOD_HOOK)
+
+    footer = _footer(entries, hooks, banner=banner, boot=boot, combos=combos)
+    text = "\n\n".join(head + sections + [footer])
+    _require_ascii(text)
+    return GeneratedSource(
+        text=text,
+        entry_script=", ".join(entries),
+        external_symbols=externals,
     )
 
 

@@ -95,7 +95,12 @@ class _HardwareInput(ctypes.Structure):
 
 
 class _InputUnion(ctypes.Union):
-    _fields_ = [("mi", _MouseInput), ("ki", _KeyboardInput), ("hi", _HardwareInput)]
+    # ctypes reads `_fields_` at class creation: a declaration, not shared state.
+    _fields_ = [  # noqa: RUF012
+        ("mi", _MouseInput),
+        ("ki", _KeyboardInput),
+        ("hi", _HardwareInput),
+    ]
 
 
 class _Input(ctypes.Structure):

@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "merge-a",
+  "version": "0.1.0",
+  "description": "First code mod, to prove two merge into one REL",
+  "base": "eu0",
+  "code": { "script": "scripts/main.evt", "target": "eu0", "module_id": 2 }
+}

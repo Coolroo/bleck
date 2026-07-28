@@ -27,11 +27,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+from ingame import Session  # noqa: E402
+
+from bleck import platforms  # noqa: E402
 from bleck.backends.disc import DiscError, find_tool  # noqa: E402
 from bleck.mods import registry  # noqa: E402
-from bleck import platforms  # noqa: E402
-
-from ingame import Session  # noqa: E402
 
 #: eu0. Both structs are 0x68 bytes (spm-headers, npcdrv.h).
 TEMPLATES = 0x80449888
@@ -143,7 +143,7 @@ def main() -> int:
     except DiscError as exc:
         raise SystemExit(str(exc)) from exc
 
-    import dolphin_memory_engine as dme  # noqa: PLC0415
+    import dolphin_memory_engine as dme
 
     tables = None
     print(f"booting {image.name} ...")

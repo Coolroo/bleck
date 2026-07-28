@@ -48,11 +48,11 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
+import keys  # noqa: E402  -- scripts/, deliberately not part of the bleck package
+
+from bleck import platforms  # noqa: E402
 from bleck.backends.disc import DiscError, find_tool  # noqa: E402
 from bleck.mods import registry  # noqa: E402
-from bleck import platforms  # noqa: E402
-
-import keys  # noqa: E402  -- scripts/, deliberately not part of the bleck package
 
 #: Unused TRK interrupt vector table. Free, and at the same address in every
 #: region -- which is why `spm-loaders` reserves this range too. The Gecko
@@ -159,7 +159,7 @@ class Session:
         return self
 
     def __exit__(self, *_exc: object) -> None:
-        import dolphin_memory_engine as dme  # noqa: PLC0415
+        import dolphin_memory_engine as dme
 
         if dme.is_hooked():
             dme.un_hook()
@@ -208,7 +208,7 @@ class Session:
         return text if text and all(c.isalnum() or c == "_" for c in text) else ""
 
     def read(self, probe: int, words: int, watch_gw: list[int]) -> ReadResult:
-        import dolphin_memory_engine as dme  # noqa: PLC0415
+        import dolphin_memory_engine as dme
 
         if not dme.is_hooked():
             dme.hook()
@@ -474,7 +474,7 @@ def main() -> int:
 
             if args.find and elapsed >= args.find_at and not searched:
                 searched = True
-                import dolphin_memory_engine as dme  # noqa: PLC0415
+                import dolphin_memory_engine as dme
 
                 for text_pattern in args.find:
                     pattern = bytes.fromhex(text_pattern)

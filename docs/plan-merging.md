@@ -143,12 +143,21 @@ perfectly by every mechanical check and still froze.
    `bleck_`; `prefix_for("hard-mode")` gives `bleck_hard_mode_`. Single-mod
    output verified byte-identical on four representative programs, and a
    real mod still builds to the same size. `tests/test_prefix.py`.
-2. Compile per mod, merge into one translation unit.
-3. Shared runtime block: hooks installed once, all entries started.
-4. Lift the >1 error; union banner, boot map and map hooks.
+2. ✅ **Compile per mod, merge into one translation unit.** Done --
+   `emit.generate_merged` and `code.build_merged`. Two mods both declaring
+   `script main` compile to one 1716-byte module through devkitPPC.
+3. ✅ **Shared runtime block.** Done -- one `_prolog`, one set of sequence
+   hooks, and `bleck_entries[]` starting every mod's `main`.
+4. ✅ **Lifted the >1 error**; banner, boot map, map hooks and combos are
+   unioned. Two boot maps are refused naming both -- a disc starts in one
+   place.
 5. ✅ **The 32-hook cap.** Done -- `MAX_MAP_HOOKS` refuses the 33rd with an
    error saying *why*, so nobody just raises the number.
-6. Verify in-game with two real mods.
+6. ⬅️ **Verify in game with two real mods.** NOT DONE, and the only step
+   that matters now. `mods/merge-a` and `mods/merge-b` both loop and write
+   different `gw` slots, so a run can tell "both ran" from "one ran".
+   No unit test can show that, and D51 installed perfectly by every
+   mechanical check and still froze.
 7. `docs-site` + decision-log entry.
 
 Step 1 is worth landing on its own: it is invisible, it is covered by existing
