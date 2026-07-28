@@ -5379,3 +5379,83 @@ which is only meaningful *during* a map change — precisely the field that cost
 D70/D73/D74. That zero says nothing about the game. The map names in the
 transcript come from the rig's own `seq_mapchange_wp->mapName` (the D76 fix) and
 are correct: the first `SEQ_GAME` sample was taken while `aa4_01` was current.
+
+---
+
+## D89 — ✅ In-place evt bytecode patching works, with a control (2026-07-28)
+
+**A vanilla Super Paper Mario script called code in `mod.rel`, and the map kept
+running.** This is the capability `bleck` was missing against mods like
+`spm-lunatic-pit`, and it is now measured rather than argued.
+
+### The patch
+
+`he1_01`'s init script begins `DEBUG_PUT_MSG <msg>` — opcode `0x72`, argc 1, so
+**two words**. `USER_FUNC f` with no extra arguments is `EVT_HELPER_CMD(1, 92)`
+plus the pointer (`spm-headers/mod/evt_cmd.h`) — also **two words**.
+
+So one replaces the other with nothing moving, which is what keeps the
+per-`EvtEntry` `jumptable[]` valid (D87). Two words at `0x80D2FF10`:
+
+    00010072 80CB3798     ->     0001005C 80F65F04
+    DEBUG_PUT_MSG msg            USER_FUNC patchedHook
+
+`DEBUG_PUT_MSG` was chosen because it is the only instruction in that script
+that is not load-bearing — the rest is `evt_hitobj_attr_onoff`,
+`evt_mapobj_flag_onoff`, `evt_mapobj_flag4_onoff` and `evt_map_playanim`, scene
+setup where a clobber would break the map and make failure unreadable.
+⛔ `aa4_01` was deliberately not the target: it drives the attract demo, so
+breaking it would stop the rig reaching gameplay at all.
+
+### ✅ Result, and the control that makes it one
+
+Identical builds, booted to `he1_01` with `--map`. The **only** difference is
+the guard constant the patch is gated on.
+
+| Report field | Patched | Control (guard refuses) |
+|---|---|---|
+| state | `1` applied | `2` refused |
+| word 0, read back | `0001005C` | `00010072` *(untouched)* |
+| word 1, read back | `80F65F04` | `80CB3798` *(untouched)* |
+| **hook entries** | **1** | **0** |
+| sentinel | `B1ECB1EC` | `0` |
+| map, 90 s | `he1_01`, frames climbing | `he1_01`, frames climbing |
+
+The readback is what separates *"the store did not stick"* from *"the VM ignored
+it"* — two failures that look identical from outside. Both are excluded.
+
+### What this settles
+
+- ✅ **The written word takes effect.** The evt VM read the mutated bytecode.
+- ✅ **A vanilla script can call into `mod.rel`** by pointer, with no dispatcher
+  changes and no new opcodes.
+- ✅ **`2` is the right user-func return.** The script advanced and the map ran
+  normally for 90 s. (The sentinel was written *before* returning precisely so a
+  wrong guess would still have shown the hook ran.)
+- ✅ **No cache flush is needed.** This is bytecode read as *data* through the
+  same data cache — unlike patching PowerPC instructions, which needs
+  `dcbst`/`sync`/`icbi`.
+- ✅ **The script is identical booted directly or reached via the attract demo** —
+  word 1 was `80CB3798` in both this run and D88's dump.
+
+### Still open
+
+- 🔶 Only `MapData.initScript` was patched. `getItemUseEvt`, `evt_door.h` and
+  `npcdrv.h` scripts are untested.
+- 🔶 The hook ran **once**. Whether a patch survives leaving and re-entering the
+  map is untested — evt state is torn down across a map change (D51).
+- ⛔ Still not attempted: instruction insertion or deletion (moves labels;
+  `jumptable[]` is cached per entry), pointer swapping (D51 froze), and adding
+  opcodes to the dispatcher as `evtpatch` does.
+- ⚠️ Patching at `mod_prolog` mutates the script for the **whole session**,
+  including maps entered later. Fine for a probe; a real feature needs to decide
+  whether patches are permanent or re-applied per arrival.
+
+### What this unblocks
+
+A declarative surface: a mod names a script, an offset and a replacement, and
+`bleck` generates the prolog code that applies it — edits as data, generated at
+build time, never shipped as baked bytes (`vision.md`). The guard used here
+(refuse unless the target word is what was decoded) should be part of it: a
+patch that silently writes into an unexpected script is the failure mode worth
+designing out.
