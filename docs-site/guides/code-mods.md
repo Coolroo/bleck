@@ -28,6 +28,39 @@ Add a `sources` entry to the mod's `code` block:
 Either half is optional; at least one is required. `bleck mod build` compiles
 them into a single `mod.rel`.
 
+## Several code mods on one disc
+
+You can install more than one. `bleck` compiles them **together** into the one
+`mod.rel` the disc carries — so a chain like `hard-mode -> extra-enemies` works
+the same as a single mod, and both mods' scripts run.
+
+Two mods may both declare `script main`; each gets its own namespace in the
+generated module, and every mod's `main` is started.
+
+Three things are decided per **disc** rather than per mod, and `bleck` refuses
+rather than picking for you:
+
+| If two mods… | You get |
+|---|---|
+| both set `code.boot` | an error naming both — a disc starts in one place |
+| set different `code.target` | an error — addresses differ per game version, and a mixed build would call the wrong ones without complaining |
+| have names that reduce to the same identifier, like `hard-mode` and `hard mode` | an error naming both mods |
+
+!!! note "Why this is unusual"
+
+    Elsewhere in the Super Paper Mario scene, running two code mods at once is
+    an unsolved problem — the loader opens exactly one `/mod/mod.rel`, and
+    attempts to chain several at runtime have not worked out.
+
+    That limit is real, and `bleck` does not fight it. It produces **one** REL,
+    exactly as before; the merging happens at compile time, where there is
+    nothing to go wrong at runtime.
+
+!!! warning "Native sources are the one gap"
+
+    Two mods that both ship `code.sources` and both define `mod_prolog` will
+    collide when they link. Scripts merge cleanly; C does not yet.
+
 ## Writing a hook
 
 `bleck` owns `_prolog` — it has to install its sequence hooks first. Your code

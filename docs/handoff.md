@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D77)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D78)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -559,10 +559,24 @@ protection system-wide and outlive the process.
 
 ---
 
-## Next: compiling several mods into one REL
+## ✅ Done: compiling several mods into one REL
 
-**This is the planned next piece.** Full design in
-[`plan-merging.md`](./plan-merging.md).
+**Landed and verified in game** (D78). Design in
+[`plan-merging.md`](./plan-merging.md), all seven steps marked.
+
+```
+[t+45s] seq=GAME  map=aa4_01  gw[28]=2  gw[29]=2
+```
+
+`merge-a` writes `gw[28]`, `merge-b` writes `gw[29]`, **both declare
+`script main`**, and both ran to completion. Each slot is the other's
+positive control — the rule D76 cost six runs to learn.
+
+🔶 **One gap**: two mods that both ship `code.sources` would collide on
+`mod_prolog` at link time. Scripts merge cleanly; C does not yet. The plan's
+answer is to detect and refuse naming both.
+
+<details><summary>The original plan text, for reference</summary>
 
 The insight: the Gecko loader opens exactly one `/mod/mod.rel`, but **it does
 not care how many mods went into it**. Merging at *compile* time produces one
@@ -592,11 +606,11 @@ need the same treatment.
 
 ### Then
 
-- union banner, boot map and map hooks across mods; start every mod's `main`
-- `mod_prolog`: two mods defining it collide. **Detect and refuse, naming both**
-  — a good error beats a clever mechanism until someone needs several
-- ⚠️ verify in game with two real mods. Unit tests cannot show two mods' scripts
-  both running; D51 installed perfectly by every mechanical check and froze
+- ✅ banner, boot map, map hooks and combos unioned; every mod's `main` started
+- 🔶 `mod_prolog`: still the open gap, see above
+- ✅ verified in game with two real mods (D78)
+
+</details>
 
 ---
 
