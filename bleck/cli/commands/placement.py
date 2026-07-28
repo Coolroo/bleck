@@ -8,11 +8,18 @@ places, change one thing, build, boot.
 from __future__ import annotations
 
 import argparse
+import json
+import sys
+from dataclasses import replace
+from pathlib import Path
 
+from pydantic import ValidationError
+
+from bleck import api
 from bleck.backends import maps
 from bleck.common.errors import BleckError
 from bleck.formats import setup
-from bleck.mods import registry
+from bleck.mods import manifest, registry
 
 CATEGORY = "inspection"
 
@@ -42,6 +49,9 @@ def _path(name: str):
 def cmd_show(args: argparse.Namespace) -> int:
     path = _path(args.map)
     data = setup.read(path)
+
+    if args.json:
+        return _emit(_as_json(args.map, data))
 
     print(f"{args.map}: {data.summary()}")
     if data.version != setup.DOCUMENTED_VERSION:
@@ -101,6 +111,11 @@ def register(add) -> None:
     shown = sub.add_parser("show", help="list one map's placements")
     shown.add_argument("map", help="map name, e.g. he1_01")
     shown.add_argument("--all", action="store_true", help="include the empty slots too")
+    shown.add_argument(
+        "--json",
+        action="store_true",
+        help="emit machine-readable JSON instead, for another tool to consume",
+    )
     shown.set_defaults(func=cmd_show)
 
     listing = sub.add_parser("list", help="every map that places something")
@@ -108,3 +123,124 @@ def register(add) -> None:
         "--min-enemies", type=int, default=0, metavar="N", help="only maps with N+"
     )
     listing.set_defaults(func=cmd_list)
+
+    register_editing(sub)
+
+
+def _emit(model) -> int:
+    """Print a pydantic model as JSON, and nothing else.
+
+    Nothing else on purpose: a caller piping this into `jq` or a GUI should not
+    have to strip a friendly header off the front.
+    """
+    print(model.model_dump_json(indent=2, exclude_none=True))
+    return 0
+
+
+def _read_json(source: str) -> str:
+    """JSON from a file, or from stdin when the path is `-`."""
+    if source == "-":
+        return sys.stdin.read()
+    path = Path(source)
+    if not path.exists():
+        raise BleckError(f"no such file: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def _as_json(map_name: str, data: setup.SetupFile) -> api.MapPlacements:
+    # Entry *fields* are only decoded for version 6; other versions parse as a
+    # container and nothing more. Saying so beats emitting confident nulls.
+    documented = data.version == setup.DOCUMENTED_VERSION
+    names = setup.load_names()
+    enemies = []
+    for slot, enemy in enumerate(data.enemies):
+        species = (
+            names.lookup(enemy.template)
+            if names and documented and not enemy.is_empty
+            else None
+        )
+        enemies.append(
+            api.EnemyPlacement.of(slot, enemy, species.describe() if species else "")
+        )
+    return api.MapPlacements(
+        map=map_name,
+        version=data.version,
+        documented=documented,
+        enemies=enemies,
+    )
+
+
+def cmd_edits(args: argparse.Namespace) -> int:
+    """What one mod declares, as JSON. The read half of the editing loop."""
+    mod = registry.load().require(args.name)
+    edits = api.SetupEdits.of(mod.manifest.setup)
+    if args.json:
+        return _emit(edits)
+    if not edits.setup:
+        print(f"{mod.name} declares no placement changes")
+        return 0
+    for map_name, entries in edits.setup.items():
+        print(f"  {map_name}")
+        for edit in entries:
+            print(f"    {edit.model_dump_json(exclude_none=True)}")
+    return 0
+
+
+def cmd_apply(args: argparse.Namespace) -> int:
+    """Write declared edits into a mod's `mod.json`, from JSON.
+
+    ⚠️ Replaces the mod's `setup` block rather than merging into it. Merging
+    would need a rule for "the incoming JSON omits a map -- delete it, or leave
+    it?", and any rule chosen would surprise half the callers. An editor holds
+    the whole document anyway.
+    """
+    mod = registry.load().require(args.name)
+    try:
+        incoming = api.SetupEdits.model_validate_json(_read_json(args.json))
+    except ValidationError as exc:
+        raise BleckError(f"{args.json}: {exc}") from exc
+
+    updated = replace(mod.manifest, setup=incoming.to_manifest())
+    manifest.write(mod.root, updated)
+
+    changed = sum(len(edits) for edits in incoming.setup.values())
+    print(
+        f"{mod.name}: wrote {changed} edit(s) across "
+        f"{len(incoming.setup)} map(s) to {mod.root / manifest.MANIFEST_NAME}"
+    )
+    return 0
+
+
+def cmd_schema(args: argparse.Namespace) -> int:
+    """The JSON Schema for these documents, so other tools can validate.
+
+    The point of using pydantic rather than hand-rolling the JSON: the schema
+    and the parser cannot drift, because they are the same declaration.
+    """
+    model = api.MapPlacements if args.of == "map" else api.SetupEdits
+    print(json.dumps(model.model_json_schema(), indent=2))
+    return 0
+
+
+def register_editing(sub) -> None:
+    """The JSON half: read a mod's edits, write them back, publish the schema."""
+    edits = sub.add_parser("edits", help="what a mod declares, as JSON")
+    edits.add_argument("name", help="mod name")
+    edits.add_argument("--json", action="store_true", help="machine-readable output")
+    edits.set_defaults(func=cmd_edits)
+
+    apply_ = sub.add_parser("apply", help="write declared edits into a mod.json")
+    apply_.add_argument("name", help="mod name")
+    apply_.add_argument(
+        "--json", required=True, metavar="FILE", help="JSON document, or - for stdin"
+    )
+    apply_.set_defaults(func=cmd_apply)
+
+    schema = sub.add_parser("schema", help="JSON Schema for these documents")
+    schema.add_argument(
+        "--of",
+        choices=("map", "edits"),
+        default="edits",
+        help="which document (default: edits)",
+    )
+    schema.set_defaults(func=cmd_schema)

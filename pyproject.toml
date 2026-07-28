@@ -8,6 +8,11 @@ dependencies = [
     # YAML is not a format worth hand-rolling: `.env`'s parser is safe because
     # its whole grammar is `KEY=VALUE`, and YAML's is not that.
     "pyyaml>=6.0",
+    # The JSON contract other applications integrate against: validation,
+    # serialisation and a published schema from one set of declarations.
+    # A GUI cannot shell out to `bleck mod build` per keystroke, so this
+    # boundary has to be a real API rather than CLI output (docs/vision.md).
+    "pydantic>=2.7",
 ]
 
 [project.scripts]
@@ -30,6 +35,10 @@ dev = [
     # watch a screen produced two wrong conclusions; this settled the same
     # question in four unattended runs (D43).
     "dolphin-memory-engine>=1.3",
+    # pylint cannot see through pydantic's descriptors and reports every
+    # model field as a FieldInfo with no members. Teaching it beats
+    # scattering `# pylint: disable=no-member` as the API grows.
+    "pylint-pydantic>=0.3",
 ]
 
 # Separate from `dev` so that editing prose does not pull in a test and lint
@@ -68,7 +77,11 @@ ignore = [
 "tests/*" = ["ARG001", "ARG002"]
 
 [tool.pylint.main]
-load-plugins = ["lint_plugins.container_returns", "lint_plugins.env_access"]
+load-plugins = [
+    "lint_plugins.container_returns",
+    "lint_plugins.env_access",
+    "pylint_pydantic",
+]
 ignore-paths = ["\\.venv", "build", "dist"]
 # Must stay 1: with jobs > 1 pylint loads custom plugins once per worker and
 # every plugin message is reported twice. Verified on pylint 4.0.6.

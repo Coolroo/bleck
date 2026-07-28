@@ -316,3 +316,45 @@ Compile a script all the way to a loadable `.rel` module.
 | `0` | Success |
 | `1` | User-fixable error, or verification failure |
 | `130` | Interrupted |
+
+### `bleck setup` — JSON in, JSON out
+
+Three subcommands exist for programs rather than people. Every document is
+validated against a published schema, so an integration finds out about a typo
+immediately rather than at build time.
+
+```bash
+bleck setup show <map> --json     # what a map currently places
+bleck setup edits <mod> --json    # what a mod declares
+bleck setup apply <mod> --json FILE   # write declared edits back; - for stdin
+bleck setup schema --of edits     # JSON Schema for the above
+```
+
+A whole edit loop, without touching `mod.json` by hand:
+
+```bash
+bleck setup edits hard-lineland --json > edits.json
+# ...change it in your editor, or your program...
+bleck setup apply hard-lineland --json edits.json
+```
+
+or piped straight through:
+
+```bash
+bleck setup edits hard-lineland --json | your-tool | bleck setup apply hard-lineland --json -
+```
+
+!!! note "Reading and editing are different shapes"
+
+    `show` returns **every** slot with the enemy name resolved; `edits` returns
+    only the slots a mod changes. A read is not an edit turned around — sending
+    a whole map back would rewrite a hundred slots to change one, and lose the
+    difference between "left alone" and "deliberately set to what it already
+    was".
+
+!!! warning "`apply` replaces, it does not merge"
+
+    The mod's whole `setup` block is replaced by the document you send. Merging
+    would need a rule for "the incoming JSON omits a map — delete it or keep
+    it?", and either answer surprises half of callers. An editor holds the whole
+    document anyway.
