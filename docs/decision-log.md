@@ -3852,3 +3852,49 @@ result — "hung before the first readable frame" — not an absence of one.
 - ✅ `SeqWork` is `0x24` bytes, not the 0x10 the generated C assumes. The
   generated struct only reads `seq`, `stage` and `p0`, so it is correct as far
   as it goes, but it is not the whole struct.
+
+---
+
+## D66 — Input *can* be read; D48 was about something else (2026-07-27)
+
+✅ **A mod can read the controller. D48 does not say otherwise, and treating it
+as though it did closed off a whole design space for several sessions.**
+
+D48 established that input cannot be *injected into Dolphin from outside* --
+DirectInput ignores the message queue, and driver-level injection needs an
+unlocked session with Dolphin focused. That is a statement about **automating**
+input for unattended runs. It says nothing about the game reading its own
+controller, which it does every frame.
+
+Verified against `work/upstream/spm-headers`:
+
+| Piece | Where | Value |
+|---|---|---|
+| `wpadGetWork()` | `spm.eu0.lst` | `0x8023697c` -- already linkable |
+| `WpadWork.statuses[4][16]` | `spm/wpadmgr.h` | offset `0x006C`; major index controller, minor age, latest 0 |
+| `KPADStatus` | `wii/kpad.h` | `0x84` bytes |
+| `KPADStatus.buttonsHeld` | `wii/kpad.h` | offset `0x0` |
+
+So `wpadGetWork()->statuses[0][0].buttonsHeld` is live button state, reachable
+from the per-frame sequence hook that already exists.
+
+🔶 **The button masks are not in spm-headers** and must be verified in-game
+before use -- see `plan-config.md`. Inference is exactly what cost D65.
+
+**The general lesson:** a recorded ⛔ is scoped to what was actually tested. D48
+was written about one technique and then read as a blanket fact about input.
+Re-read the entry before letting it rule something out.
+
+### Two plans written
+
+- [`plan-config.md`](./plan-config.md) -- a `bleck.yml` holding named button
+  combos and other compile-time values, injected at build time.
+  ⚠️ Costs the project's first runtime dependency; the trade is argued there.
+- [`plan-merging.md`](./plan-merging.md) -- several code mods merged into **one**
+  REL at compile time. The loader's one-`mod.rel` limit is satisfied because
+  only one REL is ever produced, so `chainrel`'s unsolved runtime chaining
+  (D39) is not on this path at all.
+
+  ⚠️ It surfaces a live latent bug: `bleck_map_pending` is a `u32` bitmask with
+  one bit per map hook, so the 33rd hook shifts past the end. Unreachable with
+  one mod, plausible once mods merge, and silent today.
