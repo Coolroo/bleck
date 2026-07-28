@@ -4140,3 +4140,57 @@ it is a link bug and nothing to do with controllers.
 `code.combos` **detects presses correctly and must not be relied on for
 anything else yet.** The chain from `bleck.yml` through the manifest to a
 firing script is proven (D69); what a fired script can then *do* is not.
+
+---
+
+## D71 — The D70 binding is correct; relocation is ruled out (2026-07-27)
+
+⛔ **D70's leading suspicion was wrong.** `evt_seq_mapchange` binds to the right
+address even in the build where calling it does nothing.
+
+```
+$ uv run python scripts/check_binding.py warp-combo warp_home 4 0x8010D0F0
+found 2 copy(ies) at ['0x80f65fc0', '0x91b1aa80']
+  0x80F65FC0 -> bound 0x8010D0F0  MATCHES
+  0x91B1AA80 -> bound 0x00000000  *** WRONG ***
+```
+
+So the story "adding `wpadGetWork` perturbs how `elf2rel` binds the rest" is
+dead. It was the hypothesis that best explained why *both* scripts failed, and
+it is simply not what is happening.
+
+### ✅ A fact about how the loader works, from the two hits
+
+The module exists twice in memory at once:
+
+- **MEM1 `0x80F65FC0`** — the linked copy. Relocations applied, addresses real.
+- **MEM2 `0x91B1AA80`** — the REL file as read off the disc, before linking.
+  Its relocation slots are still zero.
+
+Useful for any future memory search: **a pattern from a generated script matches
+twice, and only the MEM1 hit means anything.** Reading the MEM2 copy would
+report every bound address as `0x00000000` and look exactly like a total link
+failure.
+
+### What is left
+
+`evt_seq_mapchange` is called, at the correct address, from a script that
+demonstrably runs — and the map does not change, but only when the combo block
+is compiled in. Remaining candidates, none tested:
+
+1. 🔶 The call happens but its *arguments* are read differently. `USER_FUNC`
+   takes its operands from the script; something about the surrounding module
+   may change what the VM sees.
+2. 🔶 The script is torn down between its first statement and its second. The
+   `gw` write is observed; nothing proves the following instruction executes.
+3. 🔶 Something the per-frame `wpadGetWork()` read does to engine state. Weaker
+   than it looks: the read is guarded and detection works, so `wpadGetWork` is
+   plainly bound correctly too.
+
+⚠️ **(2) is the cheapest to test and has not been done**: put a second `gw`
+write *after* the `evt_seq_mapchange` call in the script. If it never lands, the
+script is dying at the call rather than the call doing nothing — a completely
+different problem from the one being chased.
+
+That test should have come before the binding check. The binding check needed a
+new tool; this one needs two lines of script.
