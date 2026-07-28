@@ -3347,3 +3347,71 @@ is verified — the game loads this member (D53), and this member holds our edit
 Decompressing a map archive to read one member takes ~0.4 s. It is *compression*
 that is slow (~12 s/MB, D16), and that cost is paid by the overlay merge, which
 a mod touching an archive already pays.
+
+---
+
+## D59 — ⛔ D53 was wrong: the embedded setup copy is not the one that matters (2026-07-27)
+
+**Superseded: D53's conclusion.** Its measurement was sound; the inference on
+top of it was not.
+
+### What happened
+
+D58 shipped placement edits writing **only** the copy embedded in the map
+archive, on D53's authority. A disc was built where:
+
+| Copy | Content |
+|---|---|
+| `files/map/he1_01.bin` → `./dvd/setup/he1_01.dat` | edited — Squig, Sproing Oing |
+| `files/setup/he1_01.dat` | **untouched — Goomba, Squiglet, Goomba** |
+
+In game: **still Goombas.** So the edit had no effect, and the copy that was
+*not* written is the one that decided what spawned.
+
+### Where the reasoning failed
+
+D53's experiment was good. Two runs with the markers swapped between copies left
+both buffer addresses unchanged, which proves exactly what it claimed: MEM1
+`0x81266420` always holds the embedded copy, MEM2 `0x91B31980` always holds the
+standalone one. That part stands.
+
+The error was the step after it:
+
+> `0x81266420` is 32-byte aligned and in MEM1, the fast main RAM where live game
+> data lives — therefore it is the copy the game uses.
+
+⛔ **Presence in working memory is not use.** Both copies are read off the disc;
+only one of them drives spawning, and being in MEM1 does not identify it. D53
+flagged this leap 🔶 at the time — "strictly, one step short of
+`npcEntryFromSetupEnemy` is handed a pointer into it" — and then acted on it
+anyway. The marker was correct and ignored.
+
+### 🔶 What is actually true
+
+Unresolved. The evidence now says only:
+
+- ⛔ Editing **only** the embedded copy changes nothing.
+- 🔶 Either the standalone copy drives spawning, or something else does — a map
+  script spawning enemies directly, for instance. Untested.
+
+The decisive experiment is cheap and still unrun: put a **different** enemy in
+each copy and see which appears. One boot answers it.
+
+### What `bleck` does meanwhile
+
+Writes **both** copies. Correct whichever wins, and it stops a stale copy sitting
+on the disc to mislead the next reader. The build-time warning has been corrected
+too — it had been confidently telling people to edit the archive copy, which is
+precisely the advice that produced the Goombas.
+
+### The lesson
+
+**A hypothesis marked 🔶 and then used as a foundation is just an unmarked
+assumption.** The confidence markers in this log are only worth having if they
+change what gets built on top. Here one did not, and shipped a feature that did
+nothing.
+
+⚠️ Also worth noting: the in-game rig gave a *useless* reading during diagnosis
+because `dolphin-memory-engine` attached to a Dolphin the user already had open,
+not the one the script launched — the log showed another mod's probe magic
+entirely. Close other instances before an unattended run.

@@ -273,10 +273,19 @@ class TestConflicts:
         assert builder.check(chain, base, allow_binary=False).is_clean
 
     def test_setup_duplicate_warning(self, base: Path, mods_root: Path):
+        """A setup file exists twice and it is unknown which the game reads.
+
+        Editing one by hand is the silent no-op this warning exists to catch --
+        which is exactly what happened when only the archive copy was written
+        (D59).
+        """
         make_mod(mods_root, "s", ModSpec(files={"files/setup/aa1_01.dat": b"Z" * 64}))
         chain = resolver.resolve(registry.load(mods_root), "s")
         report = builder.check(chain, base, allow_binary=False)
-        assert any("D13" in w for w in report.warnings)
+        warning = next(w for w in report.warnings if "aa1_01" in w)
+        assert "unresolved" in warning
+        # It has to say what to do, not just that something is wrong.
+        assert "Edit both" in warning
 
 
 class TestByteRanges:

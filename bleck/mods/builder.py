@@ -302,10 +302,12 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
     Setup files ship both standalone in `setup/` and embedded inside some map
     archives, byte-identically (see docs/decision-log.md D13).
 
-    D13 is now settled: the game loads the copy **embedded in the map archive**
-    into MEM1 working memory, and the standalone `files/setup/*.dat` is read but
-    parked in MEM2. So editing only the standalone copy is a silent no-op, which
-    is what these warnings exist to prevent.
+    ⚠️ D13 is *not* settled. D53 concluded the embedded copy was the one read,
+    from a memory search; editing only that copy changed nothing in game (D59),
+    so the inference was wrong. Which copy drives spawning is unknown.
+
+    `bleck` therefore writes both when it generates a setup file, and warns when
+    a hand-written overlay touches only one.
     """
     warnings: list[str] = []
     for file_plan in plan.files:
@@ -316,13 +318,13 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
                 if (base / twin).exists():
                     warnings.append(
                         f"{path}/{member} also exists as {twin}; "
-                        "the game reads this embedded copy, not the standalone "
-                        "one (D13). Edit both to keep them consistent"
+                        "which copy the game reads is unresolved (D59), so "
+                        "edit both"
                     )
         if "/setup/" in f"/{path}":
             warnings.append(
-                f"{path} is the standalone setup copy, which the game loads but "
-                "does not read (D13). Edit the copy inside the map archive, or "
-                "this change will do nothing"
+                f"{path} has a twin inside the map archive, and which one the "
+                "game reads is unresolved (D59). Edit both, or declare the "
+                "change under 'setup' in mod.json and let bleck write both"
             )
     return warnings

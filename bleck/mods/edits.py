@@ -5,10 +5,11 @@ derives the bytes. See [`vision.md`](../../docs/vision.md): the goal is an
 editor, and an editor needs edits that can be reviewed, undone and re-applied,
 which a pre-baked binary in an overlay cannot be.
 
-⚠️ **Output goes into the map archive, not `files/setup/`.** D53 established
-that the game reads the copy embedded in the map archive; the standalone file is
-loaded into MEM2 and never used. Writing the obvious place would silently do
-nothing.
+⚠️ **Both copies of a setup file are written.** D53 concluded the game reads the
+one embedded in the map archive, so only that was written -- and in-game the
+enemies did not change (D59). Which copy actually drives spawning is not
+established, so both are written: correct either way, and it stops a stale copy
+sitting on the disc to mislead the next reader.
 
 This runs before the overlay is planned, for the same reason compiled code does:
 the plan comes from walking `overlay/`, so a generated file has to exist by then.
@@ -35,6 +36,9 @@ class EditError(BleckError):
 MEMBER = "dvd/setup/{map_name}.dat"
 ARCHIVE = "files/map/{map_name}.bin"
 
+#: The other copy. Written too -- see the note in `_apply_map`.
+STANDALONE = "files/setup/{map_name}.dat"
+
 
 @dataclass(frozen=True)
 class PlacementBuild:
@@ -43,6 +47,7 @@ class PlacementBuild:
     mod: str
     map_name: str
     output: Path
+    also_wrote: Path
     applied: int
     used_before: int
     used_after: int
@@ -70,9 +75,9 @@ def apply_chain(chain: Chain, base: Path) -> list[PlacementBuild]:
 def _archive_member(base: Path, map_name: str) -> bytes:
     """The map's own setup file, read out of its archive.
 
-    Read from the archive rather than from `files/setup/` because that is the
-    copy the game uses (D53) -- so an edit is applied to what actually runs,
-    even if the two ever diverge.
+    Read from the archive rather than from `files/setup/` because the two are
+    byte-identical on the disc and the archive copy is the one that cannot be
+    stale -- it travels with the map it belongs to.
     """
     archive = base / ARCHIVE.format(map_name=map_name)
     if not archive.is_file():
@@ -111,18 +116,30 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         has_item_section=data.has_item_section,
     )
 
-    output = (
+    # ⚠️ BOTH copies, and the reason is a correction. D53 concluded from a
+    # memory search that the game reads the copy embedded in the map archive --
+    # that was the only one written, and in-game the enemies did not change
+    # (D59). "Present in MEM1" turned out not to mean "the copy that is used".
+    #
+    # Which one actually drives spawning is still unestablished, so writing both
+    # is the honest answer: it is correct either way, and keeps the two in step
+    # rather than leaving a stale copy on the disc to confuse the next reader.
+    payload = updated.to_bytes()
+    outputs = [
         mod.overlay
         / ARCHIVE.format(map_name=placement.map_name)
-        / MEMBER.format(map_name=placement.map_name)
-    )
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_bytes(updated.to_bytes())
+        / MEMBER.format(map_name=placement.map_name),
+        mod.overlay / STANDALONE.format(map_name=placement.map_name),
+    ]
+    for output in outputs:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(payload)
 
     return PlacementBuild(
         mod=mod.name,
         map_name=placement.map_name,
-        output=output,
+        output=outputs[0],
+        also_wrote=outputs[1],
         applied=len(placement.edits),
         used_before=before,
         used_after=len(updated.used),
