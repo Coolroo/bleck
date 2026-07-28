@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D58)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D63)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -393,3 +393,113 @@ In rough order of value:
   it; no Node toolchain is involved. ⚠️ Nothing has been checked visually in a
   browser — `mkdocs build --strict` passes and every construct renders to the
   expected HTML, but that is not the same as looking at it.
+
+---
+
+## ⚠️ Open right now: one enemy did not spawn (2026-07-27)
+
+**This is the live question. It is waiting on a human to boot one disc.**
+
+`mods/hard-lineland` declared two enemies in `he1_01` and **only the first
+appeared**. The user walked the entire level, so "it was further along" is not
+the answer — that was my first guess and it was wrong, stated without checking.
+
+| Slot | Declared | Result |
+|---|---|---|
+| 0 | Squig (template 148) at `(-675, 0, 0)` | ✅ appeared |
+| 1 | cleared | ✅ gone |
+| 2 | Sproing Oing (template 144) at `(-75, 0, -75)` | ⛔ **never appeared** |
+
+### ⛔ Already ruled out — do not re-check these
+
+- **`canSpawnFunction`** — null on *both* templates. Only 2 of 435 templates
+  have one at all.
+- **Template flags** — identical, `0x18` for both.
+- **A missing model** — `e_tekti` is present in `files/a/`, and enemy models are
+  global assets, not per-map. The map archive holds only geometry, textures,
+  backgrounds and the setup file.
+
+Templates 144 and 148 are indistinguishable in every field currently readable.
+
+### The two surviving hypotheses
+
+1. 🔶 **Template 144 cannot spawn in this map.** Something map-scoped decides
+   which tribes may appear, and it is not the setup file. `e_octar` (Squig,
+   tribe 126) worked in a map whose vanilla enemies are tribes 0 and 125, so
+   whatever the rule is, it is not "only the tribes vanilla used".
+2. 🔶 **Slot 2's position is the problem.** `z = -75` where slot 0 sits at
+   `z = 0`. SPM is a 2D game with a 3D flip axis, so an enemy off the visible
+   plane is entirely plausible — **and vanilla's own enemy is at that exact
+   position**, which was never verified as visible.
+
+### The test that separates them — already built
+
+```bash
+uv run bleck launch --batch --fast work/out/slot-check.wbfs
+```
+
+`mods/slot-check` puts the **same** enemy — Squiglet, which vanilla already uses
+in `he1_01`, so it certainly works there — in **both** slots at their **vanilla
+positions**, with slot 1 cleared so the count is unambiguous.
+
+| Seen | Conclusion |
+|---|---|
+| **Two Squiglets** | positions are fine → **template 144 specifically** is refused here |
+| **One Squiglet** | **slot 2's position is off the visible plane** — and vanilla has always had an enemy there you cannot see without flipping |
+
+Either answer is worth having. The second would be a fact about the game, not a
+bug in the toolkit.
+
+⚠️ **Do not explain this away without the test.** That is exactly how the last
+two days produced two wrong conclusions (D53, and my "it was further along").
+
+---
+
+## Where things stand, 2026-07-27 (end of session)
+
+✅ **Placement editing works end to end.** A mod declares enemies in `mod.json`
+and they appear in game — confirmed by eye. See D58, D62.
+
+✅ **D13 is finally settled** (D62): the game reads the **standalone**
+`files/setup/<map>.dat`. D53 concluded the opposite and was wrong; its
+measurement was sound, the inference from "in MEM1" to "in use" was not.
+
+✅ **A test run costs ~6 seconds, not ~50** (D63). `--fast` on `bleck launch`,
+default in `scripts/ingame.py`. Fifteen runs were spent waiting for logos before
+anyone questioned the frame limiter.
+
+✅ **The banner is merged** and confirmed on a real mod.
+
+✅ **Symbols**: `bleck symbols` reads the decomp table, and the compiler now
+rejects a call that would not link — 148 of 443 builtins had no address in the
+lst, and 94 of those are recoverable with `BLECK_DECOMP` set (D60, D61).
+
+### Next, in order
+
+1. **Boot `slot-check.wbfs`** and close the question above. Everything else in
+   placement editing is blocked on knowing which hypothesis is right, because
+   the answer decides whether `bleck` should be validating templates against
+   something map-scoped.
+2. 🔶 **Make a save state.** Driving into a map from the attract demo leaves
+   **Mario invisible** — no save, no profile, player never initialised (D63).
+   Fine for reading placement; useless for anything touching player state.
+   `--state` is implemented on both `bleck launch` and `ingame.py`; it needs a
+   human to play far enough to have a profile and press F1 once. There is no SPM
+   save in this Dolphin's NAND at all.
+3. **`bleck setup edit`** — writing placements from the CLI rather than
+   hand-editing JSON, which is also the precursor to a GUI doing it
+   ([`vision.md`](./vision.md)).
+4. **The remaining roadmap** — `SETI`, more opcodes, `peek`/`poke` for doors and
+   NPCs, multiple code mods. See [`roadmap.md`](./roadmap.md).
+
+### Still unresolved, carried forward
+
+- 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
+  REL-relative addresses, 33 have no known address anywhere.
+- 🟡 **`bleck` is still unlicensed.** The only thing between this and being
+  shareable; `README.md` credits upstream correctly but the project itself is
+  all-rights-reserved by default.
+- ⚠️ **Close other Dolphin instances before an unattended run.**
+  `dolphin-memory-engine` attaches to *a* Dolphin process, not necessarily the
+  one the script launched. One diagnostic run read a completely different mod's
+  memory and produced a confidently wrong reading.

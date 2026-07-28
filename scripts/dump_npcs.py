@@ -41,6 +41,10 @@ TRIBE_COUNT = 535
 STRUCT_SIZE = 0x68
 
 #: NPCEnemyTemplate
+#: A per-template gate. If it returns false the enemy does not spawn, which is
+#: one candidate explanation for a declared enemy simply not appearing.
+TEMPLATE_CAN_SPAWN = 0x0C
+TEMPLATE_FLAGS = 0x2C
 TEMPLATE_TRIBE_ID = 0x14
 TEMPLATE_INSTANCE_NAME = 0x18
 TEMPLATE_JAPANESE_NAME = 0x1C
@@ -98,6 +102,8 @@ def dump(dme) -> dict:  # pylint: disable=container-return
         entry = {
             "id": index,
             "tribe": dme.read_word(at + TEMPLATE_TRIBE_ID),
+            "can_spawn": dme.read_word(at + TEMPLATE_CAN_SPAWN),
+            "flags": dme.read_word(at + TEMPLATE_FLAGS),
             "name": _string(dme, dme.read_word(at + TEMPLATE_INSTANCE_NAME)),
             "japanese": _string(dme, dme.read_word(at + TEMPLATE_JAPANESE_NAME)),
         }

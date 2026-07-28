@@ -3,2610 +3,3480 @@
   {
    "id": 0,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30b3\u30fc\u30c9"
   },
   {
    "id": 1,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 2,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 3,
    "tribe": 4,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 4,
    "tribe": 7,
+   "can_spawn": 0,
+   "flags": 88,
    "name": "",
    "japanese": "\u30d1\u30bf\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 5,
    "tribe": 1,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 6,
    "tribe": 5,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30af\u30ea\u30dc\u30fc\uff08\u843d\u3061\u306a\u3044\uff09"
   },
   {
    "id": 7,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 8,
    "tribe": 11,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ce\u30b3\u30ce\u30b3"
   },
   {
    "id": 9,
    "tribe": 14,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u8d64\uff09"
   },
   {
    "id": 10,
    "tribe": 465,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30a6\u30e9\u30ce\u30b3"
   },
   {
    "id": 11,
    "tribe": 18,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30ce\u30b3"
   },
   {
    "id": 12,
    "tribe": 15,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30ce\u30b3\u30ce\u30b3"
   },
   {
    "id": 13,
    "tribe": 466,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30ce\u30b3"
   },
   {
    "id": 14,
    "tribe": 20,
+   "can_spawn": 0,
+   "flags": 88,
    "name": "",
    "japanese": "\u30d1\u30bf\u30d1\u30bf"
   },
   {
    "id": 15,
    "tribe": 22,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30d1\u30bf\u30d1\u30bf\uff08\u8d64\uff09"
   },
   {
    "id": 16,
    "tribe": 468,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30a6\u30e9\u30d1\u30bf"
   },
   {
    "id": 17,
    "tribe": 23,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30d1\u30bf\u30d1\u30bf"
   },
   {
    "id": 18,
    "tribe": 469,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30d1\u30bf"
   },
   {
    "id": 19,
    "tribe": 94,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ac\u30dc\u30f3\u3078\u3044"
   },
   {
    "id": 20,
    "tribe": 173,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30d1\u30c8\u30cb\u30e3\u30f3"
   },
   {
    "id": 21,
    "tribe": 174,
+   "can_spawn": 0,
+   "flags": 1573136,
    "name": "",
    "japanese": "\u30d5\u30e9\u30a4\u30cb\u30e3\u30f3"
   },
   {
    "id": 22,
    "tribe": 175,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30c9\u30ab\u30cb\u30e3\u30f3"
   },
   {
    "id": 23,
    "tribe": 176,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30dc\u30e0\u30cb\u30e3\u30f3(\u30c9\u30e0\u30cb\u30e3\u30f3\u306e\u7206\u5f3e)"
   },
   {
    "id": 24,
    "tribe": 45,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
   },
   {
    "id": 25,
    "tribe": 88,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d7\u30af\u30d7\u30af"
   },
   {
    "id": 26,
    "tribe": 91,
+   "can_spawn": 0,
+   "flags": 67108880,
    "name": "",
    "japanese": "\u3052\u3063\u305d\u30fc"
   },
   {
    "id": 27,
    "tribe": 265,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30c9\u30c3\u30b9\u30f3"
   },
   {
    "id": 28,
    "tribe": 121,
+   "can_spawn": 0,
+   "flags": 4,
    "name": "",
    "japanese": "\u30d0\u30d6\u30eb"
   },
   {
    "id": 29,
    "tribe": 266,
+   "can_spawn": 0,
+   "flags": 34144280,
    "name": "",
    "japanese": "\u30b4\u30ed\u30f3"
   },
   {
    "id": 30,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 31,
    "tribe": 77,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30d1\u30c3\u30af\u30f3\u30d5\u30e9\u30ef\u30fc"
   },
   {
    "id": 32,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 33,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 34,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 35,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 36,
    "tribe": 39,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30ed\u30f3"
   },
   {
    "id": 37,
    "tribe": 283,
+   "can_spawn": 0,
+   "flags": 1835024,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc\uff12"
   },
   {
    "id": 38,
    "tribe": 41,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30db\u30cd\u30ce\u30b3"
   },
   {
    "id": 39,
    "tribe": 51,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
   },
   {
    "id": 40,
    "tribe": 57,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
   },
   {
    "id": 41,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 42,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 43,
    "tribe": 313,
+   "can_spawn": 0,
+   "flags": 134808320,
    "name": "",
    "japanese": "\u30ba\u30f3\u30d0\u30d0"
   },
   {
    "id": 44,
    "tribe": 314,
+   "can_spawn": 0,
+   "flags": 134808320,
    "name": "",
    "japanese": "\u30b6\u30f3\u30d0\u30d0"
   },
   {
    "id": 45,
    "tribe": 92,
+   "can_spawn": 0,
+   "flags": 67108880,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u3052\u3063\u305d\u30fc"
   },
   {
    "id": 46,
    "tribe": 47,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
   },
   {
    "id": 47,
    "tribe": 267,
+   "can_spawn": 0,
+   "flags": 8,
    "name": "",
    "japanese": "\u30b3\u30ed\u30f3"
   },
   {
    "id": 48,
    "tribe": 482,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30d1\u30c3\u30af\u30f3\u30d5\u30e9\u30ef\u30fc\uff08\u9006\u3055\uff09"
   },
   {
    "id": 49,
    "tribe": 78,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3"
   },
   {
    "id": 50,
    "tribe": 483,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3\uff08\u9006\u3055\uff09"
   },
   {
    "id": 51,
    "tribe": 80,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3"
   },
   {
    "id": 52,
    "tribe": 484,
+   "can_spawn": 0,
+   "flags": 134217744,
    "name": "",
    "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3\uff08\u9006\u3055\uff09"
   },
   {
    "id": 53,
    "tribe": 25,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30e1\u30c3\u30c8"
   },
   {
    "id": 54,
    "tribe": 26,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30e1\u30c3\u30c8\uff08\u9006\u3055\uff09"
   },
   {
    "id": 55,
    "tribe": 470,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30e1\u30c3\u30c8"
   },
   {
    "id": 56,
    "tribe": 27,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30e1\u30c3\u30c8"
   },
   {
    "id": 57,
    "tribe": 30,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30d1\u30bf\u30e1\u30c3\u30c8"
   },
   {
    "id": 58,
    "tribe": 31,
+   "can_spawn": 0,
+   "flags": 80,
    "name": "",
    "japanese": "\u30d1\u30bf\u30c8\u30b2\u30e1\u30c3\u30c8"
   },
   {
    "id": 59,
    "tribe": 36,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30be\u30fc"
   },
   {
    "id": 60,
    "tribe": 472,
+   "can_spawn": 0,
+   "flags": 8216,
    "name": "",
    "japanese": "\u30c8\u30b2\u30be\u30fc\uff08\u9006\u3055\uff09"
   },
   {
    "id": 61,
    "tribe": 34,
+   "can_spawn": 0,
+   "flags": 528,
    "name": "",
    "japanese": "\u30b8\u30e5\u30b2\u30e0"
   },
   {
    "id": 62,
    "tribe": 35,
+   "can_spawn": 0,
+   "flags": 784,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30b8\u30e5\u30b2\u30e0"
   },
   {
    "id": 63,
    "tribe": 17,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30dc\u30b9\u30ce\u30b3\u30ce\u30b3"
   },
   {
    "id": 64,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 65,
    "tribe": 122,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ef\u30f3\u30ef\u30f3"
   },
   {
    "id": 66,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 67,
    "tribe": 89,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d7\u30af\u30d7\u30af\uff08\u8d64\uff09"
   },
   {
    "id": 68,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 69,
    "tribe": 90,
+   "can_spawn": 0,
+   "flags": 0,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30d7\u30af\u30d7\u30af"
   },
   {
    "id": 70,
    "tribe": 108,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d0\u30b5\u30d0\u30b5"
   },
   {
    "id": 71,
    "tribe": 16,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ce\u30b3"
   },
   {
    "id": 72,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 73,
    "tribe": 13,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u7121\u9650\u5897\u6b96\u7528\uff09"
   },
   {
    "id": 74,
    "tribe": 495,
+   "can_spawn": 0,
+   "flags": 1572888,
    "name": "",
    "japanese": "\u30d2\u30f3\u30cb\u30e3\u2212"
   },
   {
    "id": 75,
    "tribe": 113,
+   "can_spawn": 0,
+   "flags": 1572888,
    "name": "",
    "japanese": "\u30cf\u30f3\u30cb\u30e3\u30fc"
   },
   {
    "id": 76,
    "tribe": 496,
+   "can_spawn": 0,
+   "flags": 1572888,
    "name": "",
    "japanese": "\u30d8\u30f3\u30cb\u30e3\u30fc"
   },
   {
    "id": 77,
    "tribe": 99,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b7\u30f3\u30ce\u30b9\u30b1"
   },
   {
    "id": 78,
    "tribe": 100,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b7\u30f3\u30a8\u30e2\u30f3"
   },
   {
    "id": 79,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 80,
    "tribe": 63,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af"
   },
   {
    "id": 81,
    "tribe": 64,
+   "can_spawn": 0,
+   "flags": 336,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
   },
   {
    "id": 82,
    "tribe": 65,
+   "can_spawn": 0,
+   "flags": 360720,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u9752\uff09"
   },
   {
    "id": 83,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 84,
    "tribe": 9,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ba\u30c4\u30ad\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 85,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 86,
    "tribe": 194,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30d0\u30ea\u30d0\u30fc"
   },
   {
    "id": 87,
    "tribe": 195,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0"
   },
   {
    "id": 88,
    "tribe": 200,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30d6\u30fc\u30c1\u30e7"
   },
   {
    "id": 89,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 90,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 91,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 92,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 93,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 94,
    "tribe": 268,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30ad\u30e9\u30fc\u30ad\u30ce\u30b3"
   },
   {
    "id": 95,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 96,
    "tribe": 32,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b9\u30c8\u30fc\u30f3\u30e1\u30c3\u30c8"
   },
   {
    "id": 97,
    "tribe": 188,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30c3\u30af\u30f3"
   },
   {
    "id": 98,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 99,
    "tribe": 37,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30be\u30fc"
   },
   {
    "id": 100,
    "tribe": 150,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30a2\u30a4\u30af\u30f3"
   },
   {
    "id": 101,
    "tribe": 471,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30e1\u30c3\u30c8"
   },
   {
    "id": 102,
    "tribe": 310,
+   "can_spawn": 0,
+   "flags": 327680,
    "name": "",
    "japanese": "\u30e9\u30b9\u30c8\u30d0\u30c8\u30eb\u30d6\u30ed\u30c3\u30af"
   },
   {
    "id": 103,
    "tribe": 311,
+   "can_spawn": 0,
+   "flags": 327680,
    "name": "",
    "japanese": "\u30c0\u30df\u30fc"
   },
   {
    "id": 104,
    "tribe": 260,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30d0\u30f3\u30b1\u30f3"
   },
   {
    "id": 105,
    "tribe": 261,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30c0\u30a4\u30d0\u30f3\u30b1\u30f3"
   },
   {
    "id": 106,
    "tribe": 82,
+   "can_spawn": 0,
+   "flags": 16400,
    "name": "",
    "japanese": "\u30ad\u30e9\u30fc"
   },
   {
    "id": 107,
    "tribe": 83,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ad\u30e9\u30fc\u305f\u3044\u307b\u3046"
   },
   {
    "id": 108,
    "tribe": 502,
+   "can_spawn": 0,
+   "flags": 16400,
    "name": "",
    "japanese": "\u30b9\u30fc\u30d1\u30fc\u30ad\u30e9\u30fc"
   },
   {
    "id": 109,
    "tribe": 503,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b9\u30fc\u30d1\u30fc\u30ad\u30e9\u30fc\u305f\u3044\u307b\u3046"
   },
   {
    "id": 110,
    "tribe": 84,
+   "can_spawn": 0,
+   "flags": 33554448,
    "name": "",
    "japanese": "\u30c6\u30ec\u30b5"
   },
   {
    "id": 111,
    "tribe": 85,
+   "can_spawn": 0,
+   "flags": 33555216,
    "name": "",
    "japanese": "\u30c0\u30fc\u30af\u30c6\u30ec\u30b5"
   },
   {
    "id": 112,
    "tribe": 87,
+   "can_spawn": 0,
+   "flags": 33555216,
    "name": "",
    "japanese": "\u30a2\u30c8\u30df\u30c3\u30af\u30c6\u30ec\u30b5"
   },
   {
    "id": 113,
    "tribe": 498,
+   "can_spawn": 0,
+   "flags": 33555216,
    "name": "",
    "japanese": "\u30c0\u30fc\u30af\u30a2\u30c8\u30df\u30c3\u30af\u30c6\u30ec\u30b5"
   },
   {
    "id": 114,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 115,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 116,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 117,
    "tribe": 96,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c1\u30e7\u30ed\u30dc\u30f3"
   },
   {
    "id": 118,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 119,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 120,
    "tribe": 97,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d4\u30f3\u30af\u30c1\u30e7\u30ed\u30dc\u30f3"
   },
   {
    "id": 121,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 122,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 123,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 124,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 125,
    "tribe": 493,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3"
   },
   {
    "id": 126,
    "tribe": 102,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b5\u30f3\u30dc"
   },
   {
    "id": 127,
    "tribe": 104,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc"
   },
   {
    "id": 128,
    "tribe": 69,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b3\u30a6\u30e9\u30b7\u30e5\u30fc\u30bf\u30fc"
   },
   {
    "id": 129,
    "tribe": 70,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9"
   },
   {
    "id": 130,
    "tribe": 280,
+   "can_spawn": 0,
+   "flags": 589848,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff12\uff09"
   },
   {
    "id": 131,
    "tribe": 280,
+   "can_spawn": 0,
+   "flags": 589848,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\u7121\u6575\uff09"
   },
   {
    "id": 132,
    "tribe": 315,
+   "can_spawn": 0,
+   "flags": 536871448,
    "name": "",
    "japanese": "\u30af\u30c3\u30d1"
   },
   {
    "id": 133,
    "tribe": 93,
+   "can_spawn": 0,
+   "flags": 538509328,
    "name": "",
    "japanese": "\u30d5\u30b0\u30e2\u30c9\u30ad"
   },
   {
    "id": 134,
    "tribe": 318,
+   "can_spawn": 0,
+   "flags": 538443800,
    "name": "",
    "japanese": "\u30ab\u30e1\u30ec\u30b4\u30f3"
   },
   {
    "id": 135,
    "tribe": 177,
+   "can_spawn": 0,
+   "flags": 1572888,
    "name": "",
    "japanese": "\u30dc\u30e0\u30cb\u30e3\u30f3\uff08\u30ea\u30e2\u30b3\u30f3\u30bf\u30a4\u30d7\uff09"
   },
   {
    "id": 136,
    "tribe": 317,
+   "can_spawn": 0,
+   "flags": 672694548,
    "name": "",
    "japanese": "\u30c0\u30a4\u30aa\u30fc\u3052\u3063\u305d\u30fc"
   },
   {
    "id": 137,
    "tribe": 295,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30df\u30b9\u30bf\u30fc\uff2c"
   },
   {
    "id": 138,
    "tribe": 296,
+   "can_spawn": 0,
+   "flags": 1671424,
    "name": "",
    "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc"
   },
   {
    "id": 139,
    "tribe": 297,
+   "can_spawn": 0,
+   "flags": 1916944,
    "name": "",
    "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30df\u30b5\u30a4\u30eb"
   },
   {
    "id": 140,
    "tribe": 301,
+   "can_spawn": 0,
+   "flags": 1884176,
    "name": "",
    "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u3072\u3052"
   },
   {
    "id": 141,
    "tribe": 168,
+   "can_spawn": 0,
+   "flags": 1560,
    "name": "",
    "japanese": "\u30b8\u30e3\u30de\u30c9\u30f3"
   },
   {
    "id": 142,
    "tribe": 286,
+   "can_spawn": 0,
+   "flags": 66304,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff13\uff09"
   },
   {
    "id": 143,
    "tribe": 288,
+   "can_spawn": 0,
+   "flags": 278544,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5"
   },
   {
    "id": 144,
    "tribe": 134,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
   },
   {
    "id": 145,
    "tribe": 135,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b3\u30d4\u30e7\u30f3"
   },
   {
    "id": 146,
    "tribe": 281,
+   "can_spawn": 0,
+   "flags": 1835032,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc"
   },
   {
    "id": 147,
    "tribe": 156,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d0\u30af\u30fc"
   },
   {
    "id": 148,
    "tribe": 126,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c6\u30c8\u30e9\u30dd\u30f3"
   },
   {
    "id": 149,
    "tribe": 127,
+   "can_spawn": 0,
+   "flags": 409624,
    "name": "",
    "japanese": "\u30aa\u30af\u30bf\u30ed\u306e\u77f3"
   },
   {
    "id": 150,
    "tribe": 319,
+   "can_spawn": 0,
+   "flags": 1703960,
    "name": "",
    "japanese": "\u30ad\u30f3\u30b0\u30fb\u30cf\u30ca\u30fc\u30f3"
   },
   {
    "id": 151,
    "tribe": 245,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ce\u30ed\u30a4\u30ce\u30ed\u30a4"
   },
   {
    "id": 152,
    "tribe": 254,
+   "can_spawn": 0,
+   "flags": 10044180,
    "name": "",
    "japanese": "\u30c7\u30b9\u30c7\u30b9"
   },
   {
    "id": 153,
    "tribe": 142,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30aa\u30f3\u30d1\u30fc"
   },
   {
    "id": 154,
    "tribe": 191,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d8\u30ea\u30f3"
   },
   {
    "id": 155,
    "tribe": 320,
+   "can_spawn": 0,
+   "flags": 1638416,
    "name": "",
    "japanese": "\u8594\u8587\u30d4\u30f3\u30af"
   },
   {
    "id": 156,
    "tribe": 321,
+   "can_spawn": 0,
+   "flags": 1638416,
    "name": "",
    "japanese": "\u8594\u8587\u30aa\u30ec\u30f3\u30b8"
   },
   {
    "id": 157,
    "tribe": 322,
+   "can_spawn": 0,
+   "flags": 1638416,
    "name": "",
    "japanese": "\u8594\u8587\u30d6\u30eb\u30fc"
   },
   {
    "id": 158,
    "tribe": 143,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0"
   },
   {
    "id": 159,
    "tribe": 109,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3"
   },
   {
    "id": 160,
    "tribe": 163,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30bf\u30a4\u30fc\u30eb\uff27"
   },
   {
    "id": 161,
    "tribe": 164,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30bf\u30a4\u30fc\u30eb\uff22"
   },
   {
    "id": 162,
    "tribe": 165,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30bf\u30a4\u30fc\u30eb\uff32"
   },
   {
    "id": 163,
    "tribe": 166,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30bf\u30a4\u30fc\u30eb\uff39"
   },
   {
    "id": 164,
    "tribe": 159,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30dd\u30a4\u30dd\u30a4"
   },
   {
    "id": 165,
    "tribe": 48,
+   "can_spawn": 0,
+   "flags": 67174424,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc"
   },
   {
    "id": 166,
    "tribe": 54,
+   "can_spawn": 0,
+   "flags": 67436560,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3"
   },
   {
    "id": 167,
    "tribe": 60,
+   "can_spawn": 0,
+   "flags": 67469336,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2"
   },
   {
    "id": 168,
    "tribe": 172,
+   "can_spawn": 0,
+   "flags": 1638424,
    "name": "",
    "japanese": "\u30c7\u30ab\u30cb\u30e3\u30f3"
   },
   {
    "id": 169,
    "tribe": 182,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3"
   },
   {
    "id": 170,
    "tribe": 178,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30b8\u30a7\u30eb\u30eb"
   },
   {
    "id": 171,
    "tribe": 179,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d5\u30a9\u30c8\u30f3"
   },
   {
    "id": 172,
    "tribe": 181,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ef\u30fc\u30d7\u30ef\u30fc\u30d7"
   },
   {
    "id": 173,
    "tribe": 257,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30de\u30f3\u30e2\u30fc"
   },
   {
    "id": 174,
    "tribe": 272,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff15\u30fb\u305d\u306e\uff12\uff09"
   },
   {
    "id": 175,
    "tribe": 203,
+   "can_spawn": 2149743892,
+   "flags": 131096,
    "name": "",
    "japanese": "\u30ed\u30c3\u30af\u4eba\uff08\u25bd\u982d\uff09"
   },
   {
    "id": 176,
    "tribe": 204,
+   "can_spawn": 2149743892,
+   "flags": 131096,
    "name": "",
    "japanese": "\u30ed\u30c3\u30af\u4eba\uff08\u25cb\u982d\uff09"
   },
   {
    "id": 177,
    "tribe": 515,
+   "can_spawn": 0,
+   "flags": 66072,
    "name": "",
    "japanese": "\u30d6\u30d6\u30c9\u30fc"
   },
   {
    "id": 178,
    "tribe": 211,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ca\u30f3\u30b8\u30e3"
   },
   {
    "id": 179,
    "tribe": 323,
+   "can_spawn": 0,
+   "flags": 327696,
    "name": "",
    "japanese": "\u8594\u8587\u30ab\u30c3\u30bf\u30fc"
   },
   {
    "id": 180,
    "tribe": 180,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30d5\u30a9\u30c8\u30f3\u306e\u7389"
   },
   {
    "id": 181,
    "tribe": 270,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff11\uff09"
   },
   {
    "id": 182,
    "tribe": 271,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff15\uff09"
   },
   {
    "id": 183,
    "tribe": 273,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\uff08\uff33\uff34\uff27\uff18\uff09"
   },
   {
    "id": 184,
    "tribe": 274,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u5c0f)"
   },
   {
    "id": 185,
    "tribe": 275,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u4e2d)"
   },
   {
    "id": 186,
    "tribe": 276,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30af(\u5927)"
   },
   {
    "id": 187,
    "tribe": 282,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff16\uff09"
   },
   {
    "id": 188,
    "tribe": 300,
+   "can_spawn": 0,
+   "flags": 1671936,
    "name": "",
    "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc\uff3a"
   },
   {
    "id": 189,
    "tribe": 327,
+   "can_spawn": 0,
+   "flags": 1671960,
    "name": "",
    "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9"
   },
   {
    "id": 190,
    "tribe": 328,
+   "can_spawn": 0,
+   "flags": 999424,
    "name": "",
    "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u306e\u5f3e"
   },
   {
    "id": 191,
    "tribe": 329,
+   "can_spawn": 0,
+   "flags": 524288,
    "name": "",
    "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u306e\u30c4\u30e9\u30e9"
   },
   {
    "id": 192,
    "tribe": 212,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\u306e\u624b\u88cf\u5263"
   },
   {
    "id": 193,
    "tribe": 213,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\u306e\u7206\u5f3e"
   },
   {
    "id": 194,
    "tribe": 223,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ac\u30a4\u30b3\u30c3\u30c4"
   },
   {
    "id": 195,
    "tribe": 226,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30b3\u30c3\u30c4"
   },
   {
    "id": 196,
    "tribe": 305,
+   "can_spawn": 0,
+   "flags": 1049368,
    "name": "",
    "japanese": "\u30ce\u30ef\u30fc\u30eb\u4f2f\u7235"
   },
   {
    "id": 197,
    "tribe": 306,
+   "can_spawn": 0,
+   "flags": 67993600,
    "name": "",
    "japanese": "\u6b21\u5143\u4f2f\u7235\u30df\u30cb\u6697\u9ed2\u7a7a\u9593"
   },
   {
    "id": 198,
    "tribe": 307,
+   "can_spawn": 0,
+   "flags": 67993600,
    "name": "",
    "japanese": "\u6b21\u5143\u4f2f\u7235\u6697\u9ed2\u7a7a\u9593"
   },
   {
    "id": 199,
    "tribe": 46,
+   "can_spawn": 0,
+   "flags": 67436568,
    "name": "",
    "japanese": "\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc"
   },
   {
    "id": 200,
    "tribe": 304,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30ca\u30b9\u30bf\u30b7\u30a2"
   },
   {
    "id": 201,
    "tribe": 308,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u6b21\u5143\u4f2f\u7235\u30c0\u30df\u30fc"
   },
   {
    "id": 202,
    "tribe": 52,
+   "can_spawn": 0,
+   "flags": 67436560,
    "name": "",
    "japanese": "\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3"
   },
   {
    "id": 203,
    "tribe": 58,
+   "can_spawn": 0,
+   "flags": 67469336,
    "name": "",
    "japanese": "\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2"
   },
   {
    "id": 204,
    "tribe": 103,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53"
   },
   {
    "id": 205,
    "tribe": 105,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53"
   },
   {
    "id": 206,
    "tribe": 246,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30e2\u30c9\u30eb\u30ce\u30ed\u30a4"
   },
   {
    "id": 207,
    "tribe": 247,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ef\u30b6\u30ce\u30ed\u30a4"
   },
   {
    "id": 208,
    "tribe": 248,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30aa\u30e2\u30a4\u30ce\u30ed\u30a4"
   },
   {
    "id": 209,
    "tribe": 249,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30b5\u30ab\u30b5\u30ce\u30ed\u30a4"
   },
   {
    "id": 210,
    "tribe": 184,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u30d7\u30e9\u30b9"
   },
   {
    "id": 211,
    "tribe": 183,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u8d64\uff09"
   },
   {
    "id": 212,
    "tribe": 185,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u7dd1\uff09"
   },
   {
    "id": 213,
    "tribe": 324,
+   "can_spawn": 0,
+   "flags": 1638424,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3"
   },
   {
    "id": 214,
    "tribe": 325,
+   "can_spawn": 0,
+   "flags": 1638424,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\uff08\u9752\uff09"
   },
   {
    "id": 215,
    "tribe": 326,
+   "can_spawn": 0,
+   "flags": 1638424,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\uff08\u9ec4\uff09"
   },
   {
    "id": 216,
    "tribe": 123,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ec\u30c3\u30c9\u30ef\u30f3\u30ef\u30f3"
   },
   {
    "id": 217,
    "tribe": 115,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
   },
   {
    "id": 218,
    "tribe": 116,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30d1\u30f3\u30b8\u30fc\u3055\u3093\u306e\u97f3\u7b26"
   },
   {
    "id": 219,
    "tribe": 79,
+   "can_spawn": 0,
+   "flags": 262148,
    "name": "",
    "japanese": "\u30dd\u30a4\u30ba\u30f3\u30d1\u30c3\u30af\u30f3\u306e\u606f"
   },
   {
    "id": 220,
    "tribe": 81,
+   "can_spawn": 0,
+   "flags": 262148,
    "name": "",
    "japanese": "\u30a2\u30a4\u30b9\u30d1\u30c3\u30af\u30f3\u306e\u606f"
   },
   {
    "id": 221,
    "tribe": 232,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u904b\u3073\u30bf\u30a4\u30d7\uff09"
   },
   {
    "id": 222,
    "tribe": 229,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u982d\u30bf\u30a4\u30d7\uff09"
   },
   {
    "id": 223,
    "tribe": 234,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30c3\u30c1\u30b3\u30c3\u30c1"
   },
   {
    "id": 224,
    "tribe": 235,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c8\u30b2\u30ab\u30c3\u30c1\u30b3\u30c3\u30c1"
   },
   {
    "id": 225,
    "tribe": 289,
+   "can_spawn": 0,
+   "flags": 768,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff15\uff09"
   },
   {
    "id": 226,
    "tribe": 292,
+   "can_spawn": 0,
+   "flags": 768,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff18\uff09"
   },
   {
    "id": 227,
    "tribe": 231,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u624b\u4e0b\u9854"
   },
   {
    "id": 228,
    "tribe": 236,
+   "can_spawn": 0,
+   "flags": 262148,
    "name": "",
    "japanese": "\u30b7\u30cb\u30ac\u30df\u30c0\u30b9\u624b\u4e0b\u30bf\u30b3\u306e\u606f"
   },
   {
    "id": 229,
    "tribe": 239,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30a2\u30ab\u30de\u30b8\u30fc\u30eb"
   },
   {
    "id": 230,
    "tribe": 237,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30a2\u30aa\u30de\u30b8\u30fc\u30eb"
   },
   {
    "id": 231,
    "tribe": 241,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ad\u30de\u30b8\u30fc\u30eb"
   },
   {
    "id": 232,
    "tribe": 240,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u8d64\u9b54\u30d3\u30fc\u30e0"
   },
   {
    "id": 233,
    "tribe": 238,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u9752\u9b54\u30d3\u30fc\u30e0"
   },
   {
    "id": 234,
    "tribe": 242,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u9ec4\u9b54\u30d3\u30fc\u30e0"
   },
   {
    "id": 235,
    "tribe": 3,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30e4\u30df\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 236,
    "tribe": 42,
+   "can_spawn": 0,
+   "flags": 327704,
    "name": "",
    "japanese": "\u30db\u30cd\u30ce\u30b3\u30fb\u9aa8"
   },
   {
    "id": 237,
    "tribe": 12,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ce\u30b3\u30ce\u30b3\uff08\u30b0\u30e9\u30b5\u30f3\u306a\u3057\uff09"
   },
   {
    "id": 238,
    "tribe": 21,
+   "can_spawn": 0,
+   "flags": 88,
    "name": "",
    "japanese": "\u30d1\u30bf\u30d1\u30bf\uff08\u30b0\u30e9\u30b5\u30f3\u306a\u3057\uff09"
   },
   {
    "id": 239,
    "tribe": 205,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30ca\u30fc\u30f3"
   },
   {
    "id": 240,
    "tribe": 206,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cf\u30ca\u65cf\u306e\u9996"
   },
   {
    "id": 241,
    "tribe": 334,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30a2\u30a4\u30c6\u30e0\u30b3\u30a6\u30e9\u30fb\u5927"
   },
   {
    "id": 242,
    "tribe": 335,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30a2\u30a4\u30c6\u30e0\u30b3\u30a6\u30e9\u30fb\u5c0f"
   },
   {
    "id": 243,
    "tribe": 207,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30ca\u30fc\u30f3\uff08\u7d2b\uff09"
   },
   {
    "id": 244,
    "tribe": 208,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cf\u30ca\u65cf\u306e\u9996\uff08\u7d2b\uff09"
   },
   {
    "id": 245,
    "tribe": 209,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30ca\u30fc\u30f3\uff08\u8d64\uff09"
   },
   {
    "id": 246,
    "tribe": 210,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cf\u30ca\u65cf\u306e\u9996\uff08\u8d64\uff09"
   },
   {
    "id": 247,
    "tribe": 262,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff11\uff09"
   },
   {
    "id": 248,
    "tribe": 263,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff12\uff09"
   },
   {
    "id": 249,
    "tribe": 264,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30b7\u30ed\u30a4\u30c6\uff08\u30bf\u30a4\u30d7\uff13\uff09"
   },
   {
    "id": 250,
    "tribe": 125,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c6\u30c8\u30e9"
   },
   {
    "id": 251,
    "tribe": 128,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c6\u30c8\u30e9\u30c9\u30f3"
   },
   {
    "id": 252,
    "tribe": 129,
+   "can_spawn": 0,
+   "flags": 409624,
    "name": "",
    "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u7dd1\uff09\u306e\u77f3"
   },
   {
    "id": 253,
    "tribe": 28,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30c8\u30b2\u30e1\u30c3\u30c8\uff08\u9006\u3055\uff09"
   },
   {
    "id": 254,
    "tribe": 11,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u5149\u30ce\u30b3\u30ce\u30b3"
   },
   {
    "id": 255,
    "tribe": 309,
+   "can_spawn": 0,
+   "flags": 67207960,
    "name": "",
    "japanese": "\u30b9\u30fc\u30d1\u30fc\u30c7\u30a3\u30e1\u30fc\u30f3"
   },
   {
    "id": 256,
    "tribe": 312,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c3\u30c8\u30eb\u30a4\u30fc\u30b8"
   },
   {
    "id": 257,
    "tribe": 336,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "kinkai"
   },
   {
    "id": 258,
    "tribe": 337,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "kinkai3"
   },
   {
    "id": 259,
    "tribe": 214,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30c1\u30e5\u30fc\u30ca\u30f3\u30b8\u30e3"
   },
   {
    "id": 260,
    "tribe": 215,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e2d\u5fcd\uff09\u306e\u624b\u88cf\u5263"
   },
   {
    "id": 261,
    "tribe": 216,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e2d\u5fcd\uff09\u306e\u7206\u5f3e"
   },
   {
    "id": 262,
    "tribe": 217,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30b8\u30e7\u30fc\u30ca\u30f3\u30b8\u30e3"
   },
   {
    "id": 263,
    "tribe": 218,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u624b\u88cf\u5263"
   },
   {
    "id": 264,
    "tribe": 219,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u7206\u5f3e"
   },
   {
    "id": 265,
    "tribe": 255,
+   "can_spawn": 0,
+   "flags": 1655572,
    "name": "",
    "japanese": "\u30c7\u30b9\u30c7\u30b9\u30c7\u30b9"
   },
   {
    "id": 266,
    "tribe": 160,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30dd\u30ed\u30dd\u30ed"
   },
   {
    "id": 267,
    "tribe": 161,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30dc\u30ed\u30dc\u30ed"
   },
   {
    "id": 268,
    "tribe": 71,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c4\u30a4\u30f3\u30b7\u30e5\u30fc\u30bf\u30fc"
   },
   {
    "id": 269,
    "tribe": 72,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\u5144\u5f1f"
   },
   {
    "id": 270,
    "tribe": 73,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b9\u30fc\u30d1\u30fc\u30b7\u30e5\u30fc\u30bf\u30fc"
   },
   {
    "id": 271,
    "tribe": 74,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\uff08\u5f37\uff09"
   },
   {
    "id": 272,
    "tribe": 269,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30db\u30e9\u30fc\u30ad\u30ce\u30b3"
   },
   {
    "id": 273,
    "tribe": 189,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ac\u30c3\u30af\u30f3"
   },
   {
    "id": 274,
    "tribe": 144,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30a6\u30a7\u30fc\u30d3\u30fc"
   },
   {
    "id": 275,
    "tribe": 145,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u4e2d\uff09"
   },
   {
    "id": 276,
    "tribe": 504,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d6\u30fc\u30df\u30fc"
   },
   {
    "id": 277,
    "tribe": 505,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0"
   },
   {
    "id": 278,
    "tribe": 192,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b3\u30d7\u30bf"
   },
   {
    "id": 279,
    "tribe": 506,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30e1\u30ac\u30de\u30f3\u30e2\u30fc"
   },
   {
    "id": 280,
    "tribe": 152,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u304d\u3087\u3046\u3075\u306e\u3081\u3060\u307e"
   },
   {
    "id": 281,
    "tribe": 151,
+   "can_spawn": 0,
+   "flags": 786432,
    "name": "",
    "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0"
   },
   {
    "id": 282,
    "tribe": 153,
+   "can_spawn": 0,
+   "flags": 786432,
    "name": "",
    "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0\uff08\u5f37\uff09"
   },
   {
    "id": 283,
    "tribe": 130,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30c6\u30c8\u30e9\u30b4\u30f3"
   },
   {
    "id": 284,
    "tribe": 131,
+   "can_spawn": 0,
+   "flags": 409624,
    "name": "",
    "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u767d\uff09\u306e\u77f3"
   },
   {
    "id": 285,
    "tribe": 333,
+   "can_spawn": 0,
+   "flags": 536871448,
    "name": "",
    "japanese": "\u30ab\u30b2\u30af\u30c3\u30d1"
   },
   {
    "id": 286,
    "tribe": 331,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u304b\u3052\u30eb\u30a4\u30fc\u30b8"
   },
   {
    "id": 287,
    "tribe": 330,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30ab\u30b2\u30de\u30ea\u30aa"
   },
   {
    "id": 288,
    "tribe": 332,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d4\u30fc\u30c1"
   },
   {
    "id": 289,
    "tribe": 136,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30eb\u30ea\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
   },
   {
    "id": 290,
    "tribe": 137,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30eb\u30ea\u30b3\u30d4\u30e7\u30f3"
   },
   {
    "id": 291,
    "tribe": 138,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30af\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
   },
   {
    "id": 292,
    "tribe": 139,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30cf\u30af\u30b3\u30d4\u30e7\u30f3"
   },
   {
    "id": 293,
    "tribe": 258,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30e1\u30ac\u30de\u30f3\u30e2\u30fc"
   },
   {
    "id": 294,
    "tribe": 146,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30d1\u30eb\u30b5\u30fc"
   },
   {
    "id": 295,
    "tribe": 147,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u767d\uff09"
   },
   {
    "id": 296,
    "tribe": 169,
+   "can_spawn": 0,
+   "flags": 1560,
    "name": "",
    "japanese": "\u30b8\u30e3\u30de\u30b4\u30f3"
   },
   {
    "id": 297,
    "tribe": 170,
+   "can_spawn": 0,
+   "flags": 1560,
    "name": "",
    "japanese": "\u30b8\u30e3\u30de\u30ae\u30e9\u30b9"
   },
   {
    "id": 298,
    "tribe": 196,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30c1\u30e7\u30d0\u30ea\u30d0\u30fc"
   },
   {
    "id": 299,
    "tribe": 197,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0\uff08\u5f37\uff09"
   },
   {
    "id": 300,
    "tribe": 201,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30c8\u30f3\u30c1\u30e7"
   },
   {
    "id": 301,
    "tribe": 157,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b4\u30af\u30fc"
   },
   {
    "id": 302,
    "tribe": 117,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u304d\u3089\u3081\u304f\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
   },
   {
    "id": 303,
    "tribe": 118,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u304d\u3089\u3081\u304f\u30d1\u30f3\u30b8\u30fc\u3055\u3093\u306e\u97f3\u7b26"
   },
   {
    "id": 304,
    "tribe": 3,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30e4\u30df\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 305,
    "tribe": 499,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b"
   },
   {
    "id": 306,
    "tribe": 500,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b\uff08\u9752\uff09"
   },
   {
    "id": 307,
    "tribe": 501,
+   "can_spawn": 0,
+   "flags": 1638680,
    "name": "",
    "japanese": "\u30d8\u30eb\u30ef\u30f3\u30ef\u30f3\u30fb\u6c4e\u7528\u578b\uff08\u9ec4\uff09"
   },
   {
    "id": 308,
    "tribe": 438,
+   "can_spawn": 0,
+   "flags": 507920,
    "name": "",
    "japanese": "\u30b5\u30e0\u30e9\u30a4\u30fb\u5263\u306e\u885d\u6483\u6ce2"
   },
   {
    "id": 309,
    "tribe": 439,
+   "can_spawn": 0,
+   "flags": 507920,
    "name": "",
    "japanese": "\u30b5\u30e0\u30e9\u30a4\u30fb\u5486\u54ee\u306e\u885d\u6483\u6ce2"
   },
   {
    "id": 310,
    "tribe": 53,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
   },
   {
    "id": 311,
    "tribe": 59,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
   },
   {
    "id": 312,
    "tribe": 224,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30ac\u30a4\u30b3\u30c3\u30c4"
   },
   {
    "id": 313,
    "tribe": 227,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30c8\u30b2\u30b3\u30c3\u30c4"
   },
   {
    "id": 314,
    "tribe": 233,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u904b\u3073\u30bf\u30a4\u30d7\uff09"
   },
   {
    "id": 315,
    "tribe": 230,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30cf\u30cd\u30b3\u30c3\u30c4\uff08\u982d\u30bf\u30a4\u30d7\uff09"
   },
   {
    "id": 316,
    "tribe": 473,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30b0\u30ea\u30fc\u30f3\u30ab\u30e1\u30c3\u30af"
   },
   {
    "id": 317,
    "tribe": 474,
+   "can_spawn": 0,
+   "flags": 336,
    "name": "",
    "japanese": "\u30b0\u30ea\u30fc\u30f3\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
   },
   {
    "id": 318,
    "tribe": 475,
+   "can_spawn": 0,
+   "flags": 360720,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u7dd1\uff09"
   },
   {
    "id": 319,
    "tribe": 476,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30db\u30ef\u30a4\u30c8\u30ab\u30e1\u30c3\u30af"
   },
   {
    "id": 320,
    "tribe": 477,
+   "can_spawn": 0,
+   "flags": 336,
    "name": "",
    "japanese": "\u30db\u30ef\u30a4\u30c8\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
   },
   {
    "id": 321,
    "tribe": 478,
+   "can_spawn": 0,
+   "flags": 360720,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u767d\uff09"
   },
   {
    "id": 322,
    "tribe": 479,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30ec\u30c3\u30c9\u30ab\u30e1\u30c3\u30af"
   },
   {
    "id": 323,
    "tribe": 480,
+   "can_spawn": 0,
+   "flags": 336,
    "name": "",
    "japanese": "\u30ec\u30c3\u30c9\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
   },
   {
    "id": 324,
    "tribe": 481,
+   "can_spawn": 0,
+   "flags": 360720,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u8d64\uff09"
   },
   {
    "id": 325,
    "tribe": 494,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30af\u30e2\u30af\u30e2\u30fc\u30f3\u306e\u96f7"
   },
   {
    "id": 326,
    "tribe": 110,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30af\u30ed\u30af\u30e2\u30fc\u30f3\u306e\u96f7"
   },
   {
    "id": 327,
    "tribe": 6,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c8\u30b2\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 328,
    "tribe": 8,
+   "can_spawn": 0,
+   "flags": 88,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d1\u30bf\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 329,
    "tribe": 2,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 330,
    "tribe": 10,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ba\u30c4\u30ad\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 331,
    "tribe": 19,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c8\u30b2\u30ce\u30b3"
   },
   {
    "id": 332,
    "tribe": 467,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30b8\u30b2\u30f3\u30a6\u30e9\u30ce\u30b3\uff22"
   },
   {
    "id": 333,
    "tribe": 24,
+   "can_spawn": 0,
+   "flags": 88,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d1\u30bf"
   },
   {
    "id": 334,
    "tribe": 29,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c8\u30b2\u30e1\u30c3\u30c8"
   },
   {
    "id": 335,
    "tribe": 33,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b9\u30c8\u30fc\u30f3\u30e1\u30c3\u30c8"
   },
   {
    "id": 336,
    "tribe": 38,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c8\u30b2\u30be\u30fc"
   },
   {
    "id": 337,
    "tribe": 43,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30db\u30cd\u30ce\u30b3"
   },
   {
    "id": 338,
    "tribe": 44,
+   "can_spawn": 0,
+   "flags": 327704,
    "name": "",
    "japanese": "\u30db\u30cd\u30ce\u30b3\u9aa8\uff22"
   },
   {
    "id": 339,
    "tribe": 49,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30ab\u30b2\u30cf\u30f3\u30de\u30fc\u30d6\u30ed\u30b9"
   },
   {
    "id": 340,
    "tribe": 55,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d6\u30fc\u30e1\u30e9\u30f3\u30d6\u30ed\u30b9"
   },
   {
    "id": 341,
    "tribe": 61,
+   "can_spawn": 0,
+   "flags": 280,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d5\u30a1\u30a4\u30a2\u30d6\u30ed\u30b9"
   },
   {
    "id": 342,
    "tribe": 50,
+   "can_spawn": 0,
+   "flags": 67436568,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u30cf\u30f3\u30de\u30fc\uff22"
   },
   {
    "id": 343,
    "tribe": 56,
+   "can_spawn": 0,
+   "flags": 67436560,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d6\u30fc\u30e1\u30e9\u30f3\uff22"
   },
   {
    "id": 344,
    "tribe": 62,
+   "can_spawn": 0,
+   "flags": 67469336,
    "name": "",
    "japanese": "\u6b21\u5143\u30d6\u30ed\u30b9\u306e\u30d5\u30a1\u30a4\u30a2\uff22"
   },
   {
    "id": 345,
    "tribe": 66,
+   "can_spawn": 0,
+   "flags": 272,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ab\u30e1\u30c3\u30af"
   },
   {
    "id": 346,
    "tribe": 67,
+   "can_spawn": 0,
+   "flags": 336,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ab\u30e1\u30c3\u30af\uff08\u30db\u30a6\u30ad\uff09"
   },
   {
    "id": 347,
    "tribe": 68,
+   "can_spawn": 0,
+   "flags": 360720,
    "name": "",
    "japanese": "\u30ab\u30e1\u30c3\u30af\u30d3\u30fc\u30e0\uff08\u8d64\uff09\uff22"
   },
   {
    "id": 348,
    "tribe": 75,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b7\u30e5\u30fc\u30bf\u30fc"
   },
   {
    "id": 349,
    "tribe": 76,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7a7a\u3063\u307d\u30b3\u30a6\u30e9\uff08\u5f37\uff09\uff22"
   },
   {
    "id": 350,
    "tribe": 95,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ac\u30dc\u30f3\u3078\u3044"
   },
   {
    "id": 351,
    "tribe": 119,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u306e\u30d1\u30f3\u30b8\u30fc\u3055\u3093"
   },
   {
    "id": 352,
    "tribe": 120,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u304d\u3089\u30d1\u30f3\u3055\u3093\u306e\u97f3\u7b26\uff22"
   },
   {
    "id": 353,
    "tribe": 0,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u7121\u52b9\u30af\u30ea\u30dc\u30fc"
   },
   {
    "id": 354,
    "tribe": 98,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c1\u30e7\u30ed\u30dc\u30f3"
   },
   {
    "id": 355,
    "tribe": 106,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b5\u30f3\u30dc"
   },
   {
    "id": 356,
    "tribe": 107,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30c9\u30af\u30b5\u30f3\u30dc\u306e\u6295\u3052\u4f53\uff22"
   },
   {
    "id": 357,
    "tribe": 111,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30af\u30e2\u30fc\u30f3"
   },
   {
    "id": 358,
    "tribe": 112,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30af\u30ed\u30af\u30e2\u30fc\u30f3\u306e\u96f7\uff22"
   },
   {
    "id": 359,
    "tribe": 114,
+   "can_spawn": 0,
+   "flags": 1572888,
    "name": "",
    "japanese": "\u30ab\u30b2\u30cf\u30f3\u30cb\u30e3\u30fc"
   },
   {
    "id": 360,
    "tribe": 250,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ce\u30ed\u30a4\u30ce\u30ed\u30a4"
   },
   {
    "id": 361,
    "tribe": 497,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30e2\u30c9\u30eb\u30ce\u30ed\u30a4"
   },
   {
    "id": 362,
    "tribe": 251,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ef\u30b6\u30ce\u30ce\u30ed\u30a4"
   },
   {
    "id": 363,
    "tribe": 252,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30aa\u30e2\u30a4\u30ce\u30ed\u30a4"
   },
   {
    "id": 364,
    "tribe": 253,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b5\u30ab\u30b5\u30ce\u30ed\u30a4"
   },
   {
    "id": 365,
    "tribe": 124,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ef\u30f3\u30ef\u30f3"
   },
   {
    "id": 366,
    "tribe": 86,
+   "can_spawn": 0,
+   "flags": 33555216,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c6\u30ec\u30b5"
   },
   {
    "id": 367,
    "tribe": 101,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30a8\u30e2\u30f3"
   },
   {
    "id": 368,
    "tribe": 158,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d0\u30af\u30fc"
   },
   {
    "id": 369,
    "tribe": 132,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c6\u30c8\u30e9"
   },
   {
    "id": 370,
    "tribe": 133,
+   "can_spawn": 0,
+   "flags": 409624,
    "name": "",
    "japanese": "\u30aa\u30af\u30bf\u30ed\uff08\u7dd1\uff09\u306e\u77f3\uff22"
   },
   {
    "id": 371,
    "tribe": 140,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d4\u30e7\u30f3\u30d4\u30e7\u30f3"
   },
   {
    "id": 372,
    "tribe": 141,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b3\u30d4\u30e7\u30f3"
   },
   {
    "id": 373,
    "tribe": 148,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30aa\u30f3\u30d1\u30fc"
   },
   {
    "id": 374,
    "tribe": 149,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30dc\u30eb\u30dc\u30a4\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
   },
   {
    "id": 375,
    "tribe": 171,
+   "can_spawn": 0,
+   "flags": 1560,
    "name": "",
    "japanese": "\u30ab\u30b2\u30b8\u30e3\u30de\u30c9\u30f3"
   },
   {
    "id": 376,
    "tribe": 154,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u3081\u3060\u307e"
   },
   {
    "id": 377,
    "tribe": 155,
+   "can_spawn": 0,
+   "flags": 524288,
    "name": "",
    "japanese": "\u5927\u76ee\u7389\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
   },
   {
    "id": 378,
    "tribe": 162,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30dd\u30a4\u30dd\u30a4"
   },
   {
    "id": 379,
    "tribe": 167,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30bf\u30a4\u30fc\u30eb"
   },
   {
    "id": 380,
    "tribe": 186,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d5\u30ec\u30fc\u30b4\u30f3"
   },
   {
    "id": 381,
    "tribe": 187,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30d5\u30ec\u30fc\u30b4\u30f3\u80f4\u4f53\uff08\u7dd1\uff09\uff22"
   },
   {
    "id": 382,
    "tribe": 190,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ab\u30c3\u30af\u30f3"
   },
   {
    "id": 383,
    "tribe": 198,
+   "can_spawn": 0,
+   "flags": 536,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d0\u30ea\u30d0\u30fc"
   },
   {
    "id": 384,
    "tribe": 199,
+   "can_spawn": 0,
+   "flags": 262144,
    "name": "",
    "japanese": "\u30d0\u30ea\u30a2\u7537\u306e\u30d3\u30fc\u30e0\uff08\u5f37\uff09\uff22"
   },
   {
    "id": 385,
    "tribe": 202,
+   "can_spawn": 0,
+   "flags": 1573144,
    "name": "",
    "japanese": "\u30ab\u30b2\u30d6\u30fc\u30c1\u30e7"
   },
   {
    "id": 386,
    "tribe": 193,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u3078\u30ea\u30f3"
   },
   {
    "id": 387,
    "tribe": 259,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30de\u30f3\u30e2\u30fc"
   },
   {
    "id": 388,
    "tribe": 220,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ca\u30f3\u30b8\u30e3"
   },
   {
    "id": 389,
    "tribe": 221,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u624b\u88cf\u5263\uff22"
   },
   {
    "id": 390,
    "tribe": 222,
+   "can_spawn": 0,
+   "flags": 262160,
    "name": "",
    "japanese": "\u30cb\u30f3\u30b8\u30e3\uff08\u4e0a\u5fcd\uff09\u306e\u7206\u5f3e\uff22"
   },
   {
    "id": 391,
    "tribe": 225,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30ac\u30a4\u30b3\u30c3\u30c4"
   },
   {
    "id": 392,
    "tribe": 228,
+   "can_spawn": 0,
+   "flags": 24,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c8\u30b2\u30b3\u30c3\u30c4"
   },
   {
    "id": 393,
    "tribe": 256,
+   "can_spawn": 0,
+   "flags": 1655572,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c7\u30b9\u30c7\u30b9"
   },
   {
    "id": 394,
    "tribe": 243,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30de\u30b8\u30fc\u30eb"
   },
   {
    "id": 395,
    "tribe": 244,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u9ec4\u9b54\u30d3\u30fc\u30e0\uff22"
   },
   {
    "id": 396,
    "tribe": 302,
+   "can_spawn": 0,
+   "flags": 1639168,
    "name": "",
    "japanese": "\u30a8\u30eb\u30ac\u30f3\u30c0\u30fc\uff3a\u306e\u30d1\u30f3\u30c1"
   },
   {
    "id": 397,
    "tribe": 284,
+   "can_spawn": 0,
+   "flags": 589848,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\uff08\uff33\uff34\uff27\uff18\uff09"
   },
   {
    "id": 398,
    "tribe": 316,
+   "can_spawn": 0,
+   "flags": 536871448,
    "name": "",
    "japanese": "\u30af\u30c3\u30d1(stg7)"
   },
   {
    "id": 399,
    "tribe": 277,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u5c0f)"
   },
   {
    "id": 400,
    "tribe": 278,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u4e2d)"
   },
   {
    "id": 401,
    "tribe": 279,
+   "can_spawn": 0,
+   "flags": 262168,
    "name": "",
    "japanese": "\u30c9\u30c9\u30f3\u30bf\u30b9\u306e\u30d6\u30ed\u30c3\u30afstg8(\u5927)"
   },
   {
    "id": 402,
    "tribe": 285,
+   "can_spawn": 0,
+   "flags": 1835032,
    "name": "",
    "japanese": "\u30de\u30cd\u30fc\u30e9\u30eb\u30d3\u30fc"
   },
   {
    "id": 403,
    "tribe": 291,
+   "can_spawn": 0,
+   "flags": 278544,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5stg5"
   },
   {
    "id": 404,
    "tribe": 294,
+   "can_spawn": 0,
+   "flags": 278544,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\u306e\u9b54\u6cd5stg8"
   },
   {
    "id": 405,
    "tribe": 287,
+   "can_spawn": 0,
+   "flags": 768,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3"
   },
   {
    "id": 406,
    "tribe": 290,
+   "can_spawn": 0,
+   "flags": 768,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff15\uff09"
   },
   {
    "id": 407,
    "tribe": 293,
+   "can_spawn": 0,
+   "flags": 768,
    "name": "",
    "japanese": "\u30c7\u30a3\u30e1\u30fc\u30f3\uff08\uff33\uff34\uff27\uff18\uff09"
   },
   {
    "id": 408,
    "tribe": 298,
+   "can_spawn": 0,
+   "flags": 786432,
    "name": "",
    "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30d3\u30fc\u30e0"
   },
   {
    "id": 409,
    "tribe": 440,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3"
   },
   {
    "id": 410,
    "tribe": 441,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
   },
   {
    "id": 411,
    "tribe": 442,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30dd\u30a4\u30ba\u30f3\u30c1\u30a7\u30ea\u30ea\u30f3"
   },
   {
    "id": 412,
    "tribe": 443,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
   },
   {
    "id": 413,
    "tribe": 444,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30a2\u30a4\u30b9\u30c1\u30a7\u30ea\u30ea\u30f3"
   },
   {
    "id": 414,
    "tribe": 445,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3B\u306e\u30ac\u30b9"
   },
   {
    "id": 415,
    "tribe": 446,
+   "can_spawn": 0,
+   "flags": 16,
    "name": "",
    "japanese": "\u30ab\u30b2\u30c1\u30a7\u30ea\u30ea\u30f3"
   },
   {
    "id": 416,
    "tribe": 447,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
   },
   {
    "id": 417,
    "tribe": 448,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
   },
   {
    "id": 418,
    "tribe": 449,
+   "can_spawn": 0,
+   "flags": 67371024,
    "name": "",
    "japanese": "\u30c1\u30a7\u30ea\u30ea\u30f3\u306e\u30ac\u30b9"
   },
   {
    "id": 419,
    "tribe": 450,
+   "can_spawn": 0,
+   "flags": 524312,
    "name": "",
    "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0R"
   },
   {
    "id": 420,
    "tribe": 451,
+   "can_spawn": 0,
+   "flags": 524312,
    "name": "",
    "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0"
   },
   {
    "id": 421,
    "tribe": 452,
+   "can_spawn": 0,
+   "flags": 933912,
    "name": "",
    "japanese": "\u30b3\u30ba\u30f3\u30d0\u30d0\u306e\u77f3"
   },
   {
    "id": 422,
    "tribe": 453,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "HMG\u30de\u30ea\u30aa"
   },
   {
    "id": 423,
    "tribe": 454,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "HMG\u30de\u30ea\u30aa"
   },
   {
    "id": 424,
    "tribe": 455,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "HMG_LUIGI"
   },
   {
    "id": 425,
    "tribe": 456,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "HMG_LUIGI"
   },
   {
    "id": 426,
    "tribe": 457,
+   "can_spawn": 0,
+   "flags": 66200,
    "name": "",
    "japanese": "HMG\u30b5\u30e0\u30e9\u30a4"
   },
   {
    "id": 427,
    "tribe": 458,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "KHG\u30de\u30ea\u30aa"
   },
   {
    "id": 428,
    "tribe": 459,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "KHG_LUIGI"
   },
   {
    "id": 429,
    "tribe": 460,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "KHG_PEACH"
   },
   {
    "id": 430,
    "tribe": 461,
+   "can_spawn": 0,
+   "flags": 664,
    "name": "",
    "japanese": "KHG_KOOPA"
   },
   {
    "id": 431,
    "tribe": 462,
+   "can_spawn": 0,
+   "flags": 152,
    "name": "",
    "japanese": "KHG\u30b7\u30e5\u30fc\u30bf\u30fc"
   },
   {
    "id": 432,
    "tribe": 463,
+   "can_spawn": 0,
+   "flags": 262296,
    "name": "",
    "japanese": "KHG\u30b3\u30a6\u30e9"
   },
   {
    "id": 433,
    "tribe": 299,
+   "can_spawn": 0,
+   "flags": 1916944,
    "name": "",
    "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dc\u30df\u30b5\u30a4\u30eb\u30c6\u30b9\u30c8"
   },
   {
    "id": 434,
    "tribe": 303,
+   "can_spawn": 0,
+   "flags": 1916944,
    "name": "",
    "japanese": "\u30eb\u30a4\u30fc\u30b8\u30ed\u30dcII\u30df\u30b5\u30a4\u30eb"
   }
