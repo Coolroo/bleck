@@ -285,7 +285,31 @@ declarative since D90:
 |---|---|---|
 | `map:he1_01` | `mapDataPtr("he1_01")->initScript` | ✅ measured end to end (D89, D90, D92) |
 | `item:0x41` | the `itemEventDataTable` entry with that `itemId`, then its `useScript` | ✅ resolves, guard matches, bytes change (D92). 🔶 the hook has never been observed *entering* |
-| `door:` | — | ⛔ deferred: `DoorDesc` has no lookup by name, and would need `evt_door_set_door_descs` intercepted (D91) |
+| `door:` | — | ⛔ deferred, **but no longer for the old reason**: the descriptor array's address is a `USER_FUNC` argument in a map's init script, readable with D89's mechanism alone (D101). What is missing is the calls' **argc** — see below |
+
+⛔ **Why `door:` is still refused, correctly.** `DoorDesc` has no lookup by name,
+so a door patch has to find the descriptor array the map registers. ✅ It does
+register one: one 90 s `mods/door-scan` run counted `evt_door_set_door_descs` ×1,
+`evt_door_set_map_door_descs` ×3 and `evt_door_set_dokan_descs` ×3 across map
+init scripts, positive control 8 hits, and read `MapDoorDesc[0].destMapName` back
+as the string **`he1_02`** — a real map name, so the pointer is genuinely a
+descriptor array (D101). ⛔ **D93 and D94 said doors were unreachable and are
+superseded**: D93's walker matched a single function at a single argc — taken
+from `evt_door.h`'s `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)`, which
+contradicts the comment above it reading `(DoorDesc *descs, s32 count)` — and
+D94 hooked the function while loading `mac_01`, `aa4_01` and `ls4_12`, none of
+which contain the call that was later found in `he1_01`.
+
+🔶 **The blocker is now one number: the calls' argc.** A replacement carries the
+original instruction's argument count (D92), so a `door:` patch written at the
+wrong size **corrupts** the script rather than being refused. `door:` stays out
+of the manifest until that is measured, and `DEFERRED_PATCH_KINDS` still cites
+D91. 🔶 Five maps is also not the game.
+
+⚠️ Two descriptor types, and the *second* is probably the interesting one:
+`DoorDesc` is 0x58 bytes with `interactScript` +0x40, `initScript` +0x50 and
+`moveScript` +0x54; `MapDoorDesc` is 0x20 bytes with `destMapName` +0x14 and
+`destDoorName` +0x18 — the **loading zone** descriptor.
 
 ⚠️ **Item ids share scripts.** 22 distinct scripts across the 33 table entries
 (D91), so patching one id can change several — `item:0x41` was measured to hit a
@@ -363,7 +387,9 @@ reads a final value.
   creates no new `EvtEntry`.
 - ⛔ **No dispatcher or opcode changes**, as `evtpatch` does.
 - ⛔ **No `door:`**, and no `npcdrv.h` scripts. Deferred with a reason, not
-  merely unimplemented — see the selector table.
+  merely unimplemented — and ⚠️ the reason changed in D101: doors *are* reached
+  from map init scripts, and the outstanding question is the calls' argc. See
+  the selector table.
 - ⚠️ **A patch lasts the whole session**, including maps entered later. It is
   applied once, at load, and not re-applied per arrival.
 - 🔶 **A patched item hook has never been seen running.** An item use script
@@ -387,9 +413,9 @@ extern void bleck_code_write(void *at, u32 word);   /* store then flush */
 extern s32 bleck_code_branch(const void *from, const void *to, u32 *out);
 extern s32 bleck_code_hook(void *at, const void *to); /* encode, write, flush */
 
-extern void evt_door_set_door_descs(void);   /* bound by elf2rel, by name */
+extern void npcDispMain(void);   /* bound by elf2rel, by name */
 
-if (bleck_code_hook((void *) evt_door_set_door_descs, (void *) myHandler) != 0)
+if (bleck_code_hook((void *) npcDispMain, (void *) myHandler) != 0)
     ; /* refused: 1 misaligned, 2 out of range. Nothing was written. */
 ```
 
@@ -691,10 +717,13 @@ costing ~9 ticks is not credible on a real 750, which has to drain the pipeline.
 - ⛔ **No build-time range check.** The loader chooses where the module lands, so
   "can this branch be encoded" is only answerable at run time. The encoder
   refuses rather than masking, and the status says which way it failed.
-- ⛔ **`evt_door_set_door_descs` is not the way in to doors.** It was hooked
-  successfully and entered **zero** times while Flipside loaded and ran for 90 s,
-  with a control hook on `npcDispMain` firing 62,480 times in the same window
-  (D94). Two maps, so 🔶 rather than settled — but `door:` stays refused.
+- ⚠️ **Hooking `evt_door_set_door_descs` is not the way in to doors — but not
+  because doors are out of reach.** D94 hooked it successfully and it was entered
+  **zero** times in 90 s with a control hook firing 62,480 times; ⛔ **that run is
+  superseded by D101**, which found the registration in `he1_01` — a map D94
+  never loaded. The route that works needs no hook at all: the descriptor
+  address is a `USER_FUNC` argument in the map's init script, read with D89's
+  mechanism (D101). `door:` stays refused pending the calls' argc.
 - ⛔ **Do not stub `effMain`.** It hangs the map-change sequence (D94).
 - 🔶 **Hardware.** Dolphin reproduced the stale instruction fetch, which is the
   interesting direction, but its cache emulation is not the Wii's.

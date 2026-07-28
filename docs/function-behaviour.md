@@ -147,10 +147,61 @@ Documented in `spm/effdrv.h`. Two operational facts that are not:
 
 ---
 
+## The door descriptor setters — `evt_door_set_door_descs` and friends
+
+⚠️ **Established by walking bytecode, not by tracing** (D101), which is a
+different instrument from everything above — the entries here are `USER_FUNC`
+call sites found in map init scripts, so what is measured is *who calls them and
+with what*, not what the functions do internally.
+
+`evt_door_set_door_descs` is `0x800E2610` (eu0), declared in `evt_door.h`.
+
+✅ **They are called from map init scripts.** One 90 s `mods/door-scan` run:
+
+| | |
+|---|---|
+| `evt_door_set_door_descs` | 1 call |
+| `evt_door_set_map_door_descs` | 3 calls |
+| `evt_door_set_dokan_descs` | 3 calls |
+| control (`evt_hitobj_attr_onoff`) | 8 hits |
+| walks truncated at the 4096-word limit | 0 |
+
+✅ **The first argument is the descriptor array's address, in the bytecode.**
+`DoorDesc *` = `0x80D2FBB0`; `MapDoorDesc *` = `0x80D2F940`, from `he1_01`. The
+check that makes this a finding rather than a number: `MapDoorDesc[0].destMapName`
+read back as the string **`he1_02`** — a real map name. A wrong pointer does not
+spell one.
+
+✅ Layouts, from `evt_door.h`: `DoorDesc` is 0x58 bytes with `interactScript`
++0x40, `initScript` +0x50, `moveScript` +0x54. `MapDoorDesc` is 0x20 bytes with
+`destMapName` +0x14 and `destDoorName` +0x18 — the **loading zone** descriptor.
+
+⚠️ **`evt_door.h`'s argument count is wrong.**
+`EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` contradicts the comment
+directly above it, `evt_door_set_door_descs(DoorDesc *descs, s32 count)` — two
+arguments, so argc 3. D93 trusted the macro, searched at argc 2 only, and
+recorded zero calls. ⛔ D93 and D94 are superseded; the pointer above was read at
+`+2`, which is correct for any argc ≥ 2, and the `he1_02` string says it was.
+
+🔶 **The actual argc is still not measured**, and `code.patches` needs it — a
+replacement carries the original's argc (D92), so a patch at the wrong size
+corrupts the script rather than failing.
+
+🔶 Which map holds the `set_door_descs` call was not recorded, and five maps is
+not the game.
+
+⛔ **Hooking the function is not the route in.** D94 branched over it and counted
+zero entries in 90 s with a control at 62,480 — but that run covered `mac_01`,
+`aa4_01` and `ls4_12`, none of which contain the call. Reading the argument out
+of the bytecode needs no hook at all (D89, D101).
+
+---
+
 ## See also
 
 - [`decision-log.md`](decision-log.md) — D94 (instruction patching), D95
-  (`code.hooks`), D96 (the trace)
+  (`code.hooks`), D96 (the trace), D101 (the door setters, and why D93/D94 were
+  wrong about them)
 - [`hook-points.md`](hook-points.md) — when custom code can safely run
 - [`code-mods.md`](code-mods.md) — the trace pattern and its hazards
 - [`disc-layout.md`](disc-layout.md) — facts about the disc rather than the code

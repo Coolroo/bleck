@@ -18,7 +18,7 @@ from bleck.script.compiler.ir import (
     SymbolWord,
     Word,
 )
-from bleck.script.emit import runtime_c, runtime_intercept, runtime_trace
+from bleck.script.emit import runtime_c, runtime_intercept, runtime_patch, runtime_trace
 
 # Re-exported as `emit.MapHook` and friends.
 # pylint: disable=unused-import
@@ -190,6 +190,13 @@ class _PatchKind:
     resolve: str
     """The lines inside `bleck_apply_patches` that call it."""
 
+    needs: tuple[PatchKind, ...] = ()
+    """Other kinds whose resolver this one calls.
+
+    `door` walks a map's init script, so it uses `bleck_map_init_script`. Without
+    this a door-only module would emit a call to a helper it never defined.
+    """
+
 
 #: What each selector kind contributes to the generated C. Keyed by the enum, so
 #: a new member that nobody wired up here is a `KeyError` at the one line that
@@ -197,13 +204,19 @@ class _PatchKind:
 _PATCH_KINDS = {
     PatchKind.MAP: _PatchKind(
         constant="BLECK_PATCH_MAP",
-        resolver=runtime_c.PATCH_MAP_RESOLVER,
-        resolve=runtime_c.PATCH_MAP_RESOLVE,
+        resolver=runtime_patch.PATCH_MAP_RESOLVER,
+        resolve=runtime_patch.PATCH_MAP_RESOLVE,
     ),
     PatchKind.ITEM: _PatchKind(
         constant="BLECK_PATCH_ITEM",
-        resolver=runtime_c.PATCH_ITEM_RESOLVER,
-        resolve=runtime_c.PATCH_ITEM_RESOLVE,
+        resolver=runtime_patch.PATCH_ITEM_RESOLVER,
+        resolve=runtime_patch.PATCH_ITEM_RESOLVE,
+    ),
+    PatchKind.DOOR: _PatchKind(
+        constant="BLECK_PATCH_DOOR",
+        resolver=runtime_patch.PATCH_DOOR_RESOLVER,
+        resolve=runtime_patch.PATCH_DOOR_RESOLVE,
+        needs=(PatchKind.MAP,),
     ),
 }
 
@@ -214,24 +227,27 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
     seen: set[str] = set()
     for index, patch in enumerate(patches):
         decls.append(
-            runtime_c.PATCH_TARGET.format(index=index, name=_c_string(patch.target))
+            runtime_patch.PATCH_TARGET.format(index=index, name=_c_string(patch.target))
         )
     for patch in patches:
         if patch.call not in seen:
             seen.add(patch.call)
-            decls.append(runtime_c.PATCH_CALL.format(name=patch.call))
+            decls.append(runtime_patch.PATCH_CALL.format(name=patch.call))
 
     # Only the kinds actually used, so an item-only module never references
     # `mapDataPtr` and vice versa. Declaration order stays stable.
-    used = [kind for kind in _PATCH_KINDS if any(p.kind is kind for p in patches)]
+    wanted = {p.kind for p in patches}
+    for kind in list(wanted):
+        wanted.update(_PATCH_KINDS[kind].needs)
+    used = [kind for kind in _PATCH_KINDS if kind in wanted]
     rows = "".join(
         f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
-        f"{patch.item_id}, {patch.at}u, 0x{patch.expect:08X}u, "
+        f"{patch.index}, {patch.at}u, 0x{patch.expect:08X}u, "
         f"(const void *) &{patch.call}}},"
         f"  {patch.comment}\n"
         for index, patch in enumerate(patches)
     )
-    return runtime_c.PATCH_BLOCK.format(
+    return runtime_patch.PATCH_BLOCK.format(
         count=len(patches),
         decls="\n" + "\n".join(decls) + "\n",
         rows=rows,

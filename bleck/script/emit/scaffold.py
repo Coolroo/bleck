@@ -82,7 +82,8 @@ class PatchKind(StrEnum):
     """Which family of the game's own `evt` scripts a patch selector names.
 
     `map:<name>` resolves through `mapDataPtr`; `item:<id>` walks
-    `itemEventDataTable`.
+    `itemEventDataTable`; `door:<map>:<index>` walks that map's init script for
+    the descriptor array and follows `interactScript`.
 
     ⚠️ The value is half of a wire format. Renaming a member is free; changing a
     *value* breaks every `mod.json` that patches a script.
@@ -90,6 +91,7 @@ class PatchKind(StrEnum):
 
     MAP = "map"
     ITEM = "item"
+    DOOR = "door"
 
     @property
     def example(self) -> str:
@@ -107,6 +109,7 @@ class PatchKind(StrEnum):
 _PATCH_KIND_EXAMPLES = {
     PatchKind.MAP: "map:<name>",
     PatchKind.ITEM: "item:<id>",
+    PatchKind.DOOR: "door:<map>:<index>",
 }
 
 #: Derived, not written out. The prose list this replaces sat two lines below
@@ -268,6 +271,9 @@ class ScriptPatch:
     """Which family of the game's own scripts `target` names."""
 
     target: str
+    """The script's name in its family. For `door:` this is the MAP whose init
+    script registers the descriptors, not the door itself."""
+
     at: int
     expect: int
     """The header word the guard compares against before writing anything.
@@ -279,13 +285,26 @@ class ScriptPatch:
     call: str
     """A C function in the mod's own sources, with evt's user-func signature."""
 
-    item_id: int = -1
-    """The item `target` names, for `item` patches. -1 otherwise."""
+    index: int = -1
+    """What `target` alone does not say.
+
+    An item id for `item:`, a door index for `door:`, -1 for `map:`. One field
+    rather than one per kind, because the generated C carries one column.
+    """
+
+    @property
+    def selector(self) -> str:
+        """How this patch was written in the manifest, for a comment."""
+        if self.kind is PatchKind.DOOR:
+            return f"{self.kind}:{self.target}:{self.index}"
+        if self.kind is PatchKind.ITEM:
+            return f"{self.kind}:{self.index}"
+        return f"{self.kind}:{self.target}"
 
     @property
     def comment(self) -> str:
         argc = self.expect >> 16
-        return f"/* {self.kind}:{self.target} +{self.at} -> {self.call}, argc {argc} */"
+        return f"/* {self.selector} +{self.at} -> {self.call}, argc {argc} */"
 
 
 @dataclass(frozen=True)

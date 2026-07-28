@@ -285,11 +285,11 @@ def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.Scri
     return [
         emit.ScriptPatch(
             kind=patch.kind,
-            target=patch.target,
+            target=patch.emit_target,
             at=patch.at,
             expect=patch.expect_word,
             call=patch.call,
-            item_id=patch.item_id,
+            index=patch.index,
         )
         for patch in spec.patches
     ]

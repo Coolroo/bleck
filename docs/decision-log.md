@@ -7019,3 +7019,91 @@ a door patch has two plausible meanings and they are not the same feature:
 
 🔶 Still five maps, and 🔶 the count argument was read as a literal — a script
 that computes it would not be handled.
+
+---
+
+## D103 — ✅ `door:<map>:<index>` — the selector D91 wanted, built (2026-07-28)
+
+```json
+"patches": [
+  { "script": "door:he1_01:0", "at": 0, "expect": "MULF", "call": "on_door" }
+]
+```
+
+Resolved at load: `mapDataPtr(map)` → `MapData.initScript` → walk for
+`evt_door_set_door_descs` → `descs[index].interactScript` → patch. No
+interception, no trampoline, no `code.hooks`. ⛔ D91 recorded that reaching a
+door "needs interception, not a lookup"; that is now wrong, and it was wrong
+because of D93's argc (D101, D102).
+
+### ✅ Measured in-game, and the readback is the evidence
+
+Two patches on purpose — `door:he1_01:0` and `door:he1_01:9`, the same map, one
+index past the end. **A run where both report the same thing proves nothing,
+whichever thing it is.**
+
+| | run 1, guessed `expect` | run 2, measured `expect` |
+|---|---|---|
+| `status[0]` | **3 REFUSED** | **2 APPLIED** |
+| `status[1]` | 4 NO_SCRIPT | 4 NO_SCRIPT |
+| script word 0 | `0x0002003C` (`MULF`) | **`0x0002005C`** (`USER_FUNC`) |
+| script word 1 | `0xFE363C80` | **`0x80F660F0`** → `on_door` |
+| script word 2 | `0xF1B1E5C7` | `0xF1B1E5C7` unchanged |
+
+⚠️ **REFUSED was the useful result in run 1.** It is not a failure: it means
+the resolver walked the init script, found the array, indexed the door and
+followed `interactScript` to a real script — and *then* the guard declined
+because `expect` was a guess. NO_SCRIPT on the same row would have meant
+resolution failed. The two statuses differing across rows, and REFUSED→APPLIED
+across runs, are what separate "it resolved" from "it looked plausible".
+
+✅ Word 2 unchanged is D92's same-size rule visible in memory: argc preserved,
+opcode swapped, pointer written, trailing argument untouched.
+
+✅ Two independent cross-checks landed: `interactScript` read back as
+`0x80D2FB78`, the value D102 measured by a different route, and the descriptor
+count as **1**, also D102's.
+
+### ⚠️ A door interact script opens with `MULF`
+
+Worth recording because it is not what anyone would guess. `he1_01` door 0's
+`interactScript` starts `0x0002003C` — opcode `0x3C`, a float multiply, argc 2.
+Not a `USER_FUNC`, not a `DEBUG_PUT_MSG`. So **`expect` for a door patch has to
+be measured per door**; there is no useful default, and the guard is what makes
+guessing safe rather than destructive.
+
+### Design decisions
+
+- **`door:<map>:<index>`, not `door:<name>`.** ⛔ There is no lookup by name —
+  D91 was right about that. The index is a position in the array the map
+  registers, in registration order.
+- ⛔ **The index is not bounds-checked at build time and cannot be.** How many
+  doors a map registers lives in the game's data. The generated code compares
+  against the `count` argument sitting beside the array and reports NO_SCRIPT.
+- **`interactScript` only.** `initScript` (+0x50) and `moveScript` (+0x54) are
+  reachable the same way; adding them is a suffix on the selector and a
+  non-breaking change. `interact` is what "change what this door does" means.
+- **`_PatchKind.needs`.** `door` calls `bleck_map_init_script`, and resolvers
+  are emitted only when their kind is used — so a door patch with no map patch
+  would have called a helper it never defined. Declared as data rather than
+  discovered as a link error.
+- The `BleckPatch.itemId` column became `index`, since it now carries a door
+  index too. One column, named for what it is.
+
+### Not proven
+
+- 🔶 **The hook has never been *entered*.** A door interact script runs when the
+  player uses the door, which needs a controller (D48). Same standing gap as
+  `item:` (D92). `status = APPLIED` and the readback are what is measured.
+- 🔶 One door, in one map.
+- ⛔ `npcdrv:` is still not a selector.
+
+### Housekeeping
+
+- `runtime_c.py` crossed pylint's 1000-line limit again; the patch runtime moved
+  to `bleck/script/emit/runtime_patch.py`, the same seam that split out
+  `runtime_trace`. Everything there is reachable only from `code.patches`.
+- ✅ The ASCII guard caught a `⚠️` in the new generated comment — that check
+  earning its keep.
+- 797 tests (793 before). `DEFERRED_PATCH_KINDS` is now empty and stays as the
+  shape for the next kind that is explained and refused.

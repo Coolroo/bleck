@@ -10,7 +10,7 @@ image (D86).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D96)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D101)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -175,7 +175,7 @@ than trusting a number written here.
 | ⛔ **Still no trampoline** | interception restores/re-installs instead — two cache flushes per call (D97) |
 | ⛔ **More than eight integer arguments cannot be intercepted** | they live in the caller's frame; not checked and cannot be (D97) |
 | ✅ **A function can be traced with the original still running** | restore, call, re-arm — `effMain` through four map changes (D96) |
-| ⛔ **Doors are not reachable at all** | absent from five maps' init scripts, and a hook on `evt_door_set_door_descs` fired zero times (D93, D94) |
+| ✅ **Door descriptors *are* registered from map init scripts** | `set_door_descs` ×1, `set_map_door_descs` ×3, `set_dokan_descs` ×3 in 90 s; `MapDoorDesc[0].destMapName` read back as `he1_02` (D101). ⛔ D93 and D94 said the opposite and are superseded — D93 searched one function at one argc, D94 loaded maps without the call. 🔶 `door:` still refused pending the calls' argc |
 | ✅ **C++ code mods build** | `.ctors` survives `-r --gc-sections` and elf2rel; markers checked at link (D85) |
 | 🔶 **No C++ code mod has run in-game** | every D85 claim is about the ELF and REL on disk |
 | ✅ **Riivolution output boots in Dolphin** | loader travels in the patched `main.dol`; negative isolates one XML element (D86) |
@@ -367,23 +367,34 @@ per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
    remaining gap in the language.
    ⚠️ **Maps did *not* need it** (D51): `code.maps` watches the map-change work
    instead, because repointing a pointer the game owns deadlocked it. Expect the
-   same trap for NPCs — read D51 first. ⛔ It does not open doors either: D93 and
-   D94 showed the descriptor registration is not reachable at all.
-3. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
+   same trap for NPCs — read D51 first. ⚠️ Doors do **not** need it: D101 reads
+   the descriptor array's address straight out of the map init script's
+   bytecode, with D89's mechanism. ⛔ The sentence here used to say D93 and D94
+   had shown door registration unreachable; both are superseded.
+3. **Measure the argc of the door descriptor setters** — the cheapest open
+   experiment here, and the only thing between `door:` and a working selector.
+   ✅ The calls exist (D101: `set_door_descs` ×1, `set_map_door_descs` ×3,
+   `set_dokan_descs` ×3, positive control 8 hits,
+   `MapDoorDesc[0].destMapName` = `he1_02`). 🔶 Their argument count is not
+   known, and D92's replacement matches the original's argc — at the wrong size
+   a patch **corrupts** the script rather than failing, so ⛔ the manifest keeps
+   refusing `door:` until this is measured. 🔶 Which map holds the
+   `set_door_descs` call was not recorded either, and five maps is not the game.
+4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need
    not be. Small, and removes a papercut the language shipped with.
-4. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
    `switch` is done (D84), though nothing has run one in-game yet.
    ⚠️ `RUN_EVT` is *emitted* nowhere — the map-hook design that used it was
    ruled out (D51) — so `spawn` starts from scratch.
-5. **Switch to the decomp's symbol table** (D39).
+6. **Switch to the decomp's symbol table** (D39).
    `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
    `spm.eu0.lst`'s 1,111 — and carries sizes and types, so `user_func` targets
    and `code.hooks` targets could be validated rather than just resolved. One
    regex parses it. ⚠️ It states no licence (D54), so it must stay a
    user-supplied clone.
-6. **Run something on a real Wii.** The Riivolution output is built for it and
+7. **Run something on a real Wii.** The Riivolution output is built for it and
    has never touched one.
 
 ---
@@ -803,14 +814,18 @@ What to know before extending it:
 - ⚠️ A patch lasts the **whole session** — applied once at load, never
   re-applied per arrival.
 - ✅ **Two selectors: `map:<name>` and `item:<id>`** (D92). ⛔ `door:` is refused
-  with a reason, not merely unimplemented — see the code section below.
+  with a reason, not merely unimplemented — ⚠️ but the reason is now the
+  unmeasured **argc** of the descriptor setters (D101), not the old "doors are
+  unreachable" (D93, D94, both superseded). See the code section below.
 - ⚠️ **Item scripts are shared.** 33 table entries, 22 distinct scripts, so
   patching one id can change others. The generated code counts them into
   `bleck_patch_shared[]` rather than pretending an id is a unique target.
 - 🔶 **An item hook has been applied and never *entered*.** Using an item needs
   menu navigation and input cannot be injected (D48). `hook entries` reading `0`
   is the expected value for a working hook and a broken one alike.
-- `mods/evt-patch` and `mods/item-patch` are the worked examples.
+- `mods/evt-patch` and `mods/item-patch` are the worked examples;
+  `mods/door-scan` is the bytecode *walk* that found the door registrations
+  (D101) without patching anything.
 
 ---
 
@@ -879,9 +894,12 @@ What to know before extending it:
     `afterSaw = 0x901D6248`, and `result − arg = 0xD8`, independently
     reproducing D96's `GetBasicPlayer` finding. 26,996 SEQ_GAME frames, map names
     readable as text. 🔶 Dolphin only, as ever.
-- ⛔ **Doors are still not reachable.** `evt_door_set_door_descs` was hooked
-  successfully and entered **zero** times while Flipside loaded and ran 90 s,
-  with a control hook firing 62,480 times in the same window. 🔶 Two maps only.
+- ⛔ **"Doors are still not reachable" — superseded by D101.** The zero-entry
+  hook on `evt_door_set_door_descs` is real, but the run loaded `mac_01`,
+  `aa4_01` and `ls4_12`, and the registration is in `he1_01`. ✅ Doors are
+  reached from map init scripts without any hook at all — the descriptor
+  address is a `USER_FUNC` argument (D101). ⚠️ The lesson to keep: a passing
+  control shows the instrument works, not that it is aimed at the right thing.
 - ⛔ **Do not stub `effMain`** — it hangs the map-change sequence. Use
   `npcDispMain` as a hot-function control; it is a draw pass. ⚠️ *Tracing*
   `effMain` is fine — see below.

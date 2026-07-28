@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "door-patch",
+  "version": "0.1.0",
+  "description": "Does door:<map>:<index> resolve to a real interact script and apply?",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "patches": [
+      { "script": "door:he1_01:0", "at": 0, "expect": "MULF", "call": "on_door" },
+      { "script": "door:he1_01:9", "at": 0, "expect": "MULF", "call": "on_door" }
+    ]
+  }
+}

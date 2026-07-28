@@ -28,7 +28,18 @@ ITEM_PATCH = emit.ScriptPatch(
     at=0,
     expect=0x0004005C,
     call="on_item_use",
-    item_id=0x41,
+    index=0x41,
+)
+
+
+#: he1_01 registers one door; its interact script is the target (D102).
+DOOR_PATCH = emit.ScriptPatch(
+    kind=emit.PatchKind.DOOR,
+    target="he1_01",
+    at=0,
+    expect=0x00010072,
+    call="on_door",
+    index=0,
 )
 
 
@@ -105,6 +116,37 @@ class TestGeneratedCode:
         assert "mapDataPtr" not in out
         assert "itemEventDataTable[index].useScript" in out
 
+    def test_a_door_only_module_still_defines_the_map_helper(self):
+        """`door:` walks a map's init script, so it calls `bleck_map_init_script`.
+        Kinds are emitted only when used, so without the dependency declared this
+        module would call a helper it never defined -- a link error, and only for
+        the door-without-a-map-patch combination."""
+        out = generated([DOOR_PATCH])
+        assert "bleck_map_init_script" in out
+        assert "bleck_door_interact_script(patch->target, patch->index)" in out
+        # Still nothing it does not need.
+        assert "itemEventDataTable" not in out
+
+    def test_the_door_walk_uses_the_measured_argc_not_the_header_s(self):
+        """`evt_door.h` declares argc 2; the game uses 3 (D102). Trusting the
+        header is exactly what made D93 and D94 conclude doors were
+        unreachable, so the constant here must be the measured one."""
+        out = generated([DOOR_PATCH])
+        assert "#define BLECK_DOOR_SETTER_HEADER 0x0003005Cu" in out
+        assert "script[at + 2]" in out  # descs
+        assert "script[at + 3]" in out  # count
+
+    def test_the_door_index_is_bounds_checked_against_the_count(self):
+        """The manifest cannot check it -- how many doors a map has is in the
+        game's data. So the runtime compares against the setter's own count
+        argument rather than reading past the array."""
+        out = generated([DOOR_PATCH])
+        assert "index >= count" in out
+
+    def test_the_door_resolver_is_absent_from_a_map_only_module(self):
+        out = generated()
+        assert "bleck_door_interact_script" not in out
+
     def test_the_status_table_is_readable_from_a_mod(self):
         out = generated()
         # Not static, and not in .bss: the loader does not document zeroing it.
@@ -175,12 +217,12 @@ class TestPatchKind:
         for kind in emit.PatchKind:
             assert kind.example in emit.SUPPORTED_SELECTORS
 
-    def test_a_deferred_kind_is_not_a_member(self):
-        """`door:` is recognised well enough to explain and refused anyway. As a
-        member it would appear in every 'here is what works' list."""
-        assert emit.PatchKind.parse("door") is None
-        assert "door" in mod_manifest.DEFERRED_PATCH_KINDS
-        assert "door" not in emit.SUPPORTED_SELECTORS
+    def test_nothing_is_deferred_any_more(self):
+        """`door` sat in DEFERRED_PATCH_KINDS until D101 showed the reason was
+        an instrument limit rather than a fact about the game. The dict stays --
+        it is the right shape for the next kind that is explained and refused."""
+        assert not mod_manifest.DEFERRED_PATCH_KINDS
+        assert emit.PatchKind.parse("door") is emit.PatchKind.DOOR
 
 
 class TestManifest:
@@ -214,13 +256,27 @@ class TestManifest:
         with pytest.raises(mod_manifest.ManifestError, match="map:<name>"):
             manifest({**WHOLE, "script": "he1_01"})
 
-    def test_door_is_refused_with_its_reason(self):
-        """Deferred, not merely unimplemented: there is no lookup by name (D91)."""
+    def test_a_door_needs_both_a_map_and_an_index(self):
+        """`door:he1_01` alone names a map, not a door. Refused rather than
+        assumed to mean index 0 -- a map registers several."""
         with pytest.raises(mod_manifest.ManifestError) as caught:
-            manifest({**WHOLE, "script": "door:front"})
+            manifest({**WHOLE, "script": "door:he1_01"})
         message = str(caught.value)
-        assert "evt_door_set_door_descs" in message
-        assert "item:<id>" in message
+        assert "door:<map>:<index>" in message
+        assert "not an id" in message
+
+    def test_a_door_index_must_be_a_number(self):
+        with pytest.raises(mod_manifest.ManifestError, match="not a number"):
+            manifest({**WHOLE, "script": "door:he1_01:front"})
+
+    def test_a_door_resolves_to_a_map_and_an_index(self):
+        """The generated C needs them apart: it looks the map up, then indexes
+        the descriptor array the map's init script registered."""
+        parsed = manifest({**WHOLE, "script": "door:he1_01:2"}).code.patches[0]
+        assert parsed.kind == "door"
+        assert parsed.emit_target == "he1_01"
+        assert parsed.index == 2
+        assert parsed.selector == "door:he1_01:2"
 
     def test_a_negative_offset_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError, match="cannot be negative"):
@@ -235,17 +291,17 @@ class TestManifest:
             {**WHOLE, "script": "item:0x41", "expect": "USER_FUNC 4"}
         ).code.patches[0]
         assert parsed.kind == "item"
-        assert parsed.item_id == 0x41
+        assert parsed.index == 0x41
         assert parsed.selector == "item:0x41"
 
     def test_a_decimal_item_id_works_too(self):
         parsed = manifest(
             {**WHOLE, "script": "item:65", "expect": "USER_FUNC 4"}
         ).code.patches[0]
-        assert parsed.item_id == 65
+        assert parsed.index == 65
 
-    def test_a_map_patch_has_no_item_id(self):
-        assert manifest(WHOLE).code.patches[0].item_id == -1
+    def test_a_map_patch_needs_neither(self):
+        assert manifest(WHOLE).code.patches[0].index == -1
 
     def test_a_non_numeric_item_id_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:

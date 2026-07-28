@@ -93,15 +93,11 @@ PatchKind = emit.PatchKind
 #: ⚠️ Deliberately **not** `PatchKind` members. A key here is a selector bleck
 #: recognises well enough to explain and refuses to accept; making it a member
 #: would put it in `SUPPORTED_SELECTORS` and in every "here is what works" list.
-DEFERRED_PATCH_KINDS = {
-    "door": (
-        "a door script cannot be looked up by name: `DoorDesc` carries the "
-        "scripts, but the descriptor array is registered per map by "
-        "`evt_door_set_door_descs`, and `evtDoorGetActiveDoorDesc` returns only "
-        "the door currently in use. Reaching one needs interception, not a "
-        "lookup (D91)."
-    ),
-}
+#: ⛔ `door` was here until D101/D102. It is now a real kind: the descriptor
+#: array's address sits in the map's init script as a `USER_FUNC` argument, so
+#: no interception is needed. D93 and D94 concluded otherwise by searching for
+#: one function at the argument count `evt_door.h` declares, which is wrong.
+DEFERRED_PATCH_KINDS: dict[str, str] = {}
 
 
 @dataclass(frozen=True)
@@ -151,9 +147,25 @@ class ScriptPatch:
         return self.expect_word >> 16
 
     @property
-    def item_id(self) -> int:
-        """The item id `target` names, or -1 when this is not an `item:` patch."""
-        return int(self.target, 0) if self.kind is PatchKind.ITEM else -1
+    def index(self) -> int:
+        """What `target` alone does not say: an item id, or a door index.
+
+        -1 for `map:`, which needs neither.
+        """
+        if self.kind is PatchKind.ITEM:
+            return int(self.target, 0)
+        if self.kind is PatchKind.DOOR:
+            return int(self.target.split(":")[1], 0)
+        return -1
+
+    @property
+    def emit_target(self) -> str:
+        """The name the generated C looks up.
+
+        For `door:` that is the MAP, not the whole selector -- the door index
+        travels separately in `index`, because the runtime needs them apart.
+        """
+        return self.target.split(":")[0] if self.kind is PatchKind.DOOR else self.target
 
 
 #: Re-exported so a manifest reader does not have to know the enum lives in the
@@ -569,17 +581,56 @@ def _parse_selector(raw: str, where: str) -> _Selector:
             f"{where}: 'script' is {raw!r}, which names no script bleck can "
             f"reach.\n  Supported selectors: {emit.SUPPORTED_SELECTORS}.\n"
             f"  'map:he1_01' patches that map's init script; 'item:0x41' "
-            f"patches that item's use script."
+            f"patches that item's use script; 'door:he1_01:0' patches the "
+            f"interact script of that map's first door."
         )
     if kind is PatchKind.ITEM:
         return _Selector(kind=kind, target=_parse_item_id(target, where))
-    if not _MAP_NAME_RE.match(target):
-        raise ManifestError(
-            f"{where}: {target!r} is not a map name. They look like 'he1_01' -- "
-            f"lowercase letters, digits and underscores.\n"
-            f"  `bleck maps` lists all 383 of them."
-        )
+    if kind is PatchKind.DOOR:
+        return _Selector(kind=kind, target=_parse_door(target, where))
+    _check_map_name(target, where)
     return _Selector(kind=kind, target=target)
+
+
+def _check_map_name(name: str, where: str) -> None:
+    if _MAP_NAME_RE.match(name):
+        return
+    raise ManifestError(
+        f"{where}: {name!r} is not a map name. They look like 'he1_01' -- "
+        f"lowercase letters, digits and underscores.\n"
+        f"  `bleck maps` lists all 383 of them."
+    )
+
+
+def _parse_door(raw: str, where: str) -> str:
+    """Check `he1_01:0` and hand it back as written.
+
+    ⚠️ The index is **not** bounds-checked here, and cannot be: how many doors a
+    map registers is in the game's data, which is a run-time question. The
+    generated code compares against the `count` argument beside the descriptor
+    array and reports NO_SCRIPT rather than reading past the end.
+    """
+    map_name, sep, index = raw.partition(":")
+    if not sep or not index:
+        raise ManifestError(
+            f"{where}: 'door:{raw}' names no door.\n"
+            f"  A door selector is 'door:<map>:<index>' -- 'door:he1_01:0' is "
+            f"that map's first door.\n"
+            f"  A map registers its doors in order, so the index is a position "
+            f"in that list, not an id. `mods/door-scan` reports how many a map "
+            f"has."
+        )
+    _check_map_name(map_name, where)
+    try:
+        value = int(index, 0)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: door index {index!r} is not a number. Write "
+            f"'door:{map_name}:0' for the first door."
+        ) from None
+    if value < 0:
+        raise ManifestError(f"{where}: door index {index!r} cannot be negative")
+    return raw
 
 
 def _parse_item_id(raw: str, where: str) -> str:

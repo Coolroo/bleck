@@ -30,7 +30,7 @@ this file is forward-looking only.
 | **Patching the game's own scripts** | ✅ `code.patches` replaces one instruction of a vanilla `evt` script with a call into `mod.rel` (D89, D90). Same-size, but **any** size from two words up, and `item:<id>` as well as `map:<name>` (D92). 🔶 An item hook has never been seen *entering* |
 | **Patching the game's own code** | ✅ C helpers write a PowerPC branch and flush it correctly; measured against a no-flush control that did nothing (D94). ✅ `code.hooks` declares one, with a guard word derived from `main.dol`; positive and negative runs (D95). ✅ **All three modes** — `replace`, `before` and `after` — via a generated PowerPC **assembly** wrapper per intercepting hook (D97); `before` and `after` both return the *original's* value. ⛔ Still **no trampoline**: interception reuses D96's self-healing detour, so it pays two cache flushes per call. ✅ A mod can also keep the original by hand-restoring it around the call: arguments **and** return values, `mapDataPtr` and `effMain` traced live (D96) |
 | **Tracing a game function** | ✅ The self-healing detour records arguments **and** return values while the original still runs — `mapDataPtr`, `effMain` and `GetBasicPlayer` measured live (D96). Hand-written tracing is still a pattern over `code.hooks`, deliberately **not** a manifest field; `mode: "before"`/`"after"` (D97) covers the declarative case over the same mechanism. ⚠️ Floats are invisible to the trace record either way |
-| **Doors** | ⛔ **Unreachable, with a reason.** `DoorDesc` has no lookup by name; descriptors are registered per map by `evt_door_set_door_descs`. That call is absent from all five map init scripts walked (D93, positive control 8 hits), and a branch installed over the function itself was entered **zero** times across 90 s in Flipside while a control hook fired 62,480 times (D94). `door:` is refused by the manifest. 🔶 Two maps is not the game; `door_init_evt` sits in the REL range, so door setup plausibly lives in each map's own module |
+| **Doors** | 🟡 **Reachable; one measurement short of a selector** (D101). Map init scripts *do* call the descriptor setters — `evt_door_set_door_descs` ×1, `evt_door_set_map_door_descs` ×3, `evt_door_set_dokan_descs` ×3 in one 90 s `mods/door-scan` run, positive control 8 hits, zero truncated walks. ✅ The descriptor address sits in the bytecode as a `USER_FUNC` argument and is read with D89's mechanism alone — no interception, no trampoline; `MapDoorDesc[0].destMapName` read back as **`he1_02`**, a real map name. ⛔ D93 and D94 said doors were unreachable and are **superseded** — D93 searched for one function at one argc, D94 loaded maps that do not contain the call. ⛔ `door:` is still refused by the manifest until the calls' **argc** is measured (D92's replacement matches the original's argc). 🔶 Five maps is not the game |
 | **US (`us0`) support** | 🔴 **Blocked on a US disc image.** `work/extracted/` holds `eu0` only, so nothing US-targeted can be extracted, built or booted here. `base`/`code.target` already carry the version, and the symbol lists exist — what is missing is a disc |
 | Map ids / chapter names | ✅ Dumped from the game and committed; `bleck maps` (D51) |
 | **Boot straight into any map** | ✅ `--map` / `code.boot` (D64) |
@@ -115,27 +115,61 @@ navigation, and controller input cannot be injected unattended (D48). What would
 settle it: a save state with the item in the inventory plus `scripts/keys.py`
 (Windows, attended). Until then the hook's *execution* stays 🔶.
 
-### ⛔ `door:` and `npcdrv:` patch selectors
+### 🟢 `door:` — measure the argc, then build the selector
 
-Deferred with a reason, not merely unimplemented. `DoorDesc` carries
-`initScript`/`interactScript`/`moveScript` but has **no lookup by name**: the
-descriptor array is registered per map by `evt_door_set_door_descs`, and
-`evtDoorGetActiveDoorDesc` returns only the door in use, which is null at
-`mod_prolog`. A door patch would have to *intercept* that registration — a
-different shape from `map:` and `item:`, and unproven (D91). 🔶 The same likely
-applies to `npcdrv.h`'s `templateinitScript`.
+**The next cheap experiment in the repository.** ✅ Door descriptor arrays *are*
+registered from map init scripts (D101), so this is one measurement away rather
+than a research problem:
 
-⛔ **Interception is now built and it does not help.** Instruction patching works
-(D94): a branch written over `evt_door_set_door_descs` at `mod_prolog` was in
-place, verified by readback, and entered **zero** times while Flipside loaded and
-ran for 90 s — with a control hook on `npcDispMain` firing 62,480 times in the
-same window. D93 had already ruled out reaching it from map init scripts. So the
-function is not on the path for `mac_01` or `aa4_01` at all.
+| in one 90 s `mods/door-scan` run | |
+|---|---|
+| `evt_door_set_door_descs` | 1 call |
+| `evt_door_set_map_door_descs` | 3 calls |
+| `evt_door_set_dokan_descs` | 3 calls |
+| control (`evt_hitobj_attr_onoff`) | 8 hits |
+| walks truncated at the 4096-word limit | 0 |
+| `MapDoorDesc[0].destMapName` | ✅ **`he1_02`** |
 
-🔶 **Where to look next:** `door_init_evt` (`0x8041a2b0`) sits in the REL address
-range, so door setup plausibly lives in each map's own module. Hooking that, or
-finding the caller of `evt_door_set_door_descs` in a map that does use it, is the
-next cheap experiment. Two maps is not the game.
+✅ The descriptor array's address is a `USER_FUNC` argument in the bytecode, so
+reading it needs only what D89 proved — **no interception and no trampoline**.
+The `he1_02` string is what makes this a finding: a wrong pointer does not spell
+a map name.
+
+⛔ **D93 and D94 concluded the opposite and are superseded.** Keep why, because
+both had passing controls:
+
+- **D93 searched for one function at one argument count** — it matched
+  `header == 0x0002005C && script[at+1] == 0x800E2610`, so
+  `evt_door_set_map_door_descs` and `evt_door_set_dokan_descs` were never in the
+  search at any argc. ⚠️ The argc-2 constraint came from `evt_door.h`'s
+  `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)`, which **contradicts the
+  comment directly above it** reading `(DoorDesc *descs, s32 count)`. The macro
+  is wrong and D93 trusted it.
+- **D94 hooked the function in maps that do not contain the call** — its run
+  covered `mac_01`, `aa4_01` and `ls4_12`, and the registration D101 found is in
+  `he1_01`.
+
+Both controls passed. They proved the instruments *worked*, not that they were
+*pointed at the right thing*.
+
+⛔ **`door:` is still refused by the manifest**, and `DEFERRED_PATCH_KINDS` still
+cites D91. What unblocks it:
+
+- 🔶 **The actual argc of these calls.** D92's replacement matches the
+  original's argument count, so a patch written at the wrong size *corrupts* the
+  script rather than failing. Nothing should be built on `door:` until this is
+  measured.
+- 🔶 Which map holds the `set_door_descs` call — D101 recorded the first hit's
+  argument but not its map.
+- 🔶 Five maps is not the game.
+
+⚠️ `MapDoorDesc` (0x20 bytes, `destMapName` +0x14, `destDoorName` +0x18) is the
+**loading zone** descriptor, and is arguably the more interesting of the two for
+modding — `DoorDesc` (0x58, `interactScript` +0x40, `initScript` +0x50,
+`moveScript` +0x54) is the door the player interacts with.
+
+🔶 `npcdrv.h`'s `templateinitScript` is untested and unchanged by this; the same
+registration-from-a-script shape is now the thing to look for first.
 
 ### 🔴 US (`us0`) support — blocked on a disc
 
