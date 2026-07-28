@@ -19,7 +19,7 @@ from bleck.script.compiler import (
     Literal,
     compile_program,
 )
-from bleck.script.parser import parse
+from bleck.script.syntax.parser import parse
 
 
 def words(source: str, script: str = "main") -> list:

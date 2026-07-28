@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 from bleck.formats import setup
-from bleck.mods import edits as mod_edits
 from bleck.mods import manifest as mod_manifest
+from bleck.mods.build import edits as mod_edits
 from bleck.mods.manifest import ManifestError, PlacementEdit
 
 DISC_SETUP = Path("work/extracted/eu0/files/setup")

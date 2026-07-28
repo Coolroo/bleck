@@ -16,8 +16,8 @@ from pathlib import Path
 
 from bleck.formats import lz77, u8
 
-from .overlay import Edit, Plan, TargetPath
-from .resolver import Chain
+from bleck.mods.build.overlay import Edit, Plan, TargetPath
+from bleck.mods.resolver import Chain
 
 TEXT_SUFFIXES = frozenset({".txt", ".json", ".xml", ".ini", ".cfg", ".md"})
 

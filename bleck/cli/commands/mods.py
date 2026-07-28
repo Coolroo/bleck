@@ -15,7 +15,7 @@ from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
 from bleck.mods import builder, manifest, registry, resolver
-from bleck.mods.overlay import normalize_disc_path, resolve_target
+from bleck.mods.build.overlay import normalize_disc_path, resolve_target
 
 from .disc import add_format_flags, resolve_format
 

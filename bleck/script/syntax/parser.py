@@ -8,10 +8,10 @@ What is offered maps down cleanly — see `compiler.py`.
 
 from __future__ import annotations
 
-from bleck.script import syntax
 from bleck.script.errors import Position, ScriptError
 from bleck.script.evt import STORAGE_CLASSES
-from bleck.script.lexer import Token, TokenKind, tokenize
+from bleck.script.syntax import tree
+from bleck.script.syntax.lexer import Token, TokenKind, tokenize
 
 #: Binding power for infix operators. Higher binds tighter.
 _PRECEDENCE = {
@@ -36,9 +36,9 @@ _STORAGE_NAMES = {storage.name.lower() for storage in STORAGE_CLASSES}
 
 #: Statements that are a single keyword and nothing else.
 _KEYWORD_ONLY_STATEMENTS = {
-    "break": syntax.Break,
-    "continue": syntax.Continue,
-    "return": syntax.Return,
+    "break": tree.Break,
+    "continue": tree.Continue,
+    "return": tree.Return,
 }
 
 
@@ -119,8 +119,8 @@ class _Parser:  # pylint: disable=too-many-public-methods
 
     # --- top level -------------------------------------------------------
 
-    def parse_program(self) -> syntax.Program:
-        scripts: list[syntax.Script] = []
+    def parse_program(self) -> tree.Program:
+        scripts: list[tree.Script] = []
         self.skip_newlines()
         while self.current.kind is not TokenKind.END:
             scripts.append(self.parse_script())
@@ -128,9 +128,9 @@ class _Parser:  # pylint: disable=too-many-public-methods
         if not scripts:
             raise self.fail("this file declares no scripts")
         self._reject_duplicate_scripts(scripts)
-        return syntax.Program(scripts=scripts)
+        return tree.Program(scripts=scripts)
 
-    def _reject_duplicate_scripts(self, scripts: list[syntax.Script]) -> None:
+    def _reject_duplicate_scripts(self, scripts: list[tree.Script]) -> None:
         seen: dict[str, Position] = {}
         for script in scripts:
             if script.name in seen:
@@ -142,7 +142,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
                 )
             seen[script.name] = script.position
 
-    def parse_script(self) -> syntax.Script:
+    def parse_script(self) -> tree.Script:
         keyword = self.accept_keyword("script")
         if keyword is None:
             raise self.fail(
@@ -151,12 +151,12 @@ class _Parser:  # pylint: disable=too-many-public-methods
             )
         name = self.expect_ident("a script name")
         body = self.parse_block()
-        return syntax.Script(position=keyword.position, name=name.text, body=body)
+        return tree.Script(position=keyword.position, name=name.text, body=body)
 
-    def parse_block(self) -> list[syntax.Statement]:
+    def parse_block(self) -> list[tree.Statement]:
         self.skip_newlines()
         self.expect_op("{")
-        statements: list[syntax.Statement] = []
+        statements: list[tree.Statement] = []
         self.skip_newlines()
         while not self.current.is_op("}"):
             if self.current.kind is TokenKind.END:
@@ -168,7 +168,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
 
     # --- statements ------------------------------------------------------
 
-    def parse_statement(self) -> syntax.Statement:
+    def parse_statement(self) -> tree.Statement:
         token = self.current
         if token.kind is not TokenKind.KEYWORD:
             return self.parse_assignment_or_call()
@@ -185,20 +185,20 @@ class _Parser:  # pylint: disable=too-many-public-methods
 
         return self.parse_assignment_or_call()
 
-    def parse_var(self) -> syntax.VarDecl:
+    def parse_var(self) -> tree.VarDecl:
         keyword = self.advance()
         name = self.expect_ident("a variable name")
-        value: syntax.Expression | None = None
+        value: tree.Expression | None = None
         if self.accept_op("="):
             value = self.parse_expression()
         self.end_statement()
-        return syntax.VarDecl(position=keyword.position, name=name.text, value=value)
+        return tree.VarDecl(position=keyword.position, name=name.text, value=value)
 
-    def parse_if(self) -> syntax.If:
+    def parse_if(self) -> tree.If:
         keyword = self.advance()
         condition = self.parse_expression()
         then_body = self.parse_block()
-        else_body: list[syntax.Statement] = []
+        else_body: list[tree.Statement] = []
 
         # `else` may legally sit on the line after the closing brace.
         saved = self.index
@@ -212,68 +212,68 @@ class _Parser:  # pylint: disable=too-many-public-methods
         else:
             self.index = saved
 
-        return syntax.If(
+        return tree.If(
             position=keyword.position,
             condition=condition,
             then_body=then_body,
             else_body=else_body,
         )
 
-    def parse_while(self) -> syntax.While:
+    def parse_while(self) -> tree.While:
         keyword = self.advance()
         condition = self.parse_expression()
         body = self.parse_block()
-        return syntax.While(position=keyword.position, condition=condition, body=body)
+        return tree.While(position=keyword.position, condition=condition, body=body)
 
-    def parse_loop(self) -> syntax.Loop:
+    def parse_loop(self) -> tree.Loop:
         keyword = self.advance()
-        count: syntax.Expression | None = None
+        count: tree.Expression | None = None
         if not self.current.is_op("{"):
             count = self.parse_expression()
         body = self.parse_block()
-        return syntax.Loop(position=keyword.position, count=count, body=body)
+        return tree.Loop(position=keyword.position, count=count, body=body)
 
-    def parse_wait(self) -> syntax.Wait:
+    def parse_wait(self) -> tree.Wait:
         keyword = self.advance()
         self.expect_op("(")
         duration = self.parse_expression()
         self.expect_op(")")
         self.end_statement()
-        return syntax.Wait(
+        return tree.Wait(
             position=keyword.position,
             duration=duration,
             milliseconds=keyword.text == "wait_ms",
         )
 
-    def parse_spawn(self) -> syntax.Spawn:
+    def parse_spawn(self) -> tree.Spawn:
         keyword = self.advance()
         name = self.expect_ident("a script name")
         self.end_statement()
-        return syntax.Spawn(position=keyword.position, name=name.text)
+        return tree.Spawn(position=keyword.position, name=name.text)
 
-    def parse_assignment_or_call(self) -> syntax.Statement:
+    def parse_assignment_or_call(self) -> tree.Statement:
         start = self.current
         target = self.parse_expression()
 
         if self.accept_op("="):
             value = self.parse_expression()
             self.end_statement()
-            if not isinstance(target, (syntax.Name, syntax.SlotRef)):
+            if not isinstance(target, (tree.Name, tree.SlotRef)):
                 raise self.fail("cannot assign to this expression", start)
-            return syntax.Assign(position=start.position, target=target, value=value)
+            return tree.Assign(position=start.position, target=target, value=value)
 
         self.end_statement()
-        if not isinstance(target, syntax.Call):
+        if not isinstance(target, tree.Call):
             raise self.fail(
                 "this expression has no effect; "
                 "did you mean to call a function or assign to a variable?",
                 start,
             )
-        return syntax.ExpressionStatement(position=start.position, expression=target)
+        return tree.ExpressionStatement(position=start.position, expression=target)
 
     # --- expressions -----------------------------------------------------
 
-    def parse_expression(self, minimum: int = 0) -> syntax.Expression:
+    def parse_expression(self, minimum: int = 0) -> tree.Expression:
         """Precedence climbing over `_PRECEDENCE`."""
         left = self.parse_unary()
 
@@ -294,35 +294,33 @@ class _Parser:  # pylint: disable=too-many-public-methods
             # Every operator here is left-associative, so the right operand is
             # parsed at one level tighter.
             right = self.parse_expression(precedence + 1)
-            left = syntax.Binary(
+            left = tree.Binary(
                 position=token.position,
                 operator=_canonical_operator(spelling),
                 left=left,
                 right=right,
             )
 
-    def parse_unary(self) -> syntax.Expression:
+    def parse_unary(self) -> tree.Expression:
         token = self.current
         if token.is_keyword("not") or token.is_op("-"):
             self.advance()
             operand = self.parse_unary()
             operator = "not" if token.is_keyword("not") else "-"
-            return syntax.Unary(
-                position=token.position, operator=operator, operand=operand
-            )
+            return tree.Unary(position=token.position, operator=operator, operand=operand)
         return self.parse_primary()
 
-    def parse_primary(self) -> syntax.Expression:
+    def parse_primary(self) -> tree.Expression:
         token = self.advance()
 
         if token.kind is TokenKind.INT:
-            return syntax.IntLiteral(position=token.position, value=int(token.text))
+            return tree.IntLiteral(position=token.position, value=int(token.text))
         if token.kind is TokenKind.FLOAT:
-            return syntax.FloatLiteral(position=token.position, value=float(token.text))
+            return tree.FloatLiteral(position=token.position, value=float(token.text))
         if token.kind is TokenKind.STRING:
-            return syntax.StringLiteral(position=token.position, value=token.text)
+            return tree.StringLiteral(position=token.position, value=token.text)
         if token.is_keyword("true", "false"):
-            return syntax.BoolLiteral(position=token.position, value=token.text == "true")
+            return tree.BoolLiteral(position=token.position, value=token.text == "true")
         if token.is_op("("):
             inner = self.parse_expression()
             self.expect_op(")")
@@ -332,7 +330,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
 
         raise self.fail(f"expected a value, found {token}", token)
 
-    def parse_after_identifier(self, token: Token) -> syntax.Expression:
+    def parse_after_identifier(self, token: Token) -> tree.Expression:
         """An identifier may start a slot reference, a call, or a plain name."""
         lowered = token.text.lower()
 
@@ -345,7 +343,7 @@ class _Parser:  # pylint: disable=too-many-public-methods
                 )
             self.advance()
             self.expect_op("]")
-            return syntax.SlotRef(
+            return tree.SlotRef(
                 position=token.position,
                 storage=lowered,
                 index=int(index_token.text),
@@ -354,14 +352,14 @@ class _Parser:  # pylint: disable=too-many-public-methods
         if self.current.is_op("("):
             self.advance()
             arguments = self.parse_arguments()
-            return syntax.Call(
+            return tree.Call(
                 position=token.position, callee=token.text, arguments=arguments
             )
 
-        return syntax.Name(position=token.position, text=token.text)
+        return tree.Name(position=token.position, text=token.text)
 
-    def parse_arguments(self) -> list[syntax.Expression]:
-        arguments: list[syntax.Expression] = []
+    def parse_arguments(self) -> list[tree.Expression]:
+        arguments: list[tree.Expression] = []
         self.skip_newlines()
         if self.accept_op(")"):
             return arguments
@@ -388,6 +386,6 @@ def _canonical_operator(spelling: str) -> str:
     return spelling
 
 
-def parse(source: str) -> syntax.Program:
+def parse(source: str) -> tree.Program:
     """Parse script source into a `Program`."""
     return _Parser(tokenize(source), source).parse_program()

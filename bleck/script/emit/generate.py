@@ -17,8 +17,7 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass, field
 
-from bleck.script import runtime_c
-from bleck.script.compiler import (
+from bleck.script.compiler.ir import (
     CompiledProgram,
     CompiledScript,
     Literal,
@@ -27,12 +26,12 @@ from bleck.script.compiler import (
     SymbolWord,
     Word,
 )
-from bleck.script.errors import Position, ScriptError
+from bleck.script.emit import runtime_c
 
 # Re-exported: `emit.MapHook` and friends are how the rest of the toolkit has
 # always named these, and the split is about where they live.
 # pylint: disable=unused-import
-from bleck.script.scaffold import (  # noqa: F401
+from bleck.script.emit.scaffold import (  # noqa: F401
     _PREFIX,
     BOOT_DELAY_FRAMES,
     BOOT_SCRIPT,
@@ -48,6 +47,7 @@ from bleck.script.scaffold import (  # noqa: F401
     mod_slug,
     prefix_for,
 )
+from bleck.script.errors import Position, ScriptError
 
 
 @dataclass(frozen=True)

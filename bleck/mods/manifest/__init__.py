@@ -11,10 +11,12 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from bleck.mods.errors import ManifestError
+
 # Re-exported: every caller has always reached these through `manifest`, and
 # the split is about where they live rather than who may use them.
 # pylint: disable=unused-import
-from bleck.mods.codespec import (  # noqa: F401
+from bleck.mods.manifest.codespec import (  # noqa: F401
     REL_DISC_PATH,
     BannerSpec,
     CodeSpec,
@@ -22,8 +24,7 @@ from bleck.mods.codespec import (  # noqa: F401
     MapHook,
     _parse_code,
 )
-from bleck.mods.errors import ManifestError
-from bleck.mods.placements import (  # noqa: F401
+from bleck.mods.manifest.placements import (  # noqa: F401
     MapPlacements,
     PlacementEdit,
     _parse_setup,

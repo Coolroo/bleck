@@ -18,11 +18,11 @@ from bleck.backends import disc
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, u8
 
-from .code import CodeBuild, CodeOverride, build_chain
-from .conflicts import Conflict, detect, effective_edits, merge_three_way
-from .edits import PlacementBuild, apply_chain
-from .overlay import Plan, build_plan
-from .resolver import Chain, check_bases
+from bleck.mods.code import CodeBuild, CodeOverride, build_chain
+from bleck.mods.build.conflicts import Conflict, detect, effective_edits, merge_three_way
+from bleck.mods.build.edits import PlacementBuild, apply_chain
+from bleck.mods.build.overlay import Plan, build_plan
+from bleck.mods.resolver import Chain, check_bases
 
 
 class BuildError(BleckError):

@@ -20,7 +20,7 @@ from bleck.script.catalog import (
 )
 from bleck.script.compiler import compile_program
 from bleck.script.errors import ScriptError
-from bleck.script.parser import parse
+from bleck.script.syntax.parser import parse
 
 HEADER = """\
 #pragma once

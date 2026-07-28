@@ -24,12 +24,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from bleck.script import catalog as builtin_catalog
-from bleck.script import evt, syntax
-from bleck.script.errors import Position, ScriptError
+from bleck.script import evt
 
 # Re-exported: callers have always reached these through `compiler`, and the
 # split is about where they live, not about who may use them.
-from bleck.script.ir import (
+from bleck.script.compiler.ir import (
     ARITHMETIC,
     COMPARISONS,
     LOCAL_SLOTS,
@@ -43,6 +42,8 @@ from bleck.script.ir import (
     ValueType,
     Word,
 )
+from bleck.script.errors import Position, ScriptError
+from bleck.script.syntax import tree
 
 _STORAGE_BY_NAME = {storage.name.lower(): storage for storage in evt.STORAGE_CLASSES}
 
@@ -64,7 +65,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
     bookkeeping they all share.
     """
 
-    def __init__(self, owner: _ProgramCompiler, script: syntax.Script) -> None:
+    def __init__(self, owner: _ProgramCompiler, script: tree.Script) -> None:
         self.owner = owner
         self.script = script
         self.words: list[Word] = []
@@ -121,23 +122,23 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     # --- values ----------------------------------------------------------
 
-    def direct_value(self, node: syntax.Expression) -> Value | None:
+    def direct_value(self, node: tree.Expression) -> Value | None:
         """A value usable as an operand without evaluating anything first."""
         folded = _fold_negation(node)
         if folded is not None:
             node = folded
-        if isinstance(node, syntax.IntLiteral):
+        if isinstance(node, tree.IntLiteral):
             self.reject_ambiguous_literal(node.value, node.position)
             return Value(Literal(node.value), ValueType.INT)
-        if isinstance(node, syntax.BoolLiteral):
+        if isinstance(node, tree.BoolLiteral):
             return Value(Literal(1 if node.value else 0), ValueType.INT)
-        if isinstance(node, syntax.FloatLiteral):
+        if isinstance(node, tree.FloatLiteral):
             return Value(Literal(self.encode_float(node)), ValueType.FLOAT)
-        if isinstance(node, syntax.StringLiteral):
+        if isinstance(node, tree.StringLiteral):
             return Value(StringWord(self.owner.intern(node.value)), ValueType.STRING)
-        if isinstance(node, syntax.Name):
+        if isinstance(node, tree.Name):
             return self.name_value(node)
-        if isinstance(node, syntax.SlotRef):
+        if isinstance(node, tree.SlotRef):
             return self.slot_ref_value(node)
         return None
 
@@ -157,13 +158,13 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
                 at,
             )
 
-    def encode_float(self, node: syntax.FloatLiteral) -> int:
+    def encode_float(self, node: tree.FloatLiteral) -> int:
         try:
             return evt.encode_float(node.value)
         except ValueError as exc:
             raise self.fail(str(exc), node.position) from exc
 
-    def name_value(self, node: syntax.Name) -> Value:
+    def name_value(self, node: tree.Name) -> Value:
         variable = self.variables.get(node.text)
         if variable is None:
             raise self.fail(
@@ -173,7 +174,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             )
         return Value(self.slot_word(variable.slot), variable.type)
 
-    def slot_ref_value(self, node: syntax.SlotRef) -> Value:
+    def slot_ref_value(self, node: tree.SlotRef) -> Value:
         storage = _STORAGE_BY_NAME[node.storage]
         try:
             encoded = storage.encode(node.index)
@@ -184,17 +185,17 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         # so a bare slot reference is typed INT and float use is explicit.
         return Value(Literal(encoded), ValueType.INT)
 
-    def evaluate(self, node: syntax.Expression) -> Value:
+    def evaluate(self, node: tree.Expression) -> Value:
         """Produce a `Value` for `node`, emitting code if it needs computing."""
         direct = self.direct_value(node)
         if direct is not None:
             return direct
 
-        if isinstance(node, syntax.Unary):
+        if isinstance(node, tree.Unary):
             return self.evaluate_unary(node)
-        if isinstance(node, syntax.Binary):
+        if isinstance(node, tree.Binary):
             return self.evaluate_binary(node)
-        if isinstance(node, syntax.Call):
+        if isinstance(node, tree.Call):
             raise self.fail(
                 f"{node.callee}(...) cannot be used as a value; evt user "
                 "functions return results through output slots, so call it on "
@@ -204,7 +205,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
         raise self.fail("unsupported expression", node.position)
 
-    def evaluate_unary(self, node: syntax.Unary) -> Value:
+    def evaluate_unary(self, node: tree.Unary) -> Value:
         assert node.operand is not None
         if node.operator == "not":
             return self.boolean_value(node)
@@ -228,7 +229,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         )
         return Value(self.slot_word(slot), inner.type)
 
-    def evaluate_binary(self, node: syntax.Binary) -> Value:
+    def evaluate_binary(self, node: tree.Binary) -> Value:
         assert node.left is not None and node.right is not None
 
         if node.operator in COMPARISONS or node.operator in ("and", "or"):
@@ -267,7 +268,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             at,
         )
 
-    def boolean_value(self, node: syntax.Expression) -> Value:
+    def boolean_value(self, node: tree.Expression) -> Value:
         """Materialise a condition as 0 or 1 in a scratch slot."""
         slot = self.take_scratch(node.position)
         self.emit(evt.Opcode.SET, self.slot_word(slot), Literal(0))
@@ -278,23 +279,23 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     # --- conditions ------------------------------------------------------
 
-    def branch_if(self, node: syntax.Expression, invert: bool) -> None:
+    def branch_if(self, node: tree.Expression, invert: bool) -> None:
         """Open an `IF` that runs its body when `node` is true (or false).
 
         The caller is responsible for the matching `END_IF`. Comparisons lower
         straight to an `IF_*` opcode; anything else is reduced to a 0/1 value
         first and then compared against zero.
         """
-        if isinstance(node, syntax.Binary) and node.operator in COMPARISONS:
+        if isinstance(node, tree.Binary) and node.operator in COMPARISONS:
             self.branch_comparison(node, invert)
             return
 
-        if isinstance(node, syntax.Unary) and node.operator == "not":
+        if isinstance(node, tree.Unary) and node.operator == "not":
             assert node.operand is not None
             self.branch_if(node.operand, invert=not invert)
             return
 
-        if isinstance(node, syntax.Binary) and node.operator in ("and", "or"):
+        if isinstance(node, tree.Binary) and node.operator in ("and", "or"):
             self.branch_boolean(node, invert)
             return
 
@@ -304,7 +305,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         opcode = evt.Opcode.IF_EQUAL if invert else evt.Opcode.IF_NOT_EQUAL
         self.emit(opcode, value.word, Literal(0))
 
-    def branch_comparison(self, node: syntax.Binary, invert: bool) -> None:
+    def branch_comparison(self, node: tree.Binary, invert: bool) -> None:
         assert node.left is not None and node.right is not None
         left = self.evaluate(node.left)
         right = self.evaluate(node.right)
@@ -325,7 +326,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         right: Value,
         operator: str,
         invert: bool,
-        node: syntax.Binary,
+        node: tree.Binary,
     ) -> None:
         if left.type is not right.type:
             raise self.fail(
@@ -342,7 +343,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         )
         self.emit(opcode, left.word, right.word)
 
-    def branch_boolean(self, node: syntax.Binary, invert: bool) -> None:
+    def branch_boolean(self, node: tree.Binary, invert: bool) -> None:
         """`and`/`or` via a 0/1 accumulator.
 
         `evt` has no short-circuit control flow, so both sides are evaluated.
@@ -361,7 +362,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     # --- statements ------------------------------------------------------
 
-    def compile_body(self, body: list[syntax.Statement]) -> None:
+    def compile_body(self, body: list[tree.Statement]) -> None:
         for statement in body:
             # Scratch is statement-local: nothing computed for one statement is
             # readable by the next, so the slots go back into the pool.
@@ -369,33 +370,33 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             self.compile_statement(statement)
             self.scratch_low = high_water
 
-    def compile_statement(self, node: syntax.Statement) -> None:
-        if isinstance(node, syntax.VarDecl):
+    def compile_statement(self, node: tree.Statement) -> None:
+        if isinstance(node, tree.VarDecl):
             self.compile_var(node)
-        elif isinstance(node, syntax.Assign):
+        elif isinstance(node, tree.Assign):
             self.compile_assign(node)
-        elif isinstance(node, syntax.If):
+        elif isinstance(node, tree.If):
             self.compile_if(node)
-        elif isinstance(node, syntax.While):
+        elif isinstance(node, tree.While):
             self.compile_while(node)
-        elif isinstance(node, syntax.Loop):
+        elif isinstance(node, tree.Loop):
             self.compile_loop(node)
-        elif isinstance(node, syntax.Wait):
+        elif isinstance(node, tree.Wait):
             self.compile_wait(node)
-        elif isinstance(node, syntax.Spawn):
+        elif isinstance(node, tree.Spawn):
             self.compile_spawn(node)
-        elif isinstance(node, syntax.ExpressionStatement):
+        elif isinstance(node, tree.ExpressionStatement):
             self.compile_call_statement(node)
-        elif isinstance(node, syntax.Break):
+        elif isinstance(node, tree.Break):
             self.compile_loop_jump(node, evt.Opcode.DO_BREAK, "break")
-        elif isinstance(node, syntax.Continue):
+        elif isinstance(node, tree.Continue):
             self.compile_loop_jump(node, evt.Opcode.DO_CONTINUE, "continue")
-        elif isinstance(node, syntax.Return):
+        elif isinstance(node, tree.Return):
             self.emit(evt.Opcode.END_EVT)
         else:
             raise self.fail("unsupported statement", node.position)
 
-    def compile_var(self, node: syntax.VarDecl) -> None:
+    def compile_var(self, node: tree.VarDecl) -> None:
         if node.value is None:
             variable = self.declare(node.name, ValueType.INT, node.position)
             self.emit(evt.Opcode.SET, self.slot_word(variable.slot), Literal(0))
@@ -412,11 +413,11 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         setter = evt.Opcode.SETF if value.type is ValueType.FLOAT else evt.Opcode.SET
         self.emit(setter, self.slot_word(variable.slot), value.word)
 
-    def compile_assign(self, node: syntax.Assign) -> None:
+    def compile_assign(self, node: tree.Assign) -> None:
         assert node.target is not None and node.value is not None
         value = self.evaluate(node.value)
 
-        if isinstance(node.target, syntax.Name):
+        if isinstance(node.target, tree.Name):
             variable = self.variables.get(node.target.text)
             if variable is None:
                 raise self.fail(
@@ -440,7 +441,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         setter = evt.Opcode.SETF if target_type is ValueType.FLOAT else evt.Opcode.SET
         self.emit(setter, target_word, value.word)
 
-    def compile_if(self, node: syntax.If) -> None:
+    def compile_if(self, node: tree.If) -> None:
         assert node.condition is not None
         self.branch_if(node.condition, invert=False)
         self.compile_body(node.then_body)
@@ -449,7 +450,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             self.compile_body(node.else_body)
         self.emit(evt.Opcode.END_IF)
 
-    def compile_while(self, node: syntax.While) -> None:
+    def compile_while(self, node: tree.While) -> None:
         """`while` on top of `evt`'s counted `DO`/`WHILE`.
 
         `evt` has no condition-tested loop, only `DO n` ... `WHILE`, which
@@ -470,7 +471,7 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         self.loop_depth -= 1
         self.emit(evt.Opcode.WHILE)
 
-    def compile_loop(self, node: syntax.Loop) -> None:
+    def compile_loop(self, node: tree.Loop) -> None:
         if node.count is None:
             count: Word = Literal(0)
         else:
@@ -488,13 +489,13 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         self.emit(evt.Opcode.WHILE)
 
     def compile_loop_jump(
-        self, node: syntax.Statement, opcode: evt.Opcode, spelling: str
+        self, node: tree.Statement, opcode: evt.Opcode, spelling: str
     ) -> None:
         if self.loop_depth == 0:
             raise self.fail(f"'{spelling}' is only valid inside a loop", node.position)
         self.emit(opcode)
 
-    def compile_wait(self, node: syntax.Wait) -> None:
+    def compile_wait(self, node: tree.Wait) -> None:
         assert node.duration is not None
         value = self.evaluate(node.duration)
         if value.type is ValueType.STRING:
@@ -502,13 +503,13 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         opcode = evt.Opcode.WAIT_MSEC if node.milliseconds else evt.Opcode.WAIT_FRM
         self.emit(opcode, value.word)
 
-    def compile_spawn(self, node: syntax.Spawn) -> None:
+    def compile_spawn(self, node: tree.Spawn) -> None:
         self.owner.require_script(node.name, node.position)
         self.emit(evt.Opcode.RUN_CHILD_EVT, ScriptWord(node.name))
 
-    def compile_call_statement(self, node: syntax.ExpressionStatement) -> None:
+    def compile_call_statement(self, node: tree.ExpressionStatement) -> None:
         call = node.expression
-        if not isinstance(call, syntax.Call):
+        if not isinstance(call, tree.Call):
             raise self.fail("expected a call", node.position)
 
         self.owner.check_call(call)
@@ -537,7 +538,7 @@ class _ProgramCompiler:
 
     def __init__(
         self,
-        program: syntax.Program,
+        program: tree.Program,
         source: str,
         catalog: builtin_catalog.Catalog | None = None,
         symbol_table=None,
@@ -570,7 +571,7 @@ class _ProgramCompiler:
                 self.source,
             )
 
-    def check_call(self, call: syntax.Call) -> None:
+    def check_call(self, call: tree.Call) -> None:
         """Reject a call the catalog says cannot be right.
 
         Both failures below are otherwise found far too late: an unknown name
@@ -609,7 +610,7 @@ class _ProgramCompiler:
                 self.source,
             )
 
-    def _check_linkable(self, call: syntax.Call) -> None:
+    def _check_linkable(self, call: tree.Call) -> None:
         """Reject a call that will not survive the link.
 
         ⚠️ **A third of the catalog is not linkable against the lst alone.** Of
@@ -647,7 +648,7 @@ class _ProgramCompiler:
         )
 
 
-def _fold_negation(node: syntax.Expression) -> syntax.Expression | None:
+def _fold_negation(node: tree.Expression) -> tree.Expression | None:
     """Rewrite `-&lt;literal&gt;` into a negative literal.
 
     Without this, a negative constant becomes three instructions (set a scratch
@@ -657,17 +658,17 @@ def _fold_negation(node: syntax.Expression) -> syntax.Expression | None:
     never see one, because the parser always produces a unary minus applied to a
     positive literal.
     """
-    if not isinstance(node, syntax.Unary) or node.operator != "-":
+    if not isinstance(node, tree.Unary) or node.operator != "-":
         return None
-    if isinstance(node.operand, syntax.IntLiteral):
-        return syntax.IntLiteral(position=node.position, value=-node.operand.value)
-    if isinstance(node.operand, syntax.FloatLiteral):
-        return syntax.FloatLiteral(position=node.position, value=-node.operand.value)
+    if isinstance(node.operand, tree.IntLiteral):
+        return tree.IntLiteral(position=node.position, value=-node.operand.value)
+    if isinstance(node.operand, tree.FloatLiteral):
+        return tree.FloatLiteral(position=node.position, value=-node.operand.value)
     return None
 
 
 def compile_program(
-    program: syntax.Program,
+    program: tree.Program,
     source: str = "",
     catalog: builtin_catalog.Catalog | None = None,
     symbol_table=None,

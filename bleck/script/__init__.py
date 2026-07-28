@@ -26,8 +26,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from bleck.script import compiler, emit, evt, lexer, parser, syntax
+from bleck.script import compiler, emit, evt, syntax
 from bleck.script.errors import Position, ScriptError
+from bleck.script.syntax import parser
 
 __all__ = [
     "CompiledSource",
@@ -37,7 +38,6 @@ __all__ = [
     "compiler",
     "emit",
     "evt",
-    "lexer",
     "parser",
     "syntax",
 ]
