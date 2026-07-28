@@ -317,7 +317,19 @@ Compile a script all the way to a loadable `.rel` module.
 | `1` | User-fixable error, or verification failure |
 | `130` | Interrupted |
 
-### `bleck setup` — JSON in, JSON out
+## Placements
+
+### `bleck setup`
+
+```bash
+bleck setup show <map> [--all] [--json]
+bleck setup list [--min-enemies N]
+```
+
+What a map places, and which maps place anything. Reads the extracted base,
+so it needs no build and no emulator.
+
+#### JSON in, JSON out
 
 Three subcommands exist for programs rather than people. Every document is
 validated against a published schema, so an integration finds out about a typo
