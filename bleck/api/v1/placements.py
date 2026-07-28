@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from bleck.api.v1.documents import Document
 from bleck.formats import setup
 from bleck.mods.manifest import placements as manifest_placements
 
@@ -81,10 +82,8 @@ class EnemyPlacement(BaseModel):
         )
 
 
-class MapPlacements(BaseModel):
+class MapPlacements(Document):
     """Everything one map places. What an editor reads."""
-
-    model_config = ConfigDict(extra="forbid")
 
     map: str
     version: int = Field(description="Setup file version; the entry stride follows it.")
@@ -150,10 +149,8 @@ class PlacementEdit(BaseModel):
         )
 
 
-class SetupEdits(BaseModel):
+class SetupEdits(Document):
     """Declared changes to one or more maps, as a mod stores them."""
-
-    model_config = ConfigDict(extra="forbid")
 
     setup: dict[str, list[PlacementEdit]] = Field(
         default_factory=dict,

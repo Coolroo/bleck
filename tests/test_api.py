@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from bleck import api
 from bleck.formats import setup
+from bleck.mods import manifest as mod_manifest
 from bleck.mods.manifest import placements as manifest_placements
 
 
@@ -127,3 +128,73 @@ class TestSchema:
 
     def test_the_schema_forbids_unknown_fields(self):
         assert api.PlacementEdit.model_json_schema()["additionalProperties"] is False
+
+
+class TestVersioning:
+    """`api_version` rides inside each document, and the module path versions
+    the code. Both, because a document read off disk has no schema to hand."""
+
+    def test_a_document_stamps_its_version(self):
+        assert api.SetupEdits().api_version == api.API_VERSION
+
+    def test_an_unknown_version_is_refused_with_a_way_forward(self):
+        with pytest.raises(ValidationError) as caught:
+            api.SetupEdits.model_validate_json('{"api_version": 99, "setup": {}}')
+        message = str(caught.value)
+        assert "not supported" in message
+        assert "Upgrade bleck" in message
+
+    def test_omitting_it_means_the_current_version(self):
+        """A hand-written document should not need boilerplate to be valid."""
+        assert api.SetupEdits.model_validate_json('{"setup": {}}').api_version == 1
+
+    def test_nested_models_carry_no_version(self):
+        # Stamping every object would make a document mostly version fields.
+        assert "api_version" not in api.PlacementEdit.model_json_schema()["properties"]
+
+    def test_the_current_alias_points_at_a_real_version(self):
+        assert api.CURRENT is api.v1
+
+
+class TestModDocument:
+    def _manifest(self):
+        return mod_manifest.Manifest(
+            name="demo",
+            version=mod_manifest.Version(1, 2, 3),
+            description="a mod",
+            base="eu0",
+            dependencies=[mod_manifest.Requirement.parse("other", ">=1.0.0")],
+            code=mod_manifest.CodeSpec(
+                script="s.evt",
+                maps=[mod_manifest.MapHook("aa4_01", "on_arrive")],
+                combos=[mod_manifest.ComboBinding("start_map", "warp")],
+                boot_map="he1_01",
+            ),
+        )
+
+    def test_a_manifest_survives_a_trip_through_json(self):
+        original = self._manifest()
+        wire = api.ModDocument.of(original).model_dump_json()
+        assert api.ModDocument.model_validate_json(wire).to_manifest() == original
+
+    def test_a_versioned_dependency_keeps_its_constraint(self):
+        """`>=1.0.0` collapsing to `1.0.0` would silently tighten a chain."""
+        document = api.ModDocument.of(self._manifest())
+        assert document.dependencies[0].version == ">=1.0.0"
+
+    def test_an_asset_only_mod_has_no_code_block(self):
+        document = api.ModDocument.of(mod_manifest.Manifest(name="m"))
+        assert document.code is None
+
+    def test_a_document_needs_a_name(self):
+        with pytest.raises(ValidationError, match="needs a name"):
+            api.ModDocument(name="   ")
+
+    def test_unknown_fields_are_refused(self):
+        with pytest.raises(ValidationError):
+            api.ModDocument(name="m", desription="typo")
+
+    def test_a_reserved_module_id_is_refused(self):
+        # 0 is the game binary and 1 its own REL.
+        with pytest.raises(ValidationError):
+            api.Code(module_id=1)

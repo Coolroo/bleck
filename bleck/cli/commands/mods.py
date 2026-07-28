@@ -8,8 +8,13 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import json
+import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
+from bleck import api
 from bleck.backends import disc, emulator, gecko, maps
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
@@ -279,6 +284,17 @@ def register(add) -> None:
     child = action("chain", cmd_chain, "resolved install order")
     child.add_argument("name")
 
+    child = action("export", cmd_export, "a mod's declarations as JSON")
+    child.add_argument("name")
+
+    child = action("import", cmd_import, "write a JSON document to a mod.json")
+    child.add_argument("name")
+    child.add_argument(
+        "--json", required=True, metavar="FILE", help="document, or - for stdin"
+    )
+
+    action("schema", cmd_schema, "JSON Schema for a mod document")
+
     child = action("check", cmd_check, "resolve and detect conflicts; writes nothing")
     child.add_argument("name")
     _add_merge_flag(child)
@@ -325,3 +341,58 @@ def _add_merge_flag(parser: argparse.ArgumentParser) -> None:
             "because byte-disjoint edits can still be semantically incompatible"
         ),
     )
+
+
+def _read_json(source: str) -> str:
+    """JSON from a file, or from stdin when the path is `-`."""
+    if source == "-":
+        return sys.stdin.read()
+    path = Path(source)
+    if not path.exists():
+        raise UserError(f"no such file: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    """A whole mod as JSON. What an editor opens.
+
+    ⚠️ Declarations only. A mod's overlay holds extracted game assets, which are
+    binary and already on disk; dragging megabytes through a document that is
+    mostly a name would make every read expensive.
+    """
+    mod = _registry().require(args.name)
+    print(api.ModDocument.of(mod.manifest).model_dump_json(indent=2))
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    """Write a JSON document back to a mod's `mod.json`.
+
+    ⚠️ Replaces the manifest rather than merging into it, for the same reason
+    `setup apply` does: merging needs a rule for "the document omits a field --
+    clear it or keep it?", and either answer surprises half of callers. An
+    editor holds the whole document.
+    """
+    try:
+        document = api.ModDocument.model_validate_json(_read_json(args.json))
+    except ValidationError as exc:
+        raise UserError(f"{args.json}: {exc}") from exc
+
+    mod = _registry().require(args.name)
+    if document.name != mod.name:
+        raise UserError(
+            f"this document is for {document.name!r}, but you asked to write it "
+            f"to {mod.name!r}.\n"
+            f"  Renaming a mod means moving its directory; bleck will not do "
+            f"that by surprise."
+        )
+
+    manifest.write(mod.root, document.to_manifest())
+    print(f"wrote {mod.root / manifest.MANIFEST_NAME}")
+    return 0
+
+
+def cmd_schema(_args: argparse.Namespace) -> int:
+    """The JSON Schema for a mod document."""
+    print(json.dumps(api.ModDocument.model_json_schema(), indent=2))
+    return 0
