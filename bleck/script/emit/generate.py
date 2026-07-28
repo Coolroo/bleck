@@ -35,6 +35,7 @@ from bleck.script.emit.scaffold import (  # noqa: F401
     ComboHook,
     FunctionHook,
     MapHook,
+    PatchKind,
     Scaffolding,
     ScriptPatch,
     mod_slug,
@@ -190,15 +191,16 @@ class _PatchKind:
     """The lines inside `bleck_apply_patches` that call it."""
 
 
-#: Selector kinds the generated C can resolve. A kind absent here is a bug in
-#: `bleck`: the manifest rejects unsupported selectors long before this.
+#: What each selector kind contributes to the generated C. Keyed by the enum, so
+#: a new member that nobody wired up here is a `KeyError` at the one line that
+#: uses it rather than a hand-written "this is a bug in bleck" branch.
 _PATCH_KINDS = {
-    "map": _PatchKind(
+    PatchKind.MAP: _PatchKind(
         constant="BLECK_PATCH_MAP",
         resolver=runtime_c.PATCH_MAP_RESOLVER,
         resolve=runtime_c.PATCH_MAP_RESOLVE,
     ),
-    "item": _PatchKind(
+    PatchKind.ITEM: _PatchKind(
         constant="BLECK_PATCH_ITEM",
         resolver=runtime_c.PATCH_ITEM_RESOLVER,
         resolve=runtime_c.PATCH_ITEM_RESOLVE,
@@ -211,13 +213,6 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
     decls: list[str] = []
     seen: set[str] = set()
     for index, patch in enumerate(patches):
-        if patch.kind not in _PATCH_KINDS:
-            raise ScriptError(
-                f"patch selector kind {patch.kind!r} has no generated form; "
-                f"bleck knows {', '.join(sorted(_PATCH_KINDS))}. This is a bug "
-                f"in bleck.",
-                Position(),
-            )
         decls.append(
             runtime_c.PATCH_TARGET.format(index=index, name=_c_string(patch.target))
         )
@@ -228,7 +223,7 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
 
     # Only the kinds actually used, so an item-only module never references
     # `mapDataPtr` and vice versa. Declaration order stays stable.
-    used = [name for name in _PATCH_KINDS if any(p.kind == name for p in patches)]
+    used = [kind for kind in _PATCH_KINDS if any(p.kind is kind for p in patches)]
     rows = "".join(
         f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
         f"{patch.item_id}, {patch.at}u, 0x{patch.expect:08X}u, "

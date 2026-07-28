@@ -73,6 +73,46 @@ _HOOK_MODE_MEANS = {
     HookMode.AFTER: "the original first, then the mod's function",
 }
 
+
+# ⚠️ Unlike `HookMode`, a value here is only *part* of a wire string: it is
+# what precedes the colon in `code.patches[].script`, as in `map:he1_01`. The
+# whole selector is reassembled by `ScriptPatch.selector`, so that property and
+# `_parse_selector` are the only two places the wire is written or read.
+class PatchKind(StrEnum):
+    """Which family of the game's own `evt` scripts a patch selector names.
+
+    `map:<name>` resolves through `mapDataPtr`; `item:<id>` walks
+    `itemEventDataTable`.
+
+    ⚠️ The value is half of a wire format. Renaming a member is free; changing a
+    *value* breaks every `mod.json` that patches a script.
+    """
+
+    MAP = "map"
+    ITEM = "item"
+
+    @property
+    def example(self) -> str:
+        """How this kind is written, for an error listing what is reachable."""
+        return _PATCH_KIND_EXAMPLES[self]
+
+    @classmethod
+    def parse(cls, raw: str) -> PatchKind | None:
+        """The kind `raw` names, or None. The one place the wire is decoded."""
+        return next((kind for kind in cls if kind.value == raw), None)
+
+
+#: What each kind's target looks like. Separate from the members for the same
+#: reason as `_HOOK_MODE_MEANS`: a dict in an `Enum` body reads as a member.
+_PATCH_KIND_EXAMPLES = {
+    PatchKind.MAP: "map:<name>",
+    PatchKind.ITEM: "item:<id>",
+}
+
+#: Derived, not written out. The prose list this replaces sat two lines below
+#: the tuple it was meant to describe, with nothing keeping the two in step.
+SUPPORTED_SELECTORS = ", ".join(kind.example for kind in PatchKind)
+
 #: The script the loader starts, chosen by name so reordering a file cannot
 #: change which script runs.
 ENTRY_SCRIPT = "main"
@@ -186,8 +226,8 @@ class ScriptPatch:
     and a name the generated C can look up, and `expect` a header word.
     """
 
-    kind: str
-    """Which family of script `target` names: `map` or `item`."""
+    kind: PatchKind
+    """Which family of the game's own scripts `target` names."""
 
     target: str
     at: int

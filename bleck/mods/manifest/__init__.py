@@ -16,12 +16,15 @@ from bleck.mods.errors import ManifestError
 # Re-exported: callers reach these through `manifest`.
 # pylint: disable=unused-import
 from bleck.mods.manifest.codespec import (  # noqa: F401
+    DEFERRED_PATCH_KINDS,
     REL_DISC_PATH,
     BannerSpec,
     CodeSpec,
     ComboBinding,
     FunctionHook,
+    HookMode,
     MapHook,
+    PatchKind,
     ScriptPatch,
     _parse_code,
 )

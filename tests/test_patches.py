@@ -18,12 +18,17 @@ from bleck.mods.registry import Mod
 from bleck.script import compile_source, emit
 
 PATCH = emit.ScriptPatch(
-    kind="map", target="he1_01", at=0, expect=0x00010072, call="on_map_init"
+    kind=emit.PatchKind.MAP, target="he1_01", at=0, expect=0x00010072, call="on_map_init"
 )
 
 #: Item script 0's opening instruction: `USER_FUNC f, a, b, c`, argc 4 (D91).
 ITEM_PATCH = emit.ScriptPatch(
-    kind="item", target="0x41", at=0, expect=0x0004005C, call="on_item_use", item_id=0x41
+    kind=emit.PatchKind.ITEM,
+    target="0x41",
+    at=0,
+    expect=0x0004005C,
+    call="on_item_use",
+    item_id=0x41,
 )
 
 
@@ -109,7 +114,9 @@ class TestGeneratedCode:
         assert "const u32 bleck_patch_count = BLECK_PATCH_COUNT;" in out
 
     def test_the_hook_is_declared_once_per_name(self):
-        second = emit.ScriptPatch("map", "he2_01", 4, 0x00010072, "on_map_init")
+        second = emit.ScriptPatch(
+            emit.PatchKind.MAP, "he2_01", 4, 0x00010072, "on_map_init"
+        )
         out = generated([PATCH, second])
         assert out.count("extern void on_map_init(void);") == 1
         assert "#define BLECK_PATCH_COUNT 2" in out
@@ -136,7 +143,9 @@ class TestMerging:
         )
 
     def test_the_table_is_the_union(self):
-        second = emit.ScriptPatch("map", "ls4_12", 2, 0x00010072, "other_hook")
+        second = emit.ScriptPatch(
+            emit.PatchKind.MAP, "ls4_12", 2, 0x00010072, "other_hook"
+        )
         out = emit.generate_merged(
             [self._part("alpha"), self._part("beta")], patches=[PATCH, second]
         ).text
@@ -149,12 +158,37 @@ class TestMerging:
         assert "bleck_apply_patches" not in out
 
 
+class TestPatchKind:
+    """The kind is half of a wire string -- `map:he1_01` -- so the enum has to
+    survive a round trip through `mod.json` without leaking its member name."""
+
+    @pytest.mark.parametrize("selector", ["map:he1_01", "item:0x41", "item:65"])
+    def test_a_selector_round_trips_as_written(self, selector):
+        expect = "USER_FUNC 4" if selector.startswith("item") else "DEBUG_PUT_MSG"
+        written = manifest({**WHOLE, "script": selector, "expect": expect}).to_json()
+        assert f'"script": "{selector}"' in written
+        assert "PatchKind" not in written
+
+    def test_the_supported_list_is_derived_from_the_members(self):
+        """It used to be prose sitting two lines below the tuple it described,
+        with nothing keeping them in step."""
+        for kind in emit.PatchKind:
+            assert kind.example in emit.SUPPORTED_SELECTORS
+
+    def test_a_deferred_kind_is_not_a_member(self):
+        """`door:` is recognised well enough to explain and refused anyway. As a
+        member it would appear in every 'here is what works' list."""
+        assert emit.PatchKind.parse("door") is None
+        assert "door" in mod_manifest.DEFERRED_PATCH_KINDS
+        assert "door" not in emit.SUPPORTED_SELECTORS
+
+
 class TestManifest:
     def test_it_parses_and_round_trips(self):
         parsed = manifest(WHOLE)
         assert parsed.code.patches == [
             mod_manifest.ScriptPatch(
-                kind="map",
+                kind=mod_manifest.PatchKind.MAP,
                 target="he1_01",
                 at=0,
                 expect="DEBUG_PUT_MSG",
@@ -295,7 +329,9 @@ class TestCallResolution:
         mod = self._mod(tmp_path, "int hook(void *e, int f) { return 2; }\n")
         spec = manifest(WHOLE).code
         patches = code.patches_for(mod, spec, code.collect_sources(mod, spec))
-        assert patches == [emit.ScriptPatch("map", "he1_01", 0, 0x00010072, "hook")]
+        assert patches == [
+            emit.ScriptPatch(emit.PatchKind.MAP, "he1_01", 0, 0x00010072, "hook")
+        ]
 
     def test_a_typo_is_caught_before_the_linker_and_suggests(self, tmp_path):
         mod = self._mod(tmp_path, "int hook(void *e, int f) { return 2; }\n")

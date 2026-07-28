@@ -82,15 +82,17 @@ class MapHook:
     """Which script in the mod's source runs when the map loads."""
 
 
-#: Selector kinds `code.patches[].script` accepts. `map:<name>` resolves through
-#: `mapDataPtr` (D88); `item:<id>` walks `itemEventDataTable` (D91).
-PATCH_KINDS = ("map", "item")
+#: Re-exported so a manifest reader need not know the enum lives in the emitter.
+#: `map:<name>` resolves through `mapDataPtr` (D88); `item:<id>` walks
+#: `itemEventDataTable` (D91).
+PatchKind = emit.PatchKind
 
 #: Kinds known to exist that have no mechanism yet, and why. Named separately so
 #: asking for one gets the reason rather than "unsupported".
-#: Rendered into every "that selector is not a thing" error.
-_SUPPORTED_SELECTORS = "map:<name>, item:<id>"
-
+#:
+#: ⚠️ Deliberately **not** `PatchKind` members. A key here is a selector bleck
+#: recognises well enough to explain and refuses to accept; making it a member
+#: would put it in `SUPPORTED_SELECTORS` and in every "here is what works" list.
 DEFERRED_PATCH_KINDS = {
     "door": (
         "a door script cannot be looked up by name: `DoorDesc` carries the "
@@ -106,7 +108,7 @@ DEFERRED_PATCH_KINDS = {
 class _Selector:
     """A `code.patches[].script` value split into its two halves."""
 
-    kind: str
+    kind: PatchKind
     target: str
 
 
@@ -120,8 +122,8 @@ class ScriptPatch:
     cached per `EvtEntry` (D87, D91).
     """
 
-    kind: str
-    """Which family of script `target` names: `map` or `item`."""
+    kind: PatchKind
+    """Which family of the game's own scripts `target` names."""
 
     target: str
     """The script's name in that family: a map like `he1_01`, or an item id."""
@@ -151,7 +153,7 @@ class ScriptPatch:
     @property
     def item_id(self) -> int:
         """The item id `target` names, or -1 when this is not an `item:` patch."""
-        return int(self.target, 0) if self.kind == "item" else -1
+        return int(self.target, 0) if self.kind is PatchKind.ITEM else -1
 
 
 #: Re-exported so a manifest reader does not have to know the enum lives in the
@@ -554,21 +556,22 @@ def build_patch(script: str, at: int, expect: str, call: str, where: str) -> Scr
 
 def _parse_selector(raw: str, where: str) -> _Selector:
     """Split `map:he1_01` or `item:0x41` into its kind and its target."""
-    kind, _, target = raw.partition(":")
-    if kind in DEFERRED_PATCH_KINDS:
+    name, _, target = raw.partition(":")
+    if name in DEFERRED_PATCH_KINDS:
         raise ManifestError(
             f"{where}: 'script' is {raw!r}, and bleck has no mechanism for "
-            f"{kind!r} scripts.\n  {DEFERRED_PATCH_KINDS[kind]}\n"
-            f"  Supported selectors: {_SUPPORTED_SELECTORS}."
+            f"{name!r} scripts.\n  {DEFERRED_PATCH_KINDS[name]}\n"
+            f"  Supported selectors: {emit.SUPPORTED_SELECTORS}."
         )
-    if kind not in PATCH_KINDS or not target:
+    kind = PatchKind.parse(name)
+    if kind is None or not target:
         raise ManifestError(
             f"{where}: 'script' is {raw!r}, which names no script bleck can "
-            f"reach.\n  Supported selectors: {_SUPPORTED_SELECTORS}.\n"
+            f"reach.\n  Supported selectors: {emit.SUPPORTED_SELECTORS}.\n"
             f"  'map:he1_01' patches that map's init script; 'item:0x41' "
             f"patches that item's use script."
         )
-    if kind == "item":
+    if kind is PatchKind.ITEM:
         return _Selector(kind=kind, target=_parse_item_id(target, where))
     if not _MAP_NAME_RE.match(target):
         raise ManifestError(
