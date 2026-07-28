@@ -36,7 +36,13 @@ class Launch:
         return self.exit_code is not None
 
 
-def launch(image: Path, batch: bool = False, wait: bool = False) -> Launch:
+def launch(
+    image: Path,
+    batch: bool = False,
+    wait: bool = False,
+    unlimited: bool = False,
+    state: Path | None = None,
+) -> Launch:
     """Boot a disc image in Dolphin.
 
     Returns as soon as the emulator starts unless `wait` is set — a build-and-
@@ -45,6 +51,14 @@ def launch(image: Path, batch: bool = False, wait: bool = False) -> Launch:
 
     `batch` adds Dolphin's `-b`, which boots straight into the game instead of
     opening the game list first.
+
+    `unlimited` removes the 100% speed cap. Super Paper Mario spends its first
+    ~2,100 frames on logos, so a cold boot takes about 45 seconds of watching
+    nothing; uncapped it reaches gameplay in about 6 (D63).
+
+    `state` loads a Dolphin save state, which skips the boot altogether and --
+    more usefully -- carries a save with it. Entering a map without one leaves
+    the player character uninitialised and invisible.
     """
     if not image.exists():
         raise DiscError(f"no such image: {image}")
@@ -60,6 +74,13 @@ def launch(image: Path, batch: bool = False, wait: bool = False) -> Launch:
     # This may happen with improper permissions, or use by another process" —
     # which blames permissions for what is actually a mangled argument.
     args += ["-e", str(image.resolve())]
+
+    if unlimited:
+        args += ["-C", "Dolphin.Core.EmulationSpeed=0"]
+    if state is not None:
+        if not state.exists():
+            raise DiscError(f"no save state at {state}")
+        args += ["-s", str(state.resolve())]
 
     try:
         # Deliberately not a context manager: the emulator has to outlive this

@@ -154,9 +154,11 @@ hold assets; map scripts and code live in the REL.**
 **This is a modding trap.** Editing one copy while the game loads the other
 produces a silent no-op — the most annoying class of bug to diagnose.
 
-⛔ **Superseded by D59 — this was wrong.** Editing only the embedded copy
-changed nothing in game. Which copy drives spawning is unresolved; `bleck` writes
-both. The measurement below is sound, the conclusion drawn from it was not.
+✅ **Settled by D62: the game reads the standalone `files/setup/<map>.dat`.**
+A disc carrying a different enemy in each copy spawned the standalone one's.
+
+⛔ D53 below concluded the opposite and was wrong. Its *measurement* holds — the
+embedded copy is the one loaded into MEM1 — but "in MEM1" did not mean "in use".
 
 > ✅ ~~Settled (D53): the game reads the copy embedded in the map archive.~~
 

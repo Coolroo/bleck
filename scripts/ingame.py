@@ -85,14 +85,34 @@ def _signed(value: int) -> int:
 class Session:
     """A booted Dolphin, and the memory reads that make it observable."""
 
-    def __init__(self, image: Path, dolphin: str) -> None:
+    def __init__(
+        self,
+        image: Path,
+        dolphin: str,
+        unlimited: bool = False,
+        state: Path | None = None,
+    ) -> None:
         self.image = image
         self.dolphin = dolphin
+        self.unlimited = unlimited
+        self.state = state
         self.process: subprocess.Popen | None = None
 
-    def __enter__(self) -> Session:
+    def command(self) -> list[str]:
         # `-b` boots straight into the game rather than opening the game list.
-        self.process = subprocess.Popen([self.dolphin, "-b", "-e", str(self.image)])
+        args = [self.dolphin, "-b", "-e", str(self.image)]
+        if self.unlimited:
+            # 0 means "no limit". Gameplay is reached ~45s in at 100% speed, and
+            # almost all of that is logos nobody is watching.
+            args += ["-C", "Dolphin.Core.EmulationSpeed=0"]
+        if self.state is not None:
+            # Skips the boot entirely, and carries a save with it -- which is
+            # what stops Mario being invisible for want of a profile.
+            args += ["-s", str(self.state)]
+        return args
+
+    def __enter__(self) -> Session:
+        self.process = subprocess.Popen(self.command())
         return self
 
     def __exit__(self, *_exc: object) -> None:
@@ -208,6 +228,14 @@ def main() -> int:
         "--no-build", action="store_true", help="boot the existing image as-is"
     )
     parser.add_argument(
+        "--slow",
+        action="store_true",
+        help="run at normal speed; the default is unlimited, which boots faster",
+    )
+    parser.add_argument(
+        "--state", help="a Dolphin save state to load instead of booting cold"
+    )
+    parser.add_argument(
         "--log", help="where to write the full transcript (default: work/build/ingame.log)"
     )
     parser.add_argument(
@@ -254,7 +282,12 @@ def main() -> int:
     seen = ""
     quiet = 0
     searched = False
-    with Session(image, dolphin) as session:
+    with Session(
+        image,
+        dolphin,
+        unlimited=not args.slow,
+        state=Path(args.state) if args.state else None,
+    ) as session:
         start = time.time()
         while time.time() - start < args.seconds:
             time.sleep(3)

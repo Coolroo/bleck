@@ -302,12 +302,12 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
     Setup files ship both standalone in `setup/` and embedded inside some map
     archives, byte-identically (see docs/decision-log.md D13).
 
-    ⚠️ D13 is *not* settled. D53 concluded the embedded copy was the one read,
-    from a memory search; editing only that copy changed nothing in game (D59),
-    so the inference was wrong. Which copy drives spawning is unknown.
+    ✅ D62 settled it: the game reads the **standalone** `files/setup/<map>.dat`.
+    A disc with a different enemy in each copy spawned the standalone one's.
 
-    `bleck` therefore writes both when it generates a setup file, and warns when
-    a hand-written overlay touches only one.
+    `bleck` writes both when it generates a setup file -- hygiene rather than a
+    hedge, since a stale embedded copy would mislead anyone inspecting the
+    archive -- and warns when a hand-written overlay touches only one.
     """
     warnings: list[str] = []
     for file_plan in plan.files:
@@ -317,14 +317,14 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
                 twin = f"setup/{Path(member).name}"
                 if (base / twin).exists():
                     warnings.append(
-                        f"{path}/{member} also exists as {twin}; "
-                        "which copy the game reads is unresolved (D59), so "
-                        "edit both"
+                        f"{path}/{member} also exists as {twin}, which is the "
+                        "copy the game actually reads (D62). Editing only this "
+                        "one does nothing"
                     )
         if "/setup/" in f"/{path}":
             warnings.append(
-                f"{path} has a twin inside the map archive, and which one the "
-                "game reads is unresolved (D59). Edit both, or declare the "
-                "change under 'setup' in mod.json and let bleck write both"
+                f"{path} is the copy the game reads (D62); its twin inside the "
+                "map archive is ignored. Edit both to keep them consistent, or "
+                "declare the change under 'setup' in mod.json"
             )
     return warnings

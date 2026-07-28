@@ -164,3 +164,30 @@ def test_real_popen_is_what_gets_patched():
     """Guard the tests above: they are meaningless if the name moved."""
     assert emulator.subprocess is subprocess
     assert hasattr(subprocess, "Popen")
+
+
+class TestFastBoot:
+    """Super Paper Mario spends ~2,100 frames on logos before gameplay.
+
+    At 100% that is ~45 seconds of watching nothing on every test run. Uncapped
+    it is ~6 (D63), which changes what is worth testing in-game at all.
+    """
+
+    def test_uncapping_passes_dolphins_config_override(self, spawned, image: Path):
+        emulator.launch(image, unlimited=True)
+        assert "Dolphin.Core.EmulationSpeed=0" in spawned[0]
+
+    def test_the_cap_is_left_alone_by_default(self, spawned, image: Path):
+        emulator.launch(image)
+        assert not any("EmulationSpeed" in arg for arg in spawned[0])
+
+    def test_a_save_state_is_passed_through(self, spawned, image: Path, tmp_path):
+        state = tmp_path / "spm.s01"
+        state.write_bytes(b"state")
+        emulator.launch(image, state=state)
+        assert spawned[0][-2:] == ["-s", str(state.resolve())]
+
+    def test_a_missing_save_state_is_refused(self, spawned, image: Path, tmp_path):
+        # Silently booting cold would look like the state simply not working.
+        with pytest.raises(DiscError, match="no save state"):
+            emulator.launch(image, state=tmp_path / "absent.sav")

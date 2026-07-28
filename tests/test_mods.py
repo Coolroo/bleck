@@ -283,8 +283,9 @@ class TestConflicts:
         chain = resolver.resolve(registry.load(mods_root), "s")
         report = builder.check(chain, base, allow_binary=False)
         warning = next(w for w in report.warnings if "aa1_01" in w)
-        assert "unresolved" in warning
-        # It has to say what to do, not just that something is wrong.
+        # D62: the standalone copy is the one the game reads. The warning has to
+        # say which, not just that there are two.
+        assert "the copy the game reads" in warning
         assert "Edit both" in warning
 
 

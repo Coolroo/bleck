@@ -3542,3 +3542,99 @@ per-map code, consistent with the REL theory, but no table names them at all.
 **Two upstream sources, each correct, contradicting each other in a way neither
 could notice.** Same shape as D60's two wrong lst addresses, found the same way:
 by comparing things that had only ever been used separately.
+
+---
+
+## D62 — ✅ D13 finally settled: the game reads the *standalone* setup copy (2026-07-27)
+
+**Supersedes D53 (wrong) and closes D59 (unresolved).**
+
+`mods/copy-race` put a **different enemy in each copy** and cleared the other
+slots, so exactly one enemy could appear and it would name the winner:
+
+| Copy | Enemy placed |
+|---|---|
+| `files/setup/he1_01.dat` | Squig (`e_octar`, template 148) |
+| `files/map/he1_01.bin` → `./dvd/setup/he1_01.dat` | Sproing Oing (`e_tekti`, template 144) |
+
+**A Squig appeared.** So `files/setup/<map>.dat` is the copy that drives
+spawning, and the one embedded in the map archive is ignored — the exact
+opposite of D53.
+
+That also explains D58 completely: it wrote only the embedded copy, and nothing
+changed in game.
+
+### Why D53 got it backwards
+
+Its measurement was right and is still true: the embedded copy is the one loaded
+into MEM1, the standalone into MEM2. The inference — *MEM1 is the fast working
+RAM, therefore MEM1 holds the copy in use* — was wrong, and was flagged 🔶 at the
+time before being built on anyway.
+
+🔶 So a plausible reading now is the reverse of the intuition: the MEM1 copy is
+the map archive's own payload, decompressed with everything else it ships, and
+the *separately loaded* MEM2 copy is what `npcEntryFromSetupEnemy` walks. Not
+tested — and this log has now been wrong once by reasoning from residency, so it
+stays a hypothesis.
+
+### What stays the same
+
+`bleck` keeps writing **both** copies. Now that the winner is known that is no
+longer a hedge, it is hygiene: leaving a stale embedded copy on the disc would
+mislead anyone who inspects the archive. The build warning now names the copy
+that matters instead of saying "unresolved".
+
+### ✅ Placement editing is confirmed working end to end
+
+Both discs showed the declared enemy. `mods/hard-lineland`'s Squig appears where
+Lineland Road's first Goomba was, from six lines of JSON.
+
+### Two things the test discs also showed
+
+- ✅ **The banner works on a real mod**: `mod_loaded: copy-race` on the title
+  screen, which is the first time it has been seen outside `banner-probe`.
+- ⚠️ **Mario is invisible** when a map is entered this way. The game was driven
+  into `he1_01` from the attract demo with no save file and no profile selected,
+  so the player character never got set up. Harmless for reading placement, but
+  it means these discs are a *diagnostic*, not a way to play a mod.
+
+---
+
+## D63 — A test run costs 6 seconds, not 50 (2026-07-27)
+
+✅ **Uncapping Dolphin's emulation speed takes a boot-to-gameplay from ~45
+seconds to ~6.**
+
+```
+$ uv run python scripts/ingame.py map-hook --no-build
+[t+  6s] seq=GAME(2) stage=1  gw[31]=4660   <- map hook already fired
+```
+
+One flag: `-C Dolphin.Core.EmulationSpeed=0`. The game spends its first ~2,100
+frames on logos, which at 100% is 35 seconds of watching nothing, on every run.
+
+⚠️ **This should have been done ten runs ago.** Roughly fifteen unattended runs
+have been spent at 45 seconds each waiting for logos, and the cost was accepted
+as a property of the game rather than of the emulator's frame limiter. Recorded
+because the general failure is worth naming: **an accepted constant is rarely
+checked.**
+
+Available as `--fast` on `bleck launch`, and the default in `scripts/ingame.py`
+(`--slow` opts out).
+
+### ⚠️ Driving into a map leaves the player uninitialised
+
+Both test discs showed **Mario invisible**. The cause is not the mod: they enter
+`he1_01` from the attract demo via `evt_seq_mapchange` (D52), with no save file
+and no profile selected, so the player character is never set up.
+
+That is fine for reading enemy placement, which is what those discs are for, but
+it means **this technique is a diagnostic, not a way to play a mod**. Anything
+depending on player state -- damage, items, the pause menu -- cannot be trusted
+in a disc driven this way.
+
+🔶 The fix is a save state. `bleck launch --state` and `ingame.py --state` now
+load one, which skips the boot *and* carries a save. Creating it needs a human
+once: play far enough to have a profile, save a state, and every later run can
+start from it. Not yet done -- there is no SPM save in this Dolphin's NAND at
+all.
