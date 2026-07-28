@@ -132,6 +132,22 @@ class BannerSpec:
 
 
 @dataclass(frozen=True)
+class ComboBinding:
+    """A script bound to a button combination declared in `bleck.yml`.
+
+    The manifest names a combination; it does not say which buttons. That split
+    is the point — a mod says `start_map`, the project says once what
+    `start_map` is, and changing the buttons does not touch any mod.
+    """
+
+    combo: str
+    """Name of a combination in `bleck.yml`."""
+
+    script: str
+    """Name of a script in this mod's source, not a C identifier."""
+
+
+@dataclass(frozen=True)
 class PlacementEdit:
     """One change to one enemy slot, as declared rather than as bytes.
 
@@ -223,6 +239,9 @@ class CodeSpec:
     maps: list[MapHook] = field(default_factory=list)
     """Scripts attached to maps, so they run on arrival rather than looping."""
 
+    combos: list[ComboBinding] = field(default_factory=list)
+    """Scripts bound to button combinations named in `bleck.yml`."""
+
     banner: BannerSpec = field(default_factory=BannerSpec)
     """The on-screen label naming this mod."""
 
@@ -237,6 +256,10 @@ class CodeSpec:
     @property
     def has_boot_map(self) -> bool:
         return bool(self.boot_map)
+
+    @property
+    def has_combos(self) -> bool:
+        return bool(self.combos)
 
     @property
     def has_maps(self) -> bool:
@@ -260,6 +283,8 @@ class CodeSpec:
         body["module_id"] = self.module_id
         if self.maps:
             body["maps"] = {hook.map_name: hook.script for hook in self.maps}
+        if self.combos:
+            body["combos"] = {b.combo: b.script for b in self.combos}
         if self.boot_map:
             body["boot"] = self.boot_map
         # Written only when it says something a default would not, so the
@@ -373,6 +398,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         raise ManifestError(f"{source}: 'code.sources' must be a list of paths")
 
     boot = _parse_boot(raw.get("boot"), source)
+    combos = _parse_combos(raw.get("combos"), source)
 
     if not script and not sources and not boot:
         raise ManifestError(
@@ -397,6 +423,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         target=str(raw.get("target", "eu0")),
         module_id=module_id,
         maps=_parse_maps(raw.get("maps"), source),
+        combos=combos,
         banner=_parse_banner(raw.get("banner"), source),
         boot_map=boot,
     )
@@ -571,6 +598,35 @@ def _parse_maps(raw: object, source: str) -> list[MapHook]:
             )
         hooks.append(MapHook(map_name=map_name, script=script))
     return hooks
+
+
+def _parse_combos(raw: object, source: str) -> list[ComboBinding]:
+    """Read `code.combos`, an object of combination name -> script name.
+
+    An object for the same reason `code.maps` is one: a combination fires one
+    script, so a second entry for the same combination should be impossible to
+    write rather than something to detect.
+
+    The names are not checked here. `bleck.yml` is what defines them, it is not
+    a manifest concern, and the check belongs where the config is loaded so the
+    error can list what *is* defined.
+    """
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise ManifestError(
+            f"{source}: 'code.combos' must be an object of "
+            f'combo name -> script name, e.g. {{"start_map": "warp_home"}}'
+        )
+
+    bindings: list[ComboBinding] = []
+    for combo, script in raw.items():
+        if not isinstance(script, str) or not script:
+            raise ManifestError(
+                f"{source}: 'code.combos.{combo}' must name a script in this mod"
+            )
+        bindings.append(ComboBinding(combo=str(combo), script=script))
+    return bindings
 
 
 def _parse_dependencies(raw: object, source: str) -> list[Requirement]:

@@ -366,6 +366,94 @@ static void bleck_boot_on_seq(u32 seq)
 }}
 """
 
+#: Starting a script when a button combination is pressed.
+#:
+#: The reading path is measured, not assumed: `wpadGetWork()` is at `0x8023697c`
+#: in the eu0 lst, `WpadWork.statuses` is at `+0x6C` with the newest sample
+#: first, and `KPADStatus.buttonsHeld` is its first field (D67, D68).
+_COMBO_BLOCK = """
+/*
+    Button combinations.
+
+    The game reads its own controller every frame, so a mod can read the same
+    state. NOTE: This is not what D48 ruled out -- that was about *injecting* input
+    into Dolphin from outside, for unattended tests, and says nothing about the
+    game's own input. Conflating the two closed off this feature for weeks.
+
+    Layout, all from spm-headers and confirmed against a running game:
+      wpadGetWork()            spm/wpadmgr.h, returns WpadWork *
+      WpadWork.statuses        +0x6C, [controller][age], newest age is 0
+      KPADStatus.buttonsHeld   +0x00, and KPADStatus is 0x84 bytes
+
+    NOTE: Masks are tested with `(held & mask) == mask`, never `held == mask`.
+    Bit 31 of `buttonsHeld` flips between frames while the controller is
+    untouched -- measured in D67 -- so an equality test would match on roughly
+    half the frames and read as flaky hardware.
+
+    Edge-triggered: a combination fires once when it becomes held, not sixty
+    times a second while it stays held.
+*/
+
+extern void *wpadGetWork(void);
+
+#define BLECK_WPAD_STATUSES 0x6C
+#define BLECK_COMBO_COUNT {count}
+
+static const u32 bleck_combo_masks[BLECK_COMBO_COUNT] = {{
+{masks}}};
+
+static const s32 *const bleck_combo_scripts[BLECK_COMBO_COUNT] = {{
+{scripts}}};
+
+/*
+    Which combinations were held last frame, one bit each.
+
+    Starts all-ones for two reasons: it is non-zero, so it lands in .data rather
+    than .bss whose zeroing the loader does not document -- and it means every
+    combination counts as already-held until it has been seen released. A button
+    held while the game boots therefore cannot fire anything.
+*/
+static u32 bleck_combo_down = 0xFFFFFFFFu;
+
+static u32 bleck_buttons_held(void)
+{{
+    u8 *work = (u8 *) wpadGetWork();
+
+    /* Null before wpadInit has run; reading through it would fault. */
+    if (work == 0)
+        return 0;
+    return *(volatile u32 *) (work + BLECK_WPAD_STATUSES);
+}}
+
+static void bleck_combos_on_seq(u32 seq)
+{{
+    u32 held, i, bit;
+
+    /* evtEntry needs the script VM, which needs gameplay. Watching earlier is
+       tempting and is what hung the game in D65. */
+    if (seq != BLECK_SEQ_GAME)
+        return;
+
+    held = bleck_buttons_held();
+    for (i = 0; i < BLECK_COMBO_COUNT; i++)
+    {{
+        bit = 1u << i;
+        if ((held & bleck_combo_masks[i]) == bleck_combo_masks[i])
+        {{
+            if ((bleck_combo_down & bit) == 0)
+            {{
+                bleck_combo_down |= bit;
+                evtEntry(bleck_combo_scripts[i], 0, 0);
+            }}
+        }}
+        else
+        {{
+            bleck_combo_down &= ~bit;
+        }}
+    }}
+}}
+"""
+
 #: One trampoline per sequence, because the game passes no index of its own.
 _SEQ_STUBS = """
 static void bleck_seq0(void *w) { bleck_after_seq(0, w); }
@@ -443,6 +531,30 @@ class MapHook:
 
 
 @dataclass(frozen=True)
+class ComboHook:
+    """A button combination that starts a script.
+
+    The mask arrives already resolved: the manifest names a combination and
+    `bleck.yml` says which buttons it is, so by the time the emitter sees it
+    there is nothing left to look up. `name` is carried only so the generated C
+    can say which combination a table row is.
+    """
+
+    name: str
+    mask: int
+    script: str
+
+    @property
+    def comment(self) -> str:
+        return f"/* {self.name} */"
+
+
+#: One bit per combination in `bleck_combo_down`, so this is a hard ceiling.
+#: Shared with map hooks, which have the same shape of bitmask.
+MAX_COMBOS = 32
+
+
+@dataclass(frozen=True)
 class Scaffolding:
     """Everything the generated module does besides run its entry script.
 
@@ -461,6 +573,9 @@ class Scaffolding:
     boot_script: str = ""
     """A script started once, on the first frame of gameplay."""
 
+    combos: list[ComboHook] = field(default_factory=list)
+    """Button combinations that start scripts."""
+
     require_entry: bool = True
     """Whether a script called `main` must exist.
 
@@ -472,10 +587,15 @@ class Scaffolding:
     def needs_entry_script(self) -> bool:
         """A mod needs `main` only when nothing else can start a script.
 
-        Map hooks and boot maps each bring their own way in, so requiring
-        `main` alongside them would be ceremony.
+        Map hooks, boot maps and button combinations each bring their own way
+        in, so requiring `main` alongside any of them would be ceremony.
         """
-        return self.require_entry and not self.map_hooks and not self.boot_script
+        return (
+            self.require_entry
+            and not self.map_hooks
+            and not self.boot_script
+            and not self.combos
+        )
 
 
 @dataclass(frozen=True)
@@ -572,6 +692,22 @@ def _banner_block(banner: Banner) -> str:
     return _BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
 
 
+def _combo_block(hooks: list[ComboHook]) -> str:
+    """Mask and script tables, plus the per-frame watcher."""
+    if len(hooks) > MAX_COMBOS:
+        raise ScriptError(
+            f"{len(hooks)} button combinations declared, but at most "
+            f"{MAX_COMBOS} are supported -- `bleck_combo_down` tracks one bit "
+            f"each in a 32-bit word.",
+            Position(),
+        )
+    return _COMBO_BLOCK.format(
+        count=len(hooks),
+        masks="".join(f"    0x{hook.mask:08X}u,  {hook.comment}\n" for hook in hooks),
+        scripts="".join(f"    {_PREFIX}script_{hook.script},\n" for hook in hooks),
+    )
+
+
 def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
     """The script text a `code.boot` declaration desugars into.
 
@@ -603,6 +739,7 @@ def _footer(
     hooks: list[MapHook],
     banner: Banner | None = None,
     boot: str = "",
+    combos: list[ComboHook] | None = None,
 ) -> str:
     """Assemble the scaffolding that runs the mod, from the pieces it needs.
 
@@ -610,7 +747,8 @@ def _footer(
     sequence table -- one to start and re-start itself, the other to notice
     where the game went. A mod using both installs one set of hooks, not two.
     """
-    if not entry and not hooks and banner is None and not boot:
+    combos = list(combos or [])
+    if not entry and not hooks and banner is None and not boot and not combos:
         return _PLAIN_PROLOG + _ENTRY_POINTS
 
     parts = [_SEQ_TABLE]
@@ -622,6 +760,9 @@ def _footer(
     if hooks:
         parts.append(_map_block(hooks))
         body += "    bleck_maps_on_seq(seq);\n"
+    if combos:
+        parts.append(_combo_block(combos))
+        body += "    bleck_combos_on_seq(seq);\n"
     if entry:
         parts.append(_SCRIPT_START % entry)
         body += "    bleck_start_entry(seq);\n"
@@ -667,6 +808,7 @@ def generate(
     plan = scaffolding or Scaffolding()
     hooks = list(plan.map_hooks)
     _check_map_hooks(program, hooks)
+    _check_combo_hooks(program, plan.combos)
     _check_boot_script(program, plan.boot_script)
     entry = _entry_script(program, required=plan.needs_entry_script)
 
@@ -709,6 +851,7 @@ def generate(
             hooks,
             plan.banner,
             boot=f"{_PREFIX}script_{plan.boot_script}" if plan.boot_script else "",
+            combos=plan.combos,
         )
     )
 
@@ -738,6 +881,29 @@ def _require_ascii(text: str) -> None:
             f"generated C contains non-ASCII {offending!r}; "
             "this is a bug in bleck's code templates"
         ) from exc
+
+
+def _check_combo_hooks(program: CompiledProgram, hooks: list[ComboHook]) -> None:
+    """Every combination's script has to exist, and be spelled the same twice.
+
+    Same failure as a map hook: `mod.json` names a script, the source declares
+    one, and nothing connects them until here. Without this the C compiler
+    reports an undefined `bleck_script_wrap_home`, which says nothing about the
+    manifest line that asked for it.
+    """
+    names = [script.name for script in program.scripts]
+    for hook in hooks:
+        if hook.script in names:
+            continue
+        listed = ", ".join(names) or "none"
+        suggestion = difflib.get_close_matches(hook.script, names, n=1, cutoff=0.6)
+        hint = f"\n  Did you mean {suggestion[0]!r}?" if suggestion else ""
+        raise ScriptError(
+            f"mod.json binds combo {hook.name!r} to script {hook.script!r}, "
+            f"but this file declares no such script "
+            f"(it declares: {listed}).{hint}",
+            Position(),
+        )
 
 
 def _check_map_hooks(program: CompiledProgram, hooks: list[MapHook]) -> None:

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "warp-combo",
+  "version": "0.1.0",
+  "description": "Press a button combination to warp to a map",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "combos": { "start_map": "warp_home" }
+  }
+}

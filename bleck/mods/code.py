@@ -9,11 +9,13 @@ know it was generated.
 
 from __future__ import annotations
 
+import difflib
 from dataclasses import dataclass
 from pathlib import Path
 
 from bleck.backends import symbols as symbol_tables
 from bleck.backends import toolchain
+from bleck.common import config as project_config
 from bleck.common import env
 from bleck.common.errors import BleckError
 from bleck.mods import registry as mod_registry
@@ -185,6 +187,35 @@ def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     ]
 
 
+def combo_hooks_for(mod: Mod, spec, settings) -> list[emit.ComboHook]:
+    """Resolve each `code.combos` binding against `bleck.yml`.
+
+    The manifest names a combination and the config says which buttons it is.
+    Joining the two here means a mod never contains a button mask, so changing
+    what `start_map` means is one edit in one file.
+    """
+    hooks: list[emit.ComboHook] = []
+    for binding in spec.combos:
+        found = settings.combo(binding.combo)
+        if found is None:
+            listed = ", ".join(settings.combo_names) or "none"
+            close = difflib.get_close_matches(
+                binding.combo, settings.combo_names, n=1, cutoff=0.6
+            )
+            hint = f"\n  Did you mean {close[0]!r}?" if close else ""
+            raise CodeError(
+                f"{mod.name}: mod.json uses combo {binding.combo!r}, but "
+                f"{settings.where} defines no such combination "
+                f"(it defines: {listed}).{hint}\n"
+                f"  Add it under `combos:` there, e.g. "
+                f"`{binding.combo}: [1, 2]`."
+            )
+        hooks.append(
+            emit.ComboHook(name=found.name, mask=found.mask, script=binding.script)
+        )
+    return hooks
+
+
 def banner_for(mod: Mod, spec=None) -> emit.Banner | None:
     """The on-screen label this mod should draw, if any.
 
@@ -260,6 +291,7 @@ def build_mod(
     )
     sources = collect_sources(mod, spec)
     banner = banner_for(mod, spec)
+    combos = combo_hooks_for(mod, spec, project_config.load())
     source = _script_text(mod, spec, boot_map)
     compiled = None
 
@@ -271,6 +303,7 @@ def build_mod(
                 scaffolding=emit.Scaffolding(
                     map_hooks=map_hooks_for(mod),
                     banner=banner,
+                    combos=combos,
                     boot_script=emit.BOOT_SCRIPT if boot_map else "",
                 ),
                 symbol_table=table,

@@ -1,0 +1,11 @@
+-- Warp on demand, rather than on a timer.
+--
+-- The combination is named in bleck.yml, not here: a mod says `start_map`
+-- and the project says once which buttons that is. See docs/plan-config.md.
+
+script warp_home {
+    -- Visible in the rig as gw[31], so a run can tell "pressed" from
+    -- "pressed and the map change did nothing".
+    gw[31] = 1
+    evt_seq_mapchange("mac_01", 0)
+}
