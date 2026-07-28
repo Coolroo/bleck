@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "item-probe",
+  "version": "0.1.0",
+  "description": "Are item use scripts reachable and patchable the way map init scripts are (D90 follow-up)",
+  "base": "eu0",
+  "code": { "sources": ["src"], "target": "eu0", "module_id": 2 }
+}

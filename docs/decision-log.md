@@ -5557,3 +5557,70 @@ clean at 10.00/10.
   exist first, and nothing has produced one.
 - 🔶 Only `MapData.initScript` has been patched, by anyone, on this project.
   `getItemUseEvt`, `evt_door.h` and `npcdrv.h` remain untested.
+
+---
+
+## D91 — Item scripts are reachable; doors are not, and the 2-word rule is too narrow (2026-07-28)
+
+Read-only probe (`mods/item-probe`), asking of items the three questions D88
+asked of maps. Full transcript `work/build/item-probe.log`.
+
+### ✅ Item use scripts are reachable, static, and stable
+
+`itemEventDataTable` (`0x803fbc10`) is 33 entries of
+`{s32 itemId, EvtScriptCode *useScript, const char *useMsgName}`.
+
+| Reading | Value |
+|---|---|
+| item ids, first 8 | `0x41`–`0x48` (65–72), sequential |
+| `useScript`, first 8 | `803FC918`, `803FCCA4`, `803FD028`, `803FD328`, `803FD6B8`, `803FDBA8`, `803FDD60`, `803FDDF8` |
+| entry 0 at `mod_prolog` vs `SEQ_GAME` | `803FC918` both — **stable** |
+| first words of entry 0 | `0004005C 80025250 00000000 FE363C80` |
+
+`0x0004005C` is `USER_FUNC` argc 4, and `0x80025250` is `func_80025250`, which
+`item_event_data.h` already lists as an unnamed item function. The decode is
+consistent.
+
+**These are easier targets than map scripts.** `0x803Fxxxx` is the DOL's own
+static data, not a loaded REL — no map has to be resident for the pointer to be
+valid. Read the table directly rather than calling `getItemUseEvt`, which the
+header says returns *"a fallback if the item isn't in there"*.
+
+⚠️ **22 distinct scripts across 33 entries.** Eleven entries share a script with
+another, so a patch aimed at one item id can change every item sharing it. Any
+`item:` selector must resolve to a script pointer and say what else points there,
+rather than pretending an item id is a unique target.
+
+### ⛔ The current replacement rule is too narrow for items
+
+D90 always replaces with `USER_FUNC f` and no arguments — two words — so
+`expect` must name a one-argument instruction. Item script 0 opens with a
+**five**-word `USER_FUNC`, and nothing says a two-word instruction appears in it
+at all.
+
+So `item:` cannot simply be added to the existing primitive. The fix is a
+generalisation that helps maps equally: **emit a `USER_FUNC` with the same
+argument count as the instruction being replaced**, passing the original's
+arguments through. `USER_FUNC` with N args is N+1 words, so any instruction of
+two words or more becomes patchable, the same-size rule is preserved, and no
+label moves. The hook reads the original arguments from its `EvtEntry`.
+
+That supersedes D90's fixed two-word replacement, which stays correct but is a
+special case (N=1).
+
+### ⛔ Doors are not reachable by name, and need a different mechanism
+
+`DoorDesc` carries `initScript`, `interactScript` and `moveScript` — but there
+is no lookup by name. `evtDoorGetActiveDoorDesc()` (`0x800e11b0`) returns the
+door *currently in use*, which is null at `mod_prolog`, and the descriptor
+arrays are registered per map by `evt_door_set_door_descs(descs, count)`
+(`0x800e2610`).
+
+So a door patch cannot be a lookup. It would have to **intercept**
+`evt_door_set_door_descs` and patch the array as a map registers it — a
+different shape from `map:` and `item:`, and unproven.
+
+🔶 The same likely applies to `npcdrv.h`'s `templateinitScript`, untested.
+
+**`door:` is therefore deferred**, not merely unimplemented. The `<kind>:<name>`
+selector still accommodates it later; what it does not have is a mechanism.
