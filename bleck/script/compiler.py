@@ -22,148 +22,27 @@ linker to resolve. This is deliberate — it is what keeps game addresses out of
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum, auto
 
 from bleck.script import catalog as builtin_catalog
 from bleck.script import evt, syntax
 from bleck.script.errors import Position, ScriptError
 
-#: `evt` gives each script 16 local work slots. Declared variables are handed
-#: out from slot 0 upward and scratch from slot 15 downward; they meet in the
-#: middle, and running out is a compile error rather than silent corruption.
-LOCAL_SLOTS = 16
-
-
-class ValueType(Enum):
-    """What kind of thing an expression produced.
-
-    `evt` has separate instructions for integer and float arithmetic, and no
-    coercion between them, so this is load-bearing rather than advisory: adding
-    with the wrong opcode reinterprets the operand's bits.
-    """
-
-    INT = auto()
-    FLOAT = auto()
-    STRING = auto()
-
-    def __str__(self) -> str:
-        return self.name.lower()
-
-
-# --- words ----------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Word:
-    """One `s32` in a compiled script."""
-
-
-@dataclass(frozen=True)
-class Literal(Word):
-    """A value known at compile time."""
-
-    value: int
-
-
-@dataclass(frozen=True)
-class SymbolWord(Word):
-    """The address of a game function, resolved by name at link time."""
-
-    name: str
-
-
-@dataclass(frozen=True)
-class StringWord(Word):
-    """The address of a string constant in the generated module."""
-
-    index: int
-
-
-@dataclass(frozen=True)
-class ScriptWord(Word):
-    """The address of another script compiled from the same source."""
-
-    name: str
-
-
-@dataclass(frozen=True)
-class Value:
-    """An operand, plus what type it holds."""
-
-    word: Word
-    type: ValueType
-
-
-@dataclass(frozen=True)
-class CompiledScript:
-    """One script, ready to emit."""
-
-    name: str
-    words: list[Word]
-    slots_used: int
-
-
-@dataclass(frozen=True)
-class CompiledProgram:
-    """Everything compiled from one source file."""
-
-    scripts: list[CompiledScript]
-    strings: list[str]
-    called_symbols: list[str]
-    """Game functions this program references, for reporting and validation."""
-
-
-# --- comparison lowering ---------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Comparison:
-    """The `evt` opcodes implementing one comparison, per operand type."""
-
-    integer: evt.Opcode
-    floating: evt.Opcode
-    inverse: str
-    """Source spelling of the negated comparison."""
-
-    def opcode(self, value_type: ValueType) -> evt.Opcode:
-        return self.floating if value_type is ValueType.FLOAT else self.integer
-
-
-COMPARISONS = {
-    "==": Comparison(evt.Opcode.IF_EQUAL, evt.Opcode.IFF_EQUAL, "!="),
-    "!=": Comparison(evt.Opcode.IF_NOT_EQUAL, evt.Opcode.IFF_NOT_EQUAL, "=="),
-    "<": Comparison(evt.Opcode.IF_SMALL, evt.Opcode.IFF_SMALL, ">="),
-    ">": Comparison(evt.Opcode.IF_LARGE, evt.Opcode.IFF_LARGE, "<="),
-    "<=": Comparison(evt.Opcode.IF_SMALL_EQUAL, evt.Opcode.IFF_SMALL_EQUAL, ">"),
-    ">=": Comparison(evt.Opcode.IF_LARGE_EQUAL, evt.Opcode.IFF_LARGE_EQUAL, "<"),
-}
-
-
-@dataclass(frozen=True)
-class Arithmetic:
-    """The `evt` opcodes implementing one arithmetic operator."""
-
-    integer: evt.Opcode
-    floating: evt.Opcode | None
-
-    def opcode(self, value_type: ValueType, operator: str, at: Position) -> evt.Opcode:
-        if value_type is not ValueType.FLOAT:
-            return self.integer
-        if self.floating is None:
-            raise ScriptError(
-                f"'{operator}' has no float form in evt; convert to an integer first",
-                at,
-            )
-        return self.floating
-
-
-ARITHMETIC = {
-    "+": Arithmetic(evt.Opcode.ADD, evt.Opcode.ADDF),
-    "-": Arithmetic(evt.Opcode.SUB, evt.Opcode.SUBF),
-    "*": Arithmetic(evt.Opcode.MUL, evt.Opcode.MULF),
-    "/": Arithmetic(evt.Opcode.DIV, evt.Opcode.DIVF),
-    "%": Arithmetic(evt.Opcode.MOD, None),
-}
+# Re-exported: callers have always reached these through `compiler`, and the
+# split is about where they live, not about who may use them.
+from bleck.script.ir import (
+    ARITHMETIC,
+    COMPARISONS,
+    LOCAL_SLOTS,
+    CompiledProgram,
+    CompiledScript,
+    Literal,
+    ScriptWord,
+    StringWord,
+    SymbolWord,
+    Value,
+    ValueType,
+    Word,
+)
 
 _STORAGE_BY_NAME = {storage.name.lower(): storage for storage in evt.STORAGE_CLASSES}
 
