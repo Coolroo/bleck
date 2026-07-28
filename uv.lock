@@ -737,6 +737,9 @@ wheels = [
 name = "spm-modkit"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "pyyaml" },
+]
 
 [package.optional-dependencies]
 dev = [
@@ -759,6 +762,7 @@ requires-dist = [
     { name = "pyelf2rel", marker = "extra == 'dev'", specifier = ">=1.0.9" },
     { name = "pylint", marker = "extra == 'dev'", specifier = ">=3.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.6" },
 ]
 provides-extras = ["dev", "docs"]

@@ -1,0 +1,28 @@
+# bleck project config. Copy to `bleck.yml`.
+#
+# Unlike `.env`, this one is meant to be committed. `.env` says where `wit`
+# lives on your laptop; this says things every build of the project should
+# agree on, so the next person gets them too.
+#
+# Found by walking up from wherever you run `bleck`, so it works from anywhere
+# inside the checkout.
+
+version: 1
+
+# Named button combinations. A mod refers to one by name, and the actual mask
+# is written once, here.
+#
+# Two buttons minimum, so a combo cannot fire while you are just walking
+# around. For a deliberate single-button trigger:
+#     panic: {buttons: [home], allow_single: true}
+#
+# Valid names: a  b  1  2  plus  minus  home  up  down  left  right
+# Nunchuk `c` and `z` are not supported yet — they are not in the same field.
+combos:
+  start_map: [1, 2]
+  reload:    [minus, plus]
+
+# Values injected at compile time, so a map name lives in one place instead of
+# being repeated across mods.
+constants:
+  test_map: he1_01

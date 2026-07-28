@@ -3,13 +3,18 @@ name = "spm-modkit"
 version = "0.1.0"
 description = "Modding toolkit for Super Paper Mario (Wii)"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    # The one runtime dependency, spent on `bleck.yml` (see docs/plan-config.md).
+    # YAML is not a format worth hand-rolling: `.env`'s parser is safe because
+    # its whole grammar is `KEY=VALUE`, and YAML's is not that.
+    "pyyaml>=6.0",
+]
 
 [project.scripts]
 bleck = "bleck.cli.app:main"
 
-# bleck itself has no runtime dependencies. Keep it that way where practical —
-# it is a toolkit people install to use, not a library.
+# Keep the runtime dependency list as short as practical — this is a toolkit
+# people install to use, not a library. It was empty until `bleck.yml` landed.
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
