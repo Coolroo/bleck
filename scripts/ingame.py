@@ -76,6 +76,30 @@ SEQ_MAPCHANGE_WP = 0x805AE0A8
 #: `SeqMapChangeWork.mapName`, from `spm/seq_mapchange.h`.
 SEQ_MAPCHANGE_MAP_NAME = 0x20
 
+#: `npcdrv_wp` (eu0) -- a pointer to `NPCWork`, the live NPC list.
+#:
+#: ⚠️ This exists so "how many enemies spawned" stops being a question answered
+#: by looking at a screen. Every placement conclusion so far has rested on
+#: someone reporting what they saw, and D76 is what that costs when the thing
+#: doing the reporting is wrong.
+NPCDRV_WP = 0x805AE188
+
+#: `NPCWork`, from `spm/npcdrv.h`: `num` at 0x04, `entries` at 0x08.
+NPC_WORK_NUM = 0x04
+NPC_WORK_ENTRIES = 0x08
+
+#: `NPCEntry`: `setupFileIndex` at 0x04 (**1-based**, 0 when not from a setup
+#: file), `flag8` at 0x08 whose bit 0 is "active", `name` at 0x24.
+NPC_ENTRY_SIZE = 0x748
+NPC_SETUP_INDEX = 0x04
+NPC_FLAGS = 0x08
+NPC_NAME = 0x24
+NPC_ACTIVE = 0x1
+
+#: A map holds nowhere near this many; the cap only stops a garbage `num` from
+#: turning into a million reads.
+NPC_SCAN_LIMIT = 256
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -84,6 +108,7 @@ class Snapshot:
     sequence: int
     stage: int
     destination: str = ""
+    npcs: str = ""
     words: list[int] = field(default_factory=list)
     gw: dict[int, int] = field(default_factory=dict)
 
@@ -95,6 +120,8 @@ class Snapshot:
         parts = [f"seq={self.sequence_name}({self.sequence}) stage={self.stage}"]
         if self.destination:
             parts.append(f"map={self.destination}")
+        if self.npcs:
+            parts.append(self.npcs)
         if self.gw:
             parts.append(" ".join(f"gw[{n}]={v}" for n, v in sorted(self.gw.items())))
         if self.words:
@@ -207,7 +234,66 @@ class Session:
         # means the struct is not populated yet.
         return text if text and all(c.isalnum() or c == "_" for c in text) else ""
 
-    def read(self, probe: int, words: int, watch_gw: list[int]) -> ReadResult:
+    @staticmethod
+    def _npcs(dme) -> str:
+        """The live NPC list, as `slot=name` for anything from a setup file.
+
+        `setupFileIndex` is **1-based**, so a `setup` slot 2 shows here as 3.
+        It is printed as the slot the manifest names, minus one, because that
+        is the number someone is actually holding when they ask why an enemy
+        did not appear.
+        """
+        # ⚠️ Every branch says *something*. An empty string here would make "no
+        # enemies spawned" and "the list could not be read" identical, which is
+        # precisely the confusion that produced D76 -- and this field exists to
+        # answer a question of exactly that shape.
+        try:
+            work = dme.read_word(NPCDRV_WP)
+            if not 0x80000000 <= work < 0x94000000:
+                return f"npcs=? (npcdrv_wp is 0x{work:08X})"
+            count = _signed(dme.read_word(work + NPC_WORK_NUM))
+            entries = dme.read_word(work + NPC_WORK_ENTRIES)
+        except RuntimeError as exc:
+            return f"npcs=? ({exc})"
+        if not 0x80000000 <= entries < 0x94000000:
+            return f"npcs=? (entries is 0x{entries:08X})"
+        # ⚠️ `num` is the array's *capacity*, not how many are alive. It reads 80
+        # from the first frame of the logo onward, long before any map exists.
+        # Liveness is `flag8 & 1` per entry, so every slot has to be walked and
+        # filtered rather than trusting a count.
+        if not 0 < count <= NPC_SCAN_LIMIT:
+            return f"npcs=? (num is {count}, outside anything plausible)"
+        try:
+            block = dme.read_bytes(entries, count * NPC_ENTRY_SIZE)
+        except RuntimeError as exc:
+            return f"npcs=? ({exc})"
+
+        found: list[str] = []
+        for index in range(count):
+            at = index * NPC_ENTRY_SIZE
+            flags = int.from_bytes(block[at + NPC_FLAGS : at + NPC_FLAGS + 4], "big")
+            if not flags & NPC_ACTIVE:
+                continue
+            setup_index = int.from_bytes(
+                block[at + NPC_SETUP_INDEX : at + NPC_SETUP_INDEX + 4], "big"
+            )
+            raw = block[at + NPC_NAME : at + NPC_NAME + 32]
+            end = raw.find(b"\0")
+            name = raw[: end if end >= 0 else 32].decode("ascii", "replace")
+            # `setupFileIndex` is 1-based; the manifest's slots are 0-based, and
+            # the slot number is what someone is holding when they ask why an
+            # enemy did not appear.
+            where = f"slot{setup_index - 1}" if setup_index else "-"
+            found.append(f"{where}:{name}")
+        return f"npcs[{len(found)}] " + " ".join(found) if found else "npcs[0]"
+
+    def read(
+        self,
+        probe: int,
+        words: int,
+        watch_gw: list[int],
+        watch_npcs: bool = False,
+    ) -> ReadResult:
         import dolphin_memory_engine as dme
 
         if not dme.is_hooked():
@@ -224,6 +310,7 @@ class Session:
                     sequence=_signed(dme.read_word(SEQ_WORK)),
                     stage=_signed(dme.read_word(SEQ_WORK + 4)),
                     destination=self._destination(dme),
+                    npcs=self._npcs(dme) if watch_npcs else "",
                     words=[dme.read_word(probe + 4 * i) for i in range(words)],
                     gw={n: dme.read_word(EVT_WORK + 4 + 4 * n) for n in watch_gw},
                 )
@@ -345,6 +432,12 @@ def main() -> int:
     )
     parser.add_argument(
         "--no-build", action="store_true", help="boot the existing image as-is"
+    )
+    parser.add_argument(
+        "--npcs",
+        action="store_true",
+        help="list live NPCs and which setup slot each came from -- so "
+        "\"how many enemies spawned\" is measured rather than eyeballed",
     )
     parser.add_argument(
         "--map",
@@ -482,7 +575,7 @@ def main() -> int:
                     where = ", ".join(f"0x{a:08X}" for a in hits[:4]) or "not found"
                     say(f"[t+{elapsed:>3}s] {text_pattern}: {len(hits)} hit(s)  {where}")
 
-            result = session.read(args.probe, args.words, args.watch_gw)
+            result = session.read(args.probe, args.words, args.watch_gw, args.npcs)
             if not result.ok:
                 # Say why, and keep saying it if it persists. A run that prints
                 # nothing for three minutes teaches nothing; one that says

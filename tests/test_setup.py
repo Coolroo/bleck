@@ -16,6 +16,7 @@ import pytest
 
 from bleck.formats import setup
 from bleck.mods import manifest as mod_manifest
+from bleck.mods import registry
 from bleck.mods.build import edits as mod_edits
 from bleck.mods.manifest import ManifestError, PlacementEdit
 
@@ -303,3 +304,45 @@ class TestApplyingEdits:
         slots[0] = slots[0].with_template(99)
         rebuilt = setup.SetupFile(version=6, enemies=slots, items=[])
         assert len(rebuilt.to_bytes()) == len(raw)
+
+
+class TestOrphanedSlots:
+    """The game stops reading setup entries at the first empty one (D79).
+
+    A cleared slot in the middle silently discards everything past it. That was
+    open for a day as "an enemy did not appear", with two plausible and entirely
+    wrong explanations, because the file `bleck` wrote looked perfectly fine.
+    """
+
+    def _file(self, used):
+        """A parsed setup file whose listed slots are occupied, rest empty."""
+        return setup.parse(build(6, slots={index: entry(250) for index in used}))
+
+    def _check(self, used):
+        mod = registry.Mod(manifest=mod_manifest.Manifest(name="m"), root=Path("m"))
+        placement = mod_manifest.MapPlacements(map_name="he1_01", edits=[])
+        mod_edits._refuse_orphans(  # pylint: disable=protected-access
+            mod, placement, self._file(used)
+        )
+
+    def test_a_gap_before_a_used_slot_is_refused(self):
+        with pytest.raises(mod_edits.EditError) as caught:
+            self._check([0, 2])
+        message = str(caught.value)
+        assert "slot 1" in message and "slot(s) 2" in message
+        # And says what to do instead, not merely that it is wrong.
+        assert "Clear the last used slot" in message
+
+    def test_contiguous_slots_are_fine(self):
+        self._check([0, 1, 2])
+
+    def test_clearing_the_last_slot_is_fine(self):
+        """The supported way to remove an enemy: nothing is left stranded."""
+        self._check([0, 1])
+
+    def test_an_entirely_empty_file_is_fine(self):
+        self._check([])
+
+    def test_several_orphans_are_all_named(self):
+        with pytest.raises(mod_edits.EditError, match=r"slot\(s\) 2, 3"):
+            self._check([0, 2, 3])

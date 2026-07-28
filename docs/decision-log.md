@@ -4557,3 +4557,63 @@ which is why the split is the design rather than an implementation detail.
 🔶 `mod_prolog` from two mods with `code.sources` would collide at link time.
 Not hit yet -- neither merge mod ships native C -- and the plan's answer is to
 detect and refuse, naming both, rather than build a registry nobody needs yet.
+
+---
+
+## D79 — Clearing a setup slot orphans every slot after it (2026-07-27)
+
+✅ **The game stops reading `setup/*.dat` entries at the first empty one.** A
+cleared slot in the middle silently discards everything past it.
+
+Two builds, one variable — whether slot 1 is cleared:
+
+```
+slot-check  slots 0, 1(clear), 2   npcs[1] slot0
+slot-gap    slots 0,          2   npcs[3] slot0 slot1 slot2
+```
+
+Both declare the *same* enemy (template 250) in slots 0 and 2 at vanilla
+positions. With the gap, slot 2 never spawns.
+
+### This closes the question open since 2026-07-27 morning
+
+`mods/hard-lineland` declared slots 0, 1 (cleared) and 2, and only the first
+enemy appeared. Both recorded hypotheses were wrong:
+
+- ⛔ "template 144 is refused in this map" — the same template spawns fine in
+  slot 2 when nothing is cleared before it
+- ⛔ "slot 2's position is off the visible plane" — an enemy off the plane would
+  still be **in the NPC list**. This one is not in the list at all
+
+The user's correction at the time ("I walked the entire level") was right, and
+for a better reason than either of us had: the enemy was never spawned to find.
+
+### ⚠️ What `bleck` must do about it
+
+`code.setup` accepts `{"slot": n, "clear": true}` and produces a file the game
+reads as truncated. **That is a footgun `bleck` currently hands people.**
+Options, none implemented yet:
+
+1. **Compact on write** — move later entries down so there is no gap. Changes
+   slot numbers, which are what a manifest refers to; a mod saying "slot 2"
+   would silently mean something else.
+2. **Refuse a clear that leaves a gap**, naming the slots it would orphan.
+   Honest, and cheap.
+3. **Clear by making the entry harmless** rather than empty — leave `type` set
+   but move it out of play. Needs a value known to be inert, which we do not
+   have.
+
+🔶 Option 2 first. It is a build-time check with no format risk, and it can be
+relaxed once the file layout is better understood.
+
+### ✅ NPC census, and why it mattered
+
+`scripts/ingame.py --npcs` lists live NPCs and which setup slot each came from,
+via `npcdrv_wp` (`0x805AE188`) -> `NPCWork.entries`, filtering on `flag8 & 1`.
+
+⚠️ `NPCWork.num` is the array's **capacity**, not a live count -- it reads 80
+from the first logo frame onward. Liveness is per-entry.
+
+**This is what turned the question from unanswerable to settled.** Every
+placement conclusion before it rested on someone reporting what they saw, which
+cannot distinguish "did not spawn" from "spawned somewhere I did not look".

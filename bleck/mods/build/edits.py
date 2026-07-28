@@ -115,6 +115,7 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         item_version=data.item_version,
         has_item_section=data.has_item_section,
     )
+    _refuse_orphans(mod, placement, updated)
 
     # ⚠️ BOTH copies, and the reason is a correction. D53 concluded from a
     # memory search that the game reads the copy embedded in the map archive --
@@ -143,6 +144,44 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         applied=len(placement.edits),
         used_before=before,
         used_after=len(updated.used),
+    )
+
+
+def _refuse_orphans(mod: Mod, placement, updated: setup.SetupFile) -> None:
+    """Refuse an edit that leaves a gap with used slots after it.
+
+    ⚠️ **The game stops reading setup entries at the first empty one** (D79), so
+    a cleared slot in the middle silently discards everything past it. Measured:
+    two builds differing only in whether slot 1 was cleared spawned one enemy
+    and three.
+
+    That was open for a day as "an enemy did not appear", with two plausible and
+    entirely wrong explanations, because the file `bleck` wrote looked fine. It
+    is a footgun the toolkit hands people, so the toolkit refuses it.
+
+    Refusing rather than compacting on purpose: moving later entries down would
+    change the slot numbers a manifest refers to, so `{"slot": 2}` in one mod
+    would quietly mean a different enemy after another mod cleared something.
+    """
+    empty = [i for i, enemy in enumerate(updated.enemies) if enemy.is_empty]
+    if not empty:
+        return
+    first_gap = empty[0]
+    orphaned = [
+        index
+        for index, enemy in enumerate(updated.enemies)
+        if index > first_gap and not enemy.is_empty
+    ]
+    if not orphaned:
+        return
+
+    listed = ", ".join(str(index) for index in orphaned)
+    raise EditError(
+        f"{mod.name}: clearing slot {first_gap} of {placement.map_name} would "
+        f"orphan slot(s) {listed}.\n"
+        f"  The game stops reading setup entries at the first empty one, so "
+        f"anything after a gap never spawns -- silently.\n"
+        f"  Clear the last used slot instead, or move the later enemies down."
     )
 
 

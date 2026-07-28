@@ -408,62 +408,37 @@ In rough order of value:
 
 ---
 
-## ⚠️ Open right now: one enemy did not spawn (2026-07-27)
+## ✅ Closed: the enemy that did not spawn (D79)
 
-**This is the live question. It is waiting on a human to boot one disc.**
+**Answered, and both recorded hypotheses were wrong.**
 
-`mods/hard-lineland` declared two enemies in `he1_01` and **only the first
-appeared**. The user walked the entire level, so "it was further along" is not
-the answer — that was my first guess and it was wrong, stated without checking.
+`mods/hard-lineland` declared slots 0, 1 (cleared) and 2, and only the first
+enemy appeared. The cause is neither the template nor the position:
 
-| Slot | Declared | Result |
-|---|---|---|
-| 0 | Squig (template 148) at `(-675, 0, 0)` | ✅ appeared |
-| 1 | cleared | ✅ gone |
-| 2 | Sproing Oing (template 144) at `(-75, 0, -75)` | ⛔ **never appeared** |
+> **The game stops reading `setup/*.dat` entries at the first empty one.**
+> A cleared slot in the middle silently discards everything after it.
 
-### ⛔ Already ruled out — do not re-check these
-
-- **`canSpawnFunction`** — null on *both* templates. Only 2 of 435 templates
-  have one at all.
-- **Template flags** — identical, `0x18` for both.
-- **A missing model** — `e_tekti` is present in `files/a/`, and enemy models are
-  global assets, not per-map. The map archive holds only geometry, textures,
-  backgrounds and the setup file.
-
-Templates 144 and 148 are indistinguishable in every field currently readable.
-
-### The two surviving hypotheses
-
-1. 🔶 **Template 144 cannot spawn in this map.** Something map-scoped decides
-   which tribes may appear, and it is not the setup file. `e_octar` (Squig,
-   tribe 126) worked in a map whose vanilla enemies are tribes 0 and 125, so
-   whatever the rule is, it is not "only the tribes vanilla used".
-2. 🔶 **Slot 2's position is the problem.** `z = -75` where slot 0 sits at
-   `z = 0`. SPM is a 2D game with a 3D flip axis, so an enemy off the visible
-   plane is entirely plausible — **and vanilla's own enemy is at that exact
-   position**, which was never verified as visible.
-
-### The test that separates them — already built
-
-```bash
-uv run bleck launch --batch --fast work/out/slot-check.wbfs
+```
+slot-check  slots 0, 1(clear), 2   npcs[1] slot0
+slot-gap    slots 0,          2    npcs[3] slot0 slot1 slot2
 ```
 
-`mods/slot-check` puts the **same** enemy — Squiglet, which vanilla already uses
-in `he1_01`, so it certainly works there — in **both** slots at their **vanilla
-positions**, with slot 1 cleared so the count is unambiguous.
+Same enemy, same positions, one variable. ⛔ "Template 144 is refused here" and
+⛔ "the position is off the visible plane" are both dead — an off-plane enemy
+would still be *in the NPC list*, and this one never spawned at all.
 
-| Seen | Conclusion |
-|---|---|
-| **Two Squiglets** | positions are fine → **template 144 specifically** is refused here |
-| **One Squiglet** | **slot 2's position is off the visible plane** — and vanilla has always had an enemy there you cannot see without flipping |
+✅ `bleck` now refuses an edit that would leave a gap, naming the slots it would
+orphan. Refusing rather than compacting, because moving entries down would
+change the slot numbers a manifest refers to.
 
-Either answer is worth having. The second would be a fact about the game, not a
-bug in the toolkit.
+### Why it took a day, and what fixed it
 
-⚠️ **Do not explain this away without the test.** That is exactly how the last
-two days produced two wrong conclusions (D53, and my "it was further along").
+Every placement conclusion before this rested on someone saying what they saw,
+which cannot tell "did not spawn" from "spawned somewhere I did not look".
+
+`scripts/ingame.py --npcs` now lists live NPCs and the setup slot each came
+from — `npcdrv_wp` (`0x805AE188`) to `NPCWork.entries`, filtered on `flag8 & 1`.
+⚠️ `NPCWork.num` is the array's **capacity** (80), not a live count.
 
 ---
 
