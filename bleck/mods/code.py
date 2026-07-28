@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from bleck.backends import symbols as symbol_tables
 from bleck.backends import toolchain
 from bleck.common import env
 from bleck.common.errors import BleckError
@@ -153,6 +154,11 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     if spec is None:
         raise CodeError(f"{mod.name} declares no code to build")
 
+    # The same table the link will use, so "that will not link" is said now
+    # rather than after a compile and a toolchain run (D61).
+    table = symbol_tables.best_available(
+        toolchain.symbols_file(spec.target), env.path(env.DECOMP_DIR), spec.target
+    )
     sources = collect_sources(mod, spec)
     script_path = mod.root / spec.script if spec.has_script else None
     banner = banner_for(mod)
@@ -170,6 +176,7 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
                 origin=spec.script,
                 map_hooks=map_hooks_for(mod),
                 banner=banner,
+                symbol_table=table,
             )
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(str(script_path))}") from exc

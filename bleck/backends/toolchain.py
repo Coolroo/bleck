@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck import platforms
+from bleck.backends import symbols
 from bleck.backends.disc import DiscError, find_tool
 from bleck.common import env
 
@@ -165,6 +166,34 @@ class BuildRequest:
     toolchain: Toolchain | None = None
 
 
+def link_symbols(target: str, workdir: Path) -> Path:
+    """The symbol list the link should actually use.
+
+    `elf2rel` reads a *file*, so knowing an address is not enough — a merged
+    table has to exist on disk. When `BLECK_DECOMP` points at a clone, the lst
+    and the decomp's table are merged into the work directory and that is used
+    instead.
+
+    ⚠️ This is what makes the extra symbols real rather than advisory: **94 of
+    the game's 443 documented builtins are absent from the lst and present in
+    the decomp** (D61). Without this they pass the compiler's check and then
+    fail to link, which is worse than failing early.
+
+    Falls back to the plain lst when no clone is configured, so nothing changes
+    for anyone who has not set it.
+    """
+    lst = symbols_file(target)
+    found = symbols.decomp_path(target, env.path(env.DECOMP_DIR))
+    if found is None:
+        return lst
+
+    merged = symbols.merge(symbols.read(lst), symbols.read(found))
+    out = workdir / f"spm.{target}.merged.lst"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    symbols.write_lst(merged, out, note=f"{lst.name} + {found}")
+    return out
+
+
 def build_rel(request: BuildRequest) -> BuildResult:
     """Compile C into a REL module.
 
@@ -173,7 +202,7 @@ def build_rel(request: BuildRequest) -> BuildResult:
     compiler's line numbers is to read the file it was complaining about.
     """
     chain = request.toolchain or detect()
-    lst = symbols_file(request.target)
+    lst = link_symbols(request.target, request.workdir)
 
     workdir = request.workdir
     workdir.mkdir(parents=True, exist_ok=True)

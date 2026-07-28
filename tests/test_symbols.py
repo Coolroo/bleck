@@ -12,6 +12,8 @@ from pathlib import Path
 import pytest
 
 from bleck.backends import symbols
+from bleck.script import compile_source
+from bleck.script.errors import ScriptError
 
 DECOMP = """\
 memcpy = .init:0x80004000; // type:function size:0x50 scope:global
@@ -124,3 +126,66 @@ class TestExport:
     def test_a_missing_table_says_so(self, tmp_path):
         with pytest.raises(symbols.SymbolError, match="no symbol table"):
             symbols.read(tmp_path / "absent.lst")
+
+
+class TestLinkability:
+    """Catching "this will not link" at compile time instead of at link time.
+
+    A third of the documented builtins are absent from the lst (D61). They pass
+    the catalog check -- the header declares them -- and then die at `elf2rel`
+    after a compile and a toolchain run.
+    """
+
+    def test_a_missing_name_is_rejected_with_the_fix_named(self):
+
+        table = symbols.parse_lst("80000000:evt_pouch_add_coins\n", Path("tiny.lst"))
+        with pytest.raises(ScriptError) as caught:
+            compile_source(
+                "script main {\n evt_cam_get_at(0, 0, 0)\n}",
+                symbol_table=table,
+            )
+        message = str(caught.value)
+        assert "evt_cam_get_at" in message
+        assert "fail to link" in message
+        # An error that does not say what to do next is only half an error.
+        assert "BLECK_DECOMP" in message
+
+    def test_a_present_name_compiles(self):
+        table = symbols.parse_lst("80000000:evt_pouch_add_coins\n", Path("tiny.lst"))
+        compiled = compile_source(
+            "script main {\n evt_pouch_add_coins(1)\n}", symbol_table=table
+        )
+        assert compiled.program.called_symbols == ["evt_pouch_add_coins"]
+
+    def test_without_a_table_nothing_is_checked(self):
+        """The check is optional so `bleck script check` works with no build
+        target configured, and so nothing regresses for existing setups."""
+        compile_source("script main {\n evt_cam_get_at(0, 0, 0)\n}")
+
+
+class TestBestAvailable:
+    def test_it_degrades_to_the_lst_when_no_clone_is_set(self, tmp_path):
+        lst = tmp_path / "spm.eu0.lst"
+        lst.write_text("80000000:only_in_lst\n", encoding="utf-8")
+        table = symbols.best_available(lst, None, "eu0")
+        assert table.find("only_in_lst") is not None
+
+    def test_a_clone_without_this_version_is_ignored(self, tmp_path):
+        lst = tmp_path / "spm.eu0.lst"
+        lst.write_text("80000000:only_in_lst\n", encoding="utf-8")
+        empty_clone = tmp_path / "clone"
+        empty_clone.mkdir()
+        assert symbols.decomp_path("eu0", empty_clone) is None
+        assert symbols.best_available(lst, empty_clone, "eu0").find("only_in_lst")
+
+    def test_a_clone_is_merged_in(self, tmp_path):
+        lst = tmp_path / "spm.eu0.lst"
+        lst.write_text("80000000:only_in_lst\n", encoding="utf-8")
+        clone = tmp_path / "clone" / "config" / "EU0"
+        clone.mkdir(parents=True)
+        (clone / "symbols.txt").write_text(
+            "extra = .text:0x80001234; // type:function size:0x10\n", encoding="utf-8"
+        )
+        table = symbols.best_available(lst, tmp_path / "clone", "eu0")
+        assert table.find("extra").is_function
+        assert table.find("only_in_lst") is not None

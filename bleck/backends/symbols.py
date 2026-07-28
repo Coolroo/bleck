@@ -230,6 +230,30 @@ def write_lst(table: SymbolTable, path: Path, note: str = "") -> int:
     return len(table.symbols)
 
 
+#: Inside a spm-decomp clone. Region directories are upper case there.
+DECOMP_SYMBOLS = "config/{version}/symbols.txt"
+
+
+def decomp_path(version: str, root: Path | None) -> Path | None:
+    """Where a spm-decomp clone keeps this version's table, if configured."""
+    if root is None:
+        return None
+    path = root / DECOMP_SYMBOLS.format(version=version.upper())
+    return path if path.is_file() else None
+
+
+def best_available(lst_path: Path, decomp_root: Path | None, version: str) -> SymbolTable:
+    """The richest table that can be assembled, degrading to the lst alone.
+
+    Used wherever a name has to be resolved, so configuring `BLECK_DECOMP` makes
+    ~94 more of the game's documented builtins linkable without changing
+    anything else.
+    """
+    lst = read(lst_path)
+    found = decomp_path(version, decomp_root)
+    return merge(lst, read(found)) if found else lst
+
+
 def _tag(text: str, key: str) -> str:
     match = re.search(rf"\b{key}:(\S+)", text)
     return match[1] if match else ""

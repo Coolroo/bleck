@@ -3480,3 +3480,65 @@ including `mod build`, which is untouched. Exporting a merged lst is opt-in.
 
 ✅ `hook-demo` builds identically against the merged table and the original, so
 the merge does not disturb what already worked.
+
+---
+
+## D61 — A third of the documented builtins do not link (2026-07-27)
+
+⛔ **148 of the catalog's 443 builtins have no address in `spm.eu0.lst`.** A
+script calling one passes every check `bleck` had, compiles, runs a toolchain,
+and *then* fails with `elf2rel`'s "Missing 1 required symbol(s)".
+
+Found by cross-referencing the two things that were never compared: the builtin
+catalog (from `spm-headers`' `EVT_DECLARE_USER_FUNC` declarations) and the
+symbol list (from the same project's `linker/`). Both are upstream, both are
+correct about what they describe, and **nothing had ever checked that a declared
+function also has an address**.
+
+| Where the 443 live | Count | Linkable |
+|---|---|---|
+| `spm.eu0.lst` | 295 | ✅ today |
+| `spm-decomp`'s DOL table | **94** | ✅ with `BLECK_DECOMP` set |
+| Only `relF/symbols.txt` | 21 | ⛔ REL-relative addresses |
+| Nowhere at all | 33 | ⛔ declared, address unknown |
+
+### Two fixes, and the second is the one that matters
+
+**Say it at compile time.** The compiler now takes the symbol table it will
+actually link against, and rejects a call it cannot resolve — with the source
+line, and naming the fix:
+
+```
+main.evt:2:5: evt_cam_get_at is declared in the headers but has no address in
+spm.eu0.lst, so the module would fail to link.
+  Some builtins live in the game's own REL, which cannot be linked against;
+  others are only in spm-decomp's table.
+  Try pointing BLECK_DECOMP at a spm-decomp clone -- that covers 94 of them.
+```
+
+⚠️ **Knowing the address is not enough.** `elf2rel` reads a *file*, so the first
+attempt produced a compiler that happily accepted `evt_cam_get_at` and a link
+that still failed. `toolchain.link_symbols` now writes a merged lst into the
+work directory and hands *that* to `elf2rel`. Without it the check would have
+been advisory — worse than useless, since it would have moved the failure later
+rather than removing it.
+
+✅ Verified both ways: `evt_cam_get_at` fails to compile without a clone and
+builds a 1,644-byte module with one. `coin-tick`, `hook-demo` and `map-hook`
+produce byte-identical modules with and without, so the merge does not disturb
+what already worked.
+
+### 🔶 The 54 that are still unreachable
+
+21 are in `relF/symbols.txt` at REL-relative addresses — they live in the game's
+own REL, and linking a mod's REL against another REL's internals is a different
+problem entirely, not a missing-symbol one.
+
+33 appear nowhere. Their names (`evt_an2_08_draw_face`, `evt_bos_01_*`) suggest
+per-map code, consistent with the REL theory, but no table names them at all.
+
+### The pattern
+
+**Two upstream sources, each correct, contradicting each other in a way neither
+could notice.** Same shape as D60's two wrong lst addresses, found the same way:
+by comparing things that had only ever been used separately.

@@ -661,10 +661,14 @@ class _ProgramCompiler:
         program: syntax.Program,
         source: str,
         catalog: builtin_catalog.Catalog | None = None,
+        symbol_table=None,
     ) -> None:
         self.program = program
         self.source = source
         self.catalog = catalog if catalog is not None else builtin_catalog.load()
+        #: Optional. When present, a call to a name it does not know is rejected
+        #: here rather than at link time -- see `_check_linkable`.
+        self.symbol_table = symbol_table
         self.strings: list[str] = []
         self.symbols: list[str] = []
         self.names = {script.name for script in program.scripts}
@@ -713,6 +717,8 @@ class _ProgramCompiler:
                 self.source,
             )
 
+        self._check_linkable(call)
+
         if known.arity is not None and len(call.arguments) != known.arity:
             # Only show the signature when there is one; the fallback would
             # just restate the sentence above it.
@@ -723,6 +729,33 @@ class _ProgramCompiler:
                 call.position,
                 self.source,
             )
+
+    def _check_linkable(self, call: syntax.Call) -> None:
+        """Reject a call that will not survive the link.
+
+        ⚠️ **A third of the catalog is not linkable against the lst alone.** Of
+        443 documented builtins, 148 are absent from `spm.eu0.lst`: 94 are in
+        `spm-decomp`'s table, 21 live in the game's own REL at REL-relative
+        addresses, and 33 have no known address anywhere (D61).
+
+        All of them pass the catalog check above -- the header declares them --
+        and then die at `elf2rel` with "Missing 1 required symbol(s)", after a
+        compile and a toolchain run. Saying it here costs nothing and names the
+        fix.
+        """
+        table = self.symbol_table
+        if table is None or table.find(call.callee) is not None:
+            return
+        raise ScriptError(
+            f"{call.callee} is declared in the headers but has no address in "
+            f"{table.source.name}, so the module would fail to link.\n"
+            f"  Some builtins live in the game's own REL, which cannot be "
+            f"linked against; others are only in spm-decomp's table.\n"
+            f"  Try pointing BLECK_DECOMP at a spm-decomp clone -- that covers "
+            f"94 of them.",
+            call.position,
+            self.source,
+        )
 
     def compile(self) -> CompiledProgram:
         scripts = [
@@ -758,6 +791,7 @@ def compile_program(
     program: syntax.Program,
     source: str = "",
     catalog: builtin_catalog.Catalog | None = None,
+    symbol_table=None,
 ) -> CompiledProgram:
     """Compile a parsed program to `evt` bytecode."""
-    return _ProgramCompiler(program, source, catalog).compile()
+    return _ProgramCompiler(program, source, catalog, symbol_table).compile()
