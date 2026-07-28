@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D64)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D65)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -150,6 +150,7 @@ trying it.
 | ✅ **The game reads the *embedded* setup copy** | control run: swapping markers left both addresses unchanged (D53) |
 | ✅ **Any map is reachable unattended** | `evt_seq_mapchange` from a map hook (D52) |
 | ✅ **A disc can start itself in any map** | `--map` / `code.boot`, confirmed in game (D64) |
+| ⛔ **`SEQ_LOGO` cannot be cut short** | black screen after the controller warning (D65) |
 | ⛔ **Emulation speed cannot be restored mid-run** | `--fast` uncaps the whole session (D64) |
 | 🔶 Only `eu0` has been booted | other versions compile, untested |
 
@@ -481,12 +482,16 @@ Works on a mod with **no code block at all** — a texture swap gets a 1.6 KB
 module generated for it — because those are exactly the mods worth looking at
 inside a particular level.
 
-⚠️ **`--map` and `--fast` solve different halves and you cannot yet have both.**
-`--map` gets you to the right *place*; `--fast` gets you there *soon* but uncaps
-the whole session, gameplay included, with no way to restore the cap part-way
-through. Skipping the logo sequence is the fix and is **not done** — D64 has the
-symbols (`seqSetSeq` at `0x8017c074`) and a 🔶 hypothesis that must be checked
-against `seqdrv.h` before anyone writes the call. It is the same shape as D51.
+⚠️ **`--map` and `--fast` solve different halves and you cannot have both.**
+`--map` gets you to the right *place* — but on the first frame of *gameplay*, so
+the ~45 seconds of logos are still paid. `--fast` skips them by uncapping the
+emulator, which leaves the whole session unplayably fast.
+
+⛔ **Skipping the logo sequence was tried and does not work** (D65).
+`seqSetSeq(SEQ_MAPCHANGE, map, NULL)` from the logo hook hangs the game on a
+black screen, even though the signature was verified against `seqdrv.h` and
+`SEQ_LOGO` provably does nothing but show two screens and check the NAND. Read
+D65 before retrying; a smaller variant is noted there.
 
 ✅ **The banner is merged** and confirmed on a real mod.
 
@@ -500,12 +505,12 @@ lst, and 94 of those are recoverable with `BLECK_DECOMP` set (D60, D61).
    placement editing is blocked on knowing which hypothesis is right, because
    the answer decides whether `bleck` should be validating templates against
    something map-scoped.
-2. 🔶 **Skip the logo sequence**, so `--map` lands you in a level at normal
-   speed and `--fast` stops being needed by anyone holding a controller. D64
-   has the addresses and the untested hypothesis. ⚠️ Verify `seqSetSeq`'s
-   signature against `spm-headers/include/spm/seqdrv.h` first — the current
-   guess is inferred from `seqWork`'s layout, which is exactly the sort of
-   reasoning that produced D51 and D53.
+2. 🔶 **Make the boot faster some other way.** ⛔ The direct route is ruled
+   out (D65). What is left: swap the destination of the mapchange the logo
+   *itself* starts, saving one map load rather than the logos; or find what
+   `SEQ_LOGO` leaves half-done and finish it before switching. The second needs
+   a probe that says *why* it hangs — the current symptom cannot distinguish
+   the candidates.
 3. 🔶 **Make a save state.** Driving into a map from the attract demo leaves
    **Mario invisible** — no save, no profile, player never initialised (D63).
    Fine for reading placement; useless for anything touching player state.

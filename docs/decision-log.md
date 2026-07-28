@@ -3778,3 +3778,77 @@ Seen on **both** a `--map` disc and a control build of the same mod without one,
 at t+30s and t+39s. So it is **not** caused by the boot map. Cause unknown;
 recorded so the next person does not attribute it to whatever they just changed.
 The control run is the only reason this is known, and it cost one boot.
+
+---
+
+## D65 — ⛔ Cutting `SEQ_LOGO` short does not work (2026-07-27)
+
+⛔ **Calling `seqSetSeq(SEQ_MAPCHANGE, map, NULL)` from the logo sequence hangs
+the game on a black screen.** Observed directly: the controller warning screen
+displays, then black, and it never recovers.
+
+### What was tried, and why it looked safe
+
+D64 left "skip the logos" as the obvious next step, because `--map` gets you to
+the right *place* but still ~45 seconds late. The reasoning was better-supported
+than most:
+
+- ✅ **`seqSetSeq`'s signature was verified, not inferred.**
+  `spm-headers/include/spm/seqdrv.h` declares
+  `void seqSetSeq(s32 seqNum, const char *p0, const char *p1)`, with `p1` the
+  door name. D64's guess from `seqWork`'s layout was right.
+- ✅ **`SEQ_LOGO` does almost nothing.** `spm/seq_logo.h` names every field of
+  `SeqLogoWork`: a health-and-safety TPL, a "hold sideways" TPL, and a NAND
+  check evt entry. Nothing else. So skipping it looked like it could not leave
+  a subsystem unbuilt.
+- ✅ The sequence hook already wraps `seq_data[SEQ_LOGO].main`, and the call was
+  placed **after** the real main so `seq_logoMain`'s own sequence switch could
+  not overwrite it.
+
+It still hangs. **A verified signature and a well-understood sequence were not
+enough**, which is the general lesson: knowing what a function *is* does not
+tell you what the engine requires to have happened before you call it.
+
+### What is not yet known
+
+🔶 Whether the hang is the map load starting too early, or `SEQ_LOGO` being left
+half-finished, or the NAND check evt being interrupted mid-flight. The symptom —
+a black screen, Dolphin still running, memory never becoming readable — cannot
+distinguish them. Anyone retrying needs a probe that says *which*, not another
+attempt.
+
+🔶 A smaller variant is untried and much less likely to hang: let the logo run
+to completion, then intercept the `SEQ_MAPCHANGE` it starts and swap the
+destination from `aa4_01` to the target. That skips one map load rather than the
+logos, so it saves seconds rather than tens of seconds.
+
+### Reverted
+
+`code.boot` keeps the D64 mechanism: an evt script started on the first frame of
+gameplay, which waits 120 frames and calls `evt_seq_mapchange`. It is slower and
+it works, which beats the reverse.
+
+### ⚠️ The rig could not have caught this
+
+`scripts/ingame.py` reported **nothing at all** — no snapshot lines, no "dolphin
+exited". A hung game leaves Dolphin running with memory that never becomes
+mappable, so `dolphin-memory-engine` simply never hooks, and the run is
+indistinguishable from one where the tool failed to attach. A human looking at
+the screen answered it in seconds.
+
+That is worth recording against the standing "test in-game by reading memory"
+rule: **the rig cannot see a game that never starts.** Silence from it is a
+result — "hung before the first readable frame" — not an absence of one.
+
+### Also found while doing this
+
+- ✅ **`spm-headers` is now cloned at `work/upstream/spm-headers`** (gitignored)
+  rather than being fetched a page at a time. `include/spm/` has a header per
+  subsystem with offsets and `SIZE_ASSERT`s.
+- 🔶 **`SeqWork` has an `afterFunc` field at `0x20`**, documented as "ran after
+  every call to the main SeqFunc if not null". That is a hook point the game
+  provides *itself*, and it may be a cleaner place for the banner and map
+  watcher than patching `seq_data[].main`. Untested.
+- ✅ `SeqWork` is `0x24` bytes, not the 0x10 the generated C assumes. The
+  generated struct only reads `seq`, `stage` and `p0`, so it is correct as far
+  as it goes, but it is not the whole struct.
