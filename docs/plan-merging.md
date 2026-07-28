@@ -2,6 +2,14 @@
 
 Status: **proposed**, not built. Written 2026-07-27.
 
+⬅️ **This is the next piece of work.** `plan-config.md` is done (D77), so
+this is what follows. Step 1 -- parameterising the emitter prefix -- is
+landable on its own and invisible to existing behaviour.
+
+One thing changed since this was written: `emit.MAX_COMBOS` already refuses
+more than 32 button combinations with a clear error. **Map hooks still do
+not**, and that is the latent `1 << i` overflow described below.
+
 Today `bleck` refuses a chain containing more than one code mod
 (`bleck/mods/code.py:131`). This plan removes that limit.
 

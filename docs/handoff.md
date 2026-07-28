@@ -467,74 +467,148 @@ two days produced two wrong conclusions (D53, and my "it was further along").
 
 ---
 
-## Where things stand, 2026-07-27 (end of session)
+## Where things stand — end of 2026-07-27
 
-✅ **Placement editing works end to end.** A mod declares enemies in `mod.json`
-and they appear in game — confirmed by eye. See D58, D62.
+Two features landed and are confirmed **in game, by eye**, not by inference:
 
-✅ **D13 is finally settled** (D62): the game reads the **standalone**
-`files/setup/<map>.dat`. D53 concluded the opposite and was wrong; its
-measurement was sound, the inference from "in MEM1" to "in use" was not.
+✅ **Boot maps.** `bleck mod build <mod> --map he1_01`, or `"boot": "he1_01"`
+under `code` in a manifest. The disc drives itself to any of the 383 maps
+instead of playing the attract demo. Works on a mod with **no code block at
+all** — a texture swap gets a small module generated for it (D64).
 
-✅ **A test run costs ~6 seconds, not ~50** (D63). `--fast` on `bleck launch`,
-default in `scripts/ingame.py`. Fifteen runs were spent waiting for logos before
-anyone questioned the frame limiter.
+✅ **Button combinations.** `bleck.yml` names a combination, `mod.json` binds a
+script to it, and the compiler injects the mask. Playing the disc by hand:
+Lineland on its own, then **1+2** warps to Flipside (D77).
 
-✅ **A disc can start itself in any map** (D64). `bleck mod build <mod> --map
-he1_01`, or `"code": {"boot": "he1_01"}` in `mod.json`. Confirmed in game.
-Works on a mod with **no code block at all** — a texture swap gets a 1.6 KB
-module generated for it — because those are exactly the mods worth looking at
-inside a particular level.
+```yaml
+# bleck.yml — committed, unlike .env
+combos:
+  start_map: [1, 2]
+```
+```json
+"code": { "boot": "he1_01", "combos": { "start_map": "warp_home" } }
+```
 
-⚠️ **`--map` and `--fast` solve different halves and you cannot have both.**
-`--map` gets you to the right *place* — but on the first frame of *gameplay*, so
-the ~45 seconds of logos are still paid. `--fast` skips them by uncapping the
-emulator, which leaves the whole session unplayably fast.
+Both work **together**, which matters because four decision-log entries claimed
+otherwise. See the retraction below.
 
-⛔ **Skipping the logo sequence was tried and does not work** (D65).
-`seqSetSeq(SEQ_MAPCHANGE, map, NULL)` from the logo hook hangs the game on a
-black screen, even though the signature was verified against `seqdrv.h` and
-`SEQ_LOGO` provably does nothing but show two screens and check the NAND. Read
-D65 before retrying; a smaller variant is noted there.
+### What the button work established
 
-✅ **The banner is merged** and confirmed on a real mod.
+⚠️ **D48 does not say input is unavailable, and reading it that way cost weeks.**
+It measured `SendKeys`/`PostMessage`, which post to a message queue Dolphin never
+reads. It says nothing about the game reading its **own** controller, which it
+does every frame and so can a mod (D66).
 
-✅ **Symbols**: `bleck symbols` reads the decomp table, and the compiler now
-rejects a call that would not link — 148 of 443 builtins had no address in the
-lst, and 94 of those are recoverable with `BLECK_DECOMP` set (D60, D61).
+| Fact | Where |
+|---|---|
+| `wpadGetWork()` `0x8023697c`, `statuses` `+0x6C`, `buttonsHeld` `+0x00` | D67 |
+| `a=0x0800 b=0x0400 1=0x0200 2=0x0100`, one press each | D68 |
+| Bit 31 is **not** a button — test `(held & mask) == mask`, never equality | D67 |
+| `plus`, `minus`, `home`, d-pad still 🔶 unverified | D68 |
 
-### Next, in order
+`mods/button-probe` + `scripts/decode_buttons.py` settle the rest in one run.
 
-1. **Boot `slot-check.wbfs`** and close the question above. Everything else in
-   placement editing is blocked on knowing which hypothesis is right, because
-   the answer decides whether `bleck` should be validating templates against
-   something map-scoped.
-2. 🔶 **Make the boot faster some other way.** ⛔ The direct route is ruled
-   out (D65). What is left: swap the destination of the mapchange the logo
-   *itself* starts, saving one map load rather than the logos; or find what
-   `SEQ_LOGO` leaves half-done and finish it before switching. The second needs
-   a probe that says *why* it hangs — the current symptom cannot distinguish
-   the candidates.
-3. 🔶 **Make a save state.** Driving into a map from the attract demo leaves
-   **Mario invisible** — no save, no profile, player never initialised (D63).
-   Fine for reading placement; useless for anything touching player state.
-   `--state` is implemented on both `bleck launch` and `ingame.py`; it needs a
-   human to play far enough to have a profile and press F1 once. There is no SPM
-   save in this Dolphin's NAND at all.
-4. **`bleck setup edit`** — writing placements from the CLI rather than
-   hand-editing JSON, which is also the precursor to a GUI doing it
-   ([`vision.md`](./vision.md)).
-5. **The remaining roadmap** — `SETI`, more opcodes, `peek`/`poke` for doors and
-   NPCs, multiple code mods. See [`roadmap.md`](./roadmap.md).
+---
 
-### Still unresolved, carried forward
+## ⚠️ Read this before trusting the rig
 
-- 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
-  REL-relative addresses, 33 have no known address anywhere.
-- 🟡 **`bleck` is still unlicensed.** The only thing between this and being
-  shareable; `README.md` credits upstream correctly but the project itself is
-  all-rights-reserved by default.
-- ⚠️ **Close other Dolphin instances before an unattended run.**
-  `dolphin-memory-engine` attaches to *a* Dolphin process, not necessarily the
-  one the script launched. One diagnostic run read a completely different mod's
-  memory and produced a confidently wrong reading.
+**Six runs and four decision-log entries went into a bug that did not exist**
+(D70, D73, D74 — all retracted by D76). Every one was internally consistent,
+had a control, and bisected cleanly, because the instrument was wrong in the
+same direction every time.
+
+The cause: the rig read the current map from `seqWork.p0`, which only means
+anything *while* a map change is running. Between changes it holds stale data,
+so **a run that changed maps looked identical to one that did not**.
+
+Fixed — it now reads `seq_mapchange_wp->mapName` (`0x805AE0A8`, `+0x20`), which
+survives the transition.
+
+### The rules that came out of it
+
+1. ⚠️ **Before trusting a negative result, show the instrument can produce a
+   positive one.** No run ever asked "can this rig see a map change I already
+   know happened?" The attract demo moves `aa4_01 -> ls4_12` unaided; that was
+   always available as a positive control.
+2. ⚠️ **A control does not help when it is measured with the same broken ruler.**
+3. ⚠️ **Prefer the two-line test to the new tool.** D71 built a whole new script
+   to read a bound address, correctly, to answer a question that did not matter.
+   Adding one `gw` write would have been more discriminating and took minutes.
+4. ⚠️ **"Works by eye, invisible to the rig" is a finding about the rig.** That
+   discrepancy was visible from D64 and went unremarked for a day.
+
+### What the rig gained
+
+| Flag / behaviour | Why |
+|---|---|
+| refuses to start if another Dolphin is open | an idle instance makes every read fail and looks like a broken mod |
+| reports *why* a read failed | silence used to mean four different things |
+| `map=` from `seq_mapchange_wp` | see above |
+| `--press a b 1+2` | presses buttons; `+` holds them together |
+| `--press-at`, `--press-gap` | press after a boot map lands, and space presses so each is observable |
+
+⚠️ `scripts/keys.py` synthesises input and **must stay out of the `bleck`
+package** — `tests/test_boundaries.py` enforces it. It is reasonable for a
+harness driving an emulator on its own operator's machine, and not something a
+modding toolkit should ship to strangers.
+
+⚠️ Attended only: Windows refuses `SetForegroundWindow` to a background process
+and `AttachThreadInput` does not get around it. The script waits for a click
+rather than zeroing `SPI_SETFOREGROUNDLOCKTIMEOUT`, which would disable focus
+protection system-wide and outlive the process.
+
+---
+
+## Next: compiling several mods into one REL
+
+**This is the planned next piece.** Full design in
+[`plan-merging.md`](./plan-merging.md).
+
+The insight: the Gecko loader opens exactly one `/mod/mod.rel`, but **it does
+not care how many mods went into it**. Merging at *compile* time produces one
+REL, so `chainrel`'s unsolved runtime chaining (D39) is not on this path at all.
+D39 calls this the clearest differentiator available to `bleck`.
+
+### Step 1, and it is landable alone
+
+**Parameterise the emitter's identifier prefix.** `_PREFIX = "bleck_"` is a
+module constant and every generated identifier derives from it; two mods each
+declaring `script main` would collide. Make it per-mod — `bleck_<slug>_` — with
+single-mod output **byte-identical**, which the existing tests already assert.
+
+⚠️ Some names are per-**disc**, not per-mod, and must not be prefixed:
+`_prolog`, `_epilog`, `_unresolved`, `mod_prolog`, and the sequence-hook
+machinery (`bleck_after_seq`, `bleck_seq0..5`, `bleck_hooks`,
+`bleck_real_main`). Only per-program names get namespaced: `bleck_script_*`,
+`bleck_string_*`, `bleck_map_name_*`, and the map/banner/boot/combo tables.
+
+### Step 2 — a real latent bug to fix on the way
+
+`bleck_map_pending` is a `u32` bitmask, one bit per map hook, so the 33rd hook
+shifts past the end. Unreachable with one mod, **plausible once mods merge**,
+and silent today. `bleck_combo_down` has the same shape and *is* already
+guarded — `emit.MAX_COMBOS` refuses more than 32 with a clear error. Map hooks
+need the same treatment.
+
+### Then
+
+- union banner, boot map and map hooks across mods; start every mod's `main`
+- `mod_prolog`: two mods defining it collide. **Detect and refuse, naming both**
+  — a good error beats a clever mechanism until someone needs several
+- ⚠️ verify in game with two real mods. Unit tests cannot show two mods' scripts
+  both running; D51 installed perfectly by every mechanical check and froze
+
+---
+
+## Also open
+
+- 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each
+- 🔶 **The unfired-enemy question** (`mods/slot-check`) — untouched today, and
+  worth re-reading in light of D76: it also rests on "nothing appeared"
+- 🟡 **`bleck` is still unlicensed**
+- 🟡 **PyYAML is now the first runtime dependency**, against a comment in
+  `pyproject.toml` that defended having none. Argued in
+  [`plan-config.md`](./plan-config.md); reversible
+- 🔶 **Diagnostic mods to prune**: `boot-combo` and `boot-observe` exist only to
+  investigate the bug D76 retracted. `button-probe` and `mapchange-probe` are
+  worth keeping

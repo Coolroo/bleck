@@ -169,6 +169,39 @@ Every mod has a `mod.json` at its root.
                 anything reading player state is meaningless. This is for
                 looking at a map, not playing it.
 
+        `code.combos` <span class="pf-type">object</span>
+
+        :   Scripts to run when a button combination is pressed, as
+            combination name → script name:
+
+            ```json
+            "combos": { "start_map": "warp_home" }
+            ```
+
+            The **name** is defined once in `bleck.yml` at the top of your
+            project, so a mod never contains a button mask:
+
+            ```yaml
+            combos:
+              start_map: [1, 2]
+            ```
+
+            Changing which buttons `start_map` means is one edit in one file,
+            however many mods use it. Valid button names are `a`, `b`, `1`,
+            `2`, `plus`, `minus`, `home`, `up`, `down`, `left`, `right`.
+
+            Two buttons minimum, so a combination cannot fire while you are
+            walking around. For a deliberate single-button trigger, write
+            `{buttons: [home], allow_single: true}`.
+
+            The combination fires **once** when it becomes held, not while it
+            is held, and re-arms when you let go. A mod may declare up to 32.
+
+            !!! note "Nunchuk buttons are not supported"
+
+                `c` and `z` are not in the field `bleck` reads. Asking for one
+                gets an error saying so rather than "unknown button".
+
 `setup` <span class="pf-type">object</span>
 
 :   Changes to a map's enemy placement, as map name → a list of slot edits.

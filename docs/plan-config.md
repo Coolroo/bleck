@@ -1,6 +1,19 @@
 # Plan — a `bleck` config file, and named button combos
 
-Status: **proposed**, not built. Written 2026-07-27.
+Status: ✅ **BUILT** and confirmed in game (D77). Written 2026-07-27.
+
+What shipped, and where it differs from this plan:
+
+- `bleck/common/config.py` reads `bleck.yml`; `bleck.yml.example` documents it
+- `code.combos` binds a combination name to a script, mirroring `code.maps`
+- PyYAML was taken as the first runtime dependency, as recommended below
+- 🔶 The built-in `{"goto": "map"}` shorthand was **not** built. A script
+  calling `evt_seq_mapchange` covers it, and nothing has wanted the sugar yet
+- ✅ The masks are no longer hypotheses for `a`, `b`, `1`, `2` (D68). The rest
+  of the table is still unverified
+- ⚠️ The plan said to verify the masks *before* shipping. That was done, and
+  it was right: the published values turned out correct, but the same session
+  produced D65 and D76 by trusting inferences of exactly that shape
 
 The first user of this file is button combos, but the file is the point: a
 place for values that are chosen once and injected into every build, so nothing
