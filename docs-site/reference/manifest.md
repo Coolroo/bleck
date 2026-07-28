@@ -100,6 +100,20 @@ Every mod has a `mod.json` at its root.
 
         :   REL module id. The game's own REL is 1, so mods start at 2.
 
+        `code.banner` <span class="pf-type">object or `false`</span> <span class="pf-default">default: on</span>
+
+        :   The `mod_loaded: <name>` label drawn in the bottom right of the
+            title screen. **On by default — you do not need to declare it.**
+
+            Set it to `false` to suppress the label, or pass an object to
+            change it:
+
+            - `text` — replaces the whole label. Defaults to
+              `mod_loaded: <mod name>`.
+            - `sequences` — which parts of the game draw it. One or more of
+              `logo`, `title`, `game`, `mapchange`, `gameover`, `load`.
+              Defaults to `["title"]`.
+
         `code.maps` <span class="pf-type">object</span>
 
         :   Scripts to run on arrival at a map, as map name → script name:

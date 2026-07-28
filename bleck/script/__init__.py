@@ -73,6 +73,7 @@ def compile_source(
     origin: str = "script",
     map_hooks: list[emit.MapHook] | None = None,
     require_entry: bool = True,
+    banner: emit.Banner | None = None,
 ) -> CompiledSource:
     """Compile script text to C.
 
@@ -81,6 +82,10 @@ def compile_source(
     tree = parser.parse(text)
     program = compiler.compile_program(tree, text)
     generated = emit.generate(
-        program, origin=origin, map_hooks=map_hooks, require_entry=require_entry
+        program,
+        origin=origin,
+        map_hooks=map_hooks,
+        require_entry=require_entry,
+        banner=banner,
     )
     return CompiledSource(origin=origin, generated=generated, program=program)

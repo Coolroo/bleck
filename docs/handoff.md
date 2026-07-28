@@ -8,7 +8,7 @@ format (D42).
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D54)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D58)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -136,6 +136,7 @@ trying it.
 | ✅ **A script runs in-game** | 60 iterations/sec, survives a map change (D43) |
 | ✅ **No Dolphin cheat setup needed** | loader embedded in the disc, verified with the INI removed (D44) |
 | ✅ **Native C runs in-game** | `code.sources` module executes, measured per frame (D46, D47) |
+| ✅ **Every disc names itself on screen** | `mod_loaded: <name>` on the title screen, confirmed by eye (D49) |
 | ✅ **A script runs on arrival at a named map** | map-specific, verified by a frozen counter elsewhere (D51) |
 | ⛔ **`MapData.initScript` cannot be patched** | installs fine, then deadlocks the map load (D51) |
 | ✅ **`.env` is loaded automatically** | tool paths survive between shells; real env still wins |

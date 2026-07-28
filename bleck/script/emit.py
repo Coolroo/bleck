@@ -32,6 +32,14 @@ from bleck.script.errors import Position, ScriptError
 #: reordering a file cannot silently change which script runs.
 ENTRY_SCRIPT = "main"
 
+#: The game's sequences, in order (spm/seqdrv.h). A name's index is both the
+#: value the game puts in `seqWork.seq` and the row it uses in `seq_data[]`.
+SEQUENCE_NAMES = ("logo", "title", "game", "mapchange", "gameover", "load")
+
+#: Where the banner is drawn unless a mod says otherwise. The title screen is
+#: where someone checks which disc they are running.
+DEFAULT_BANNER_SEQUENCES = ("title",)
+
 _PREFIX = "bleck_"
 
 _HEADER = """\
@@ -175,6 +183,63 @@ _MAP_TABLE = """
 static const char {prefix}name_{index}[] = {name};
 """
 
+#: The on-screen label naming the loaded mod.
+#:
+#: Every call mirrors `spm-rel-loader`'s title-screen example, which is the only
+#: known-working use of this API: start, style, measure, draw -- and draw
+#: *before* delegating to the real sequence main.
+_BANNER_BLOCK = """
+/*
+    Naming the loaded mod on screen.
+
+    Text is drawn in screen space, which is centred with y increasing upward:
+    `spm-rel-loader` centres a string with `x = -(width / 2)` and places it near
+    the top of the title screen with `y = 200`. So the visible area is roughly
+    x -320..320 and y -240..240, and the bottom-right corner is (+320, -240).
+    The margins below back off from that corner far enough to survive overscan.
+
+    `FontGetMessageWidth` measures the string so it can be right-aligned rather
+    than positioned by guesswork, which also keeps a long mod name on screen.
+*/
+
+extern void FontDrawStart(void);
+extern void FontDrawEdge(void);
+extern void FontDrawColor(u8 *color);
+extern void FontDrawScale(float scale);
+extern void FontDrawNoiseOff(void);
+extern void FontDrawRainbowColorOff(void);
+extern void FontDrawString(float x, float y, const char *text);
+extern unsigned short FontGetMessageWidth(const char *text);
+
+#define BLECK_BANNER_RIGHT 296.0f
+#define BLECK_BANNER_BOTTOM (-200.0f)
+#define BLECK_BANNER_SCALE 0.6f
+
+static const char bleck_banner_text[] = {text};
+
+/* wii/gx.h GXColor, four bytes. Not const: FontDrawColor overwrites alpha. */
+static u8 bleck_banner_color[4] = {{255, 255, 255, 255}};
+
+/* Which sequences draw it. .rodata, so the loader's bss handling is moot. */
+static const u8 bleck_banner_on[BLECK_SEQ_COUNT] = {{{flags}}};
+
+static void bleck_draw_banner(void)
+{{
+    float width;
+
+    FontDrawStart();
+    FontDrawEdge();
+    FontDrawColor(bleck_banner_color);
+    FontDrawScale(BLECK_BANNER_SCALE);
+    FontDrawNoiseOff();
+    FontDrawRainbowColorOff();
+
+    width = (float) FontGetMessageWidth(bleck_banner_text) * BLECK_BANNER_SCALE;
+    FontDrawString(BLECK_BANNER_RIGHT - width, BLECK_BANNER_BOTTOM,
+                   bleck_banner_text);
+}}
+"""
+
 #: Typedefs and the saved originals. Needed by anything wanting a per-frame
 #: hook -- a free-running script, a map watcher, or both.
 _SEQ_TABLE = """
@@ -292,6 +357,28 @@ void _unresolved(void)
 
 
 @dataclass(frozen=True)
+class Banner:
+    """An on-screen label naming the mod that is loaded.
+
+    A disc looks identical to a stock one until something visibly differs, so a
+    player juggling several builds has no way to tell which is in the drive.
+    This draws the answer on the screen.
+    """
+
+    text: str
+    sequences: tuple[int, ...] = (1,)
+    """Sequence indices to draw on. Defaults to the title screen."""
+
+    @property
+    def flags(self) -> str:
+        """The `sequences` set rendered as a C initialiser, one flag per row."""
+        on = set(self.sequences)
+        return ", ".join(
+            "1" if index in on else "0" for index in range(len(SEQUENCE_NAMES))
+        )
+
+
+@dataclass(frozen=True)
 class MapHook:
     """A compiled script attached to one map's init script."""
 
@@ -390,19 +477,26 @@ def _map_block(hooks: list[MapHook]) -> str:
     )
 
 
-def _footer(entry: str, hooks: list[MapHook]) -> str:
+def _banner_block(banner: Banner) -> str:
+    return _BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
+
+
+def _footer(entry: str, hooks: list[MapHook], banner: Banner | None = None) -> str:
     """Assemble the scaffolding that runs the mod, from the pieces it needs.
 
     A free-running script and a map hook want the same per-frame hook on the
     sequence table -- one to start and re-start itself, the other to notice
     where the game went. A mod using both installs one set of hooks, not two.
     """
-    if not entry and not hooks:
+    if not entry and not hooks and banner is None:
         return _PLAIN_PROLOG + _ENTRY_POINTS
 
     parts = [_SEQ_TABLE]
     body = ""
 
+    if banner is not None:
+        parts.append(_banner_block(banner))
+        body += "    if (bleck_banner_on[seq])\n        bleck_draw_banner();\n"
     if hooks:
         parts.append(_map_block(hooks))
         body += "    bleck_maps_on_seq(seq);\n"
@@ -424,13 +518,15 @@ def _footer(entry: str, hooks: list[MapHook]) -> str:
     return "".join(parts)
 
 
-def generate_bare(origin: str = "native sources") -> GeneratedSource:
+def generate_bare(
+    origin: str = "native sources", banner: Banner | None = None
+) -> GeneratedSource:
     """Scaffolding for a mod that ships only native C.
 
     The REL format still needs its three entry points, and the mod still needs
     somewhere to be called from, but there is no script to schedule.
     """
-    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + _footer("", [])
+    text = _HEADER.format(origin=origin) + "\n" + MOD_HOOK + _footer("", [], banner)
     _require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
 
@@ -440,6 +536,7 @@ def generate(
     origin: str = "a script",
     map_hooks: list[MapHook] | None = None,
     require_entry: bool = True,
+    banner: Banner | None = None,
 ) -> GeneratedSource:
     """Render a compiled program as a single C translation unit."""
     hooks = list(map_hooks or [])
@@ -481,7 +578,7 @@ def generate(
         )
 
     parts.extend(_script_array(script) for script in program.scripts)
-    parts.append(_footer(f"{_PREFIX}script_{entry}" if entry else "", hooks))
+    parts.append(_footer(f"{_PREFIX}script_{entry}" if entry else "", hooks, banner))
 
     text = "\n\n".join(parts)
     _require_ascii(text)

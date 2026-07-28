@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "lineland-check",
+  "version": "0.1.0",
+  "description": "Boots straight to Lineland Road, to eyeball hard-lineland's edits",
+  "base": "eu0",
+  "dependencies": [{ "name": "hard-lineland" }],
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "maps": { "aa4_01": "on_arrive" }
+  }
+}

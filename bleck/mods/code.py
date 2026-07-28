@@ -21,6 +21,19 @@ from bleck.mods.registry import Mod
 from bleck.mods.resolver import Chain
 from bleck.script import ScriptError, compile_source, emit
 
+#: Where compile intermediates live, under the build root.
+#:
+#: ⚠️ Deliberately *not* inside the mod's staged disc directory. These used to
+#: go to `<build root>/<mod>/code`, which `builder.stage` then deleted wholesale
+#: on its way to mirroring the base — so `mod.c` and `mod.elf` were gone by the
+#: time anyone wanted to read them, and `build_rel`'s promise to keep its
+#: intermediates held only for `bleck mod check`, never for a real build. That
+#: is exactly backwards: a full build is when a compile error is most likely.
+#:
+#: Dotted so it cannot collide with a mod named after it; mod names are
+#: otherwise unrestricted.
+CODE_WORKDIR = ".code"
+
 
 class CodeError(BleckError):
     """A mod's script could not be turned into a module."""
@@ -116,6 +129,24 @@ def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     ]
 
 
+def banner_for(mod: Mod) -> emit.Banner | None:
+    """The on-screen label this mod should draw, if any.
+
+    The text comes from the mod's own name unless the manifest overrides it, so
+    the common case needs nothing declared: build a mod, and the disc says which
+    mod it is.
+    """
+    spec = mod.manifest.code
+    if spec is None or not spec.banner.enabled:
+        return None
+    return emit.Banner(
+        text=spec.banner.label(mod.name),
+        sequences=tuple(
+            emit.SEQUENCE_NAMES.index(name) for name in spec.banner.sequences
+        ),
+    )
+
+
 def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     """Compile one mod's script and native sources into its `mod.rel`."""
     spec = mod.manifest.code
@@ -124,6 +155,7 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
 
     sources = collect_sources(mod, spec)
     script_path = mod.root / spec.script if spec.has_script else None
+    banner = banner_for(mod)
     compiled = None
 
     if script_path is not None:
@@ -137,6 +169,7 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
                 script_path.read_text(encoding="utf-8"),
                 origin=spec.script,
                 map_hooks=map_hooks_for(mod),
+                banner=banner,
             )
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(str(script_path))}") from exc
@@ -144,13 +177,15 @@ def build_mod(mod: Mod, workroot: Path) -> CodeBuild:
     else:
         # Native-only: still needs the REL entry points and the `mod_prolog`
         # hand-off, just nothing to hand to the scheduler.
-        scaffolding = emit.generate_bare(origin=f"{mod.name} native sources").text
+        scaffolding = emit.generate_bare(
+            origin=f"{mod.name} native sources", banner=banner
+        ).text
 
     headers = env.path(env.HEADERS_DIR)
     result = toolchain.build_rel(
         toolchain.BuildRequest(
             source=scaffolding,
-            workdir=workroot / mod.name / "code",
+            workdir=workroot / CODE_WORKDIR / mod.name,
             target=spec.target,
             module_id=spec.module_id,
             extra_sources=sources,

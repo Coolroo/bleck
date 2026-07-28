@@ -13,6 +13,7 @@ from pathlib import Path
 
 from bleck.common.errors import BleckError
 from bleck.formats import setup
+from bleck.script import emit
 
 MANIFEST_NAME = "mod.json"
 # Named `overlay`, not `files`: the disc's own data partition is `files/`,
@@ -86,6 +87,48 @@ class Requirement:
 #: this path, so it is fixed rather than configurable — and it is why two code
 #: mods cannot currently coexist (see `conflicts.py`).
 REL_DISC_PATH = "files/mod/mod.rel"
+
+
+@dataclass(frozen=True)
+class BannerSpec:
+    """The on-screen label naming the loaded mod.
+
+    On by default, because the problem it solves is invisible until it bites:
+    a modded disc looks exactly like a stock one, so someone holding several
+    builds cannot tell which is running without playing far enough to spot a
+    difference. Opt out with `"banner": false`.
+    """
+
+    enabled: bool = True
+
+    text: str = ""
+    """Overrides the label. Empty means `mod_loaded: <mod name>`."""
+
+    sequences: list[str] = field(
+        default_factory=lambda: list(emit.DEFAULT_BANNER_SEQUENCES)
+    )
+    """Which game sequences draw it, by name from `SEQUENCE_NAMES`."""
+
+    def label(self, mod_name: str) -> str:
+        return self.text or f"mod_loaded: {mod_name}"
+
+    @property
+    def is_default(self) -> bool:
+        return (
+            self.enabled
+            and not self.text
+            and tuple(self.sequences) == emit.DEFAULT_BANNER_SEQUENCES
+        )
+
+    def to_json(self) -> object:
+        if not self.enabled:
+            return False
+        body: dict[str, object] = {}
+        if self.text:
+            body["text"] = self.text
+        if tuple(self.sequences) != emit.DEFAULT_BANNER_SEQUENCES:
+            body["sequences"] = list(self.sequences)
+        return body
 
 
 @dataclass(frozen=True)
@@ -180,6 +223,9 @@ class CodeSpec:
     maps: list[MapHook] = field(default_factory=list)
     """Scripts attached to maps, so they run on arrival rather than looping."""
 
+    banner: BannerSpec = field(default_factory=BannerSpec)
+    """The on-screen label naming this mod."""
+
     @property
     def has_maps(self) -> bool:
         return bool(self.maps)
@@ -202,6 +248,10 @@ class CodeSpec:
         body["module_id"] = self.module_id
         if self.maps:
             body["maps"] = {hook.map_name: hook.script for hook in self.maps}
+        # Written only when it says something a default would not, so the
+        # common manifest stays as short as it was before banners existed.
+        if not self.banner.is_default:
+            body["banner"] = self.banner.to_json()
         return body
 
 
@@ -331,7 +381,54 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         target=str(raw.get("target", "eu0")),
         module_id=module_id,
         maps=_parse_maps(raw.get("maps"), source),
+        banner=_parse_banner(raw.get("banner"), source),
     )
+
+
+def _parse_banner(raw: object, source: str) -> BannerSpec:
+    """Read `code.banner`, which may be absent, a boolean, or an object.
+
+    A bare `false` is accepted because turning the label off is much the most
+    likely reason to mention it at all, and `"banner": false` reads better than
+    `"banner": {"enabled": false}`.
+    """
+    if raw is None or raw is True:
+        return BannerSpec()
+    if raw is False:
+        return BannerSpec(enabled=False)
+    if not isinstance(raw, dict):
+        raise ManifestError(
+            f"{source}: 'code.banner' must be an object or false, not "
+            f"{type(raw).__name__}"
+        )
+
+    text = raw.get("text", "")
+    if not isinstance(text, str):
+        raise ManifestError(f"{source}: 'code.banner.text' must be a string")
+
+    sequences = raw.get("sequences", list(emit.DEFAULT_BANNER_SEQUENCES))
+    if not isinstance(sequences, list) or not all(isinstance(s, str) for s in sequences):
+        raise ManifestError(
+            f"{source}: 'code.banner.sequences' must be a list of sequence names"
+        )
+    for name in sequences:
+        if name not in emit.SEQUENCE_NAMES:
+            known = ", ".join(emit.SEQUENCE_NAMES)
+            raise ManifestError(
+                f"{source}: unknown sequence {name!r} in "
+                f"'code.banner.sequences'\n  known sequences are: {known}"
+            )
+    if not sequences:
+        raise ManifestError(
+            f"{source}: 'code.banner.sequences' is empty, so the banner would "
+            f'never draw -- use "banner": false to turn it off'
+        )
+
+    enabled = raw.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ManifestError(f"{source}: 'code.banner.enabled' must be true or false")
+
+    return BannerSpec(enabled=enabled, text=text, sequences=list(sequences))
 
 
 def _parse_setup(raw: object, source: str) -> list[MapPlacements]:

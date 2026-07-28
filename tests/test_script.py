@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from bleck.backends import toolchain
 from bleck.mods import code, registry, resolver
 from bleck.mods import manifest as mod_manifest
 from bleck.script import compile_source, emit, evt
@@ -693,6 +694,246 @@ class TestMapHooks:
                 ),
                 source="test",
             )
+
+
+class TestBanner:
+    """The on-screen label naming the loaded mod.
+
+    A modded disc is indistinguishable from a stock one until something visibly
+    differs, so the banner is what tells someone which build is running. It is
+    generated for every mod rather than opted into, which is the property most
+    of these tests are really guarding.
+    """
+
+    def test_it_draws_only_on_the_sequences_it_was_given(self):
+        banner = emit.Banner(text="hi", sequences=(1,))
+        assert banner.flags == "0, 1, 0, 0, 0, 0"
+
+        both = emit.Banner(text="hi", sequences=(1, 2))
+        assert both.flags == "0, 1, 1, 0, 0, 0"
+
+    def test_it_defaults_to_the_title_screen(self):
+        # Where someone actually looks to see which disc they put in.
+        assert emit.Banner(text="hi").sequences == (emit.SEQUENCE_NAMES.index("title"),)
+
+    def test_the_text_is_embedded_as_a_c_string(self):
+        out = emit.generate_bare(banner=emit.Banner(text="mod_loaded: foo")).text
+        assert 'bleck_banner_text[] = "mod_loaded: foo"' in out
+
+    def test_a_sources_only_mod_gains_sequence_hooks_for_the_banner(self):
+        """Drawing needs a per-frame hook even when there is no script.
+
+        Without a banner a native-only module installs no hooks at all, so this
+        is the case where the banner is the only reason the sequence table gets
+        touched.
+        """
+        plain = emit.generate_bare().text
+        assert "seq_data" not in plain
+
+        with_banner = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert "seq_data[i].main = bleck_hooks[i]" in with_banner
+        assert "bleck_draw_banner()" in with_banner
+        # Still no script machinery -- the hook exists purely to draw. The
+        # word itself appears in an explanatory comment, so match the call.
+        assert "evtEntry(" not in with_banner
+
+    def test_a_script_and_a_banner_share_one_set_of_hooks(self):
+        out = compile_source(
+            SIMPLE, banner=emit.Banner(text="x", sequences=(1, 2))
+        ).generated.text
+        # One installer, not two layers of them.
+        assert out.count("seq_data[i].main = bleck_hooks[i]") == 1
+        assert out.count("static void bleck_after_seq") == 1
+        # Both jobs happen in it.
+        assert "bleck_draw_banner()" in out
+        assert "evtEntry(" in out
+
+    def test_it_draws_before_delegating_to_the_real_sequence_main(self):
+        """Ordering copied from `spm-rel-loader`, the only known-working use.
+
+        Its title-screen text draws first and then calls the real main, and
+        that text is visible in game -- so the order is evidence, not taste.
+        """
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        body = out.split("static void bleck_after_seq")[1]
+        assert body.index("bleck_draw_banner()") < body.index("bleck_real_main[seq]")
+
+    def test_the_colour_is_writable_because_the_game_overwrites_alpha(self):
+        # fontmgr.h: "Warning: Overwrites color.a". A const array here would be
+        # a write to .rodata every frame.
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert "static u8 bleck_banner_color[4]" in out
+        assert "const u8 bleck_banner_color" not in out
+
+    def test_nothing_the_banner_needs_lands_in_bss(self):
+        """The loader's bss handling is undocumented, so nothing may rely on it."""
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        # Every banner object is either const (.rodata) or non-zero (.data).
+        assert "static const char bleck_banner_text[]" in out
+        assert "static const u8 bleck_banner_on[BLECK_SEQ_COUNT] = {" in out
+        assert "bleck_banner_color[4] = {255, 255, 255, 255}" in out
+
+    def test_generated_c_stays_ascii_for_an_awkward_mod_name(self):
+        # Names come from a manifest someone else wrote; the escaping guard
+        # must hold rather than the generator emitting raw UTF-8.
+        out = emit.generate_bare(banner=emit.Banner(text="mod_loaded: café")).text
+        out.encode("ascii")
+
+
+class TestBannerFromManifest:
+    """Turning a mod's manifest into the banner it draws."""
+
+    def _mod(self, tmp_path: Path, body: dict) -> registry.Mod:
+        root = tmp_path / body["name"]
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "a.c").write_text("void nothing(void) {}\n")
+        (root / "mod.json").write_text(json.dumps(body))
+        return registry.load(tmp_path).require(body["name"])
+
+    def test_every_code_mod_gets_one_without_asking(self):
+        """The point of the feature: no mod declares anything."""
+        spec = mod_manifest.CodeSpec(sources=["src"])
+        assert spec.banner.enabled
+        assert spec.banner.label("coin-tick") == "mod_loaded: coin-tick"
+
+    def test_the_label_names_the_mod(self, tmp_path):
+        mod = self._mod(
+            tmp_path,
+            {"schema": 1, "name": "speedrun", "code": {"sources": ["src"]}},
+        )
+        banner = code.banner_for(mod)
+        assert banner is not None
+        assert banner.text == "mod_loaded: speedrun"
+
+    def test_it_can_be_turned_off(self, tmp_path):
+        mod = self._mod(
+            tmp_path,
+            {
+                "schema": 1,
+                "name": "quiet",
+                "code": {"sources": ["src"], "banner": False},
+            },
+        )
+        assert code.banner_for(mod) is None
+
+    def test_a_custom_label_wins(self, tmp_path):
+        mod = self._mod(
+            tmp_path,
+            {
+                "schema": 1,
+                "name": "quiet",
+                "code": {"sources": ["src"], "banner": {"text": "build 42"}},
+            },
+        )
+        assert code.banner_for(mod).text == "build 42"
+
+    def test_sequence_names_become_indices(self, tmp_path):
+        mod = self._mod(
+            tmp_path,
+            {
+                "schema": 1,
+                "name": "probe",
+                "code": {
+                    "sources": ["src"],
+                    "banner": {"sequences": ["title", "game"]},
+                },
+            },
+        )
+        assert code.banner_for(mod).sequences == (1, 2)
+
+    def test_an_unknown_sequence_is_rejected_by_name(self, tmp_path):
+        with pytest.raises(mod_manifest.ManifestError) as excinfo:
+            self._mod(
+                tmp_path,
+                {
+                    "schema": 1,
+                    "name": "typo",
+                    "code": {"sources": ["src"], "banner": {"sequences": ["titel"]}},
+                },
+            )
+        # The message has to list the alternatives, or a typo is a guessing game.
+        assert "titel" in str(excinfo.value)
+        assert "title" in str(excinfo.value)
+
+    def test_an_empty_sequence_list_is_rejected(self, tmp_path):
+        with pytest.raises(mod_manifest.ManifestError) as excinfo:
+            self._mod(
+                tmp_path,
+                {
+                    "schema": 1,
+                    "name": "empty",
+                    "code": {"sources": ["src"], "banner": {"sequences": []}},
+                },
+            )
+        assert "banner" in str(excinfo.value)
+
+    def test_a_default_banner_is_not_written_back_to_json(self):
+        """Most manifests should look exactly as they did before banners existed."""
+        spec = mod_manifest.CodeSpec(sources=["src"])
+        assert "banner" not in spec.to_json()
+
+    def test_a_customised_banner_round_trips(self, tmp_path):
+        mod = self._mod(
+            tmp_path,
+            {
+                "schema": 1,
+                "name": "custom",
+                "code": {
+                    "sources": ["src"],
+                    "banner": {"text": "hi", "sequences": ["game"]},
+                },
+            },
+        )
+        again = mod_manifest.Manifest.from_json(
+            mod.manifest.to_json(), source="round trip"
+        )
+        assert again.code.banner == mod.manifest.code.banner
+
+    def test_disabling_round_trips_as_false(self):
+        spec = mod_manifest.CodeSpec(
+            sources=["src"], banner=mod_manifest.BannerSpec(enabled=False)
+        )
+        assert spec.to_json()["banner"] is False
+
+
+class TestCodeIntermediates:
+    """Where compile intermediates land, and why it is not obvious."""
+
+    def test_they_are_not_inside_the_staged_disc(self, tmp_path, monkeypatch):
+        """`build_rel` promises to keep its intermediates. It has to be able to.
+
+        `builder.stage` deletes the mod's build directory wholesale before
+        mirroring the base into it, so intermediates written underneath it were
+        gone by the time a build finished. The promise held for
+        `bleck mod check`, which never stages, and broke for every real build --
+        exactly backwards, since a full build is when a compile error is most
+        likely and reading the generated `mod.c` is the only way to make sense
+        of the compiler's line numbers.
+        """
+        root = tmp_path / "mods" / "demo"
+        (root / "src").mkdir(parents=True)
+        (root / "src" / "a.c").write_text("void nothing(void) {}\n")
+        (root / "mod.json").write_text(
+            json.dumps({"schema": 1, "name": "demo", "code": {"sources": ["src"]}})
+        )
+        mod = registry.load(tmp_path / "mods").require("demo")
+
+        seen: dict[str, Path] = {}
+
+        def fake_build_rel(request):
+            seen["workdir"] = request.workdir
+            return toolchain.BuildResult(
+                rel=b"\0", toolchain="fake", module_id=2, symbols_file=Path()
+            )
+
+        monkeypatch.setattr(code.toolchain, "build_rel", fake_build_rel)
+
+        workroot = tmp_path / "build"
+        code.build_mod(mod, workroot)
+
+        staged = workroot / mod.name
+        assert staged not in seen["workdir"].parents
+        assert seen["workdir"] == workroot / code.CODE_WORKDIR / mod.name
 
 
 class TestGeneratedHandoff:
