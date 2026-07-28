@@ -12,7 +12,6 @@ from enum import Enum
 from pathlib import Path
 
 from bleck.formats import lz77, u8
-
 from bleck.mods.build.overlay import Edit, Plan, TargetPath
 from bleck.mods.resolver import Chain
 

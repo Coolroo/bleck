@@ -222,6 +222,19 @@ The old path, for reference — both fail *invisibly* if misconfigured:
 The loader code itself is GPLv3 and lives in Dolphin's config, **not** in this
 repo.
 
+⚠️ **That INI is back in place on this machine and is enabled** (found during
+D86). It means a mod can run on this host even when the DOL carries no loader,
+so any run that seems to confirm an embedded loader is confounded until
+`%APPDATA%\Dolphin Emulator\GameSettings\R8PP01.ini` is moved aside. Two D86
+runs were re-done for exactly this reason.
+
+### Riivolution output (D86)
+
+`bleck mod build <mod> --output riivolution` writes a patch and only the changed
+files — seconds and megabytes instead of minutes and gigabytes — and
+`scripts/ingame.py --riivolution` boots it through the same rig. See
+[`hardware.md`](./hardware.md).
+
 ### Toolchain
 
 devkitPPC is installed at `C:\devkitPro\devkitPPC` — GCC 16.1.0, target

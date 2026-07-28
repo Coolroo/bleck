@@ -28,6 +28,11 @@ __pycache__/
 .pytest_cache/
 build/
 dist/
+# ⚠️ `build/` above also matches the `bleck/mods/build/` package, so a new module
+# added there is silently untracked — `__init__.py` was lost that way and is
+# still missing from git. These negations stop the next one going the same way.
+!bleck/mods/build/
+!bleck/mods/build/*.py
 
 # Machine-local tool paths
 .env

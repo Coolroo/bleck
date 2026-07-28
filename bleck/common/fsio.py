@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
+import stat
 from pathlib import Path
+
+from bleck import platforms
 
 from .errors import UserError
 
@@ -25,3 +29,20 @@ def guard_overwrite(path: Path, force: bool) -> None:
     """Refuse to clobber. These operations produce large, expensive artifacts."""
     if path.exists() and not force:
         raise UserError(f"{path} exists (use --force to overwrite)")
+
+
+def _on_rmtree_error(func, path: str, _exc) -> None:
+    """Retry a failed removal after clearing the read-only bit.
+
+    Windows refuses to delete read-only files, which staged copies inherit.
+    """
+    Path(path).chmod(stat.S_IWRITE)
+    func(path)
+
+
+def remove_tree(path: Path) -> None:
+    """Delete a directory tree. Never `shutil.rmtree` directly — see above."""
+    if platforms.current().strip_readonly_on_delete:
+        shutil.rmtree(path, onexc=_on_rmtree_error)
+    else:
+        shutil.rmtree(path)

@@ -344,8 +344,9 @@ def running_dolphins() -> list[int]:
     return pids
 
 
-def build(mod: str, image: Path, boot_map: str = "") -> None:
+def build(mod: str, image: Path, boot_map: str = "", output: str = "wbfs") -> None:
     command = ["uv", "run", "bleck", "mod", "build", mod, str(image), "--force"]
+    command += ["--output", output]
     if boot_map:
         # The disc drives itself to the map, so the run stays unattended (D48).
         command += ["--map", boot_map]
@@ -386,6 +387,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--no-build", action="store_true", help="boot the existing image as-is"
+    )
+    parser.add_argument(
+        "--riivolution",
+        action="store_true",
+        help="build a Riivolution patch and boot that instead of a disc image",
     )
     parser.add_argument(
         "--npcs",
@@ -461,11 +467,19 @@ def main() -> int:
     if args.map and args.no_build:
         raise SystemExit("--map has to be built in; drop --no-build")
 
-    image = registry.build_root() / f"{args.mod}.wbfs"
-    if not args.no_build:
-        build(args.mod, image, args.map)
+    # A Riivolution run boots Dolphin's descriptor instead of an image, so the
+    # same rig covers both delivery paths without a second script.
+    if args.riivolution:
+        patch_root = registry.build_root() / f"{args.mod}-riivolution"
+        image = patch_root / f"{args.mod}.json"
+        if not args.no_build:
+            build(args.mod, patch_root, args.map, output="riivolution")
+    else:
+        image = registry.build_root() / f"{args.mod}.wbfs"
+        if not args.no_build:
+            build(args.mod, image, args.map)
     if not image.exists():
-        raise SystemExit(f"no image at {image}")
+        raise SystemExit(f"nothing to boot at {image}")
 
     try:
         dolphin = find_tool(platforms.DOLPHIN)

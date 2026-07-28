@@ -416,9 +416,11 @@ iteration at ~1.125× size.
    yes — but a mod containing extracted game assets is redistribution of
    copyrighted data. Suggest committing manifests while gitignoring `files/`,
    with an opt-in for original content.
-2. Should `bleck mod build` emit an ISO by default, or a Riivolution-ready
-   directory? Riivolution avoids a 4.7 GB write per iteration, which matters a
-   lot on this hardware.
+2. ~~Should `bleck mod build` emit an ISO by default, or a Riivolution-ready
+   directory?~~ ✅ **Answered (D86): both, chosen by `--output`.** An image stays
+   the default; `--output riivolution` writes a patch and the changed files only.
+   Output kinds are a table in `bleck/mods/build/outputs.py`, so a third route is
+   a value rather than a branch. See [`hardware.md`](./hardware.md).
 3. Does `vendor` need a reverse (`unvendor`) to drop a file back to base
    behaviour, or is deleting the file from the overlay obvious enough?
 4. Should binary three-way merge be opt-in (`--merge-binary`, as proposed) or

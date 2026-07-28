@@ -5029,3 +5029,200 @@ devkitPPC 16.1.0 is installed on the Windows host at `C:\devkitPro\devkitPPC\bin
 and the Windows profile already listed that directory, so no platform change was
 needed. The project instructions' line about `g++-powerpc-linux-gnu` being missing described
 the Linux dev host only, and has been corrected.
+
+---
+
+## D86 — Riivolution output, and output kinds as a table (2026-07-28)
+
+`bleck mod build` could only produce a disc image. A 4.3 GB `wit COPY` per
+iteration is the slowest step in the loop, and it is the *only* thing standing
+between a built mod and real hardware. `mods.md` open question 2 posed the
+choice as "ISO **or** a Riivolution-ready directory"; the answer is both, chosen
+by `--output`.
+
+### ✅ Output kinds are data, not branches
+
+`bleck/mods/build/outputs.py` holds one `OutputKind` per way a build can leave
+the toolkit — `iso`, `wbfs`, `rvz`, `riivolution`, `none` — each with its writer,
+its default destination, whether it produces an artifact at all, and whether the
+Gecko loader is embedded first. `cmd_build` resolves one kind and runs it; the
+`--output` choice list and its help text are generated from the table, so they
+cannot drift from it.
+
+Rejected: a `--riivolution DEST` flag alongside `--format`. It would have made a
+third delivery route (a `.gct` beside an image, a NAND channel, the save
+exploit) a third flag and a third branch. This is the same argument that
+produced `bleck/platforms/` and `bleck/backends/languages.py`.
+
+`--no-image` and `--format` still mean exactly what they did; `--no-image` is
+now spelled `--output none` internally.
+
+### ✅ Only the changed files, found by byte comparison
+
+`riivolution.plan()` walks the staged tree and compares each file with its base
+counterpart (`filecmp.cmp(shallow=False)`, which checks size first). Staging
+hardlinks, so almost everything matches and the walk over a 407 MB base costs
+under a second. For `scripttest` the result is **two files, 5.3 MB, 3.2 s** —
+against minutes and 4.3 GB for an image.
+
+Rejected: trusting `st_ino`/`st_nlink` to spot hardlinks. Faster, but the project instructions
+already records that Windows does not report link counts reliably, and a wrong
+"unchanged" here silently ships a patch that does nothing.
+
+### ⚠️ Two ways a Riivolution XML silently patches nothing
+
+Both read out of Dolphin's `RiivolutionParser.cpp` / `RiivolutionPatcher.cpp`
+rather than guessed, because both parse cleanly and apply nothing.
+
+1. **`<option default>` is a 1-based choice index and `0` means off.**
+   `GeneratePatches` does `if (selected == 0 || selected > choices.size())
+   continue;`. A `<patch>` is only reachable through
+   `<options>/<section>/<option>/<choice>`, so an option without `default="1"`
+   contributes nothing at all.
+2. **`disc="main.dol"` must have no leading slash.** `ApplyFilePatchToFST` sends
+   any `/`-prefixed path to the FST, where the executable has no node; the bare
+   filename hits the special case that patches the DOL. With `create="true"`,
+   `disc="/main.dol"` would *add* an unread file to the disc root.
+
+Both are asserted in `tests/test_riivolution.py`.
+
+### ✅ The loader travels in the DOL, so hardware needs no Gecko code
+
+`code-mods.md` said Riivolution "only puts the file on the disc — the Gecko code
+is what actually executes it". Still true, and already solved: `wstrt patch
+--add-sect` writes the handler and codes into a new TEXT section of `main.dol`
+(D-numbered work in `gecko.py`). Riivolution replaces `main.dol` like any other
+file, so the loader ships inside the patch.
+
+Confirmed rather than assumed: the build prints `embedded 132 code words from
+loader.gct into main.dol (+3272 bytes)`, and the diff against the base is
+exactly `sys/main.dol` and `files/mod/mod.rel`. If `wstrt` had patched something
+else, or left the DOL unchanged, the diff would have shown it.
+
+### ✅ The REL stays `mod.rel`
+
+The snapshot notes `relloader3` prefers `./mod/<region>.rel`. Decoding
+`work/gecko/loader.eu0.txt` back to bytes shows the loader in use here embeds
+the literal ASCII `./mod/mod.rel`, `ERROR: mod.rel was not found` and
+`ERROR: failed to load mod.rel` — it opens that path and no other.
+
+⛔ **Not renamed.** `mod.rel` is also `relloader3`'s documented legacy fallback,
+so one filename serves both; renaming would break the loader that demonstrably
+works here for one that has never been run against this toolkit.
+
+### ✅ It boots — and the base needs no image either
+
+`Dolphin 2606` (installed here) reads a **game-mod descriptor**: `Dolphin -e
+<mod>.json`, with `base-file`, an `xml` path, an SD `root` and explicit option
+choices. `bleck` writes one beside the patch, and `scripts/ingame.py
+--riivolution` drives it through the same unattended rig as an image.
+
+`base-file` points at `work/extracted/eu0/sys/main.dol`, which Dolphin opens as
+a whole disc — so a Riivolution run touches no disc image at any point.
+
+First positive run (`work/build/riiv-positive.log`): boots, reaches `seq=GAME` on
+`aa4_01` at t+9 s, follows the attract demo into `ls4_12`, and `gw[30]` climbs
+from 2262 to 12841. `scripttest`'s script is running, and the base disc has no
+`/mod/mod.rel` at all — so Riivolution delivered the module.
+
+### ⛔ That run did **not** prove the DOL patch executed it
+
+**This host had the loader enabled as a Dolphin cheat the whole time.**
+`%APPDATA%\Dolphin Emulator\GameSettings\R8PP01.ini` contains
+`$SPM Custom REL Loader (eu0/eu1)` listed under both `[Gecko]` **and**
+`[Gecko_Enabled]`, with `EnableCheats = True` in `Config/Dolphin.ini`. D44 moved
+that file aside to prove the DOL patch worked and it is back in place now, so
+every run since has had a second carrier available.
+
+It was caught by a negative that refused to behave: a patch delivering
+`/mod/mod.rel` but **not** the patched `main.dol` still ran the mod
+(`work/build/riiv-negative-noloader.log`, `gw[30]` climbing). There is no way
+for that to happen if the DOL is the only carrier — so a second carrier existed.
+
+⚠️ **This is not only a Riivolution problem.** Any in-game run on this host,
+back to when that INI was written, had a loader available regardless of what was
+in the DOL. Anything that concluded "the embedded loader worked" from a run here
+should be re-read with that in mind.
+
+### ✅ Re-run with the cheat file moved aside
+
+`R8PP01.ini` renamed to `R8PP01.ini.bleck-bak`, Dolphin's process table checked
+empty, same patch, same rig (`work/build/riiv-positive-nocheat.log`):
+
+```
+[t+  6s] seq=GAME(2) stage=1  map=aa4_01  gw[30]=287
+[t+ 12s] seq=GAME(2) stage=1  map=ls4_12  gw[30]=3717
+[t+ 39s] seq=GAME(2) stage=1  map=ls4_12  gw[30]=8945
+```
+
+With no cheat available, the mod still runs. ✅ **The loader travels inside the
+Riivolution-replaced `main.dol`, and needs nothing configured in the emulator.**
+
+### ✅ And the matching negative isolates one variable
+
+Same patch, same cheat-free host, with only the `<file disc="main.dol">` element
+deleted from the XML — the module is still delivered, the loader is not
+(`work/build/riiv-negative-noloader-nocheat.log`):
+
+```
+[t+  6s] seq=GAME(2) stage=1  map=aa4_01  gw[30]=0
+[t+ 12s] seq=GAME(2) stage=1  map=ls4_12  gw[30]=0
+```
+
+The game boots and plays the attract demo through both maps; the mod never runs.
+One element, `gw[30]` 16577 → 0.
+
+A cruder negative — the whole payload directory renamed away, so every `external`
+dangles — hangs at the map change and Dolphin exits on its own at t+75 s
+(`work/build/riiv-negative-dangling.log`). `create="true"` still adds the
+`/mod/mod.rel` node, so the loader gets an empty module and dies. A malformed
+patch fails loudly rather than looking like success.
+
+⚠️ `R8PP01.ini` was restored afterwards. Move it aside again before trusting any
+future claim about an embedded loader.
+
+### ⚠️ The instrument lied twice before that
+
+Two earlier "negatives" sat at `seq=LOGO stage=2` forever, which read as a clean
+"the patch did nothing". They came from a scratchpad script that skipped
+`ingame.py`'s `running_dolphins()` guard while **a Dolphin from a previous run
+was still alive** — `dolphin-memory-engine` attaches to *a* Dolphin, so the
+readings were from a stale process.
+
+Two failures, same shape as D70/D73/D74: a plausible, self-consistent negative
+measured with a broken ruler. **Do not read emulated memory through anything
+that skips the process-table check**, and treat a negative that arrives too
+neatly as a reason to look at the instrument.
+
+### 🔶 An empty patch list falls back to something that does not boot
+
+A descriptor whose only option is `default="0"` (no patches active) did not get
+past the logo. `Boot.cpp`'s `AddRiivolutionPatches` returns early on an empty
+list, leaving whatever `GenerateFromFile(base_file)` produced for a `.dol` path.
+Mechanism untested. Practical consequence: **an untouched retail disc image is
+the safer `base-file` if you have one**, and the extracted-build DOL is the
+convenience path. Recorded rather than papered over.
+
+### ✅ Found on the way: `.gitignore` was eating this package
+
+`.gitignore` has `build/` for Python build artifacts, and that pattern also
+matches **`bleck/mods/build/`**. The four modules already there were force-added;
+`outputs.py` would have been silently untracked, and
+**`bleck/mods/build/__init__.py` is missing from git entirely** — `git ls-files`
+lists only `builder.py`, `conflicts.py`, `edits.py` and `overlay.py`. A fresh
+clone has been relying on implicit namespace packages ever since.
+
+Fixed with `!bleck/mods/build/` and `!bleck/mods/build/*.py` (not `/**`, which
+would have un-ignored `__pycache__/` too). The missing `__init__.py` still needs
+adding to the index.
+
+### Not covered
+
+- ⛔ **Nothing here has run on a real Wii.** Every runtime claim is Dolphin's
+  Riivolution implementation. The XML is written against the documented format
+  and Dolphin's parser agrees with it; hardware is 🔶 until someone boots it.
+- ⛔ Riivolution cannot delete a disc file, and cannot reach `sys/boot.bin`,
+  `sys/fst.bin` or the ticket. `plan()` reports such differences as warnings
+  rather than dropping them silently.
+- No `<memory>`, `<savegame>` or `<folder>` patches are emitted. `<file>` covers
+  everything `bleck` produces today.

@@ -13,14 +13,15 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from bleck import api
-from bleck.backends import disc, emulator, gecko, maps
+from bleck.backends import emulator, gecko, maps
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, u8
 from bleck.mods import builder, manifest, registry, resolver
+from bleck.mods.build import outputs
 from bleck.mods.build.overlay import normalize_disc_path, resolve_target
 
-from .disc import add_format_flags, resolve_format
+from .disc import add_format_flags
 
 CATEGORY = "mods"
 
@@ -172,6 +173,20 @@ def cmd_check(args: argparse.Namespace) -> int:
     return _report(report, chain)
 
 
+def resolve_output(args: argparse.Namespace) -> outputs.OutputKind:
+    """Which output kind to run: explicit name, legacy flag, then the path.
+
+    `--no-image` and `--format` predate `--output` and still mean what they did.
+    """
+    if args.output:
+        return outputs.find(args.output)
+    if args.no_image:
+        return outputs.NONE
+    if args.format:
+        return outputs.find(args.format)
+    return outputs.for_path(Path(args.out)) if args.out else outputs.ISO
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     chain = resolver.resolve(_registry(), args.name)
     base = _base()
@@ -189,27 +204,39 @@ def cmd_build(args: argparse.Namespace) -> int:
         + ")"
     )
 
-    if args.no_image:
+    kind = resolve_output(args)
+    if not kind.produces_artifact:
         if args.launch:
-            raise UserError("--launch needs an image to boot; drop --no-image")
+            raise UserError(f"--launch has nothing to boot with --output {kind.name}")
         return 0
 
-    _embed_loader(chain, staged, args)
+    if kind.embeds_loader:
+        _embed_loader(chain, staged, args)
 
-    default_suffix = disc.ImageFormat(args.format).suffix if args.format else ".iso"
     out = (
-        Path(args.out)
-        if args.out
-        else registry.build_root() / f"{args.name}{default_suffix}"
+        Path(args.out) if args.out else kind.default_out(registry.build_root(), args.name)
     )
     guard_overwrite(out, args.force)
-    image_format = resolve_format(out, args.format)
-    builder.emit(staged, out, image_format, keep_iso=args.keep_iso)
-    print(f"built {out}  ({out.stat().st_size:,} bytes, {image_format.value})")
+    result = kind.write(
+        outputs.OutputRequest(
+            name=args.name,
+            base=base,
+            staged=staged,
+            out=out,
+            keep_iso=args.keep_iso,
+            base_image=Path(args.base_image) if args.base_image else None,
+        )
+    )
+    for warning in result.warnings:
+        print(f"warning: {warning}")
+    if result.summary:
+        print(result.summary)
 
     if args.launch:
-        started = emulator.launch(out)
-        print(f"launched {out.name} in Dolphin  (pid {started.pid})")
+        if result.bootable is None:
+            raise UserError(f"--output {kind.name} produced nothing Dolphin can boot")
+        started = emulator.launch(result.bootable)
+        print(f"launched {result.bootable.name} in Dolphin  (pid {started.pid})")
     return 0
 
 
@@ -293,11 +320,27 @@ def register(add) -> None:
     _add_merge_flag(child)
     _add_map_flag(child)
 
-    child = action("build", cmd_build, "base + chain -> ISO")
+    child = action("build", cmd_build, "base + chain -> disc image or patch")
     child.add_argument("name")
     child.add_argument("out", nargs="?")
     child.add_argument(
-        "--no-image", action="store_true", help="stage only, skip writing a disc image"
+        "--output",
+        choices=outputs.names(),
+        default="",
+        metavar="KIND",
+        help="what to produce. " + outputs.describe_choices(),
+    )
+    child.add_argument(
+        "--no-image",
+        action="store_true",
+        help="stage only, skip writing a disc image (same as --output none)",
+    )
+    child.add_argument(
+        "--base-image",
+        metavar="PATH",
+        default="",
+        help="an untouched disc image for a Riivolution patch to sit on; "
+        "without it, Dolphin boots the extracted base directly",
     )
     child.add_argument(
         "--no-embed-loader",

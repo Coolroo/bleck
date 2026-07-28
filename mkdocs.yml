@@ -93,6 +93,7 @@ nav:
       - Scripting: guides/scripting.md
       - Testing: guides/testing.md
       - Code mods: guides/code-mods.md
+      - Running on a Wii: guides/hardware.md
       - JSON API: guides/json-api.md
   - Reference:
       - CLI: reference/cli.md

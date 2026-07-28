@@ -1,26 +1,25 @@
-"""Materialising a resolved chain into a bootable disc.
+"""Materialising a resolved chain into a staged build.
 
-The base is opened read-only throughout. Staging hardlinks unchanged files
-rather than copying 400 MB per iteration, so a build writes only what differs.
+Writing that out is `outputs.py`'s job. The base is opened read-only throughout,
+and staging hardlinks unchanged files rather than copying 400 MB per iteration,
+so a build writes only what differs.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
-import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck import platforms
-from bleck.backends import disc
 from bleck.common.errors import BleckError
+from bleck.common.fsio import remove_tree
 from bleck.formats import lz77, u8
-
-from bleck.mods.code import CodeBuild, CodeOverride, build_chain
 from bleck.mods.build.conflicts import Conflict, detect, effective_edits, merge_three_way
 from bleck.mods.build.edits import PlacementBuild, apply_chain
 from bleck.mods.build.overlay import Plan, build_plan
+from bleck.mods.code import CodeBuild, CodeOverride, build_chain
 from bleck.mods.resolver import Chain, check_bases
 
 
@@ -85,22 +84,6 @@ def stage(base: Path, dest: Path) -> int:
             shutil.copy2(source, target)
         count += 1
     return count
-
-
-def _on_rmtree_error(func, path: str, _exc) -> None:
-    """Retry a failed removal after clearing the read-only bit.
-
-    Windows refuses to delete read-only files, which staged copies inherit.
-    """
-    Path(path).chmod(stat.S_IWRITE)
-    func(path)
-
-
-def remove_tree(path: Path) -> None:
-    if platforms.current().strip_readonly_on_delete:
-        shutil.rmtree(path, onexc=_on_rmtree_error)
-    else:
-        shutil.rmtree(path)
 
 
 def _detach(path: Path) -> None:
@@ -279,15 +262,6 @@ def build(
     stage(base, staged)
     apply_plan(BuildContext(base, staged, plan, chain, allow_binary), report)
     return report
-
-
-def emit(
-    staged: Path,
-    out: Path,
-    image_format: disc.ImageFormat = disc.ImageFormat.ISO,
-    keep_iso: bool = False,
-) -> None:
-    disc.build_image(staged, out, image_format, keep_iso=keep_iso)
 
 
 def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:

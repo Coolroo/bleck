@@ -277,17 +277,19 @@ than declining to support it.
 Riivolution and ISO rebuilds only put the *file* on the disc. **The Gecko code is
 what actually executes it** — without it, `mod.rel` sits there inert.
 
-For Dolphin this is automatable: codes live in
-`User/GameSettings/R8PP01.ini` under `[Gecko]`. `bleck` can emit that INI beside
-the built image, so testing is turnkey:
+✅ **Solved by putting the code in the DOL.** `wstrt patch --add-sect` writes the
+handler and the loader codes into a new TEXT section of `main.dol` and redirects
+the game into it (`bleck/backends/gecko.py`). No `R8PP01.ini`, no cheat manager,
+no `.gct` for the user to install — on emulator or on console.
+
+That is why a **Riivolution patch is self-sufficient** (D86): Riivolution
+replaces `main.dol` like any other file, so the loader travels with the patch.
+See [`hardware.md`](./hardware.md) for the XML, the two ways to get it silently
+wrong, and why the REL stays named `mod.rel`.
 
 ```
-work/build/my-mod.wbfs
-work/build/my-mod.R8PP01.ini      ← drop into Dolphin's GameSettings
+bleck mod build my-mod --output riivolution
 ```
-
-For real hardware, the same code goes into a `.gct` via Riivolution or a code
-manager — out of scope initially, but the data is identical.
 
 ---
 

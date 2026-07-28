@@ -219,19 +219,24 @@ Resolve and detect conflicts. **Writes nothing** — the fast inner-loop command
 ### `bleck mod build`
 
 ```bash
-bleck mod build <name> [out] [--no-image] [--launch] [--map NAME|ID]
+bleck mod build <name> [out] [--output KIND] [--launch] [--map NAME|ID]
                        [--format {iso,rvz,wbfs}] [--merge-binary]
 ```
 
-Stage the base, apply the chain, and write a disc image.
+Stage the base, apply the chain, and write a disc image or a patch.
 
 | Flag | Effect |
 |---|---|
-| `--no-image` | Stage only, skip writing a disc image |
+| `--output` | What to produce: `iso`, `wbfs`, `rvz`, `riivolution`, `none` |
+| `--no-image` | Stage only, skip writing a disc image (same as `--output none`) |
 | `--launch` | Boot the result in Dolphin once it is built |
-| `--format` | Override the inferred output format |
+| `--format` | Override the inferred image format |
 | `--merge-binary` | Auto-merge disjoint edits to the same binary file |
 | `--map` | Start the game at this map instead of the attract demo |
+
+`--output riivolution` writes a patch and only the changed files instead of a
+4.5 GB image — see [Running on a Wii](../guides/hardware.md). Without
+`--output`, the kind is inferred from the output filename's extension.
 
 `--launch` makes the whole edit-build-boot loop a single command:
 
