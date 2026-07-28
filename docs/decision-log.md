@@ -6861,3 +6861,87 @@ The rule the pass converged on: **enumerate a closed set of bare values;
 leave a table of behaviour as a table.**
 
 791 tests (787 before), pylint 10.00/10.
+
+---
+
+## D101 — ⛔ D93 and D94 were both wrong: door descriptors ARE registered from map init scripts (2026-07-28)
+
+**`mods/door-scan`, one 90 s run.** Map init scripts call door descriptor
+setters. `door:` is not unreachable, and the two entries saying so are
+superseded.
+
+| | |
+|---|---|
+| `evt_door_set_door_descs` | **1** call — ⛔ D93 recorded **zero** |
+| `evt_door_set_map_door_descs` | **3** calls |
+| `evt_door_set_dokan_descs` | **3** calls |
+| control (`evt_hitobj_attr_onoff`) | **8** — the same number D93 recorded |
+| walks truncated at the 4096 limit | **0** |
+| `DoorDesc *` from the bytecode | `0x80D2FBB0` |
+| `MapDoorDesc *` from the bytecode | `0x80D2F940`, from `he1_01` |
+| `MapDoorDesc[0].destMapName` | ✅ **`he1_02`** |
+
+✅ The `destMapName` string is what makes this a finding rather than a number.
+A wrong pointer does not spell a map name.
+
+### ⚠️ TWO different instrument limits produced the two wrong negatives
+
+This is the part worth keeping. Neither earlier entry was careless, and both
+were wrong anyway.
+
+**D93 searched for one function at one argument count.** Its walker matched
+`header == 0x0002005C && script[at+1] == 0x800E2610` — `evt_door_set_door_descs`
+at argc 2. Two things follow:
+
+- ⛔ `evt_door_set_map_door_descs` and `evt_door_set_dokan_descs` **could not
+  have matched at all**, at any argc. They were never in the search.
+- ⛔ The argc-2 constraint came from `evt_door.h`'s
+  `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)`. ⚠️ **That declaration
+  contradicts the comment directly above it**, which reads
+  `evt_door_set_door_descs(DoorDesc *descs, s32 count)` — two arguments, so
+  argc 3. This run finds the call by pointer at whatever argc it declares, and
+  finds it. **The header's argument count is wrong, and D93 trusted it.**
+
+**D94 tested maps that do not contain the call.** Its branch over
+`evt_door_set_door_descs` was entered zero times across 90 s — but that run
+covered Flipside and the attract demo (`mac_01`, `aa4_01`, `ls4_12`), and the
+`MapDoorDesc` registration found here is in **`he1_01`**. A function not called
+by the maps you loaded reads exactly like a function never called.
+
+So D93 was bounded by its search space and D94 by its map coverage, and the two
+agreeing made the conclusion look twice-confirmed. ⚠️ **Two independent
+measurements are only independent if their blind spots are.** Both of these
+inherited "look for `evt_door_set_door_descs`" from the same reading of the
+same header.
+
+D94's control (`npcDispMain`, 62,480 entries) and D93's control (8 hits) both
+passed, and both were honest — they proved the instruments *worked*. Neither
+could show the instrument was *pointed at the right thing*, which is the
+distinction the project instructions' rule is about and which I did not apply here.
+
+### What is now true
+
+- ✅ A map's init script carries the descriptor array's address as a `USER_FUNC`
+  argument, exactly as D91 hypothesised before D93 appeared to rule it out.
+- ✅ Reading it needs only what D89 proved. No interception, no trampoline.
+- ✅ `DoorDesc` is 0x58 bytes with `interactScript` +0x40, `initScript` +0x50,
+  `moveScript` +0x54. `MapDoorDesc` is 0x20 with `destMapName` +0x14 and
+  `destDoorName` +0x18 — loading zones, which is the more interesting of the two
+  for modding.
+
+### Still not known
+
+- 🔶 **Which map holds the `set_door_descs` call.** Only the first hit's
+  argument was recorded, not its map.
+- 🔶 **The actual argc of these calls.** The pointer was read at `+2`, which is
+  right for any argc ≥ 2, and the `he1_02` string says it was right. But the
+  exact count is needed before `code.patches` can rewrite one of these
+  instructions, since D92's replacement matches the original's argc.
+- 🔶 Five maps is not the game.
+
+### Consequence
+
+`door:` should be reconsidered as a `code.patches` selector. ⛔ **The manifest
+still refuses it**, and `DEFERRED_PATCH_KINDS` still cites D91 — that stays
+until the argc question above is answered, because a patch written at the wrong
+size corrupts the script rather than failing.
