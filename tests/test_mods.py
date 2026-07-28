@@ -390,3 +390,25 @@ class TestBuild:
         report = builder.build(chain, base, staged, allow_binary=False)
         assert not report.is_clean
         assert not staged.exists(), "nothing should be written when conflicts exist"
+
+
+class TestArchiveMemberPaths:
+    """SPM's two archive families spell member paths differently.
+
+    `lyt/*.bin.uk` stores `arc/anim/x.brlan`; `map/*.bin` stores
+    `./dvd/setup/x.dat`. An overlay directory cannot contain a `.` component, so
+    an overlay addressing a map-archive member produces `dvd/setup/x.dat` and
+    used to match nothing -- the member was *added* beside the original rather
+    than replacing it, leaving two nodes with the same name.
+    """
+
+    def test_a_dot_slash_member_is_matched(self):
+        assert u8.member_key("./dvd/setup/he1_01.dat") == "dvd/setup/he1_01.dat"
+
+    def test_a_plain_member_is_left_alone(self):
+        assert u8.member_key("arc/timg/mario.tpl") == "arc/timg/mario.tpl"
+
+    def test_both_spellings_collide_deliberately(self):
+        # They must land on the same key, or the merge cannot see that an
+        # overlay entry and an archive node are the same file.
+        assert u8.member_key("./a/b.dat") == u8.member_key("a/b.dat")

@@ -178,20 +178,34 @@ def _merge_archive(
         )
 
     items = u8.read_all(payload)
-    known = {item.path for item in items}
+    packed = _merge_members(items, file_plan, context, report)
+    if packed is not None:
+        destination.write_bytes(lz77.compress(packed) if compressed else packed)
+
+
+def _merge_members(items, file_plan, context, report) -> bytes | None:
+    """Apply every member edit and repack. None when the merge conflicted."""
+    # ⚠️ Matched on a normalised key, not the stored path. SPM's two archive
+    # families disagree: `lyt/*.bin.uk` stores `arc/anim/...` while `map/*.bin`
+    # stores `./dvd/...`. An overlay path cannot express a `./` component, so
+    # matching literally meant a map-archive member was never recognised -- it
+    # was silently *added* alongside the original instead of replacing it,
+    # producing an archive with two members of the same name.
+    known = {u8.member_key(item.path): item.path for item in items}
 
     replacements: dict[str, bytes] = {}
     for member, raw_edits in file_plan.members.items():
         edits = effective_edits(context.chain, raw_edits)
         if not edits:
             continue
-        if member not in known:
+        key = u8.member_key(member)
+        if key not in known:
             report.warnings.append(
                 f"{file_plan.disc_path}: no member {member!r} "
                 f"(added as a new file by {edits[-1].mod_name})"
             )
         ancestor = next(
-            (i.data or b"" for i in items if i.path == member),
+            (i.data or b"" for i in items if u8.member_key(i.path) == key),
             b"",
         )
         outcome = merge_three_way(
@@ -200,21 +214,24 @@ def _merge_archive(
         if outcome.conflicts:
             report.conflicts += outcome.conflicts
             continue
-        replacements[member] = outcome.data
+        # Keyed so a `./`-prefixed member replaces the right node below.
+        replacements[key] = outcome.data
 
     if report.conflicts:
-        return
+        return None
 
-    # Preserve node order: unchanged members stay byte-identical (D17).
+    # Preserve node order *and the stored path*: unchanged members stay
+    # byte-identical (D17), and a replaced one keeps the archive's own spelling
+    # rather than the overlay's.
     merged = [
-        u8.U8Item(item.path, replacements.get(item.path, item.data)) for item in items
+        u8.U8Item(item.path, replacements.get(u8.member_key(item.path), item.data))
+        for item in items
     ]
     merged += [
         u8.U8Item(name, data) for name, data in replacements.items() if name not in known
     ]
 
-    packed = u8.write(merged)
-    destination.write_bytes(lz77.compress(packed) if compressed else packed)
+    return u8.write(merged)
 
 
 def prepare(chain: Chain, base: Path) -> Plan:

@@ -3053,3 +3053,58 @@ independently know the answer to.**
 
 `load_names` returns an empty catalog when the file is absent, and every other
 operation works without it. A convenience should not become a dependency.
+
+---
+
+## D57 — The end goal is an editor, and a latent merge bug found on the way (2026-07-27)
+
+### The goal is written down
+
+[`vision.md`](./vision.md) records what `bleck` is being built toward: **a full
+editor for SPM mods, GUI included**. It was steering decisions without being
+written anywhere.
+
+The constraint that matters immediately:
+
+> ✅ **Edits are declared as data and generated at build time, never shipped as
+> baked bytes.**
+
+A mod *could* ship a modified `setup/he1_01.dat` as a blob. It would work today
+and be a dead end — a blob cannot be undone, reviewed, re-applied to a corrected
+base, or opened in an editor. Declaring intent gives legible diffs, undo,
+re-derivation after a decode fix, and a GUI that mutates the same document the
+CLI writes. It is also the shape `code` already has.
+
+⛔ `map.dat` is the wall between here and a visual editor: 300–600 KB per map,
+undecoded, and nothing draws a map without it. Deferred deliberately.
+
+### ⛔ A merge bug that would have corrupted map archives
+
+Found while working out where a generated setup file should go.
+
+✅ **SPM's two archive families spell member paths differently:**
+
+| Archive | Stored member paths |
+|---|---|
+| `lyt/title.bin.uk` | `arc`, `arc/anim/title_Start.brlan` |
+| `map/he1_01.bin` | `.`, `./dvd`, `./dvd/setup/he1_01.dat` |
+
+An overlay addresses a member by directory, and **a directory cannot be named
+`.`** — so `overlay/files/map/he1_01.bin/dvd/setup/he1_01.dat` resolved to the
+member `dvd/setup/he1_01.dat`, which matched nothing.
+
+The failure was not an error. The merge treated it as a *new* member and added
+it, leaving the archive with **two nodes of the same file** — the original
+`./dvd/setup/he1_01.dat` still present and still what the game reads. A mod
+would have built cleanly, warned about nothing meaningful, and changed nothing.
+
+Nobody hit it because every asset mod so far targeted `lyt/`, which happens to
+use the other convention.
+
+Fixed with `u8.member_key`, which drops a leading `./` **for matching only** —
+the archive's own spelling is written back, so unchanged members stay
+byte-identical (D17).
+
+⚠️ The general shape, again: **two things that look interchangeable and are not.**
+`arc/x` and `./dvd/x` are both "a member path"; only one of them survives a
+round trip through a directory name.

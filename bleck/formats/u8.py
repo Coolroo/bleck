@@ -63,6 +63,18 @@ class _OpenDir:
     path: str
 
 
+def member_key(path: str) -> str:
+    """A member path in a form both of SPM's archive families agree on.
+
+    `map/*.bin` stores `./dvd/setup/x.dat`; `lyt/*.bin.uk` stores `arc/...`.
+    Callers matching a member by name need the two to compare equal -- an
+    overlay directory cannot contain a `.` component, so the leading `./` is
+    dropped for *matching only*. The archive's own spelling is what should be
+    written back, or a rebuilt archive stops being byte-identical.
+    """
+    return path[2:] if path.startswith("./") else path
+
+
 def is_u8(data: bytes) -> bool:
     return len(data) >= 4 and struct.unpack_from(">I", data)[0] == U8_MAGIC
 
