@@ -74,6 +74,42 @@ an application worth sharing.
 **Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent ·
 🔴 blocked on something outside the repository
 
+### 🟢 Publish what this repository knows and the ecosystem does not
+
+⚠️ **Not a docs task.** `docs/` is a maintainer's record and `docs-site/` tells
+people how to use `bleck`; neither is written to be *found* by someone
+researching Super Paper Mario. A third audience exists — the modding and decomp
+community — and there is now a real amount here that is not on any forum,
+wiki or repository:
+
+- ✅ `evt_door.h`'s `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` is
+  **wrong**; the game uses argc 3, matching the comment above it (D102). This
+  cost two entries here and would cost anyone else the same.
+- ✅ A script that reaches its end needs `END_EVT`, not just `END_SCRIPT`, or
+  its entry stays alive and the game hangs a few frames later with every value
+  it wrote still correct (D106).
+- ✅ The game reads the **standalone** `files/setup/*.dat`, not the copy
+  embedded in the map archive (D62) — and this repository itself got that
+  backwards for a long time.
+- ✅ A PowerPC code patch needs `dcbst`/`sync`/`icbi`/`isync`, measured against
+  a no-flush control that silently did nothing (D94).
+- ✅ `GetBasicPlayer` returns `arg0 + 0xD8`, and it is in no header (D96).
+- ✅ `itemEventDataTable` holds 33 entries, all *effect* items — an item with no
+  scripted use, like Shroom Shake, is simply absent (D107 follow-up).
+- ✅ The self-healing detour: a function can be watched, arguments **and**
+  return value, without a trampoline (D96).
+- ✅ A door's interact script opens with `MULF`, so there is no useful default
+  for a patch guard (D103).
+
+Most of this was measured because a header or an assumption was wrong, which is
+exactly the shape of thing that is expensive to rediscover and cheap to write
+down.
+
+🔶 Shape undecided: a `docs/findings/` tree, a wiki page, or upstream PRs
+against `spm-headers` for the ones that are outright corrections. The argc bug
+is a genuine upstream fix and should probably go back as one regardless.
+
+
 ### 🟢 More editing surfaces through the API
 
 Placement editing is done end to end because its format is *fully decoded*. The

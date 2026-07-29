@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "name": "item-use",
+  "version": "0.1.0",
+  "description": "Does a patched item use script actually ENTER when the player uses the item?",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "patches": [
+      { "script": "item:0x50", "at": 0, "expect": "USER_FUNC 4", "call": "on_item_use" },
+      { "script": "item:0xD4", "at": 0, "expect": "USER_FUNC 4", "call": "on_item_use" }
+    ]
+  }
+}

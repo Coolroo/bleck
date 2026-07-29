@@ -7421,3 +7421,57 @@ now; the second would be a declaration rather than a hook, which is what
 ⚠️ Also still open: `npcNameToPtr` (`0x801b6f2c`) means NPCs **can** be looked
 up by name, unlike doors. That is a nicer selector shape if it can be reached at
 a useful time.
+
+---
+
+## D108 — ✅ A mod can load a NAND save slot itself (2026-07-28)
+
+`mods/save-probe`. Groundwork for `--save-slot`, which would turn most of the
+remaining attended tests unattended.
+
+| | |
+|---|---|
+| `nandGetSaveFiles()` | `0x80AD4D80`, non-null **from frame 1** |
+| slot 0 | flags `0`, checksum **`0x3714`** |
+| slots 1–3 | flags `0x10000`, checksum `0x3FD` — **identical to each other** |
+| `nandLoadSave(0)` | called; **4,172 SEQ_GAME frames afterwards** |
+
+✅ **Safe to call, and no delay is needed** — unlike `code.boot`, which needed
+120 frames or the map loader stalled (D72). The array is there on the first
+frame a sequence hook runs.
+
+✅ **A written slot is distinguishable from an empty one.** Three slots sharing
+byte-identical flags *and* checksum are defaults; the fourth differs. So a
+`--save-slot` can refuse an empty slot rather than loading garbage into player
+state — which would be the worse failure, since it would look like it worked.
+
+✅ **On-screen "slot 1" is index 0.** Confirmed against a save the user had just
+made in slot 1.
+
+### ⛔ Run 1 measured nothing and reported it as zero
+
+The first attempt gated every read on `SEQ_TITLE`. `SEQ_SEEN` came back
+`0x0D` — LOGO, GAME, MAPCHANGE — so **the attract demo never reaches TITLE at
+all**, and the whole instrument sat behind a branch that never ran.
+`nandGetSaveFiles()` read as null because it was never called.
+
+⚠️ That is the fourth instrument error in two days (D101, D102, D107, this),
+and the third of a specific kind: **a correct reading of a place the game
+never goes.** `SEQ_SEEN` is the only reason it was diagnosable in one run
+instead of becoming a finding — a bitmask of which sequences were actually
+observed, added because "stopped on TITLE" and "never reached TITLE" are
+different failures that produce identical silence.
+
+### 🔶 What is not yet shown
+
+- **Loading the save did not move the game.** The attract demo carried on to
+  `ls4_12`. `nandLoadSave` populates state; something still has to enter it.
+  🔶 The likely pairing is `nandLoadSave(slot)` then `code.boot`'s map change,
+  which together would give D63's invisible-Mario problem a real fix.
+- 🔶 Nothing has confirmed the *loaded* state is correct — HP, items, position.
+  The next probe should read the pouch and compare against what the player has.
+- ⛔ The item-hook 🔶 is still open, but no longer for the reason recorded:
+  `itemEventDataTable` holds 33 entries and **all are effect items**
+  (Fire Burst, POW Block, Stopwatch…). An item with no scripted use, like
+  Shroom Shake, is simply absent — so the attended run that tried it was
+  testing an id the table never held.
