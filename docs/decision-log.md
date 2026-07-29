@@ -9983,3 +9983,65 @@ D138's disassembly showed writing into a per-map-door slot array.
 
 The 30-second human test on the `pointer-swap` branch is still the cheapest way
 to settle the swap itself.
+
+---
+
+## D140 — ✅ The door's interact script is its *animation*, not its transition (2026-07-29)
+
+Branch `pointer-swap`. D139 guessed why running the script did nothing and left
+it 🔶. Reading the bytecode settles it, and the guess was wrong.
+
+### ✅ The whole script, dumped from RAM
+
+`he1_01` door 0's `interactScript` at `0x80D2FB78` is **four instructions**:
+
+```
+MULF      LW(0), <float constant>
+USER_FUNC 0x800ED75C, 0x80CB35EC, 0, LW(0), 0
+END_EVT
+END_SCRIPT
+```
+
+`0xFE363C80` is `-30000000` — evt's encoding for a local-work variable, not a
+literal. `0x800ED75C` is unnamed in the `eu0` list but sits between
+`evt_mapobj_trans` (`0x800ED6C0`) and `evt_mapobj_scale` (`0x800ED7F8`), so it is
+an `evt_mapobj_*` transform.
+
+### ✅ So it is a per-call animation step
+
+The script multiplies a local variable by a constant and applies it to a map
+object. **`LW(0)` comes from whatever started it** — the door's opening angle,
+supplied by a parent. Run detached, `LW(0)` is 0, the object is transformed by
+nothing, and the script ends. Exactly what D139 measured: a real `EvtEntry`, no
+assert, no visible effect.
+
+⛔ **There is no branch in it at all.** The suggestion that it checks the
+player's position and bails is ruled out — there is nothing to check with. The
+proximity requirement a player experiences lives in whatever *calls* this, not
+here.
+
+### ✅ This confirms D139's 🔶 with evidence
+
+The `DoorDesc` interact script animates the door; the **transition belongs to
+`MapDoorDesc`** (D138: `ie_doa_02` -> `he1_06` covers the same doorway). Two
+records, two jobs — now measured rather than inferred.
+
+### ⚠️ What that means for the pointer swap, and for the human test
+
+The swap on this branch replaces a **door-opening animation**, not the door's
+behaviour. So the test to ask for is sharper than "does anything happen":
+
+> Use Bestovius's door. **You should still reach `he1_06`** — the transition is
+> not in the script we replaced. Word 3 climbing is the swap working; the door
+> failing to animate on the way is the same finding seen from the other side.
+
+⚠️ A swap that silently kept working *because the transition never depended on
+it* would have looked like success. Knowing what the script does is what makes
+the result readable.
+
+### 🔶 Still open
+
+Whether replacing a script that a parent drives per-call is safe in general.
+This one is called repeatedly with state in `LW(0)`; a replacement that ignores
+it stops the animation rather than breaking the entry, but that is this script's
+shape, not a rule.
