@@ -246,12 +246,105 @@ of the bytecode needs no hook at all (D89, D101), and `code.patches`'
 
 ---
 
+## NPC behaviour scripts — `npcGetWorkPtr` `0x801c9adc` (eu0)
+
+⚠️ **Research, not a feature.** `npcdrv:` is not a `code.patches` selector and
+nothing here is declarable from a manifest. What follows is what three
+`mods/npc-probe` runs measured (D107).
+
+Declared in `spm/npcdrv.h`. Established by reading the structure it returns
+during gameplay, not by tracing the function.
+
+✅ **Measured, booting into `he1_01`** (`scripts/ingame.py --map he1_01`):
+
+| | |
+|---|---|
+| `npcGetWorkPtr()` | `0x805283E0`, usable every gameplay frame |
+| `work->num` | **80**, constant |
+| `work->entries` | `0x807BB960` |
+| live slots (control: head word non-zero) | **3** |
+| slots carrying script pointers | **3** — all of them |
+| `templateinitScript` | `0x8043B8F8` |
+| `templatemoveScript` | `0x804938E8` |
+| `templateonHitScript` | `0x80494E28` |
+| `templatedeathScript` | `0x80439F10` |
+| first word of the init script | **`0x0002005C`** |
+
+⚠️ **`NPCWork.num` is the array's capacity, not a live count.** It read exactly
+80 for the whole of every run and never moved; `npcGetMaxEntries` is a separate
+symbol. A slot inside that range can be entirely unused, so reading one and
+finding nulls says nothing about whether NPCs exist.
+
+✅ **The scripts are real evt bytecode.** The init script's first word decodes as
+`USER_FUNC` with argc 2 — that is the evidence. Four non-null pointers are four
+numbers; a word that decodes as a known opcode with a sane argument count is
+bytecode.
+
+✅ **The bytecode lives in DOL static data** (`0x8043…`–`0x8049…`, inside the
+data span D95 recorded reaching `0x805B7720`), not on the heap. So the *script*
+is at a fixed address even though the *pointer* is on a live entry.
+
+⛔ **`work->setupFile`** (`NPCWork` +0x18) read **0** on every frame in every map
+tried. Either the offset is wrong or it is populated on a path these runs did
+not take. Unexplained, and not chased.
+
+### ⛔ The attract demo's maps contain no NPCs at all
+
+Two earlier runs read zero and both were honest measurements of the wrong place:
+
+- **Run 1** read `entries[0]` and found four nulls — slot 0 was simply unused,
+  because `num` is a capacity.
+- **Run 2** scanned all 80 slots and still found nothing, because it ran on
+  `aa4_01` and `ls4_12`.
+
+✅ What broke the cycle was a **control that could tell the two apart**: count
+slots whose head word is non-zero — live at all — independently of whether the
+script offsets are right. With `--map he1_01` it read 3, and the script counts
+followed. Without it, run 3's numbers would have been one more plausible zero.
+
+### 🔶 Why this is not a `door:`-shaped selector yet
+
+| | where the pointer lives | readable at `mod_prolog`? |
+|---|---|---|
+| `door:` | an argument in the map's **init script** bytecode | ✅ yes |
+| NPC scripts | fields on a **live `NPCEntry`**, copied in at spawn | ⛔ no |
+
+🔶 So a build-time selector needs the **template**, not the entry, and where
+templates live is not known. `npcEntryFromTemplate` (`0x801be198`) and
+`npcEntryFromSetupEnemy` (`0x801bf7a0`) are the two spawn paths; the second
+takes a record from the setup file `bleck` already parses and edits (D80), which
+is the promising thread.
+
+🔶 Alternatives, unranked: intercept a spawn function with `code.hooks`
+`mode: "after"` (D97) and rewrite the entry's pointers per spawn; or find the
+static template table and patch it like a door. The first is certainly possible
+today; the second would be a *declaration* rather than a hook, which is what
+[`vision.md`](vision.md) asks for.
+
+🔶 `npcNameToPtr` (`0x801b6f2c`) means NPCs **can** be looked up by name, unlike
+doors — a nicer selector shape if it can be reached at a useful time.
+
+---
+
+## ⚠️ Three times now: the right measurement, the wrong maps
+
+D94 (doors), D101 (doors again) and D107 (NPCs) each recorded a zero that was a
+fact about **map coverage**, not about the game. The attract demo reaches only
+`aa4_01` and `ls4_12`, and neither registers a `DoorDesc` or holds an NPC.
+
+`scripts/ingame.py --map <name>` boots straight into any of the 383 maps (D64),
+so this costs nothing to avoid. **Before recording that something is absent,
+check the run was in a map that has it** — and pair the reading with a control
+that would have looked different if it were present.
+
+---
+
 ## See also
 
 - [`decision-log.md`](decision-log.md) — D94 (instruction patching), D95
   (`code.hooks`), D96 (the trace), D101 (the door setters, and why D93/D94 were
   wrong about them), D102 (their argc, and the wrong header), D103/D104 (the
-  `door:` selector)
+  `door:` selector), D107 (NPC behaviour scripts, and the third wrong-maps zero)
 - [`hook-points.md`](hook-points.md) — when custom code can safely run
 - [`code-mods.md`](code-mods.md) — the trace pattern and its hazards
 - [`disc-layout.md`](disc-layout.md) — facts about the disc rather than the code

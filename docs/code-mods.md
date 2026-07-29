@@ -129,7 +129,7 @@ overlay places.
 
 ---
 
-## C++ — ✅ builds, 🔶 unproven in-game (D85)
+## C++ — ✅ builds (D85), ✅ runs in-game (D105)
 
 `code.sources` accepts `.c`, `.cpp`, `.cc` and `.cxx`. Which language owns which
 suffix, and what each needs, is one table: **`bleck/backends/languages.py`**.
@@ -201,9 +201,25 @@ and refuses the build unless there is exactly one `.ctors` output section and th
 markers sit at its first and last words. A verified build: `.ctors` is 12 bytes —
 start marker, one `R_PPC_ADDR32` to `_GLOBAL__sub_I_*`, end marker.
 
-🔶 **The walk has not run in-game.** Every claim above is about the ELF and the
-REL on disk. Whether the constructed objects behave once the loader links the
-module is untested — `scripts/ingame.py` is the way to settle it.
+✅ **The walk runs in-game** (D105). ⛔ The paragraph here used to read "the walk
+has not run in-game; every claim above is about the ELF and the REL on disk" —
+that is now settled:
+
+| | |
+|---|---|
+| a global's constructed field | **`0x0C70FA11`** — `.bss` would read 0 |
+| a virtual call through a relocated vtable | **`0x1234`** |
+| constructors counted by the walk | **1** |
+| SEQ_GAME frames with C++ hooks installed | **13,119 and climbing** |
+
+So the laundered bounds are right, the vtable relocation is right, and sequence
+hooks installed from C++ keep running. ⚠️ **Read from a build that stayed up.**
+Earlier readings of the same fields were taken at `mod_prolog` and were never
+wrong — but the build they came from froze seconds later (D106), and a
+capability should not be recorded from a build that dies afterwards.
+
+⚠️ **Four runs blamed C++ for that freeze before a pure-C control cleared it.**
+The new thing is not automatically the broken thing.
 
 Order across translation units is unspecified, as in any C++ program. Within one,
 GCC emits a single initialiser calling them in declaration order, so that part is
@@ -435,8 +451,16 @@ reads a final value.
 - ⛔ **No dispatcher or opcode changes**, as `evtpatch` does.
 - ⛔ **No `npcdrv.h` scripts**, and no `MapDoorDesc` (loading zone) selector.
   Deferred with a reason, not merely unimplemented. ⚠️ **"No `door:`" used to be
-  this bullet and is gone** — `door:<map>:<index>` ships (D103, D104), and
-  `npcdrv`'s registration-from-a-script shape is the thing to look for next.
+  this bullet and is gone** — `door:<map>:<index>` ships (D103, D104).
+  ⛔ **`npcdrv` has no registration-from-a-script shape to find** — that
+  sentence used to sit here and D107 supersedes it. An NPC's script pointers are
+  fields on a **live `NPCEntry`**, copied in at spawn, so unlike a `DoorDesc`
+  array they are not an argument in the map's init script and nothing carries
+  them at `mod_prolog`. 🔶 A selector would need the *template*, and where
+  templates live is unknown; `npcEntryFromSetupEnemy` (`0x801bf7a0`) takes a
+  record from the setup file `bleck` already parses (D80) and is the open
+  thread. Measurements in
+  [`function-behaviour.md`](function-behaviour.md).
 - ⚠️ **A patch lasts the whole session**, including maps entered later. It is
   applied once, at load, and not re-applied per arrival.
 - 🔶 **A patched item or door hook has never been seen running.** An item use

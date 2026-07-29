@@ -112,7 +112,7 @@ cannot silently change which script starts.
 | `case > 10 { }` | `CASE_LARGE 10` + body |
 | `case 2, 3 { }` | `CASE_OR 2`, `CASE_OR 3` + body + `CASE_END` |
 | `else { }` (in a switch) | `CASE_ETC` + body |
-| `return` | `END_EVT` (ends the script, not the array) |
+| `return` | `END_EVT` (ends the running entry, not the array) |
 | `f(a, b)` | `USER_FUNC &f, a, b` |
 | `spawn s` | `RUN_CHILD_EVT &s` |
 | `gw[3]` | operand `-49999997` |
@@ -146,6 +146,51 @@ switch: `DO_BREAK` would jump past `END_SWITCH` and leave the switch open.
 Only the subject-holding `SWITCH` is emitted, never `SWITCHI`, which takes its
 operand raw and so cannot name a slot. Integers only — `evt` has no float or
 string `CASE_*`. `CASE_BETWEEN`, `CASE_AND` and `CASE_FLAG` are not exposed.
+
+✅ **A `switch` takes the right arm in-game** (D105). `case 3` wrote `0x33` and
+the `else` arm wrote `0xDD` — each arm writes a *different* value, and 3 is
+deliberately not the first case, so the failure a broken `SWITCH`/`CASE`
+lowering degrades to (first-arm-always) could not have passed. The `else` arm
+was exercised with a value matching no case, because a default that is present
+is not a default that is reached.
+
+### ⛔ Two terminators, and the freeze that came from emitting one
+
+`evt` ends things twice over, and the distinction is not cosmetic:
+
+| | | |
+|---|---|---|
+| `END_SCRIPT` | `0x01` | ends the instruction **list** |
+| `END_EVT` | `0x02` | ends the running **entry** |
+
+⛔ **A script that fell off its end used to hang the game** (D105, D106).
+`lower.py` emitted `END_EVT` only for an explicit `return` and only
+`END_SCRIPT` when a body ran off its end, so a script that simply finished left
+its `EvtEntry` alive and the game stopped advancing a few frames later. ⚠️ The
+symptom was quiet and easy to misread: **every value the script had written was
+correct**, and then nothing moved again.
+
+✅ **Fixed** — both are now emitted unconditionally, so after an explicit
+`return` the second is unreachable. That costs one word and removes any need to
+reason about whether the last statement on every path happened to be a `return`.
+
+⚠️ **It affected every script, not just `main`.** A map-hook script with no
+`main` at all froze identically, which is what showed the bug was in *scripts*
+rather than in the free-running entry — and therefore that special-casing `main`
+(warning about it at build time, or appending a trailing wait) would have been
+the wrong shape of fix. D105 leaned toward both of those; ⛔ both are superseded.
+
+⚠️ **Why nothing caught it.** Every worked example in the repository ends in a
+way that avoids the case: `coin-tick` is `loop { wait_ms }`, `map-hook` loops
+with `wait(1)`, `goto-map` changes map so evt state is torn down anyway. **No
+mod here had a script that simply ended**, so the first thing a new user writes
+was the one case never exercised. The whole suite passed on either version of
+the compiler, because the bytecode tests asserted **what the compiler emits**
+rather than what the VM requires — an assertion of a compiler against itself
+passes on any self-consistent compiler. `tests/test_script.py::TestTermination`
+now asserts the property the VM imposes: every compiled script ends with both
+terminators, whatever its last statement was. `mods/end-scope` is the worked
+example.
 
 ### Two things the encoding forces
 
@@ -263,7 +308,10 @@ generated code reports how many in `bleck_patch_shared[]`. ⛔ `door:` was
 deferred and is not any more: `DoorDesc` still has no lookup by name (D91), so
 the index is a **position** in the array the map registers, walked out of the
 init script's bytecode. ⚠️ A door interact script opens with `MULF`, so `expect`
-must be measured per door. ⛔ `npcdrv:` is still not a selector.
+must be measured per door. ⛔ `npcdrv:` is still not a selector, and 🔶 it is
+not the same shape as `door:` — an NPC's script pointers are fields on a live
+`NPCEntry`, copied in at spawn, so nothing carries them at `mod_prolog` (D107).
+See [`function-behaviour.md`](function-behaviour.md) for what is measured.
 
 ⚠️ **The guard is not optional, and it is the point.** A patch that writes into
 an unexpected script is the failure mode worth designing out: without it, a

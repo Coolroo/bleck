@@ -3,14 +3,15 @@
 Last updated 2026-07-28. A mod can now change the game's **own** content: one
 instruction of a vanilla `evt` script (D89–D92) or a game C function by name
 (D94–D96), both declared in `mod.json` and both refused rather than written when
-the target is not what the build expected. Code mods build C++ (D85), and
+the target is not what the build expected. Code mods build C++ and run it
+in-game (D85, D105), and
 `--output riivolution` produces a patch for real hardware instead of a 4.3 GB
 image (D86).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D101)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D107)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -143,7 +144,15 @@ refers to is a different mechanism and it works** (D89) — that is what
 `code.patches` does.
 
 ✅ **Code mods build C++** (D85), with static constructors walked from `_prolog`
-and the `.ctors` table checked at link time. 🔶 Nothing C++ has run in-game.
+and the `.ctors` table checked at link time — and ✅ **C++ runs in-game** (D105):
+a global's constructor fired, a virtual call through a relocated vtable
+returned, and sequence hooks installed from C++ kept running for 13,119 frames.
+
+⛔ **A script that fell off its end used to hang the game** (D105, D106). Only
+`END_SCRIPT` (0x01, ends the instruction *list*) was emitted, never `END_EVT`
+(0x02, ends the running *entry*), so the entry stayed alive and the game stopped
+a few frames later with every value the script wrote still correct. ✅ Fixed —
+both are now emitted unconditionally, for **every** script, not just `main`.
 
 pylint 10.00/10. The test count moves every session; run `uv run pytest` rather
 than trusting a number written here.
@@ -178,7 +187,9 @@ than trusting a number written here.
 | ✅ **Door scripts are reachable, and `door:` ships** | `door:<map>:<index>[:interact\|init\|move]` resolved and APPLIED in-game; word 0 `0x0002003C` → `0x0002005C`, word 2 untouched (D103, D104). ⛔ D91 ("needs interception, not a lookup") and D93/D94 ("unreachable") are all superseded — the setters take **argc 3**, not the argc 2 `evt_door.h` declares (D102). 🔶 The hook has never been *entered* |
 | ⚠️ **`spm-headers` can be simply wrong** | `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` contradicts the comment above it and the game; it cost two decision entries (D102). A load-bearing argc, offset or size from a header is a hypothesis 🔶 until measured |
 | ✅ **C++ code mods build** | `.ctors` survives `-r --gc-sections` and elf2rel; markers checked at link (D85) |
-| 🔶 **No C++ code mod has run in-game** | every D85 claim is about the ELF and REL on disk |
+| ✅ **A C++ code mod runs in-game** | a global's ctor fired (`0x0C70FA11`, `.bss` would read 0), a virtual call through a relocated vtable returned `0x1234`, 1 constructor counted, 13,119 SEQ_GAME frames (D105) |
+| ✅ **A `switch` takes the right arm in-game** | `case 3` wrote `0x33`, the `else` arm `0xDD`; each arm writes a different value and 3 is not the first case, so first-arm-always could not pass (D105) |
+| ⛔ **A script that simply ended hung the game** | `END_EVT` was emitted only for an explicit `return`, so the entry outlived the script (D105, D106). Fixed; both terminators now always emitted |
 | ✅ **Riivolution output boots in Dolphin** | loader travels in the patched `main.dol`; negative isolates one XML element (D86) |
 | ⛔ **Nothing has run on real hardware** | every runtime claim here is Dolphin's (D86, D94, D96) |
 | ✅ **`.env` is loaded automatically** | tool paths survive between shells; real env still wins |
@@ -381,13 +392,17 @@ per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
    D104), `DEFERRED_PATCH_KINDS` is empty, and `he1_01` is the map that holds
    the `set_door_descs` call. 🔶 What is *not* done: the hook has never been
    entered, `init`/`move` opening opcodes are unrecorded, and five maps is still
-   not the game. ⛔ `npcdrv:` is still not a selector.
+   not the game. ⛔ `npcdrv:` is still not a selector — and D107 shows it is not
+   the same shape: NPC script pointers are fields on a live `NPCEntry` copied in
+   at spawn, not an argument in a map init script, so nothing carries them at
+   `mod_prolog`. The thread to pull is `npcEntryFromSetupEnemy` (`0x801bf7a0`),
+   which takes a record from the setup file `bleck` already parses (D80).
 4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
    takes its argument raw, bypassing the zone decoder — confirmed from
    decompiled source. `var a = -30000000` is currently a compile error and need
    not be. Small, and removes a papercut the language shipped with.
 5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
-   `switch` is done (D84), though nothing has run one in-game yet.
+   `switch` is done (D84) and ✅ takes the right arm in-game (D105).
    ⚠️ `RUN_EVT` is *emitted* nowhere — the map-hook design that used it was
    ruled out (D51) — so `spawn` starts from scratch.
 6. **Switch to the decomp's symbol table** (D39).
@@ -777,10 +792,16 @@ stopped being true. If a third is ever added, check that page.
   REL-relative addresses, 33 have no known address anywhere.
 - ⛔ **Hardware.** Riivolution output is built for a Wii and has only ever run in
   Dolphin (D86), as has every cache-flush result (D94, D96).
-- 🔶 **No C++ code mod has run in-game** (D85). Every claim there is about the
-  ELF and the REL on disk.
-- 🔶 **No `switch` has run in-game** (D84), and the absence of `SWITCH_BREAK` is
-  read off header declarations rather than off the VM's code.
+- ✅ ~~**No C++ code mod has run in-game**~~ — *closed by D105.* Constructors,
+  a virtual call through a relocated vtable, and sequence hooks installed from
+  C++ all measured in a running game.
+- ✅ ~~**No `switch` has run in-game**~~ — *closed by D105*, with each arm
+  writing a distinct value so a first-arm-always lowering could not pass. 🔶 The
+  absence of `SWITCH_BREAK` is still read off header declarations rather than
+  off the VM's code.
+- 🔶 **`npcdrv:` is research, not a feature** (D107). NPC behaviour scripts are
+  real evt bytecode in DOL static data and are readable from a live `NPCEntry`,
+  but nothing carries them at `mod_prolog`, so no selector exists.
 - 🔴 **US (`us0`) support is blocked on a US disc image.** `work/extracted/`
   holds `eu0` only.
 

@@ -99,8 +99,8 @@ play far enough once and press F1.
 ### 🟢 The rest of the scripting language
 
 `SETI` for ambiguous literals, `IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`,
-and `peek`/`poke` for `SET_RAM`/`GET_RAM`. `switch` landed in D84, though 🔶
-nothing has run one in-game. The language lowers to 50 of the VM's 120 opcodes;
+and `peek`/`poke` for `SET_RAM`/`GET_RAM`. `switch` landed in D84 and ✅ takes
+the right arm in-game (D105). The language lowers to 50 of the VM's 120 opcodes;
 this is the one place that number is written down, so update it here.
 
 ⚠️ Raw memory access is what would let a script write an `EvtScriptCode *` into
@@ -179,9 +179,61 @@ What is still open on doors:
 (0x58), the door the player interacts with. Loading zones are the obvious next
 one.
 
-🔶 `npcdrv.h`'s `templateinitScript` is untested and unchanged by this; ⛔
-`npcdrv:` is still not a selector. The registration-from-a-script shape that
-`door:` walks is the thing to look for first.
+### 🟡 `npcdrv:` — research in progress, and *not* a `door:` in disguise
+
+⛔ **Still not a selector**, and D107 is why it is not a mechanical follow-on
+from `door:`. What that research settled, and what it did not:
+
+✅ **Known** (`mods/npc-probe`, booted into `he1_01`):
+
+- `npcGetWorkPtr()` (`0x801c9adc`) is usable every gameplay frame; it returned
+  `0x805283E0`, entries at `0x807BB960`.
+- ⚠️ `NPCWork.num` is **80 and constant** — the array's **capacity**, not a live
+  count. `npcGetMaxEntries` is a separate symbol.
+- `he1_01` has **3 live entries, all 3 carrying script pointers**
+  (`templateinitScript` `0x8043B8F8`, `move` `0x804938E8`, `onHit`
+  `0x80494E28`, `death` `0x80439F10`).
+- ✅ Those pointers are **real evt bytecode** — the init script's first word is
+  `0x0002005C`, `USER_FUNC` argc 2 — and the bodies live in **DOL static data**
+  (`0x8043…`–`0x8049…`), so the bytecode is at a fixed address.
+
+⛔ **The attract demo's maps contain no NPCs at all.** Two earlier runs read zero
+for that reason alone. See the standing caution below.
+
+🔶 **Why the `door:` shape does not carry over.** A door descriptor array's
+address is an argument in the map's **init script**, readable at `mod_prolog`
+before anything runs. An NPC's script pointers are fields on a **live
+`NPCEntry`**, copied in at spawn — nothing carries them at `mod_prolog`. So a
+build-time selector needs the **template**, and where templates live is unknown.
+
+The open thread: `npcEntryFromSetupEnemy` (`0x801bf7a0`) takes a record from the
+**setup file `bleck` already parses and edits** (D80). `npcEntryFromTemplate`
+(`0x801be198`) is the other spawn path. 🔶 The alternative is intercepting a
+spawn with `code.hooks` `mode: "after"` (D97) and rewriting the entry per spawn —
+certainly possible today, but a hook rather than a declaration, which is the
+wrong direction for [`vision.md`](./vision.md).
+
+⚠️ `npcNameToPtr` (`0x801b6f2c`) means NPCs **can** be looked up by name, unlike
+doors — a better selector shape than an index, if it can be reached at a useful
+time. ⛔ `work->setupFile` (+0x18) read 0 in every map tried and is unexplained.
+
+Measurements in
+[`function-behaviour.md`](./function-behaviour.md); reasoning in D107.
+
+### ⚠️ Standing caution: a correct measurement of the wrong maps
+
+**Three separate times now, a real measurement has read as a capability being
+absent** because the run never visited a map that had it — D94 (doors), D101
+(doors again), D107 (NPCs). Each zero was honest and each was about **map
+coverage**, not about the game.
+
+The attract demo reaches only `aa4_01` and `ls4_12`. Neither registers a
+`DoorDesc`; neither contains a single NPC. `scripts/ingame.py --map <name>`
+boots straight into any of the 383 maps (D64), so this costs nothing to avoid.
+
+**Before recording that something is absent, check the run was in a map that has
+it**, and pair the reading with a control that would look different if it were
+present. This is a testing-methodology fact people here keep re-learning.
 
 ### 🔴 US (`us0`) support — blocked on a disc
 

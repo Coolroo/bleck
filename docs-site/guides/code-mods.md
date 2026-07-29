@@ -441,9 +441,6 @@ extern "C" void mod_prolog(void)
     Constructor order *across* source files is unspecified, as in any C++
     program; within one file it follows declaration order.
 
-    This has not been exercised in a running game. If a global object matters to
-    your mod, confirm it is what you expect before relying on it.
-
 !!! note
 
     `BLECK_HEADERS_DIR` supplies `-I` for your sources — point it at
