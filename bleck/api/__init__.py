@@ -24,6 +24,7 @@ from bleck.api.v1 import (
     PlacementEdit,
     Position,
     SetupEdits,
+    Table,
 )
 
 #: The version this module's re-exports point at.
@@ -44,5 +45,6 @@ __all__ = [
     "PlacementEdit",
     "Position",
     "SetupEdits",
+    "Table",
     "v1",
 ]

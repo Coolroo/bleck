@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "name": "npc-fields",
+  "version": "0.1.0",
+  "description": "Do a setup entry's undocumented fields reach the live NPCEntry? Bare vs cloned vs shipped, same map, same frame.",
+  "base": "eu0",
+  "_comment": [
+    "No 'setup' block on purpose. Slot 4 must be a byte-copy of slot 0 with two",
+    "fields overwritten, and a declared edit cannot express that -- it writes",
+    "template and position onto whatever the slot already holds, which for an",
+    "empty slot is zeros. Declaring it produced two BARE enemies and a probe",
+    "whose comments described a control that did not exist (D123).",
+    "scratchpad/make_extra.py writes overlay/files/setup/he1_01.dat instead."
+  ],
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false
+  }
+}

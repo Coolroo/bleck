@@ -126,6 +126,54 @@ collide at link time; scripts merge cleanly, C does not yet. See
 Map names are the disc's own; `bleck maps --chapter 5` lists them with the
 chapter each belongs to.
 
+### Placements: `setup` and `tables`
+
+A mod changes what a map spawns by *declaring* it — never by shipping patched
+bytes (D58, `vision.md`). Two spellings, one meaning:
+
+```json
+"setup":  { "he1_01": [ { "slot": 3, "template": 2, "position": [-300, 0, 0] } ] },
+"tables": { "enemies": ["tables/enemies.csv",
+                        { "path": "tables/he1_01.csv", "map": "he1_01" }] }
+```
+
+Inline is right up to a handful of rows. Past that it is punctuation, so a CSV
+table takes over (D124). A table declared as a bare path carries a `map` column;
+one declared with a `map` binds every row to it and **must not** also have the
+column. `bleck/formats/tables.py` reads them; `bleck/mods/build/edits.py` merges
+both sources and applies them.
+
+⚠️ **The `tables` key is the *kind*, not a label** (D125) — a closed
+`TableKind`, today only `enemies`, with `items` and `doors` refused as unbuilt
+rather than accepted and ignored. Read rows through
+`Manifest.tables_of(kind)`; iterating `manifest.tables` is the bug D125 removed,
+where every declared table was applied as enemy placements whatever it was
+called.
+
+| Column | |
+|---|---|
+| `map` | required unless the table is bound |
+| `slot` | required, 0–99 |
+| `template` | a number, or a name resolved through the committed NPC catalog |
+| `x`, `y`, `z` | all three or none |
+| `copy_from` | a slot whose whole entry is copied first |
+| `clear` | empty the slot |
+
+⚠️ **`copy_from` exists because a declared edit builds on zeros** (D123). An
+unused slot has zeros where every shipped enemy carries `0xDC` at +0x14, `0x12C`
+at +0x18 and `2` at +0x68, and those reach the live `NPCEntry`. Copying an
+existing entry carries them across without anyone naming them — the same
+principle `Enemy.raw` uses to survive a `with_*` edit. Copying an *empty* slot is
+refused: it would carry nothing and look like it had.
+
+⚠️ **A name that fits several templates is refused, not guessed.** 386 distinct
+English tribe names cover the 423 named templates and only 382 are unique;
+`Goomba` names 35. Ambiguity lists the candidate ids and says to use a number.
+
+⚠️ **The same `(map, slot)` inline and in a table is an error naming both.**
+Across mods it is an ordinary conflict and the install order settles it; within
+one mod nothing says which of its own two statements was meant.
+
 ---
 
 ## Overlay resolution

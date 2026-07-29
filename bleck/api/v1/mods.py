@@ -223,6 +223,36 @@ class Code(BaseModel):
         )
 
 
+class Table(BaseModel):
+    """A CSV table of placements, as a program exchanges it.
+
+    ⚠️ Always the object form, and always inside a list, where `mod.json` also
+    accepts a bare path string and a lone table. The manifest is hand-edited and
+    a shorthand earns its keep there; a wire format with two shapes for one
+    thing is a bug generator.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(description="Relative to the mod root, posix-style.")
+    map: str = Field(
+        default="",
+        description=(
+            "The map every row belongs to. Empty means each row names its own "
+            "in a `map` column -- and a bound table may not have that column."
+        ),
+    )
+
+    @classmethod
+    def of(cls, ref: manifest_placements.TableRef) -> Table:
+        return cls(path=ref.path, map=ref.map_name)
+
+    def to_manifest(
+        self, kind: manifest_placements.TableKind
+    ) -> manifest_placements.TableRef:
+        return manifest_placements.TableRef(kind=kind, path=self.path, map_name=self.map)
+
+
 class ModDocument(Document):
     """Everything a mod declares. What an editor opens and saves."""
 
@@ -244,6 +274,15 @@ class ModDocument(Document):
     )
     setup: dict[str, list[PlacementEdit]] = Field(
         default_factory=dict, description="Declared enemy placement changes."
+    )
+    tables: dict[manifest_placements.TableKind, list[Table]] = Field(
+        default_factory=dict,
+        description=(
+            "CSV tables, keyed by what their rows describe. The declarations "
+            "only -- the rows live in the files, which an editor reads from "
+            "disk like any other mod file. Always a list, even for one table: "
+            "a consumer that has to branch on the shape will get it wrong."
+        ),
     )
 
     @model_validator(mode="after")
@@ -269,6 +308,11 @@ class ModDocument(Document):
                 placement.map_name: [PlacementEdit.of(edit) for edit in placement.edits]
                 for placement in manifest.setup
             },
+            tables={
+                kind: [Table.of(ref) for ref in manifest.tables_of(kind)]
+                for kind in manifest_placements.TableKind
+                if manifest.tables_of(kind)
+            },
         )
 
     def to_manifest(self) -> mod_manifest.Manifest:
@@ -288,5 +332,10 @@ class ModDocument(Document):
                     map_name=name, edits=[edit.to_manifest() for edit in edits]
                 )
                 for name, edits in self.setup.items()
+            ],
+            tables=[
+                table.to_manifest(kind)
+                for kind, found in self.tables.items()
+                for table in found
             ],
         )

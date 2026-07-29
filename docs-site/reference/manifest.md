@@ -201,6 +201,14 @@ Every mod has a `mod.json` at its root.
                 English names come from a data file shipped beside it. If
                 that file is missing, only the English spelling stops
                 resolving, and it says so.
+
+                [`bleck items`](cli.md#bleck-items) lists all 538 with
+                every spelling each one accepts, so you need not guess:
+
+                ```bash
+                bleck items --search fire
+                bleck items --group CARD
+                ```
             - `at` — word offset into the script where the instruction begins.
             - `expect` — the opcode you expect to find there. **Required.**
               An opcode name (`"DEBUG_PUT_MSG"`), a name with its argument
@@ -414,15 +422,105 @@ Every mod has a `mod.json` at its root.
     }
     ```
 
-    Each edit needs a `slot` (0–99) and at least one of `template`, `position`
-    or `clear`. See what a map currently places with
+    Each edit needs a `slot` (0–99) and at least one of `template`, `position`,
+    `copy_from` or `clear`. See what a map currently places with
     [`bleck setup show`](cli.md#bleck-setup).
+
+    `copy_from` names a slot whose **whole entry** is copied in before
+    `template` and `position` are applied:
+
+    ```json
+    { "slot": 3, "copy_from": 0, "template": 2, "position": [-300, 0, 0] }
+    ```
+
+    An edit otherwise builds on whatever the slot already holds, and an unused
+    slot holds zeros — where every enemy the game ships carries three values
+    nobody has identified, which do reach the live NPC. Copying an existing
+    enemy carries them across without your having to know what they are. Copying
+    an **empty** slot is refused, because it would carry nothing and quietly
+    look like it had.
 
     !!! note
 
         `bleck` writes **both** copies of the setup file — the standalone
         `files/setup/<map>.dat` the game reads, and the byte-identical one
         inside the map archive, so nothing stale is left on the disc.
+
+`tables` <span class="pf-type">object</span>
+
+:   The same placements as `setup`, in CSV files instead. Past a handful of
+    rows, JSON stops being readable and starts being punctuation.
+
+    ```json
+    "tables": {
+      "enemies": "tables/enemies.csv"
+    }
+    ```
+
+    ```csv
+    # mods/my-mod/tables/enemies.csv
+    map,slot,template,x,y,z,copy_from
+    he1_01,3,Squiglet,-300,0,0,0
+    he1_01,4,55,-450,0,0,
+    ```
+
+    **The key says what the table's rows describe, not what to call the file.**
+    It is a closed set — today just `enemies` — so a label like `"lineland"` is
+    refused rather than read as enemy placements on the strength of being
+    present. `items` and `doors` are designed and not built; declaring one says
+    so, instead of accepting a table nothing will ever read.
+
+    The value is a path relative to the mod, or an object with a `path` and a
+    `map`, or a **list** of either:
+
+    ```json
+    "tables": {
+      "enemies": [
+        { "path": "tables/he1_01.csv", "map": "he1_01" },
+        { "path": "tables/he2_01.csv", "map": "he2_01" }
+      ]
+    }
+    ```
+
+    **A table with a `map` lets every row drop the column** — one file per
+    level, and nothing repeating the filename. A bound table may *not* also
+    have a `map` column; two places to say the same thing is two places for them
+    to disagree.
+
+    | Column | |
+    |---|---|
+    | `map` | Required unless the table is bound to a map |
+    | `slot` | Required. 0–99 |
+    | `template` | A template number, or an enemy's name |
+    | `x`, `y`, `z` | All three or none. Two is an error, not a silent zero |
+    | `copy_from` | A slot to copy first, as above |
+    | `clear` | `true` to empty the slot |
+
+    A header row is required and column **order is free**. An unknown column is
+    an error that names it and lists the ones that exist. Every message names
+    the file and the line — `tables/enemies.csv:4: ...` — because a table is
+    only worth having once there are more rows than you want to count.
+
+    `template` takes a name as well as a number, resolved through the NPC
+    catalog `bleck` ships: `Squiglet`, `squiglet`, `SQUIGLET` and the model name
+    `e_octa2` are all the same enemy. **A name that fits several templates is
+    refused, not guessed** — `Goomba` alone covers 35 of them, so those cases
+    want the number. [`bleck setup show <map>`](cli.md#bleck-setup) lists the
+    templates a map actually uses.
+
+    !!! warning "`#` comments are an extension, and the format's one weak spot"
+
+        CSV has no comment syntax. `bleck` skips lines whose first character is
+        `#`, and blank lines, so a table can say *why* a row exists. The cost is
+        that these files are no longer strictly CSV: a quoted field cannot
+        contain a newline, and a tool that writes exact CSV will not produce the
+        comments (it will still read fine).
+
+    !!! note "One slot, one place"
+
+        Declaring the same `(map, slot)` both inline in `setup` and in a table
+        is an error naming both. Across *different* mods it is an ordinary
+        conflict, and the install order settles it as usual.
 
 ```json
 {

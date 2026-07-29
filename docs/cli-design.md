@@ -48,6 +48,7 @@ bleck ls      <archive>              list archive contents
 bleck verify  <path>                 round-trip check, no writes
 bleck launch  <image>                boot a built image in Dolphin
 bleck maps    [--chapter N]          list the game's maps, with chapters
+bleck items   [--group NAME]         list the game's items, with ITEM_ID_*
 ```
 
 Lower-level escape hatches, for when someone needs one layer only:
@@ -95,6 +96,25 @@ dumped once from the game's `mapData[]` and committed as `mapcatalog.json`.
 
 Following `info`'s reasoning below — the tool should answer questions about the
 game, not just transform files.
+
+### `items` is the same argument for `item:` selectors (D120)
+
+The same shape as `maps`, one flag renamed: `--search`, `--group NAME` and
+`--groups` where maps has `--search`, `--chapter N` and `--areas`. D114 deferred
+it explicitly ("worth building when someone needs to browse 538 items"), and
+what made it worth building was not browsing — it was that
+`scripts/smoke_binary.py` had no way to prove `itemcatalog.json` was bundled,
+because nothing on the CLI read it.
+
+Two differences from `maps`, both consequences of where the data lives:
+
+- **It reads no disc.** An item's id is in `itemids.py` and its names in
+  `itemcatalog.json`, so it answers on a machine that has never seen the game.
+  `maps` needs an extracted base for the names.
+- **It has no `--json`.** `maps` has none either, and the CLI's only `--json`
+  precedent is `bleck/api/`'s versioned pydantic contract — which D119 keeps
+  `ItemId` out of, since an `IntEnum` field would rewrite `"item:fire_burst"` as
+  a number on the next save.
 
 ### `launch` was added late, and belongs here (D36)
 

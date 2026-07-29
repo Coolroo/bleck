@@ -302,6 +302,22 @@ slots whose head word is non-zero — live at all — independently of whether t
 script offsets are right. With `--map he1_01` it read 3, and the script counts
 followed. Without it, run 3's numbers would have been one more plausible zero.
 
+### ⛔ Superseded: the templates were found, and `npcdrv:` was built
+
+⚠️ **Everything from here to the end of this section is D107's reading and is
+wrong in its conclusion.** D110 found the static table, D111 measured its stride
+(and got the field offsets wrong), D112 corrected them and built the selector:
+
+| | |
+|---|---|
+| `npcEnemyTemplates` | `0x80449888`, stride **`0x68`**, entry *n* = template *n* |
+| `initScript` / `moveScript` / `onHitScript` / `deathScript` | +0x34 / +0x38 / +0x3C / **+0x48** |
+| sharing | **280** templates share template 2's death script; **40** its onhit |
+
+✅ Confirmed in game (D115): a patch on `npcdrv:2` (Goomba) fired when the
+player hit a **Squiglet**, template 250. The kept text below is why the wrong
+inference looked sound.
+
 ### 🔶 Why this is not a `door:`-shaped selector yet
 
 | | where the pointer lives | readable at `mod_prolog`? |

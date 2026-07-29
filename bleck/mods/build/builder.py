@@ -239,7 +239,7 @@ def check(
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
-    report.warnings += _duplicate_warnings(base, plan)
+    report.warnings += _duplicate_warnings(base, plan, report.placement_builds)
     return report
 
 
@@ -257,7 +257,7 @@ def build(
     report.placement_builds = apply_chain(chain, base)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
-    report.warnings += _duplicate_warnings(base, plan)
+    report.warnings += _duplicate_warnings(base, plan, report.placement_builds)
     if report.conflicts:
         return report
 
@@ -266,19 +266,30 @@ def build(
     return report
 
 
-def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
+def _duplicate_warnings(
+    base: Path, plan: Plan, placements: list[PlacementBuild] | None = None
+) -> list[str]:
     """Warn when a mod edits a setup file that exists in two places.
 
     Setup files ship both standalone in `setup/` and embedded in some map
     archives, byte-identically (D13). ✅ The game reads the **standalone**
     `files/setup/<map>.dat` (D62). `bleck` writes both; this warns when a
     hand-written overlay touches only one.
+
+    ⛔ **It used to warn about `bleck`'s own output too.** The plan cannot tell
+    a hand-written overlay from a generated one -- both are just files by the
+    time it exists -- so a mod that declared its change under `setup` was told
+    to go and declare it under `setup`. Advice that fires when it has already
+    been followed is worse than silence: it teaches the reader to skip the
+    warning that matters. `apply_chain` writes *both* copies for a declared
+    map, so those are exactly the ones with nothing to warn about (D122).
     """
+    generated = {build.map_name for build in placements or []}
     warnings: list[str] = []
     for file_plan in plan.files:
         path = file_plan.disc_path
         for member in file_plan.members:
-            if "/setup/" in member:
+            if "/setup/" in member and Path(member).stem not in generated:
                 twin = f"setup/{Path(member).name}"
                 if (base / twin).exists():
                     warnings.append(
@@ -286,7 +297,7 @@ def _duplicate_warnings(base: Path, plan: Plan) -> list[str]:
                         "copy the game actually reads (D62). Editing only this "
                         "one does nothing"
                     )
-        if "/setup/" in f"/{path}":
+        if "/setup/" in f"/{path}" and Path(path).stem not in generated:
             warnings.append(
                 f"{path} is the copy the game reads (D62); its twin inside the "
                 "map archive is ignored. Edit both to keep them consistent, or "

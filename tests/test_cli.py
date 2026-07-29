@@ -10,11 +10,11 @@ import pytest
 
 from bleck.backends import maps
 from bleck.cli import app as cli
-from bleck.cli.commands import mods
+from bleck.cli.commands import inspect, mods
 from bleck.common import manifest
 from bleck.common.errors import UserError
 from bleck.formats import detect as formats
-from bleck.formats import u8
+from bleck.formats import items, u8
 
 
 @pytest.fixture
@@ -195,3 +195,93 @@ class TestBootMapFlag:
         with pytest.raises(UserError) as caught:
             self._resolve("he1_O1")
         assert "he1_01" in str(caught.value)
+
+
+class TestItemsCommand:
+    """`bleck items`, the sibling of `bleck maps` (D120).
+
+    It reads no disc: both an item's id and its names ship inside `bleck`, so
+    every case here runs on a machine that has never seen the game.
+    """
+
+    def test_a_name_finds_one_item(self, capsys):
+        assert cli.main(["items", "--search", "fire_burst"]) == 0
+        out = capsys.readouterr().out
+        assert "Fire Burst" in out
+        assert "ITEM_ID_USE_HONOO_SAKURETU" in out
+        assert "1 of 538 items" in out
+
+    def test_the_id_column_is_hex(self, capsys):
+        """0x41, the spelling a manifest's `item:` selector takes."""
+        cli.main(["items", "--search", "fire_burst"])
+        assert "0x041" in capsys.readouterr().out
+
+    def test_an_internal_name_finds_it_too(self, capsys):
+        """The same aliases a manifest accepts, because it is the same tiers."""
+        assert cli.main(["items", "--search", "HONOO_SAKURETU"]) == 0
+        assert "Fire Burst" in capsys.readouterr().out
+
+    def test_a_substring_finds_a_family(self, capsys):
+        """Browsing, not resolution: `resolve('fire')` matches nothing at all."""
+        assert cli.main(["items", "--search", "fire"]) == 0
+        assert "1 of 538" not in capsys.readouterr().out
+
+    def test_no_flags_lists_everything(self, capsys):
+        assert cli.main(["items"]) == 0
+        assert "538 of 538 items" in capsys.readouterr().out
+
+    def test_a_typo_exits_one_and_suggests(self, capsys):
+        assert cli.main(["items", "--search", "fire_brust"]) == 1
+        out = capsys.readouterr().out
+        assert "nothing matching" in out
+        assert "fire_burst" in out
+
+    def test_groups_summarise_every_id(self, capsys):
+        assert cli.main(["items", "--groups"]) == 0
+        out = capsys.readouterr().out
+        assert "CARD" in out
+        counted = sum(
+            int(line.split()[1]) for line in out.splitlines() if line.endswith(" items")
+        )
+        assert counted == 538
+
+    def test_one_group_lists_only_its_own(self, capsys):
+        assert cli.main(["items", "--group", "special"]) == 0
+        out = capsys.readouterr().out
+        assert "ITEM_ID_SPECIAL_CARD_FUKURO" in out
+        assert "ITEM_ID_USE_HONOO_SAKURETU" not in out
+
+    def test_an_unknown_group_exits_one(self, capsys):
+        assert cli.main(["items", "--group", "nope"]) == 1
+        assert "no group 'nope'" in capsys.readouterr().out
+
+
+class TestItemsWithoutTheCatalog:
+    """What survives `itemcatalog.json` going missing — and what does not.
+
+    ⚠️ This is the unit half of what `scripts/smoke_binary.py` checks against a
+    frozen binary. The check there asserts on the English name *because* of what
+    is pinned here: ids and `ITEM_ID_*` constants come from a module (D119) and
+    print fine with no catalog at all, so asserting on either would pass in both
+    states and prove nothing.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _empty(self, monkeypatch):
+        monkeypatch.setattr(inspect.items, "catalog", items.ItemNames)
+
+    def test_it_says_the_catalog_is_missing(self, capsys):
+        assert cli.main(["items", "--search", "honoo_sakuretu"]) == 0
+        assert "no item catalog" in capsys.readouterr().out
+
+    def test_every_id_and_constant_still_prints(self, capsys):
+        assert cli.main(["items"]) == 0
+        out = capsys.readouterr().out
+        assert "0x041" in out
+        assert "ITEM_ID_USE_HONOO_SAKURETU" in out
+        assert "538 of 538 items" in out
+
+    def test_the_english_name_is_the_only_thing_lost(self, capsys):
+        """So the smoke check can only pass when the JSON is really bundled."""
+        assert cli.main(["items", "--search", "fire_burst"]) == 1
+        assert "Fire Burst" not in capsys.readouterr().out

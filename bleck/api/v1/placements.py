@@ -96,6 +96,16 @@ class PlacementEdit(BaseModel):
     slot: int = Field(ge=0)
     template: int | None = None
     position: Position | None = None
+    copy_from: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "A slot whose whole entry is copied in before `template` and "
+            "`position` are applied. An edit otherwise builds on what the slot "
+            "holds, and an unused slot holds zeros -- where a shipped enemy "
+            "carries three undocumented values that reach the live NPC (D123)."
+        ),
+    )
     clear: bool = Field(
         default=False,
         description=(
@@ -105,16 +115,29 @@ class PlacementEdit(BaseModel):
         ),
     )
 
+    @property
+    def _sets_anything(self) -> bool:
+        return (
+            self.template is not None
+            or self.position is not None
+            or self.copy_from is not None
+        )
+
     @model_validator(mode="after")
     def _clear_is_exclusive(self) -> PlacementEdit:
-        if self.clear and (self.template is not None or self.position is not None):
+        if self.clear and self._sets_anything:
             raise ValueError(
-                "an edit that clears a slot cannot also set a template or "
-                "position; those describe an enemy that would not be there"
+                "an edit that clears a slot cannot also set a template, "
+                "position or source; those describe an enemy that would not be there"
             )
-        if not self.clear and self.template is None and self.position is None:
+        if not self.clear and not self._sets_anything:
             raise ValueError(
-                "an edit must change something: set `template`, `position`, or `clear`"
+                "an edit must change something: set `template`, `position`, "
+                "`copy_from`, or `clear`"
+            )
+        if self.copy_from == self.slot:
+            raise ValueError(
+                "`copy_from` names the slot being edited, so it copies nothing"
             )
         return self
 
@@ -125,6 +148,7 @@ class PlacementEdit(BaseModel):
             template=edit.template,
             position=Position.of(edit.position) if edit.position else None,
             clear=edit.clear,
+            copy_from=edit.copy_from,
         )
 
     def to_manifest(self) -> manifest_placements.PlacementEdit:
@@ -133,6 +157,7 @@ class PlacementEdit(BaseModel):
             template=self.template,
             position=self.position.to_setup() if self.position else None,
             clear=self.clear,
+            copy_from=self.copy_from,
         )
 
 

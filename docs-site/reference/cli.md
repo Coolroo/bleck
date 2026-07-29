@@ -66,6 +66,66 @@ $ bleck maps --areas
     names come from the disc itself — `files/map/sp1_01.bin` *is* the map
     `sp1_01`.
 
+### `bleck items`
+
+```bash
+bleck items [--search TEXT] [--group NAME] [--groups]
+```
+
+Lists the game's 538 items — the ids and names an `item:` selector in
+[`code.patches`](manifest.md) accepts.
+
+```
+$ bleck items --search fire_burst
+  0x041  Fire Burst                 ITEM_ID_USE_HONOO_SAKURETU
+
+1 of 538 items
+```
+
+Three columns: the id in hex, the way you would write it in a manifest; the
+English name; and the game's own `ITEM_ID_*` constant. Any of the three — plus
+the internal romaji name, here `HONOO_SAKURETU` — can be written as the
+selector.
+
+`--search` matches on a substring of any of them, so a family comes back
+together:
+
+```
+$ bleck items --search fire
+  0x020  Fire Tablet                ITEM_ID_KEY_STG5_SEKIBAN3
+  0x041  Fire Burst                 ITEM_ID_USE_HONOO_SAKURETU
+  0x139  Fire Bro                   ITEM_ID_CARD_FIRE_BROS
+  0x13c  Dark Fire Bro              ITEM_ID_CARD_MD_FIRE_BROS_BLK
+
+4 of 538 items
+```
+
+A name it does not recognise gets the same suggestions a `mod.json` typo does,
+and exits non-zero:
+
+```
+$ bleck items --search fire_brust
+nothing matching 'fire_brust' in 538 items
+  Did you mean 'fire_burst', 'fire_bros', 'fire_bro'?
+```
+
+`--groups` summarises by the constant's family, and `--group NAME` lists one:
+
+```
+$ bleck items --groups
+538 items, by ITEM_ID_* group:
+
+  CARD        256 items
+  COOK         96 items
+  USE          55 items
+```
+
+!!! note
+
+    Unlike `bleck maps`, this needs **no extracted disc**: an item's id and its
+    names both ship inside `bleck`. If the English names are unavailable the
+    command says so and still lists every id and `ITEM_ID_*` constant.
+
 ## Archives
 
 ### `bleck ls`
@@ -176,6 +236,10 @@ Raw LZ77, one layer only. Prints sizes if no output is given.
 ```bash
 bleck mod new <name> [--description ...] [--author ...]
 ```
+
+Writes `mod.json`, an empty `overlay/`, and an empty `tables/enemies.csv` — a
+comment line and a header row — which the manifest already points at. Add rows
+to place enemies; see [`tables`](manifest.md).
 
 ### `bleck mod list`
 

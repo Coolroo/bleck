@@ -95,6 +95,30 @@ nav:
       - Code mods: guides/code-mods.md
       - Running on a Wii: guides/hardware.md
       - JSON API: guides/json-api.md
+  - Findings:
+      - findings/index.md
+      - How these were measured: findings/method.md
+      - The evt VM:
+          - Scripts need END_EVT: findings/evt-script-end.md
+          - Instruction encoding: findings/evt-instruction-format.md
+          - Door setter argc (header bug): findings/evt-door-argc.md
+      - Game data:
+          - Door descriptors: findings/door-descriptors.md
+          - npcEnemyTemplates: findings/npc-enemy-templates.md
+          - itemEventDataTable: findings/item-event-data-table.md
+          - itemDataTable: findings/item-data-table.md
+          - Message files: findings/msg-file-format.md
+          - Setup file format: findings/setup-file-format.md
+          - Which setup copy is read: findings/setup-which-copy.md
+      - Code and formats:
+          - Patching PowerPC code: findings/ppc-code-patching.md
+          - Tracing a function: findings/function-tracing.md
+          - Four functions measured: findings/undocumented-functions.md
+          - Symbol list errors: findings/symbol-list-errors.md
+          - LZ77 need not be exact: findings/lz77-not-bit-exact.md
+      - Testing the game:
+          - An unattended boot: findings/attract-demo.md
+          - Pouch and save slots: findings/player-session.md
   - Reference:
       - CLI: reference/cli.md
       - Manifest: reference/manifest.md

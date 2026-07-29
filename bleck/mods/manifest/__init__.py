@@ -29,9 +29,14 @@ from bleck.mods.manifest.codespec import (  # noqa: F401
     _parse_code,
 )
 from bleck.mods.manifest.placements import (  # noqa: F401
+    PLANNED_KINDS,
     MapPlacements,
     PlacementEdit,
+    TableKind,
+    TableRef,
     _parse_setup,
+    _parse_tables,
+    tables_to_json,
 )
 
 MANIFEST_NAME = "mod.json"
@@ -114,9 +119,27 @@ class Manifest:
     setup: list[MapPlacements] = field(default_factory=list)
     """Declared changes to enemy placement, applied at build time."""
 
+    tables: list[TableRef] = field(default_factory=list)
+    """CSV files declaring the same thing as `setup`, for when there are enough
+    rows that JSON stops being readable. The *paths* only: the rows are read at
+    build time, where the mod's directory is known (`bleck/formats/tables.py`).
+
+    Flat, though `mod.json` groups them by kind: a mod may declare several under
+    one kind, and every caller either wants one kind or wants all of them.
+    `tables_of` is the former."""
+
+    def tables_of(self, kind: TableKind) -> list[TableRef]:
+        """Just the tables of one kind, in declaration order.
+
+        ⚠️ **Ask for a kind; never iterate `tables` to read rows.** Doing the
+        latter is what made the key decorative -- an `items` table would have
+        been read as enemy placements and produced a build nobody asked for
+        (D125)."""
+        return [ref for ref in self.tables if ref.kind is kind]
+
     @property
     def has_placements(self) -> bool:
-        return bool(self.setup)
+        return bool(self.setup or self.tables_of(TableKind.ENEMIES))
 
     @property
     def has_code(self) -> bool:
@@ -145,6 +168,10 @@ class Manifest:
                 placement.map_name: [edit.to_json() for edit in placement.edits]
                 for placement in self.setup
             }
+        # Omitted rather than written as an empty object, like `setup` and
+        # `code`: most mods declare no tables.
+        if self.tables:
+            body["tables"] = tables_to_json(self.tables)
         # Omitted rather than written as null: most mods ship no code.
         if self.code is not None:
             body["code"] = self.code.to_json()
@@ -182,6 +209,7 @@ class Manifest:
             remove=list(raw.get("remove", [])),
             code=_parse_code(raw.get("code"), source),
             setup=_parse_setup(raw.get("setup"), source),
+            tables=_parse_tables(raw.get("tables"), source),
         )
 
 

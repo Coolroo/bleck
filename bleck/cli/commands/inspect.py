@@ -1,4 +1,4 @@
-"""Inspection commands: info, verify. Neither writes anything."""
+"""Inspection commands: info, verify, maps, items. None of them writes anything."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from bleck.backends import disc, maps
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import read_bytes
-from bleck.formats import detect, u8
+from bleck.formats import detect, items, u8
 from bleck.mods import registry
 
 from .archive import unwrap
@@ -94,6 +94,61 @@ def cmd_maps(args) -> int:
     return 0
 
 
+def cmd_items(args) -> int:
+    """List the game's items — the names an `item:` selector accepts.
+
+    The sibling of `cmd_maps`, with one difference worth stating: this reads
+    **no disc**. Names and ids are both shipped with `bleck` (D114, D119), so
+    it answers on a machine that has never seen the game.
+    """
+    catalog = items.catalog()
+    total = len(catalog.known)
+
+    if not catalog:
+        # Not an error: ids and constants live in `itemids.py`, so only the
+        # English column is missing. Said up front because the listing below
+        # would otherwise just look oddly bare.
+        print(f"no item catalog beside bleck ({items.ITEM_CATALOG} is missing);")
+        print("ids and ITEM_ID_* constants still resolve, English names do not.\n")
+
+    if args.groups:
+        print(f"{total} items, by ITEM_ID_* group:\n")
+        for group in catalog.groups():
+            print(f"  {group.describe()}")
+        return 0
+
+    if args.group:
+        found = catalog.group(args.group)
+        if not found:
+            named = ", ".join(g.group for g in catalog.groups() if g.group)
+            print(f"no group {args.group!r}; the game has {named}")
+            return 1
+    elif args.search:
+        found = catalog.search(args.search)
+    else:
+        found = catalog.known
+
+    if not found:
+        print(f"nothing matching {args.search!r} in {total} items")
+        # The same "did you mean" a manifest gets for the same typo, from the
+        # same tiers — `bleck items fire-brust` and a mod.json saying
+        # `item:fire-brust` should not disagree about what was probably meant.
+        near = catalog.suggest(args.search)
+        if near:
+            print(f"  Did you mean {', '.join(repr(name) for name in near)}?")
+        return 1
+
+    for entry in found:
+        # Hex, not decimal: `item:0x41` is how every id in this repo's
+        # manifests and decision log is written, and the point of the listing
+        # is that a value can be copied straight into a selector. Decimal shows
+        # up only inside generated C comments, which nobody types.
+        name = entry.english or entry.name
+        print(f"  0x{entry.id:03x}  {name:<26} {entry.constant}")
+    print(f"\n{len(found)} of {total} items")
+    return 0
+
+
 def register(add: AddCommand) -> None:
     p = add("info", help="identify a file and its nested formats")
     p.add_argument("file")
@@ -108,3 +163,9 @@ def register(add: AddCommand) -> None:
     p.add_argument("--areas", action="store_true", help="summarise by area instead")
     p.add_argument("--chapter", type=int, metavar="N", help="only chapter N (1-8)")
     p.set_defaults(func=cmd_maps)
+
+    p = add("items", help="list the game's items, for item: selectors")
+    p.add_argument("--search", help="only show items whose name contains this")
+    p.add_argument("--groups", action="store_true", help="summarise by group instead")
+    p.add_argument("--group", metavar="NAME", help="only one group, e.g. CARD")
+    p.set_defaults(func=cmd_items)

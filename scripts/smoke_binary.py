@@ -30,6 +30,21 @@ from pathlib import Path
 SAMPLE_MAP = "he1_01"
 SAMPLE_MAP_ID = "26"
 
+#: A real item, and the English name `itemcatalog.json` records for it.
+#:
+#: ⚠️ The **name**, and deliberately not the id -- the opposite choice to the
+#: map above, for the same underlying reason. Ids and `ITEM_ID_*` constants live
+#: in `bleck/formats/itemids.py`, a generated *module* (D119), so PyInstaller
+#: carries them whether or not the JSON is bundled: `0x041` and
+#: `ITEM_ID_USE_HONOO_SAKURETU` would both print from a binary with no item
+#: catalog at all. `Fire Burst` is text from `files/msg/UK` and exists nowhere
+#: but the catalog, so it is the only column whose absence this can see.
+#:
+#: `fire_burst` as the query matters too: it is an English-tier alias, so with
+#: no catalog the search matches nothing and the command exits 1 as well.
+SAMPLE_ITEM = "fire_burst"
+SAMPLE_ITEM_NAME = "Fire Burst"
+
 
 @dataclass(frozen=True)
 class Check:
@@ -62,6 +77,13 @@ CHECKS = [
         # disc even with no catalog bundled at all.
         expect=SAMPLE_MAP_ID,
         needs_base=True,
+    ),
+    Check(
+        "item catalog is bundled",
+        ["items", "--search", SAMPLE_ITEM],
+        expect=SAMPLE_ITEM_NAME,
+        # No `needs_base`: unlike maps, both halves of an item's name ship with
+        # `bleck`, so this check works on a machine with no disc at all.
     ),
     Check(
         "pydantic models load and emit a schema",

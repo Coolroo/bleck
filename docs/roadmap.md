@@ -74,12 +74,18 @@ an application worth sharing.
 **Legend:** 🟢 ready · 🟡 needs a decision · 🔵 needs a human, not an agent ·
 🔴 blocked on something outside the repository
 
-### 🟢 Publish what this repository knows and the ecosystem does not
+### ✅ ~~Publish what this repository knows and the ecosystem does not~~ — *done (D121)*
+
+✅ **Shipped as [`docs-site/findings/`](../docs-site/findings/)** — 18 pages plus
+a section index, in the published site's nav, written for the third audience
+below. Each page states the fact, gives the evidence, and says what is *not*
+established; the index leads with a table of the four **corrections** to
+published material.
 
 ⚠️ **Not a docs task.** `docs/` is a maintainer's record and `docs-site/` tells
-people how to use `bleck`; neither is written to be *found* by someone
+people how to use `bleck`; neither *was* written to be found by someone
 researching Super Paper Mario. A third audience exists — the modding and decomp
-community — and there is now a real amount here that is not on any forum,
+community — and there is a real amount here that is not on any forum,
 wiki or repository:
 
 - ✅ `evt_door.h`'s `EVT_DECLARE_USER_FUNC(evt_door_set_door_descs, 1)` is
@@ -94,22 +100,29 @@ wiki or repository:
 - ✅ A PowerPC code patch needs `dcbst`/`sync`/`icbi`/`isync`, measured against
   a no-flush control that silently did nothing (D94).
 - ✅ `GetBasicPlayer` returns `arg0 + 0xD8`, and it is in no header (D96).
-- ✅ `itemEventDataTable` holds 33 entries — 20 from the *use* range, 12 cooked,
-  one from the key range; the full id list is in D113. An item with no scripted
+- ✅ `itemEventDataTable` holds 33 entries — **21** from the *use* range, **11**
+  cooked, one from the key range (`0x32`, Return Pipe); the full id list is in
+  D113. ⚠️ This line used to read "20 / 12 / one", which is D113's own summary
+  and disagrees with D113's own id list — see D121. An item with no scripted
   use, like Shroom Shake, is simply absent. ⛔ D109 said "all effect items" and
   that is wrong; only 19 of the 33 even open with `USER_FUNC`.
 - ✅ The self-healing detour: a function can be watched, arguments **and**
   return value, without a trampoline (D96).
 - ✅ A door's interact script opens with `MULF`, so there is no useful default
   for a patch guard (D103).
+- ✅ Since published, and not on the list above: `npcEnemyTemplates`' stride and
+  the 280-template death-script sharing (D110–D112, D115), the `key\0value\0`
+  message format and romaji item names (D114), the two wrong names in
+  `spm.eu0.lst` (D60), and `pouchGetPtr()` being a stable address whose contents
+  mean different things at different times (D109, D113, D115).
 
 Most of this was measured because a header or an assumption was wrong, which is
 exactly the shape of thing that is expensive to rediscover and cheap to write
 down.
 
-🔶 Shape undecided: a `docs/findings/` tree, a wiki page, or upstream PRs
-against `spm-headers` for the ones that are outright corrections. The argc bug
-is a genuine upstream fix and should probably go back as one regardless.
+🔵 **What is left is the upstream PR**, and it needs a human to send it: the
+argc fix is drafted in full at `work/upstream-pr.md` (gitignored), together with
+D60's two wrong lst names as a separate issue. Nothing has been pushed.
 
 
 ### 🟢 More editing surfaces through the API

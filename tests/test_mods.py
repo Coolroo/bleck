@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from bleck.formats import lz77, u8
-from bleck.mods import builder, conflicts, manifest, overlay, registry, resolver
+from bleck.mods import builder, conflicts, edits, manifest, overlay, registry, resolver
 
 
 @dataclass(frozen=True)
@@ -281,6 +281,36 @@ class TestConflicts:
         # D62: the standalone copy is the one the game reads; say which.
         assert "the copy the game reads" in warning
         assert "Edit both" in warning
+
+    def test_a_declared_setup_edit_is_not_warned_about(self):
+        """D122: it used to tell a mod that declared its edit to declare it.
+
+        Tested against `_duplicate_warnings` directly rather than through a
+        build, because the surrounding fixture's `aa1_01.dat` is 64 filler
+        bytes -- a declared edit against it cannot parse, and making it a real
+        setup file would change a fixture six other tests depend on. The
+        distinction under test is one line of this function, and nothing else
+        in the build reaches it.
+        """
+        plan = overlay.Plan(files=[overlay.FilePlan(disc_path="files/setup/aa1_01.dat")])
+        generated = edits.PlacementBuild(
+            mod="s",
+            map_name="aa1_01",
+            output=Path("out"),
+            also_wrote=Path("twin"),
+            applied=1,
+            used_before=0,
+            used_after=1,
+        )
+
+        # Reaching past the underscore on purpose, and only here: the public
+        # path is `builder.check`, which this cannot use for the reason above.
+        # pylint: disable=protected-access
+        warn = builder._duplicate_warnings
+
+        # The control: the same plan, with nothing declaring it, still warns.
+        assert warn(Path("base"), plan, [])
+        assert not warn(Path("base"), plan, [generated])
 
 
 class TestByteRanges:

@@ -25,12 +25,15 @@ verbatim rather than rebuilt.
 
 from __future__ import annotations
 
+import difflib
 import json
 import struct
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from pathlib import Path
 
 from bleck.common.errors import BleckError
+from bleck.formats.items import normalize
 
 #: Entry stride by version. `base size = 4 + 100 * stride` holds disc-wide.
 STRIDE = {1: 28, 2: 96, 3: 100, 4: 104, 5: 108, 6: 112}
@@ -85,15 +88,102 @@ class Species:
         return self.english or self.model or f"template {self.template}"
 
 
+@dataclass(frozen=True)
+class SpeciesMatch:
+    """What a written enemy name resolved to, and enough to explain a failure.
+
+    The item answer to the same question (`items.ItemMatch`), and three outcomes
+    for the same reason: one template (`species`), several (`ambiguous`), or none
+    (`near` holds the closest spellings).
+
+    ⚠️ **Ambiguity is the common case here, not the exception.** 386 distinct
+    English names cover the 423 named templates and only 382 are unique --
+    `Goomba` alone names 35. Picking one would be a coin toss, so it is reported.
+    """
+
+    query: str
+    species: Species | None = None
+    ambiguous: list[Species] = field(default_factory=list)
+    near: list[str] = field(default_factory=list)
+
+    @property
+    def found(self) -> bool:
+        return self.species is not None
+
+    @property
+    def candidates(self) -> str:
+        """The ambiguous templates as a list of numbers, for an error message."""
+        return ", ".join(str(species.template) for species in self.ambiguous)
+
+
 class NpcNames:
-    """Template id -> what it spawns. Empty if the catalog is missing."""
+    """Template id -> what it spawns, and back again.
+
+    `resolve` runs the other way -- a written name to a template id -- in tiers,
+    most specific first, exactly as `items.ItemNames` does:
+
+    1. the tribe's English name, e.g. `Squiglet`
+    2. the tribe's model name, e.g. `e_kuribo`
+
+    A tier that matches decides the answer even when it matches several
+    templates: falling through to the model name would answer a different
+    question than the one asked.
+
+    Empty if the catalog is missing, in which case every name fails to resolve
+    and every template id still works.
+    """
 
     def __init__(self, templates=None, tribes=None) -> None:
         self._templates = templates or []
         self._tribes = tribes or []
+        self._tiers = [
+            self._index(lambda species: species.english),
+            self._index(lambda species: species.model),
+        ]
+
+    def _index(self, alias):  # pylint: disable=container-return
+        """Normalised name -> the template ids that answer to it."""
+        table: dict[str, list[int]] = {}
+        for template in range(len(self._templates)):
+            species = self.lookup(template)
+            if species is None:
+                continue
+            key = normalize(alias(species))
+            if not key:
+                continue
+            found = table.setdefault(key, [])
+            if template not in found:
+                found.append(template)
+        return table
 
     def __bool__(self) -> bool:
         return bool(self._templates)
+
+    def resolve(self, text: str) -> SpeciesMatch:
+        """Find the template a written name means.
+
+        Never raises: the caller knows which file and line to blame, and there
+        are three different failures to phrase.
+        """
+        key = normalize(text)
+        if not key:
+            return SpeciesMatch(query=text)
+        for tier in self._tiers:
+            found = tier.get(key)
+            if not found:
+                continue
+            if len(found) == 1:
+                return SpeciesMatch(query=text, species=self.lookup(found[0]))
+            return SpeciesMatch(
+                query=text,
+                ambiguous=[self.lookup(template) for template in found],
+            )
+        return SpeciesMatch(query=text, near=self.suggest(text))
+
+    def suggest(self, text: str, limit: int = 3) -> list[str]:
+        """The closest names to something that resolved to nothing."""
+        every = sorted({alias for tier in self._tiers for alias in tier})
+        return difflib.get_close_matches(normalize(text), every, n=limit, cutoff=0.6)
 
     def lookup(self, template: int) -> Species | None:
         if not 0 <= template < len(self._templates):
@@ -117,6 +207,16 @@ def load_names(path: Path | None = None) -> NpcNames:
         return NpcNames()
     body = json.loads(source.read_text(encoding="utf-8"))
     return NpcNames(body.get("templates"), body.get("tribes"))
+
+
+@lru_cache(maxsize=1)
+def catalog() -> NpcNames:
+    """The catalog, read and indexed once. A table naming an enemy per row
+    would otherwise re-read a 100 KB file and rebuild both tiers per row.
+
+    Tests that swap `NPC_CATALOG` must call `catalog.cache_clear()`.
+    """
+    return load_names()
 
 
 @dataclass(frozen=True)
@@ -187,6 +287,24 @@ class Enemy:
     def cleared(self) -> Enemy:
         """An empty slot, keeping the entry's size."""
         return replace(self, raw=bytes(len(self.raw)))
+
+    def copied_from(self, other: Enemy) -> Enemy:
+        """This slot holding `other`'s whole entry, keeping its own index.
+
+        ✅ **The undocumented bytes come across, and that is the point** (D123).
+        A slot built from zeros carries `0` where every shipped enemy carries
+        `0xDC` at +0x14, `0x12C` at +0x18 and `2` at +0x68, and those reach the
+        live `NPCEntry`. Copying an existing entry is how an author gets them
+        without anyone having to name fields nobody has identified -- the same
+        principle `raw` already uses to survive a `with_*` edit.
+        """
+        if other.version != self.version or len(other.raw) != len(self.raw):
+            raise SetupError(
+                f"cannot copy slot {other.slot} (version {other.version}, "
+                f"{len(other.raw)} bytes) onto slot {self.slot} (version "
+                f"{self.version}, {len(self.raw)} bytes): the entries differ in shape"
+            )
+        return replace(self, raw=other.raw)
 
     def _patched(self, offset: int, data: bytes) -> Enemy:
         if not self.documented:

@@ -134,6 +134,61 @@ class TestItemInfo:
         assert names.lookup(0x999) is None
 
 
+class TestBrowsing:
+    """`search`, `group` and `groups` — what `bleck items` lists (D120).
+
+    Separate from `resolve` because they answer a different question: "which
+    items are worth looking at", not "which item is this called". A name that
+    `resolve` calls ambiguous is a perfectly good browsing result.
+    """
+
+    def test_a_substring_matches_where_resolve_would_not(self, names):
+        # ⚠️ A superset, not an equality: these four rows are merged with every
+        # real `ItemId` (`known`), so the constant tiers answer for all 538 and
+        # `mari` legitimately reaches Marilyn as well as both Marios.
+        assert names.resolve("mari").item is None
+        assert {found.id for found in names.search("mari")} >= {0xD8, 0x20A}
+
+    def test_an_english_substring_matches(self, names):
+        """`Fire Burst` is an English name; no constant contains `fire_burst`."""
+        assert [found.id for found in names.search("fire_burst")] == [0x41]
+
+    def test_it_matches_the_same_aliases_a_manifest_takes(self, names):
+        """The tier tables, not a second alias list — the point of reusing them
+        is that `bleck items` cannot find a name a manifest then refuses."""
+        for written in ("HONOO_SAKURETU", "ITEM_ID_USE_HONOO_SAKURETU", "sakuretu"):
+            assert [found.id for found in names.search(written)] == [0x41]
+
+    def test_case_and_punctuation_do_not_matter(self, names):
+        assert [found.id for found in names.search("Fire-Burst")] == [0x41]
+
+    def test_an_empty_search_is_everything(self, names):
+        assert len(names.search("")) == len(names.known)
+
+    def test_nothing_matching_is_empty_rather_than_an_error(self, names):
+        assert names.search("zzzz") == []
+
+    def test_known_covers_every_id_not_just_the_catalog(self, names):
+        """Four rows read, 538 ids known: the ids are a module, not the JSON."""
+        assert len(names.items) == 4
+        assert len(names.known) == len(ItemId)
+
+    def test_a_group_is_the_constants_first_word(self, names):
+        carded = {found.id for found in names.group("CARD")}
+        assert 0x20A in carded
+        assert 0xD8 not in carded  # the character item, not the card
+
+    def test_a_group_name_is_spelled_loosely_too(self, names):
+        assert names.group("card") == names.group("CARD")
+
+    def test_groups_count_every_known_id(self, names):
+        assert sum(found.items for found in names.groups()) == len(ItemId)
+
+    def test_groups_are_largest_first(self, names):
+        counts = [found.items for found in names.groups()]
+        assert counts == sorted(counts, reverse=True)
+
+
 class TestLoading:
     def test_a_missing_catalog_is_not_an_error(self, tmp_path):
         # Names are a convenience; every id must work without them.

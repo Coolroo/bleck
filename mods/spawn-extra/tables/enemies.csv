@@ -1,0 +1,6 @@
+# Lineland Road ships 3 enemies in slots 0-2 and leaves 97 empty (D122).
+# These two fill 3 and 4. Template 2 is a Goomba -- written as the number
+# because the name "Goomba" covers 35 templates and `bleck` refuses to guess.
+map,slot,template,x,y,z
+he1_01,3,2,-300,0,0
+he1_01,4,2,-450,0,0

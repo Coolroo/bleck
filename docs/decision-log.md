@@ -8430,3 +8430,573 @@ Adding this pushed it to 1004 and `too-many-lines` failed the build. It came
 back under by tightening prose — but the next addition to that module hits the
 same wall, and trimming comments to fit is the wrong answer twice. Splitting the
 selector parsers out of `codespec.py` is the work this defers.
+
+---
+
+## D122 — ✅ Extra enemies already worked; nothing had ever checked (2026-07-29)
+
+The ask was to *add* enemies to a map rather than replace the ones it ships
+with. ⛔ **No feature was needed.** `bleck` could already do it, `mods/hard-lineland`
+has been declaring it since it was written, and nobody had ever verified it
+spawns.
+
+### ✅ Five enemies in a map that ships three
+
+`he1_01` places 3 enemies in slots 0–2 and leaves 97 empty. Two were added and
+the rig counted the result:
+
+```
+[t+ 6s] seq=MAPCHANGE(3) npcs[0]
+[t+ 9s] seq=GAME(2)      npcs[5] slot0:npc_00000001 ... slot4:npc_00000005
+```
+
+⚠️ **`npcs[0]` then `npcs[5]` is the control**, and it came free: the instrument
+was watched going from seeing nothing to seeing five, so "five" is a reading
+rather than a default.
+
+⚠️ **The slot attribution was checked, not assumed.** `slot0`…`slot4` would be
+worthless if `--npcs` merely numbered the live list — the labels would agree
+with any result. It reads `setupFileIndex` from each NPC's own record at +0x04
+and converts from 1-based (`scripts/ingame.py`), so the slot comes from the
+game's data. Worth stating because this is precisely how D107 and D111 went
+wrong.
+
+### ✅ An empty slot needs only `template` and `position`
+
+Two ways to build an added enemy were run **in the same boot**, so the only
+variable was the foundation:
+
+| slot | built from | result |
+|---|---|---|
+| 3 | the zeroed slot already there, `template` + `position` written | ✅ spawned |
+| 4 | a byte-copy of slot 0, same two fields overwritten | ✅ spawned |
+
+Every *used* slot in this map carries `0xDC` at +0x14, `0x12C` at +0x18 and `2`
+at +0x68; an unused slot is all zeros. Slot 3 had none of them and spawned
+anyway, so **those fields are not required for an enemy to exist**.
+
+🔶 **They may still matter for how it behaves.** 220 and 300 have the shape of
+distances or timers, and a Goomba that spawns but never notices Mario is
+indistinguishable from a working one in an NPC count. Not tested. A cloning
+edit — copy slot N's undocumented bytes, then override — is the answer if it
+turns out they do, and is a manifest field rather than a new mechanism.
+
+⛔ Rejected: **building a "clone slot" feature first.** It was the obvious design
+and the measurement made it unnecessary. Checking what the disc already does
+before building for the gap is a standing rule here, and it paid again.
+
+### ⛔ The duplicate-setup warning fired on `bleck`'s own output
+
+Building a mod that declared its edit under `setup` printed:
+
+> `files/setup/he1_01.dat` is the copy the game reads (D62) … or declare the
+> change under 'setup' in mod.json
+
+It had already been declared. `_duplicate_warnings` walks the *plan*, and by
+then a generated file and a hand-written overlay are both just files; its
+docstring said "hand-written" but nothing implemented that. Every mod with
+declared placements — `hard-lineland` included — has been printing this.
+
+⚠️ **Advice that fires when it has already been followed is worse than
+silence**, because it teaches the reader to skip the warning that matters. Fixed
+by passing the declared map names in: `apply_chain` writes *both* copies for
+those, so they are exactly the ones with nothing to warn about.
+
+✅ The pre-existing test that asserts the warning *does* fire for a hand-written
+overlay still passes — the positive control that the fix scoped the warning
+rather than deleting it.
+
+---
+
+## D120 — ✅ `bleck items`, and a smoke check that can actually fail (2026-07-28)
+
+⚠️ Appended after D122, which a parallel session wrote first. Appended rather
+than inserted, per the append-only rule and D114's precedent.
+
+D114 deferred this command explicitly — "worth building when someone needs to
+browse 538 items, not before". What made it worth building was not browsing.
+
+### ✅ The real driver was a hole in `scripts/smoke_binary.py`
+
+`bleck.spec` bundles four JSON catalogs **by hand**, and the smoke test proved
+three of them were present. It could not prove the fourth, because no CLI
+command read `itemcatalog.json` at all — item names were only ever resolved
+while parsing a `mod.json`, which the smoke test does not do. A binary shipping
+without the item catalog would have passed every check, and `v0.1.0-rc1` was
+verified by hand instead.
+
+So the command exists for two reasons and the second is load-bearing: a user
+writing `item:<name>` can now discover what names exist, and CI can now see the
+catalog.
+
+### ✅ The check asserts the **English name** — and the opposite would have passed
+
+```python
+Check("item catalog is bundled", ["items", "--search", "fire_burst"],
+      expect="Fire Burst")
+```
+
+The map check above it already had this shape and says why: it asserts the map
+*id*, not the name, because the name comes back from the disc even with nothing
+bundled. Items invert which column is safe:
+
+| Column | Comes from | Survives an unbundled catalog |
+|---|---|---|
+| `0x041` | `bleck/formats/itemids.py` | **yes** — a generated module (D119) |
+| `ITEM_ID_USE_HONOO_SAKURETU` | `itemids.py` | **yes** |
+| `HONOO_SAKURETU` (romaji) | `itemcatalog.json` | no |
+| `Fire Burst` | `itemcatalog.json` ← `files/msg/UK` | no |
+
+D119 made this worse on purpose — "an absent catalog is now *less* of a loss" —
+which is exactly what makes the obvious assertion worthless. The query matters
+as much as the expectation: `fire_burst` is an English-tier alias, so with no
+catalog the search matches nothing and the command exits 1 as well as printing
+no name.
+
+### ✅ Two-state verification: the instrument was shown a failure
+
+The project instructions' "before trusting a negative result, produce a positive one" applies
+to a passing check too — a check that would pass either way is the same error
+wearing different clothes. Both states were built and run:
+
+**Catalog bundled** — `7 checks passed`.
+
+**`("bleck/formats/itemcatalog.json", "bleck/formats")` deleted from `DATA`,
+rebuilt:**
+
+```
+ok   map catalog is bundled
+FAIL item catalog is bundled
+  bleck.exe items --search fire_burst exited 1
+  no item catalog beside bleck (...\_MEI425082\bleck\formats\itemcatalog.json is missing);
+  nothing matching 'fire_burst' in 538 items
+```
+
+✅ And the control that matters most, from that same broken binary:
+
+```
+$ bleck.exe items --search ITEM_ID_USE_HONOO_SAKURETU
+  0x041                             ITEM_ID_USE_HONOO_SAKURETU
+1 of 538 items                                        exit 0
+```
+
+**A check asserting `0x041`, or the constant, or `538 items`, would have printed
+`ok` against a binary with no item catalog in it.** Measured, not reasoned
+about. The spec was then restored and rebuilt, and the check passes again.
+
+`TestItemsWithoutTheCatalog` in `tests/test_cli.py` pins the same three facts
+at unit speed, so the next person to change the output format finds out in 3
+seconds rather than after a 12 s PyInstaller build.
+
+### ✅ Browsing reuses the resolution tiers rather than a second alias list
+
+`ItemNames.search` walks the same three tier tables `resolve` walks, matching a
+normalised substring instead of a normalised equality. `resolve` answers "which
+item is this called" and treats several matches as an error; `search` answers
+"which items are worth looking at" and returns all of them — `mari` reaches both
+Marios and Marilyn, where `resolve('mari')` is ambiguous and refuses.
+
+- ⛔ **Rejected: build the alias list from `ItemInfo`'s public fields.** Simpler
+  to read, and it duplicates the tier definitions. The drift would surface as
+  `bleck items` finding a name a manifest then refuses — or the reverse, which
+  is worse, because the listing is what a user trusts before writing the name.
+- ⛔ **Rejected: `--search` as an exact `resolve`.** It would make the command
+  useless for the thing it exists for: you cannot browse a catalog by already
+  knowing the name.
+
+Near-misses go through `ItemNames.suggest`, the same `difflib` pass
+`codespec._resolve_item` uses, so `bleck items --search fire_brust` and a
+`mod.json` saying `item:fire_brust` cannot disagree about what was meant.
+
+### ✅ Hex ids, and no `--json`
+
+The id column is **hex** (`0x041`). Both spellings are useful, and hex wins
+because the listing exists to be copied into a selector: every id in this repo's
+manifests, in `mods/attended`, and in D113/D114/D118 is written `item:0x41`.
+Decimal appears only inside generated C comments, which nobody types.
+
+⛔ **No `--json`.** `bleck maps`, the command this mirrors, has none, and the
+CLI's only `--json` precedent is `bleck/api/`'s **versioned** pydantic contract
+— adding a published `Item` model is a contract decision, not a side effect of
+adding a listing. D119 also keeps `ItemId` out of every published schema, since
+a pydantic field typed with an `IntEnum` would rewrite `"item:fire_burst"` as a
+number on the next save. Checked, not assumed: nothing added here touches
+`bleck/api/`.
+
+### ⚠️ It reads no disc, unlike every other command it sits beside
+
+`bleck maps` needs `bleck extract` to have been run, because a map's name *is*
+its archive's filename. An item's id is in a module and its names in a committed
+JSON, so `bleck items` answers on a machine that has never seen the game. The
+smoke check therefore needs no `needs_base`, which is one less way for it to
+become untestable on CI — the trap the file's own header docstring records
+("the first version's map check quietly required one and passed only where it
+could not fail").
+
+917 tests (894 before), pylint 10.00/10.
+
+---
+
+## D121 — ✅ The findings published as a third doc tree, for a third audience (2026-07-28)
+
+⚠️ Numbered out of order: 120 and 122 were being written concurrently and landed
+first. Appended, per the append-only rule; nothing above was edited.
+
+The roadmap's standing 🟢 item — *publish what this repository knows and the
+ecosystem does not* — is shipped as **`docs-site/findings/`**, 18 pages plus a
+section index, in `mkdocs.yml`'s nav.
+
+### The shape, and the three that were rejected
+
+The roadmap left the shape 🔶 with three candidates. What decided it was the
+**audience**: someone researching SPM who has never heard of `bleck` and arrives
+from a search engine or the decomp Discord. They do not want a toolkit and will
+not read a design record.
+
+- ✅ **A section of the published site, one page per finding.** Searchable
+  titles, each page standalone: the fact, the evidence, then what is *not*
+  established. It is already built, already deployed, already indexed.
+- ⛔ **A `docs/findings/` tree.** `docs/` is not published (`docs_dir:
+  docs-site` exists precisely to keep it that way), so this would have been
+  writing for an audience that cannot reach it.
+- ⛔ **A wiki page.** One page cannot carry 18 findings at the level of detail
+  that makes them checkable, and it would be a second place to maintain them.
+- ⛔ **Upstream PRs *instead*.** Only two findings are upstream corrections. The
+  argc bug is genuinely one and its text is drafted (below); the rest have no
+  upstream to send them to.
+
+### What was published, and the two rules it follows
+
+Pages are grouped: the evt VM (3), game data (7), code and formats (5), testing
+(2), plus the method and the index. The two constraints that shaped every page:
+
+1. **Confidence is marked inline and the corrections are prominent.** Four
+   findings exist *because* a published header or a natural assumption is wrong,
+   and the index leads with a corrections table. Where this repository itself got
+   something backwards first — D53's setup copy, D109's null pouch, D93's argc —
+   the page says so, because how a wrong thing survived is the reusable part.
+2. **No wholesale redistribution.** Individual addresses appear as evidence for
+   the finding they support; no symbol list, header or table is republished. The
+   licensing question (D54, still open) is untouched by this.
+
+### ⚠️ One roadmap claim did not survive the log
+
+The roadmap said `itemEventDataTable` is *"20 from the use range, 12 cooked, one
+from the key range"*, quoting D113. **D113's own id list says 21 / 11 / 1** —
+`0x41`–`0x4F` and `0x55`–`0x5A` are 21 ids, all inside `ITEM_ID_USE_*`
+(`0x41`–`0x77`), and the cooked list it prints has eleven members, not twelve.
+The published page and the roadmap now say 21 / 11 / 1; D113 is left alone.
+
+⚠️ Both numbers were wrong in the same direction and still summed to 33, which
+is why nobody caught it: **a total that checks out is not a breakdown that
+checks out.**
+
+### Verified rather than assumed while writing
+
+- ✅ The message file format was re-checked against the disc rather than
+  restated from D114: `files/msg/UK/global.txt` really does begin
+  `place_town\0Flipside\0place_stg1\0Lineland\0`, and `files/msg/JP` decodes as
+  Shift-JIS (`place_town` → ハザマタウン).
+- ✅ `0xFE363C80` is exactly −30,000,000, i.e. `LW(0)` under `evtmgr_cmd.h`'s
+  bias — so the door's opening `MULF` operand is now decoded rather than quoted
+  as a magic word. 🔶 Its second operand, `0xF1B1E5C7`, is 455/1024 ≈ 0.444 under
+  the float bias; arithmetic, not a measurement of what the door does with it.
+- ✅ `0x803FBC10 − 0x803F5F98 = 538 × 0x2C` recomputed.
+- ✅ `mod/evt_cmd.h`'s `USER_FUNC` really does `static_assert` on the declared
+  parameter count, which is what makes the `evt_door.h` bug a **compile error**
+  for anyone writing the correct call — a stronger statement than D102 made, and
+  the core of the upstream report.
+
+### Not done, deliberately
+
+- ⛔ **The upstream PR was not opened.** Its text is drafted at
+  `work/upstream-pr.md` (gitignored) — the argc fix as a one-line diff, plus
+  D60's two wrong lst names flagged as a *separate* issue, since 2 disagreements
+  out of 744 is a smaller sample in a different file.
+- ⛔ **`relD.bin` being a debug build, and eu0 ⊃ us0, were left unpublished.**
+  Both are solid (D11, disc-layout) but plausibly already known to TCRF-adjacent
+  documentation, and a findings page whose novelty is unchecked is worth less
+  than one whose evidence is.
+- ⛔ **`work->setupFile` reading 0, and the `/a` container pairing.** Recorded
+  upstream as unexplained; publishing an unexplained zero helps nobody.
+
+---
+
+## D123 — ✅ A setup entry's undocumented fields DO reach the live NPCEntry (2026-07-29)
+
+D122 left 🔶 whether the three values a shipped slot carries and a bare one does
+not (`0xDC` at +0x14, `0x12C` at +0x18, `2` at +0x68) actually do anything.
+They are not inert.
+
+### ⛔ First, the run that proved nothing, and why
+
+The probe compared three NPCs — shipped, bare, and a byte-copy of the shipped
+setup entry — so that "the unknown fields matter" could be separated from "any
+two NPCs differ at runtime". **The clone was declared in `mod.json` as
+`{slot, template, position}`, which is a BARE edit.** A declared edit writes two
+fields onto whatever the slot already holds, and an empty slot holds zeros, so
+the manifest produced two bare enemies. The probe's comments described a control
+that did not exist.
+
+⚠️ It reported `20` and `21` differing words — nearly identical, which read as a
+tidy result. **A wrong experiment that returns plausible numbers is the whole
+hazard**; the only reason it was caught is that the *expected* asymmetry was
+absent. Written down because "the probe's comment described the experiment, the
+manifest described a different one" is a new way to get this wrong here, and the
+comment is the part that gets believed later.
+
+The real control needs a byte-copy, which no declared edit can express — it is
+the first concrete argument for a copy-from edit.
+
+### ✅ Measured, with the control it needed
+
+Same map, same frame, latched once all three existed. Diffs across the whole
+0x748-byte `NPCEntry`:
+
+| against slot 0 | differing words |
+|---|---|
+| slot 3, bare (`template` + `position` on zeros) | **20** |
+| slot 4, byte-copy of slot 0, position overwritten | **17** |
+
+The 17 are the noise floor — identity (`+0x00`, `+0x04`, the name at `+0x2C`),
+six copies of the position, live state and one pointer. **The bare entry differs
+in exactly three more, and they are these:**
+
+| setup entry | NPCEntry | shipped | bare |
+|---|---|---|---|
+| +0x14 | **+0x57C** | `0xDC` | `0` |
+| +0x18 | **+0x580** | `0x12C` | `0` |
+| +0x68 | **+0x598** | `2` | `0` |
+
+The clone matches slot 0 at all three. So the mapping is causal, not
+correlational: the same template, spawned three times, lands different values
+there according to its *setup* bytes.
+
+### ⚠️ spm-headers attributes two of these to the wrong source
+
+`npcdrv.h` names `+0x57C` and `+0x580`:
+
+```c
+/* 0x57C */ u32 templateField0x5C; // field 0x5c of spawning SetupEnemyTemplate
+/* 0x580 */ u32 templateField0x60; // field 0x60 of spawning SetupEnemyTemplate
+```
+
+⛔ **For a setup-spawned NPC that is not where the value comes from.** All three
+NPCs here are template 2, so anything read from the template would be identical
+across them. They differ, and they differ exactly as their setup entries do.
+
+`+0x598` is inside `unknown_0x588[]` and is named nowhere.
+
+🔶 **Not established:** whether the setup value *overrides* a template default,
+or whether `npcEntryFromSetupEnemy` and `npcEntryFromTemplate` are simply
+different paths and the comment describes the other one. One reading settles it —
+`npcEnemyTemplates[2]` +0x5C and +0x60. If they hold `0xDC` and `0x12C`, the
+setup wins over a default; if they hold zero, the comment is about the other
+path. This is a second `evt_door.h` (D102) either way: a header stating a
+provenance that does not hold.
+
+### 🔶 Still not shown: that any of it changes behaviour
+
+220 and 300 remain unidentified. A bare enemy has **zeros** where a shipped one
+has values, so if either governs sight range or aggro, an added enemy is inert
+and an NPC count cannot see it. ⚠️ D122 said "both spawned" and that is still
+true and still not the same as "both work".
+
+### What this means for adding enemies
+
+✅ Adding works (D122). ⚠️ But a declared edit builds on zeros, so an added
+enemy is not equivalent to a shipped one until these three are set. Two ways,
+and the second is better:
+
+- ⛔ **Document the offsets and let authors write them.** They are undocumented,
+  and an author copying `0xDC` without knowing what it means is superstition.
+- ✅ **Copy the fields from an existing entry.** `bleck` knows both entries and
+  can carry the undocumented bytes across without anyone naming them — which is
+  the same principle `Enemy.raw` already uses to survive a `with_*` edit.
+
+---
+
+## D124 — ✅ Placements in CSV tables, and `copy_from` as D123's answer (2026-07-29)
+
+D123 ended with an unbuilt conclusion: a declared edit builds on zeros, so an
+added enemy is not equivalent to a shipped one until three undocumented fields
+are set, and copying an existing entry is how to set them without naming them.
+This builds that, and the table format it wanted anyway.
+
+### ✅ CSV, and what it cost
+
+```csv
+# mods/spawn-extra/tables/enemies.csv
+map,slot,template,x,y,z
+he1_01,3,2,-300,0,0
+```
+
+`bleck/formats/tables.py` reads it; `bleck/mods/build/edits.py` merges table rows
+with inline `setup` and applies both. Inline is unchanged and still the right
+shape for two or three rows.
+
+⚠️ **CSV has no comments and no types, and that was the known cost.** Lines
+starting with `#` and blank lines are skipped — a deliberate extension, so these
+files are not strictly CSV and a quoted field cannot contain a newline. It was
+paid knowingly: a hundred rows of bare numbers with nowhere to write *why* is
+worse than a format quirk, and the alternative formats each cost more.
+
+⛔ **Rejected: TOML array-of-tables.** `[[enemies]]` is typed, has real comments
+and needs no extension. It is also four lines per placement where CSV is one, it
+does not open in a spreadsheet, and a hundred placements is exactly the case
+where a table beats a document. Typing buys little here: every column is a small
+integer, a float or a name, and each is validated by hand anyway.
+
+⛔ **Rejected: YAML, matching `bleck.yml`.** Consistency with the project config
+was the argument for it, and it lost to the same line-per-row point plus YAML's
+own hazards — `no` parsing as `false` in a `clear` column is a real one. A
+placement table and a project config are different kinds of file; matching them
+would be consistency for its own sake.
+
+### ✅ `copy_from`, and refusing to copy an empty slot
+
+`copy_from` names a slot whose **whole entry** is copied before `template` and
+`position` are applied, so the D123 fields (`0xDC` at +0x14, `0x12C` at +0x18,
+`2` at +0x68) come across without anyone writing them. It is spellable inline as
+well as in a table — otherwise `bleck mod export` would silently drop it.
+
+⚠️ **Copying an empty slot is refused, not allowed to be a no-op.** An empty slot
+is zeros, so the copy carries nothing and the edit lands on zeros exactly as if
+`copy_from` were absent — the author believes they have the shipped bytes and
+cannot tell that they do not. That is the precise shape of the D123 run that
+measured a control which did not exist, and it seemed worth refusing at the one
+place it can still be caught.
+
+✅ **`copy_from` reads the base file, not the partly-edited one.** So row order
+in a table cannot change what the table means, and chained copies are not a thing
+an author has to reason about.
+
+### ✅ Names refuse rather than guess, because ambiguity is the common case
+
+`template` takes `Squiglet` or `250`. Measured against the committed catalog:
+**386 distinct English tribe names cover the 423 named templates, 382 of them
+uniquely.** Four are not: `Goomba` names **35** templates, `Koopa Troopa`,
+`Mimi Stg2` and `Gloomba` two each.
+
+So the common case works and the failure is concentrated in one very
+guessable-looking name. `Goomba` refuses, lists all 35 candidate ids, and says to
+write the number. Model names (`e_kuribo`) are a second tier below English ones,
+exactly as `ItemNames.resolve` tiers its own aliases; `items.normalize` is reused
+rather than reimplemented.
+
+⚠️ **`mods/spawn-extra` therefore writes `2`, not `Goomba`** — its own worked
+example cannot use the name it is a Goomba by.
+
+### ✅ Two shapes of table, because two shapes of mod
+
+A table declared as a bare path carries a `map` column. One declared as
+`{"path": ..., "map": "he1_01"}` binds every row to that map and the column
+disappears — which is what a mod reworking one level wants: a file per map, and
+nothing repeating the filename.
+
+⚠️ **A bound table may not also carry a `map` column.** Refused rather than
+checked for agreement: two places to say one thing is two places to disagree, and
+a row silently disagreeing with the manifest is an edit that looks applied and is
+not.
+
+### ✅ The same slot declared twice, within one mod, is an error
+
+Inline and table are one namespace. Declaring `(he1_01, 3)` in both names both
+sources and refuses; **across** mods it stays an ordinary conflict and the
+existing chain order settles it. Picking the later one silently is how an
+afternoon disappears.
+
+`_refuse_orphans` (D79) runs on the merged result, so a table row is not a way
+past it — verified by test rather than assumed, since the guard sits in
+`_apply_map` and the merge happens before it.
+
+### ✅ Proof the conversion changed nothing
+
+`mods/spawn-extra` was converted from inline `setup` to a table and rebuilt:
+
+```
+work/build/spawn-extra/files/setup/he1_01.dat
+  byte-identical to the inline build: True   (11,204 bytes)
+  version 6, 5/100 enemies
+  [  3] template 2 at (-300, 0, 0)
+  [  4] template 2 at (-450, 0, 0)
+```
+
+That exact file is the one D122 watched spawn five NPCs in a running game, so
+byte-identity is the whole claim: the new source produced the verified artifact,
+not merely a plausible one.
+
+🔶 **Not shown: that a `copy_from` enemy behaves differently from a bare one.**
+D123 established the bytes reach the live `NPCEntry` and left 220 and 300
+unidentified. This makes them settable; it does not make them understood.
+
+---
+
+## D125 — ✅ A table's key is its *kind*, not a label (2026-07-29)
+
+D124 shipped `tables` with the key as a free-form name:
+
+```json
+"tables": { "enemies": "tables/enemies.csv",
+            "lineland": { "path": "tables/he1_01.csv", "map": "he1_01" } }
+```
+
+⛔ **That key meant nothing.** `edits.py` did `for ref in mod.manifest.tables`
+and read **every** declared table as enemy placements regardless of what it was
+called. `"enemies"` reads like a keyword and was not one; `"lineland"` and
+`"enemies"` were treated identically. The bug was invisible because the only
+kind that existed was the one it assumed.
+
+It was caught by a question, not by a test: asked to write down how a user
+declares a table, the honest answer had to include "the name is decorative",
+and that sentence does not survive being written.
+
+### ✅ The key is now a closed `TableKind`
+
+```json
+"tables": {
+  "enemies": ["tables/he1_01.csv", { "path": "tables/he2_01.csv", "map": "he2_01" }]
+}
+```
+
+A `StrEnum` (D99, so it prints as `enemies` in messages), holding only
+`ENEMIES` today. The value is one table or a **list** of them, so a mod can
+still split placements across a file per map — which is what the old
+`"lineland"` / `"one"` / `"two"` keys were really being used for.
+
+`Manifest.tables_of(kind)` is the read seam, and `edits.py` asks for
+`ENEMIES` rather than iterating. Items and doors plug in there.
+
+⚠️ **A planned-but-unbuilt kind is refused with its own message.** `items` and
+`doors` are the design (they are the next thing asked for), so reporting them as
+"unknown" would read as a misspelling and send someone hunting for a spelling
+that does not exist. They say *not built yet*. The alternative — accept them and
+read nothing — is a table that looks applied and is not, which is the failure
+mode this repo keeps logging.
+
+⚠️ **An unknown key says what the key is for.** `unknown table kind 'lineland'`
+alone would leave an author renaming their file. The message says the key
+describes the rows, not the file, and spells the bound form, because a label is
+overwhelmingly someone reaching for one file per map.
+
+### ✅ Round-trip shape
+
+One table serializes back as the scalar it was written as; several as a list. A
+one-element list would rewrite a hand-edited `mod.json` for no reason, and
+`bleck setup apply` writes that file back.
+
+⚠️ **The `v1` API is the exception: always a list, always the object form.** A
+wire format with two shapes for one thing is a bug generator; a hand-edited
+manifest is where a shorthand earns its keep. `ModDocument.tables` is
+`dict[TableKind, list[Table]]`, so the closed set reaches the published JSON
+Schema.
+
+### Verified
+
+- 987 tests, pylint 10.00/10, `mkdocs build --strict` clean.
+- `mods/spawn-extra` rebuilt through the new parser produces
+  `he1_01.dat` **byte-identical** (sha256 `f4d5c506…4135b`) to the build D122
+  verified in-game. The refactor changed the declaration, not the bytes.
+
+Free to do now and expensive later: `tables` has never been in a release. The
+`v0.1.0-rc1` tag predates it.

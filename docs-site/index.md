@@ -97,5 +97,10 @@ You supply your own disc image. `bleck` does not distribute game data.
 
     Linux, macOS and Windows.
 
+-   **[Findings](findings/index.md)**
+
+    Measured facts about the game's internals — for anyone researching SPM,
+    whether or not they use `bleck`.
+
 </div>
 

@@ -118,6 +118,22 @@ class ItemInfo:
 
 
 @dataclass(frozen=True)
+class GroupCount:
+    """How many items one `ITEM_ID_*` group holds.
+
+    The item answer to `maps.AreaCount`: 538 items in one flat list is not
+    browsable, and the constant already sorts them -- `USE`, `CARD`, `KEY`.
+    """
+
+    group: str
+    items: int
+
+    def describe(self) -> str:
+        # `ITEM_ID_NULL` names no group and is the only id that does not.
+        return f"{self.group or '-':<10} {self.items:>4} items"
+
+
+@dataclass(frozen=True)
 class ItemMatch:
     """What a written name resolved to, and enough to explain it when it did not.
 
@@ -188,7 +204,58 @@ class ItemNames:
 
     @property
     def items(self) -> list[ItemInfo]:
+        """The catalog's own rows. Empty when the JSON is absent."""
         return list(self._items)
+
+    @property
+    def known(self) -> list[ItemInfo]:
+        """Every id worth listing, catalog row or not, in id order.
+
+        What a listing counts against, where `items` is what was *read*: with
+        no catalog on disk this is still all 538 ids, because `ItemId` is a
+        module (D119). The two lengths differing is the interesting case.
+        """
+        return list(self._known)
+
+    def search(self, text: str) -> list[ItemInfo]:
+        """Every item one of whose aliases contains `text`.
+
+        Browsing, where `resolve` is identification: this answers "which items
+        are worth looking at", so it matches on substrings and reports all of
+        them rather than calling several a failure.
+
+        ⚠️ It walks the **same tier tables** `resolve` does rather than
+        rebuilding an alias list. A second list is a list that drifts, and the
+        drift would show up as `bleck items` finding a name that a manifest
+        then refuses (or worse, the reverse).
+        """
+        needle = normalize(text)
+        if not needle:
+            return self.known
+        found = {
+            item_id
+            for tier in self._tiers
+            for alias, ids in tier.items()
+            if needle in alias
+            for item_id in ids
+        }
+        return [info for info in self._known if info.id in found]
+
+    def group(self, name: str) -> list[ItemInfo]:
+        """Every item in one `ITEM_ID_*` group, e.g. `CARD`."""
+        wanted = normalize(name)
+        return [info for info in self._known if normalize(info.group) == wanted]
+
+    def groups(self) -> list[GroupCount]:
+        """The groups, largest first -- there are enough of them that
+        alphabetical order buries the ones anybody is looking for."""
+        counts: dict[str, int] = {}
+        for info in self._known:
+            counts[info.group] = counts.get(info.group, 0) + 1
+        return sorted(
+            (GroupCount(group=name, items=total) for name, total in counts.items()),
+            key=lambda found: (-found.items, found.group),
+        )
 
     def lookup(self, item_id: int) -> ItemInfo | None:
         """What an id names, or None when the catalog does not have it."""

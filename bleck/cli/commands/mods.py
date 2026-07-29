@@ -17,7 +17,7 @@ from bleck.backends import emulator, gecko, maps
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
-from bleck.formats import lz77, u8
+from bleck.formats import lz77, tables, u8
 from bleck.mods import builder, manifest, registry, resolver
 from bleck.mods.build import outputs
 from bleck.mods.build.overlay import normalize_disc_path, resolve_target
@@ -47,6 +47,7 @@ def cmd_new(args: argparse.Namespace) -> int:
         raise UserError(f"{root} already exists (use --force to overwrite)")
 
     (root / manifest.OVERLAY_DIR).mkdir(parents=True, exist_ok=True)
+    _scaffold_table(root / ENEMY_TABLE)
     manifest.write(
         root,
         manifest.Manifest(
@@ -55,12 +56,35 @@ def cmd_new(args: argparse.Namespace) -> int:
             description=args.description,
             author=args.author,
             base=_base().name,
+            tables=[manifest.TableRef(kind=manifest.TableKind.ENEMIES, path=ENEMY_TABLE)],
         ),
     )
     print(f"created {root}/")
     print(f"  edit {root}/{manifest.MANIFEST_NAME}")
+    print(f"  place enemies in {root}/{ENEMY_TABLE}")
     print(f"  then `bleck mod vendor {args.name} <disc-path>`")
     return 0
+
+
+#: Scaffolded by `bleck mod new`, and referenced from the manifest it writes.
+#: Posix-style: it is stored in `mod.json` and must survive a Windows round trip.
+ENEMY_TABLE = "tables/enemies.csv"
+
+
+def _scaffold_table(path: Path) -> None:
+    """An empty enemy table: one comment line and the header row, nothing else.
+
+    Empty rather than pre-filled, because an example row is a placement, and a
+    placement nobody asked for is exactly the class of surprise this repo keeps
+    logging.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# One enemy per row. Blank lines and '#' lines are skipped; "
+        "'template' takes a number or a name.\n"
+        f"{','.join(tables.COLUMNS)}\n",
+        encoding="utf-8",
+    )
 
 
 def cmd_list(_args: argparse.Namespace) -> int:
