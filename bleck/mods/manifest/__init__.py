@@ -155,6 +155,23 @@ class Manifest:
     def has_code(self) -> bool:
         return self.code is not None
 
+    def __post_init__(self) -> None:
+        """⚠️ A door table without a `code` block would be read by nobody.
+
+        `mods_with_code` gates the whole compile on `has_code`, so such a mod
+        would build cleanly, patch nothing, and report success -- D126's exact
+        failure. It is refused here instead, where every construction path goes
+        through it, rather than at one call site (D134).
+        """
+        if self.tables_of(TableKind.DOORS) and self.code is None:
+            raise ManifestError(
+                f"{self.name}: a 'doors' table patches scripts, so it needs a "
+                f"'code' block whose sources define the functions its 'call' "
+                f"column names.\n"
+                f"  Without one the table would be read by nothing and the "
+                f"build would report success having patched nothing."
+            )
+
     def to_json(self) -> str:
         body = {
             "schema": SCHEMA_VERSION,

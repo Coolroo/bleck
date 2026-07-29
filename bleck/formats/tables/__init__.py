@@ -14,6 +14,7 @@ so they validate differently and say so in different words:
 
     tables.enemies    map, slot, template, x, y, z, copy_from, clear
     tables.coins      map, index, x, y, z, flags, clear
+    tables.doors      map, index, script, at, expect, call
 
 `common` holds what is genuinely shared: comment stripping, the header, and
 cell access. Column *lists* are data (`common.Schema`); column *meanings* are
@@ -31,7 +32,7 @@ from __future__ import annotations
 
 # Re-exported: the error type and the file-shape vocabulary are shared, so
 # callers catch one exception rather than one per kind.
-from bleck.formats.tables import coins, enemies
+from bleck.formats.tables import coins, doors, enemies
 from bleck.formats.tables.common import (
     AXES,
     COMMENT,
@@ -47,5 +48,6 @@ __all__ = [
     "Schema",
     "TableError",
     "coins",
+    "doors",
     "enemies",
 ]

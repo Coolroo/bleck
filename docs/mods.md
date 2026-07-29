@@ -144,8 +144,7 @@ column. `bleck/formats/tables.py` reads them; `bleck/mods/build/edits.py` merges
 both sources and applies them.
 
 ⚠️ **The `tables` key is the *kind*, not a label** (D125) — a closed
-`TableKind`, `enemies` and `items`, with `doors` refused as unbuilt rather than
-accepted and ignored. Read rows through `Manifest.tables_of(kind)`; iterating
+`TableKind`: `enemies`, `coins`, `doors`. Read rows through `Manifest.tables_of(kind)`; iterating
 `manifest.tables` is the bug D125 removed, where every declared table was
 applied as enemy placements whatever it was called.
 
@@ -523,3 +522,29 @@ iteration at ~1.125× size.
 5. Should a mod be able to *delete* a base file, and if so how is that spelled?
    A `"remove": [...]` list in the manifest is the obvious answer, since an
    overlay tree can express "replace" and "add" but not "absent".
+
+### Door tables are code, not placement (D134)
+
+```csv
+# mods/my-mod/tables/doors.csv
+map,index,script,at,expect,call
+he1_01,0,interact,0,MULF,on_door
+he1_01,0,init,0,0x0002001A,on_door_init
+```
+
+A row is a **`code.patches` entry**, not setup-file data, so it merges in
+`bleck/mods/code/parts.py` (`door_patches`) and `PLACEMENT_KINDS` deliberately
+excludes `DOORS`. Each row is rebuilt into the selector a manifest would spell —
+`door:<map>:<index>:<script>` — and passed through the same
+`codespec.build_patch` an inline patch uses, so both surfaces refuse the same
+things. Verified: `door-attended`'s four inline patches rewritten as a table
+produce a **byte-identical** `mod.rel`.
+
+⚠️ **A doors table without a `code` block is refused** in
+`Manifest.__post_init__`. `mods_with_code` gates the compile on `has_code`, so
+such a mod would otherwise build cleanly, patch nothing, and report success —
+D126's exact shape.
+
+⛔ **`bleck mod new` does not scaffold one.** Enemies and coins are data any mod
+can hold; a door row's `call` must exist in the mod's sources, and a new mod has
+no `code` block.

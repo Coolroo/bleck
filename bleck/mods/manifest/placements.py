@@ -141,21 +141,28 @@ class TableKind(StrEnum):
 
     ENEMIES = "enemies"
     COINS = "coins"
+    DOORS = "doors"
 
 
 #: Kinds the design calls for that nothing reads yet. Named apart from a plain
 #: typo so a mod declaring one is told it is unbuilt rather than misspelled --
 #: the alternative, accepting it and reading nothing, is a table that looks
 #: applied and is not.
-PLANNED_KINDS = ("doors",)
+#:
+#: ⚠️ Empty since D134. Keep the machinery: the next kind wants this message,
+#: not "unknown table kind".
+PLANNED_KINDS: tuple[str, ...] = ()
 
 #: Kinds that change a map's setup file, and therefore make a mod something the
 #: placement build has to visit.
 #:
 #: ⚠️ **A kind missing from here is skipped by the entire build, silently** --
 #: `has_placements` gates `mods_with_placements`, and a mod that generates
-#: nothing still reports "chain OK" (D126). Doors will not belong here; they are
-#: code patches, not setup content.
+#: nothing still reports "chain OK" (D126).
+#:
+#: ⛔ `DOORS` is deliberately absent: a door row is a **code patch**, not setup
+#: content, and it reaches `code.patches` through
+#: `bleck/mods/code/parts.py` instead (D134).
 PLACEMENT_KINDS = (TableKind.ENEMIES, TableKind.COINS)
 
 

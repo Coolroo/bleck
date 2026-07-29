@@ -18,8 +18,9 @@ from bleck.backends import symbols as symbol_tables
 from bleck.common import config as project_config
 from bleck.common import env
 from bleck.common.errors import BleckError
+from bleck.formats import tables
 from bleck.mods import registry as mod_registry
-from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
+from bleck.mods.manifest import REL_DISC_PATH, CodeSpec, TableKind, codespec
 from bleck.mods.manifest.codespec import FunctionHook
 from bleck.mods.registry import Mod
 from bleck.script import ScriptError, compile_source, emit
@@ -258,24 +259,75 @@ def _defined_functions(sources: list[Path]) -> list[str]:
     return names
 
 
+@dataclass(frozen=True)
+class SourcedPatch:
+    """One patch and where it was written, so an error can name the right place.
+
+    A `ScriptPatch` deliberately does not carry a filename -- it is what a mod
+    *declares*, not where -- but "code.patches[3]" is a lie when the patch came
+    from row 4 of a CSV.
+    """
+
+    patch: codespec.ScriptPatch
+    where: str
+
+
+def door_patches(mod: Mod) -> list[SourcedPatch]:
+    """A mod's `tables.doors` rows, as the patches `code.patches` would hold.
+
+    ⚠️ **A door table is code, not placement.** Enemy and coin tables become
+    setup-file data in `bleck/mods/build/edits.py`; these become patches, so
+    they merge here instead and `PLACEMENT_KINDS` excludes `DOORS` (D134).
+
+    Each row is turned back into the selector a manifest would spell and run
+    through `build_patch`, so a table and an inline patch are validated by
+    exactly the same code and refuse exactly the same things.
+    """
+    out: list[SourcedPatch] = []
+    for ref in mod.manifest.tables_of(TableKind.DOORS):
+        path = mod.root / ref.path
+        if not path.is_file():
+            raise CodeError(
+                f"{mod.name}: no table at {ref.path}, declared under "
+                f"'tables.{ref.kind}' in mod.json"
+            )
+        table = tables.doors.read(path, source=ref.path, map_name=ref.map_name)
+        for row in table.rows:
+            where = f"{table.source}:{row.line}"
+            out.append(
+                SourcedPatch(
+                    patch=codespec.build_patch(
+                        row.selector, row.at, row.expect, row.call, where
+                    ),
+                    where=where,
+                )
+            )
+    return out
+
+
 def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.ScriptPatch]:
-    """Resolve `code.patches` for the emitter, checking each `call` exists.
+    """Resolve `code.patches` and `tables.doors` for the emitter, checking each
+    `call` exists.
 
     Without this the typo reaches `elf2rel`, which reports it as a missing
     *game* symbol -- the mod's own function looks like an address it should
     have found in the symbol list.
     """
-    if not spec.patches:
+    declared = [
+        SourcedPatch(patch=patch, where=f"code.patches[{index}]")
+        for index, patch in enumerate(spec.patches)
+    ] + door_patches(mod)
+    if not declared:
         return []
     defined = _defined_functions(sources)
-    for index, patch in enumerate(spec.patches):
-        if patch.call in defined:
+    for item in declared:
+        if item.patch.call in defined:
             continue
         listed = ", ".join(defined) or "none"
-        close = difflib.get_close_matches(patch.call, defined, n=1, cutoff=0.6)
+        close = difflib.get_close_matches(item.patch.call, defined, n=1, cutoff=0.6)
         hint = f"\n  Did you mean {close[0]!r}?" if close else ""
         raise CodeError(
-            f"{mod.name}: 'code.patches[{index}].call' names {patch.call!r}, but "
+            f"{mod.name}: {item.where} calls {item.patch.call!r}, but "
             f"this mod's sources define no such function "
             f"(they define: {listed}).{hint}\n"
             f"  A patched instruction calls a function with evt's user-func "
@@ -292,7 +344,7 @@ def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.Scri
             index=patch.index,
             field_offset=patch.field_offset,
         )
-        for patch in spec.patches
+        for patch in (item.patch for item in declared)
     ]
 
 

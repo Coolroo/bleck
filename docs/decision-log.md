@@ -9623,3 +9623,62 @@ This entry cost a third: a heredoc replacement whose pattern did not match, whic
 reported nothing and left the file untouched until a test caught it. The rule
 already written in D131 — targeted edits, not scripted rewrites — was ignored by
 me while writing the entry that says so. Use the editor; check the diff.
+
+---
+
+## D134 — ✅ Door tables, which are code rather than placement (2026-07-29)
+
+The third kind, and the one that does not fit the shape of the other two.
+
+### ⚠️ A door row is a patch, not data
+
+Enemies and coins become bytes in a map's setup file. A door row becomes a
+`code.patches` entry -- one instruction of a script the game already ships,
+replaced by a call into the mod. So it merges in a completely different place:
+`bleck/mods/code/parts.py`, not `bleck/mods/build/edits.py`, and
+`PLACEMENT_KINDS` excludes `DOORS` on purpose.
+
+```csv
+map,index,script,at,expect,call
+he1_01,0,interact,0,MULF,on_door
+he1_01,0,init,0,0x0002001A,on_door_init
+```
+
+The columns are the selector split where an author actually varies it --
+`door:he1_01:0:interact` is a map, an index and one of three scripts -- plus
+the three fields a patch needs. `script` defaults to `interact`, matching the
+selector's own default.
+
+✅ **Each row is rebuilt into the selector string and run through
+`codespec.build_patch`**, the same validator an inline patch uses. So a table
+cannot accept something the manifest would reject, and neither can drift from
+the other. Verified end to end: `door-attended`'s four inline patches rewritten
+as a table produce a **byte-identical** `mod.rel` (`473e8c55…`, 2,524 bytes).
+
+⛔ **Rejected: a general `patches` table** keyed by selector string
+(`door:he1_01:0:interact,0,MULF,on_door`). It would cover `map:` and `item:`
+patches too with one shape. It loses the validation that makes the structured
+form worth having -- the index is a number, the script is one of three -- and
+D125's rule is that a key names what its rows describe. A `patches` kind
+describes a mechanism; `doors` describes a thing.
+
+### ✅ Two ways this could have been a silent no-op, both closed
+
+- **`Manifest.__post_init__` refuses a doors table with no `code` block.**
+  `mods_with_code` gates the whole compile on `has_code`, so such a mod would
+  build cleanly, patch nothing and report success. Checked in `__post_init__`
+  rather than at a call site because every construction path goes through it.
+- **`SourcedPatch` carries where each patch was written**, so an unknown `call`
+  from row 4 of a CSV says `tables/doors.csv:4` instead of `code.patches[3]` --
+  which would be a lie, and would send someone looking in the wrong file.
+
+⛔ **`bleck mod new` does not scaffold `tables/doors.csv`.** Enemies and coins
+are data any mod can hold; a door row's `call` must exist in the mod's sources,
+and a new mod has no `code` block -- so scaffolding one would make every new mod
+invalid on sight.
+
+### `PLANNED_KINDS` is now empty
+
+Kept rather than deleted: the next kind wants "designed but not built yet"
+rather than "unknown table kind", and that distinction cost a paragraph to
+explain in D125.

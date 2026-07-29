@@ -523,10 +523,9 @@ Every mod has a `mod.json` at its root.
     ```
 
     **The key says what the table's rows describe, not what to call the file.**
-    It is a closed set — `enemies` and `coins` — so a label like `"lineland"` is
-    refused rather than read as enemy placements on the strength of being
-    present. `doors` is designed and not built; declaring one says so, instead
-    of accepting a table nothing will ever read.
+    It is a closed set — `enemies`, `coins` and `doors` — so a label like
+    `"lineland"` is refused rather than read as enemy placements on the strength
+    of being present.
 
     `bleck mod new` scaffolds both files, empty, and references them from the
     manifest it writes.
@@ -580,6 +579,34 @@ Every mod has a `mod.json` at its root.
     `index` are different words for genuinely different things. Indexed edits
     resolve against the list **as the game ships it**, so the order rows appear
     in cannot change what a table means.
+
+    A **door** table, which is not a placement at all — each row is a
+    [`code.patches`](#code) entry:
+
+    ```csv
+    # mods/my-mod/tables/doors.csv
+    map,index,script,at,expect,call
+    he1_01,0,interact,0,MULF,on_door
+    he1_01,0,init,0,0x0002001A,on_door_init
+    ```
+
+    | Column | |
+    |---|---|
+    | `map` | Required unless the table is bound to a map |
+    | `index` | Required. Position in the list the map registers, not an id |
+    | `script` | `interact` (default), `init` or `move` |
+    | `at` | Required. Word offset where the instruction begins |
+    | `expect` | Required. The guard — nothing is written unless it matches |
+    | `call` | Required. A function in this mod's sources |
+
+    A row means exactly the selector `door:<map>:<index>:<script>`, validated by
+    the same code an inline patch goes through.
+
+    !!! warning "A doors table needs a `code` block"
+
+        Its `call` column names functions in your own sources, so a mod
+        declaring one without `code` is refused — otherwise it would build
+        cleanly, patch nothing, and report success.
 
     A header row is required and column **order is free**. An unknown column is
     an error that names it and lists the ones that exist. Every message names

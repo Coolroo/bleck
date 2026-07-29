@@ -120,6 +120,11 @@ SCAFFOLDS = (
     ),
 )
 
+#: ⛔ No `doors` scaffold. Enemies and coins are data, so any mod can hold them;
+#: a door row is a code patch whose `call` must exist in the mod's sources, and
+#: `mod new` writes no `code` block -- a scaffolded doors table would make every
+#: new mod invalid on sight (D134).
+
 #: Kept as a name because tests and docs refer to it.
 ENEMY_TABLE = SCAFFOLDS[0].path
 COIN_TABLE = SCAFFOLDS[1].path
