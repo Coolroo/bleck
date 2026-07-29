@@ -277,6 +277,30 @@ class TestCreatingASectionIsRefused:
         assert len(notes) == 1
         assert "1 to 2 item(s)" in notes[0]
 
+    def test_more_than_the_game_can_load_is_refused(self, tmp_path):
+        """⚠️ 512 is a hard ceiling read out of the DOL (D128): the loader
+        allocates 8192 bytes and memcpys the file's own count into it with
+        nothing clamping it, so a longer list overruns rather than truncates."""
+        rows = "".join(f"m1,,{n},0,0\n" for n in range(setup.MAX_ITEMS + 1))
+        mod = a_mod(
+            tmp_path / "m", {"tables": {"items": "tables/items.csv"}}, HEADER + rows
+        )
+        data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        placement = mod_edits.placements_for(mod)[0]
+        with pytest.raises(mod_edits.EditError, match="at most 512"):
+            mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+
+    def test_exactly_the_ceiling_is_allowed(self, tmp_path):
+        """Off-by-one guard: 512 fits the allocation exactly."""
+        rows = "".join(f"m1,,{n},0,0\n" for n in range(setup.MAX_ITEMS - 1))
+        mod = a_mod(
+            tmp_path / "m", {"tables": {"items": "tables/items.csv"}}, HEADER + rows
+        )
+        data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        placement = mod_edits.placements_for(mod)[0]
+        found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+        assert len(found) == setup.MAX_ITEMS
+
     def test_a_size_preserving_edit_says_nothing(self, tmp_path):
         mod = a_mod(
             tmp_path / "m",

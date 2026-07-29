@@ -49,6 +49,19 @@ DOCUMENTED_VERSION = 6
 #: `SetupItem` is 16 bytes: u16 flags, u16 type, Vec3 pos.
 ITEM_SIZE = 16
 
+#: How many items the game can load from one map, read out of the DOL (D128).
+#:
+#: ⚠️ **A hard ceiling, not a convention.** The loader allocates 8192 bytes --
+#: `512 * ITEM_SIZE` -- then takes the count straight from the file and memcpys
+#: `count * 16` bytes into it. A file claiming more overruns the allocation with
+#: no check of any kind:
+#:
+#:     8017a9d4  li   r4, 8192      ; the allocation
+#:     8017aa0c  bl   setupReadItemInfo
+#:     8017aa54  slwi r5, r0, 4     ; count * 16, count from the FILE
+#:     8017aa58  bl   memcpy
+MAX_ITEMS = 512
+
 #: `itemVersion`, SETUPOBJ_FORMAT_VERSION upstream. All 14 files with items
 #: carry this exact value.
 ITEM_VERSION = 20051201
@@ -358,6 +371,9 @@ class Item:
     #: The only type the game can place. `setupItemTemplates` holds exactly one
     #: entry, id 0, so any other value indexes past the end of it. Every one of
     #: the 1,299 items across the 14 maps that place any is this.
+    #:
+    #: ✅ Read out of the DOL: `setupItemTemplates[0] = {id: 0,
+    #: itemTemplateId: 1}`, and item 1 is `ITEM_ID_WORLD_COIN` (D128).
     COIN = 0
 
     @property

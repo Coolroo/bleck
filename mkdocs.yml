@@ -110,6 +110,7 @@ nav:
           - Message files: findings/msg-file-format.md
           - Setup file format: findings/setup-file-format.md
           - Which setup copy is read: findings/setup-which-copy.md
+          - Placed items and the 512 ceiling: findings/setup-items.md
       - Code and formats:
           - Patching PowerPC code: findings/ppc-code-patching.md
           - Tracing a function: findings/function-tracing.md

@@ -84,6 +84,7 @@ control proves the instrument *works*, not that it is *aimed*.
 | [The message file format](msg-file-format.md) | `files/msg/<lang>/*.txt` is a flat run of NUL-terminated `key\0value\0` pairs from byte 0, with no header. JP is Shift-JIS |
 | [The setup file format](setup-file-format.md) | Always 100 entries; the stride varies with the version; and **clearing a slot in the middle silently discards every slot after it** |
 | [Which setup file the game reads](setup-which-copy.md) | The standalone copy. Editing only the embedded one is a no-op |
+| [Placed items and the 512 ceiling](setup-items.md) | The loader memcpys the file's own count into a fixed 8192-byte buffer, unclamped; a map that ships no item section **hangs** if given one |
 
 ## Code, tooling and formats
 

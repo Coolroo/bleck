@@ -354,7 +354,17 @@ def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
             continue
         kept[edit.index] = _edited_item(kept[edit.index], edit)
 
-    return [item for index, item in enumerate(kept) if index not in removed] + added
+    items = [item for index, item in enumerate(kept) if index not in removed] + added
+    if len(items) > setup.MAX_ITEMS:
+        raise EditError(
+            f"{mod.name}: {placement.map_name} would place {len(items)} items, "
+            f"and the game loads at most {setup.MAX_ITEMS}.\n"
+            f"  The loader allocates {setup.MAX_ITEMS * 16} bytes and then "
+            f"memcpys the file's own count into it, unchecked -- so a longer "
+            f"list overruns the allocation rather than being truncated (D128).\n"
+            f"  The busiest map the game ships places 48."
+        )
+    return items
 
 
 def _edited_item(item: setup.Item, edit) -> setup.Item:

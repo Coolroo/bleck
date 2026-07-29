@@ -9193,3 +9193,89 @@ unrun -- the machine that could run it is no longer available. Whoever picks
 this up should run that first: it splits "the coins need an asset" from "the
 file growing at all is fatal", and the answer decides whether the refusal can
 ever be relaxed.
+
+---
+
+## D128 — ✅ The item path, read out of the DOL instead of guessed (2026-07-29)
+
+D127 left "why does adding an item section hang?" open and the machine that
+could answer it unavailable. It did not need the machine: the DOL, a symbol
+list and `powerpc-eabi-objdump` answer most of it statically.
+
+Method note: `eu0`'s symbol list has **two** setup symbols, so nothing could be
+looked up by name. What worked was following strings -- `setup_data.c` (an
+assert `__FILE__`) and `%s/setup/%s.dat` -- back to their references with a
+small register-tracking cross-referencer, since the game materialises addresses
+as base+offset rather than one `lis`/`addi` pair. Both scripts are in the
+session scratchpad; the technique is worth keeping.
+
+### ✅ `setupReadItemInfo` @ `0x80029730`
+
+```
+80029784  lwz  r7, 11204(r3)   ; *(file + 0x2BC4) -> itemCount
+80029788  addi r0, r3, 11212   ;   file + 0x2BCC  -> items
+80029790  lwz  r3, 11208(r3)   ; *(file + 0x2BC8) -> itemVersion
+```
+
+**No length check of any kind**, confirming upstream's comment from the other
+side: the count is read whether or not the file is long enough to hold it.
+v5 reads the same three fields at `0x2A34`/`0x2A38`/`0x2A3C`.
+
+### ✅ The caller @ `0x8017A9C8`, and a ceiling nobody had written down
+
+```
+8017a9c8  li   r0, 512         ; default count
+8017a9d4  li   r4, 8192        ; 512 * sizeof(SetupItem)
+8017a9d8  bl   <alloc>
+8017aa0c  bl   setupReadItemInfo    ; count is OVERWRITTEN from the file
+8017aa14  cmpwi r8, 0 ; ble ...     ; count <= 0 -> skip everything
+8017aa24  cmplwi r0, 0xF501         ; assert version == 20051201
+8017aa54  slwi r5, r0, 4 ; bl memcpy ; count * 16 into the 8192 buffer
+8017aa8c  bl   setupSpawnItems
+```
+
+⚠️ **512 items is a hard ceiling.** The count comes from the file and is
+memcpy'd into a fixed 8192-byte allocation with nothing clamping it. `bleck` now
+refuses more than that; the busiest map the game ships places 48.
+
+⚠️ **`itemVersion` is asserted, not tolerated** -- `setup_data.c:355` panics
+unless it is exactly `20051201`. `bleck` has always written it correctly, but
+this is why a hand-edited file with a wrong version would hang rather than be
+ignored.
+
+### ✅ `setupSpawnItems` @ `0x80029680`, and what a coin actually is
+
+Per item: `flags` must have bits 0 and 4 (`0x11`), then `type` must equal
+`setupItemTemplates[0].id`. **A mismatch is skipped, not fatal.**
+
+`setupItemTemplates` resolves through `r13 = 0x805B5F00` to `0x805ADF08`:
+
+```
+00 00 00 01   ->  { id: 0, itemTemplateId: 1 }
+```
+
+and item **1** is `ITEM_ID_WORLD_COIN` in the catalog committed earlier this
+session. So the whole chain is: setup `type` 0 -> template id 1 -> a world coin
+spawned at (x, y, z).
+
+⚠️ **This means `bleck`'s refusal of `type != 0` is stricter than the game.**
+The game would silently skip such an item. The refusal stays -- a row that
+parses and then places nothing is the silent no-op this repo keeps logging --
+but it is now a *choice*, recorded as one, not a necessity.
+
+### 🔶 A falsifiable prediction, recorded before the run
+
+**Every check in the read path passes for the file D127 built.** Count 3,
+version `20051201`, flags `0x11`, type 0 matching the template. Nothing there
+can hang. So the hang is in spawning a coin in a map that ships none -- an
+asset the map has not loaded -- and *not* the file growing.
+
+That predicts **`mods/items-empty` will boot**: a count of 0 hits
+`cmpwi r8,0 ; ble` and skips the version check, the memcpy and
+`setupSpawnItems` entirely, making a zero-item section completely inert.
+
+If it boots, hypothesis B ("growing the file is fatal") is dead and the D127
+refusal is right for the right reason. **If it hangs, this whole analysis is
+wrong about something and the trace above should be distrusted, not patched.**
+Recorded in advance because D127's prediction went the other way and that only
+counted for anything because it was written down first.
