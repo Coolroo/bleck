@@ -38,6 +38,7 @@
       +0x1C ( 7)  the table's first word, so "found nothing" can be told from
                   "read nothing"
       +0x20 ( 8)  SEQ_GAME frames. The control
+      +0x40 (16)  the table's first 72 words, for the layout
 
     Target: eu0. Nothing here writes to game memory.
 */
@@ -52,6 +53,7 @@ typedef unsigned int u32;
 
 #define WANTED 4
 #define SCAN_WORDS 0x4000
+#define DUMP_WORDS 72
 
 typedef void(SeqFunc)(void *);
 
@@ -103,7 +105,7 @@ void mod_prolog(void)
     u32 i;
     u32 w;
 
-    for (i = 0; i < 9; i++)
+    for (i = 0; i < 16 + DUMP_WORDS; i++)
         probe[i] = 0;
     probe[0] = MAGIC;
     for (i = 0; i < WANTED; i++)
@@ -119,6 +121,20 @@ void mod_prolog(void)
                 FOUND(w) = i * 4;
     }
     SCANNED = SCAN_WORDS;
+
+    /*
+        Dump the head of the table as well as the hits.
+
+        The four offsets found -- 0x48, 0xA0, 0xA4, 0x104 -- span 0xBC bytes, so
+        either one template entry is at least 0x108 bytes or they sit in
+        different entries. Nothing so far distinguishes those, and NPCTemplate
+        is in no header, so the layout has to come from the bytes.
+
+        A pointer-shaped word (0x8043xxxx-0x8049xxxx, DOL data) repeating at a
+        regular interval is what a stride looks like.
+    */
+    for (i = 0; i < DUMP_WORDS; i++)
+        probe[16 + i] = table[i];
 
     for (i = 0; i < SEQ_COUNT; i++)
     {

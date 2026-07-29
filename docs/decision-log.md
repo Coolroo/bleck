@@ -7597,3 +7597,68 @@ The search was for **known values**, not for a struct layout. Given a type with
 no header and four addresses already measured, finding the addresses yields the
 offsets and confirms the table in one run — where guessing a layout would have
 needed several and could have been quietly wrong.
+
+---
+
+## D111 — ✅ `npcEnemyTemplates` decoded: stride 0x68, and the scripts are shared (2026-07-28)
+
+The layout `npcdrv:` needs, from one dump of the table's first 72 words.
+⚠️ `NPCTemplate` is in **no header** — this is measured, not read.
+
+### ✅ Stride
+
+Three independent markers repeat at a fixed interval:
+
+| | at byte |
+|---|---|
+| `0x01010000` | 4, 108, 212 |
+| `0x8033BCAC` / `BCB8` / `BCC8` (name strings) | 32, 136, 240 |
+
+Both give **104 bytes = `0x68`**, and agreeing on two unrelated markers is what
+makes it a stride rather than a coincidence.
+
+### ✅ Entry *n* is template id *n*
+
+D110's four hits land at bytes 264, 268, 272, 284 — inside entry 2
+(`208`–`311`). `he1_01` places **template 2, Goomba** (`bleck setup show`), and
+D107 read those same four pointers off the first NPC to spawn there. Three
+sources agree.
+
+### ✅ Field offsets within a template
+
+| field | offset |
+|---|---|
+| `initScript` | **+0x38** |
+| `moveScript` | **+0x3C** |
+| `onHitScript` | **+0x40** |
+| `deathScript` | **+0x4C** |
+
+### ⚠️ Scripts are SHARED between templates
+
+`0x80439F10` sits at +0x4C in entries **0, 1 and 2**; `0x804938E8` at +0x3C in
+entries 1 and 2; `0x80494E28` at +0x40 in both. So patching one template's
+script changes every template pointing at it.
+
+⛔ This is D91's item hazard again — 22 distinct scripts across 33 item entries —
+and it is the reason `bleck_patch_shared[]` exists. `npcdrv:` **must** report a
+shared count the same way `item:` does, or a mod author changes every Goomba-like
+enemy in the game while believing they changed one.
+
+⚠️ It also explains D110's offsets. Those were *first* matches — 0x48, 0xA0,
+0xA4 — and sat in entries 0 and 1 rather than the entry the scripts were read
+from. The finding held, but the offsets were not a layout, and reading them as
+one would have produced a selector that patched the wrong template.
+
+### 🔶 What is still unknown
+
+- How many templates the table holds. 16,384 words were scanned but no end
+  marker was looked for.
+- Whether the other six `templateXxxScript` fields on `NPCEntry` (pickup, throw,
+  kouraKick, atk, misc, and `field0x58`) have template slots too. Only four were
+  searched, because only four had known addresses.
+
+### Ready to build
+
+`npcdrv:<template-id>:<init|move|onhit|death>` now has everything `door:` had:
+a static base, a stride, field offsets, and an index that is already what
+`bleck setup show` prints. Plus a shared count, which doors did not need.
