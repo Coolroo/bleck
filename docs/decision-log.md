@@ -7475,3 +7475,61 @@ different failures that produce identical silence.
   (Fire Burst, POW Block, Stopwatch…). An item with no scripted use, like
   Shroom Shake, is simply absent — so the attended run that tried it was
   testing an id the table never held.
+
+---
+
+## D109 — ⛔ `nandLoadSave` is not enough: the game must *enter* the save (2026-07-28)
+
+Three more `save-probe` runs. `--save-slot` is **not built**, and this records
+exactly where it stopped so the next attempt does not repeat the three.
+
+### ✅ Still true from D108
+
+`nandGetSaveFiles()` is non-null from frame 1; slot 0 carries checksum `0x3714`
+where slots 1–3 share `0x3FD`; `nandLoadSave(0)` is safe and the game runs on.
+
+### ⛔ The pouch does not exist to load into
+
+`pouchGetPtr()` returns **null** — before the load, after the load, during
+`SEQ_GAME`, at every point tried. Not "the pouch is empty": null.
+
+That is D63 from the other side. Driving into a map leaves Mario invisible
+because there is **no player session**, and the pouch is part of that session.
+The attract demo runs `SEQ_GAME` without one. So:
+
+⛔ **`nandLoadSave(slot)` populates the save array, and nothing enters it.**
+Player state is created by the game's own load path, not by the loader
+function. `seq_load_sub_loadMain` (`0x8017d1ac`) and `SEQ_LOAD` (sequence 5) are
+where that lives; ⛔ `SEQ_SEEN` never showed sequence 5 in any run.
+
+🔶 So `--save-slot` needs to drive the sequence machine into `SEQ_LOAD`, not
+just call a function. That is a larger and riskier piece than D108 suggested,
+and closer in shape to `code.boot`'s map change than to a plain call.
+
+### ⚠️ Three runs, three versions of the same instrument defect
+
+Worth recording together, because it is the same mistake wearing three hats:
+
+1. **Gated on a sequence that never happens.** Everything sat behind
+   `SEQ_TITLE`; the attract demo goes LOGO → GAME → MAPCHANGE. A null pointer
+   was reported as though it had been read. Caught by `SEQ_SEEN`.
+2. **Early return leaving zeros.** `readPouch` returned on a null pointer and
+   left its four fields at 0 — indistinguishable from reading four zeroes.
+   Fixed by reporting the pointer as a fifth word.
+3. **Right sequence, wrong precondition.** Moving the trigger into `SEQ_GAME`
+   was still wrong, because gameplay in the attract demo has no player session.
+
+⚠️ Only the second was a coding slip. The first and third were **assumptions
+about the game presented as measurements**, which is what D101/D102/D107 were
+about, and the count is now high enough to be a pattern rather than a run of bad
+luck: **a probe must report the precondition it depends on, not just the value
+it went looking for.** Every one of these was diagnosable in a single run only
+because a sentinel existed; where one did not, it cost a run.
+
+### Where the item hook actually stands
+
+⛔ Not blocked on `--save-slot` after all, and not on the mechanism.
+`itemEventDataTable` holds 33 entries and **all are effect items** — Fire Burst,
+POW Block, Stopwatch, Ice Storm, Thunder Rage, and so on. Shroom Shake has no
+scripted use and is simply absent, so D92's 🔶 needs an attended run with an
+item that is in the table. Nothing in the toolchain needs to change first.

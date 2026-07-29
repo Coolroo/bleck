@@ -43,6 +43,11 @@
       +0x34 (13)  a bitmask of every sequence seen, so a wedge is visible as
                   "stopped on TITLE" rather than inferred from silence
       +0x38 (14)  total frames, all sequences. The control: zero invalidates
+      +0x3C (15)  hp, maxHp, coins, useItem[0] BEFORE, then pouchGetPtr()
+      +0x64 (25)  gameplay frames before the attempt
+      +0x50 (20)  the same five AFTER. Identical means nothing happened; a
+                  zero POINTER means nothing was read at all, which is a
+                  different failure
 
     Run with:  scripts/ingame.py save-probe --words 16 --seconds 120
     Target: eu0.
@@ -79,6 +84,13 @@ typedef struct
 extern SeqDef seq_data[];
 extern void *nandGetSaveFiles(void);
 extern void nandLoadSave(s32 saveId);
+extern void *pouchGetPtr(void);
+
+/* spm/mario_pouch.h: MarioPouchWork */
+#define POUCH_HP 0x0C
+#define POUCH_MAX_HP 0x10
+#define POUCH_COINS 0x1C
+#define POUCH_USE_ITEM 0x60
 
 static volatile u32 *const probe = (volatile u32 *) PROBE;
 
@@ -89,7 +101,43 @@ static volatile u32 *const probe = (volatile u32 *) PROBE;
 #define READY_AT (probe[11])
 #define GAME_AFTER (probe[12])
 #define SEQ_SEEN (probe[13])
+#define GAMEPLAY_FRAMES (probe[25])
 #define TOTAL_FRAMES (probe[14])
+#define BEFORE(i) (probe[15 + (i)])
+#define AFTER(i) (probe[20 + (i)])
+
+/*
+    The check that says whether the load did anything.
+
+    D108 established `nandLoadSave(0)` is safe to call and the game survives it.
+    Surviving is not loading: a call that returned immediately and did nothing
+    would look identical. So the pouch is read either side of it -- HP, max HP,
+    coins, and the first usable item slot.
+
+    A real save differs from a fresh boot in ALL of those, and the values are
+    checkable against the player's own file rather than merely being non-zero.
+*/
+static void readPouch(u32 base)
+{
+    unsigned char *pouch = (unsigned char *) pouchGetPtr();
+
+    /*
+        The pointer is reported, not just used.
+
+        The first version returned early on null and left the four fields at
+        zero -- which reads exactly like "the pouch is all zeroes". Those are
+        different answers and the report could not tell them apart, which is the
+        same defect as D108's gated instrument and D104's overwritten field.
+        A sentinel costs one word.
+    */
+    probe[base + 4] = (u32) pouch;
+    if (pouch == 0)
+        return;
+    probe[base + 0] = *(u32 *) (pouch + POUCH_HP);
+    probe[base + 1] = *(u32 *) (pouch + POUCH_MAX_HP);
+    probe[base + 2] = *(u32 *) (pouch + POUCH_COINS);
+    probe[base + 3] = *(u32 *) (pouch + POUCH_USE_ITEM);
+}
 
 static SeqFunc *realMain[SEQ_COUNT];
 static u32 attempted;
@@ -141,7 +189,21 @@ static void onSequenceFrame(u32 seq, void *work)
     if (FILES_PTR != 0 && READY_AT == 0)
         READY_AT = TOTAL_FRAMES;
 
-    if (attempted == 0 && READY_AT != 0 && TOTAL_FRAMES >= READY_AT + LOAD_DELAY)
+    /*
+        Wait for GAMEPLAY, not for a frame count.
+
+        The previous attempt fired at frame 241, which SEQ_SEEN shows is still
+        LOGO -- and `pouchGetPtr()` returned null there, both before and after
+        the load. That is not "the save did not load": player state does not
+        exist yet, so there was nothing to load INTO and nothing to read.
+
+        So the trigger is now the sequence the pouch belongs to, plus a settling
+        delay measured in gameplay frames rather than boot frames.
+    */
+    if (seq == SEQ_GAME)
+        GAMEPLAY_FRAMES += 1;
+
+    if (attempted == 0 && seq == SEQ_GAME && GAMEPLAY_FRAMES >= LOAD_DELAY)
     {
         attempted = 1;
         if (slotLooksWritten(0))
@@ -171,7 +233,7 @@ void mod_prolog(void)
 {
     u32 i;
 
-    for (i = 0; i < 15; i++)
+    for (i = 0; i < 27; i++)
         probe[i] = 0;
     probe[0] = MAGIC;
     LOADED_INDEX = 0xFFFFFFFFU;
