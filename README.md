@@ -50,8 +50,9 @@ Tool](https://wit.wiimm.de/), [Wiimms SZS Toolset](https://szs.wiimm.de/),
 [Dolphin](https://dolphin-emu.org/), [devkitPPC](https://devkitpro.org/), and
 [`dolphin-memory-engine`](https://github.com/aldelaro5/Dolphin-memory-engine).
 
-Upstream licences are respected and recorded per-project in
-[`docs/decision-log.md`](docs/decision-log.md) (D54).
+Upstream licences are recorded in
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md), with the reasoning in
+[`docs/decision-log.md`](docs/decision-log.md) (D54, D131).
 
 ## No game data here
 
@@ -61,5 +62,9 @@ accident.
 
 ## Licence
 
-`bleck` itself is not yet licensed. Until it is, treat this as source to read
-rather than redistribute.
+[MIT](LICENSE). Do what you like with it.
+
+`bleck/script/catalog.json` is generated from the MIT-licensed parts of
+[`spm-headers`](https://github.com/SeekyCt/spm-headers) and carries Seeky's
+copyright notice, as that licence requires. See
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).

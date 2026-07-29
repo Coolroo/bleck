@@ -9502,3 +9502,56 @@ would not:
 Both came from doing structural edits with text substitution because there were
 "only a few" call sites. There were fifty. Prefer a targeted edit per site, or
 verify with `git diff --stat` before trusting a scripted rewrite.
+
+---
+
+## D132 — ✅ `bleck` is MIT (2026-07-29)
+
+D26 flagged "licensing is unresolved; `bleck` is unlicensed" and it stayed open
+since. Closed.
+
+### ✅ MIT, over 0BSD
+
+The goal was "anyone can do anything with the code". 0BSD matches that most
+literally by dropping even attribution, and lost on two points: MIT is what
+`spm-headers` uses, so it is the most legible choice in this ecosystem, and
+public-domain dedications are shakier than they look — some jurisdictions do not
+permit abandoning copyright, and CC0 is silent on patents. The cost over 0BSD is
+one notice file.
+
+⛔ Copyleft was never available to choose: D37's rule (take headers from
+`spm-headers`, never `spm-rel-loader`) is what kept the repo MIT-compatible.
+
+### ✅ What was actually missing
+
+Audited rather than assumed:
+
+| | before |
+|---|---|
+| `spm-headers` vendored | no — reference clone in git-ignored `work/` |
+| anything from `spm-rel-loader` (GPLv3) | no |
+| verbatim upstream quotes | 2, both marked as quotes with attribution |
+| `catalog.json` (derived, ships) | ⚠️ carried a **URL**, not the notice |
+| `LICENSE` | ⚠️ **absent** |
+
+One shortfall, one gap. `catalog.json` now carries the full MIT text and Seeky's
+copyright line; `LICENSE` and `THIRD-PARTY-NOTICES.md` exist; the
+never-derive-from-GPL rule moved into the project instructions where it gets read.
+
+### ✅ Upstream has no AI policy
+
+Prompted by a Flipside Mod Loader server post saying AI-assisted modding breaks
+MIT and GPLv3. Checked the sources directly:
+
+- `spm-headers` — README, `CONTRIBUTING.md`, all three `LICENSE.md` files: **no
+  mention of AI**. Confirms `include`/`decomp`/`linker` MIT, `mod/` GPLv3.
+- `spm-rel-loader` (GPL-3.0), `spm-decomp` — **no AI policy**.
+
+⚠️ **It is a community norm, not a licence term.** The mechanics cited are right
+(MIT requires notices, GPLv3 is viral); "AI breaks both" as a blanket claim is
+not, since a licence governs copying expression and facts about a binary —
+addresses, offsets, arities — are not expression.
+
+Recorded because checking took ten minutes and moved the conclusion from "we are
+in violation" to "one missing notice". It does not settle the social question,
+which is the server's to set.

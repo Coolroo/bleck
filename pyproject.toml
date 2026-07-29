@@ -3,6 +3,8 @@ name = "spm-modkit"
 version = "0.1.0"
 description = "Modding toolkit for Super Paper Mario (Wii)"
 requires-python = ">=3.13"
+license = "MIT"
+license-files = ["LICENSE", "THIRD-PARTY-NOTICES.md"]
 dependencies = [
     # The one runtime dependency, spent on `bleck.yml` (see docs/plan-config.md).
     # YAML is not a format worth hand-rolling: `.env`'s parser is safe because

@@ -23,10 +23,34 @@ from pathlib import Path
 CATALOG_FILE = Path(__file__).parent / "catalog.json"
 
 #: Recorded in the generated file so provenance travels with the data.
+#:
+#: ⚠️ **The MIT notice is here in full, not as a link.** This catalog is derived
+#: data that `bleck` ships, so the licence's "included in all copies or
+#: substantial portions" applies to it -- and a URL is not the notice. See
+#: `THIRD-PARTY-NOTICES.md`.
 ATTRIBUTION = (
-    "Function names and argument counts extracted from SeekyCt/spm-headers, "
-    "MIT licensed (https://github.com/SeekyCt/spm-headers). "
+    "Function names and argument counts extracted from the MIT-licensed "
+    "portions of SeekyCt/spm-headers (https://github.com/SeekyCt/spm-headers). "
     "Regenerate with `bleck script index <path-to-spm-headers/include>`."
+)
+
+#: The notice `spm-headers`' MIT licence requires to travel with derived data.
+UPSTREAM_NOTICE = (
+    "MIT License. Copyright (c) 2022 Seeky. Permission is hereby granted, free "
+    "of charge, to any person obtaining a copy of this software and associated "
+    'documentation files (the "Software"), to deal in the Software without '
+    "restriction, including without limitation the rights to use, copy, modify, "
+    "merge, publish, distribute, sublicense, and/or sell copies of the Software, "
+    "and to permit persons to whom the Software is furnished to do so, subject "
+    "to the following conditions: The above copyright notice and this permission "
+    "notice shall be included in all copies or substantial portions of the "
+    'Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, '
+    "EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF "
+    "MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN "
+    "NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, "
+    "DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR "
+    "OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE "
+    "USE OR OTHER DEALINGS IN THE SOFTWARE."
 )
 
 #: `EVT_DECLARE_USER_FUNC(name, argc)` and `EVT_UNKNOWN_USER_FUNC(name)`.
@@ -111,6 +135,7 @@ class Catalog:
     def to_json(self) -> str:
         body = {
             "attribution": ATTRIBUTION,
+            "upstream_license": UPSTREAM_NOTICE,
             "source": self.source,
             "builtins": [
                 {
