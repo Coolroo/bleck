@@ -484,8 +484,10 @@ Every mod has a `mod.json` at its root.
         loaded. [`bleck setup show <map>`](cli.md#bleck-setup) says whether a
         map is one of the 14.
 
-        Changing how *many* items a map that already has them places is
-        untested, and warns.
+        Adding items to one of the 14 maps that *do* place them works —
+        `he1_03` was taken from 5 coins to 7 and reached gameplay. At most 512
+        items per map: the game copies the file's own count into a fixed buffer
+        without clamping it, and the busiest map it ships places 48.
 
     !!! note
 

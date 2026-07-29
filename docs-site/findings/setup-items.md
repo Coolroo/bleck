@@ -121,9 +121,38 @@ single `lis`/`addi` pair, so a naive two-instruction search finds nothing. A
 cross-referencer that tracks register values across `lis`/`addis`/`addi` finds
 all of them.
 
+## ⛔ What exactly fails: isolated to one byte
+
+Five unattended runs on Lineland Road, reading the game's sequence state out of
+emulated memory. Reaching gameplay reads `SEQ_GAME` stage 1; a hang reads
+`SEQ_MAPCHANGE` stage 13.
+
+| `he1_01` setup section | result |
+|---|---|
+| untouched (control) | gameplay, 3 NPCs |
+| present, **count 0** | gameplay, 3 NPCs |
+| count 1, **type 1** | gameplay, 3 NPCs |
+| count 1, **type 0** | ⛔ stuck in `SEQ_MAPCHANGE` stage 13, 0 NPCs |
+| `he1_03`, 5 coins -> 7 | gameplay |
+
+The third and fourth rows differ by **one byte** — offset `0x2BCF`, the item's
+`type`. Both have `count` 1, so both exercise the version assert and the
+`memcpy`. Only the one whose type matches `setupItemTemplates[0].id` reaches the
+spawn, and only that one hangs.
+
+So:
+
+- **Growing the file is harmless.** A zero-item section is inert, exactly as the
+  `cmpwi r8, 0 ; ble` branch says.
+- **The version assert and the copy are harmless** at `count` 1.
+- **The hang is the coin spawn itself**, and it happens *before* NPCs are
+  created — the map never finishes loading.
+- **Adding coins to a map that already has them works.** `he1_03` went from 5 to
+  7 and reached gameplay.
+
 ## Still open
 
-Which part of spawning fails in a map with no item section — the coin's model,
-or something else the map has not loaded. The discriminating test is a section
-containing **zero** items: by the listing above it should be entirely inert, so
-if that boots, the file growing is not the problem and spawning is.
+What the coin spawn needs that a map without coins has not loaded. `0x80078b3c`
+entered with `r7 = 0` is where to look. Whether the added coins on a map that
+already has them are *visible and collectible* also still needs a human — the
+instrument used here reads NPC state and cannot see items.

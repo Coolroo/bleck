@@ -254,28 +254,29 @@ class TestCreatingASectionIsRefused:
         found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
         assert len(found) == 2
 
-    def test_changing_the_count_of_an_existing_section_only_warns(self, tmp_path):
-        """🔶 Untested rather than known-bad, and moving a coin the map already
-        places is plainly safe -- so a warning, not a refusal. Silence would
-        imply it had been checked."""
+    def test_growing_an_existing_section_is_allowed_and_silent(self, tmp_path):
+        """✅ D129 measured it: `he1_03` ships 5 coins, was given 7, and reached
+        gameplay. It warned until then; a warning on every legitimate edit is
+        noise once the answer is known."""
         mod = a_mod(
             tmp_path / "m",
             {"tables": {"items": "tables/items.csv"}},
             HEADER + "m1,,-300,50,0\n",
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        build = mod_edits.PlacementBuild(
+            mod=mod.name,
+            map_name="m1",
+            output=tmp_path,
+            also_wrote=tmp_path,
+            applied=0,
+            used_before=0,
+            used_after=0,
+        )
+        assert not build.warnings
         placement = mod_edits.placements_for(mod)[0]
-        updated = setup.SetupFile(
-            version=data.version,
-            enemies=data.enemies,
-            items=mod_edits._apply_items(mod, placement, data),  # pylint: disable=protected-access
-            has_item_section=True,
-        )
-        notes = mod_edits._item_count_warning(  # pylint: disable=protected-access
-            mod, placement, data, updated
-        )
-        assert len(notes) == 1
-        assert "1 to 2 item(s)" in notes[0]
+        found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+        assert len(found) == 2
 
     def test_more_than_the_game_can_load_is_refused(self, tmp_path):
         """⚠️ 512 is a hard ceiling read out of the DOL (D128): the loader
@@ -301,7 +302,7 @@ class TestCreatingASectionIsRefused:
         found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
         assert len(found) == setup.MAX_ITEMS
 
-    def test_a_size_preserving_edit_says_nothing(self, tmp_path):
+    def test_a_size_preserving_edit_moves_the_item(self, tmp_path):
         mod = a_mod(
             tmp_path / "m",
             {"tables": {"items": "tables/items.csv"}},
@@ -309,15 +310,9 @@ class TestCreatingASectionIsRefused:
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        updated = setup.SetupFile(
-            version=data.version,
-            enemies=data.enemies,
-            items=mod_edits._apply_items(mod, placement, data),  # pylint: disable=protected-access
-            has_item_section=True,
-        )
-        assert not mod_edits._item_count_warning(  # pylint: disable=protected-access
-            mod, placement, data, updated
-        )
+        found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+        assert len(found) == 1
+        assert found[0].position == setup.Position(-300.0, 50.0, 0.0)
 
 
 class TestTheManifestSide:

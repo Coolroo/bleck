@@ -9279,3 +9279,76 @@ refusal is right for the right reason. **If it hangs, this whole analysis is
 wrong about something and the trace above should be distrusted, not patched.**
 Recorded in advance because D127's prediction went the other way and that only
 counted for anything because it was written down first.
+
+---
+
+## D129 — ✅ The item hang, isolated to one byte (2026-07-29)
+
+D128's prediction was written down before any of this ran. **It held.** Five
+unattended `scripts/ingame.py` runs on a machine nobody was watching, which is
+what the rig exists for -- the user was away and this needed no eyes.
+
+The discriminator throughout is the rig's own line: reaching gameplay reads
+`seq=GAME(2) stage=1`, and a hang reads `seq=MAPCHANGE(3) stage=13`.
+
+| run | he1_01 setup | result |
+|---|---|---|
+| `items-control` | untouched | `seq=GAME(2) stage=1  npcs[3]` |
+| `items-empty` | section, **count 0** | `seq=GAME(2) stage=1  npcs[3]` |
+| `items-skipped` | count 1, **type 1** | `seq=GAME(2) stage=1  npcs[3]` |
+| `items-onecoin` | count 1, **type 0** | ⛔ `seq=MAPCHANGE(3) stage=13  npcs[0]` |
+| `items-more` | `he1_03`, 5 coins -> 7 | `seq=GAME(2) stage=1` |
+
+### ✅ The control came first
+
+`items-control` boots `he1_01` with nothing changed and the rig reports three
+NPCs from setup slots 0-2. Run first and deliberately: three of the four
+results below are *successes*, and a rig that could not see the map load would
+have produced those same successes for the wrong reason.
+
+### ✅ Growing the file is not the problem
+
+`items-empty` adds a well-formed section holding **zero** items -- 8 bytes --
+and boots identically to the control. Exactly as D128's listing said: `cmpwi
+r8, 0 ; ble` skips the version check, the memcpy and `setupSpawnItems`
+outright. ⛔ Hypotheses B ("the file growing is fatal") and C ("the archive copy
+is corrupted") are dead.
+
+### ✅ The hang is the coin spawn, and nothing else
+
+`items-skipped` and `items-onecoin` differ by **one byte** -- `0x2BCF`, the
+item's `type`, 1 against 0 -- and land on opposite sides of the result.
+
+`items-skipped` has `count` 1, so it *does* exercise the `itemVersion` assert
+and the `memcpy` of `count * 16`. It boots. The only thing it does not do is
+reach the spawn call, because `type` 1 does not match
+`setupItemTemplates[0].id` and `0x800296cc` skips it.
+
+Change that one byte to 0 and the game stops in `SEQ_MAPCHANGE` at stage 13,
+with **zero** NPCs -- so item spawning happens *before* NPC spawning in the map
+change, and the map never finishes loading.
+
+🔶 Still unknown: *what* the coin spawn needs that `he1_01` has not loaded.
+`0x80078b3c` with `r7 = 0` is where to look next. The practical answer does not
+depend on it.
+
+### ✅ Adding to a map that already has items is fine -- warning removed
+
+`items-more` gives `he1_03` two extra coins (5 -> 7) and reaches gameplay. D127
+shipped a 🔶 warning on any count change because it was untested; it is now
+tested, so the warning is gone. A warning that fires on every legitimate edit is
+noise once the answer is known.
+
+Scope of that claim, stated so it is not over-read: **growing** an existing
+section, on one map, by two. Shrinking is untested and strictly less risky --
+fewer spawns. The 512 ceiling (D128) is guarded separately.
+
+🔶 Not shown: that the added coins are *visible and collectible*. The rig reads
+NPC state and cannot see items, so this is the one part still needing eyes.
+
+### The five scratch mods are deleted
+
+`items-control`, `items-empty`, `items-skipped`, `items-onecoin` and
+`items-more` were hand-written probes, not worked examples. The byte layouts are
+in this entry and rebuilding any of them is a five-line script; leaving five
+near-identical mods in `mods/` would cost more than it saves.

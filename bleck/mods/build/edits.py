@@ -58,7 +58,12 @@ class PlacementBuild:
     items_applied: int = 0
     items_before: int = 0
     items_after: int = 0
+
     warnings: list[str] = field(default_factory=list)
+    """Empty today. It held the item-count warning until D129 measured that
+    growing an existing section is fine; the plumbing stays because
+    `bleck mod build` already collects these and the next placement finding
+    should not have to re-add it."""
 
     def describe(self) -> str:
         out = (
@@ -457,33 +462,7 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         items_applied=len(placement.items),
         items_before=len(data.items),
         items_after=len(updated.items),
-        warnings=_item_count_warning(mod, placement, data, updated),
     )
-
-
-def _item_count_warning(
-    mod: Mod, placement, data: setup.SetupFile, updated: setup.SetupFile
-) -> list[str]:
-    """🔶 Warn when an edit changes how *many* items a map places.
-
-    Adding a section outright is refused (`_refuse_new_section`); this is the
-    weaker case, where the map already has one and the count moves. That still
-    changes the file's **size**, which is what D127 found untested territory --
-    every placement edit before items was size-preserving, because the enemy
-    array is 100 fixed slots.
-
-    A warning rather than a refusal: moving a coin the map already places is
-    plainly safe, and nothing suggests a different count is fatal. Nothing shows
-    it is safe either, and silence would imply it had been checked.
-    """
-    if len(data.items) == len(updated.items):
-        return []
-    return [
-        f"{mod.name}: {placement.map_name} goes from {len(data.items)} to "
-        f"{len(updated.items)} item(s), which changes the setup file's size. "
-        f"Adding a section to a map with none hangs the game (D127); changing "
-        f"the count of an existing one is untested. Worth watching in game."
-    ]
 
 
 def _refuse_orphans(mod: Mod, placement, updated: setup.SetupFile) -> None:
