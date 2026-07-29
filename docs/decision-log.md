@@ -9865,3 +9865,62 @@ until now the only way to learn a map's count was to guess and read a status
 word. A command reporting count and names per map would remove that entirely.
 The probe here is the whole implementation; it needs the data lifted out of a
 running game once per map, the way `bleck maps` and the NPC catalog already are.
+
+---
+
+## D138 — ✅ Two kinds of door, and only one is patchable (2026-07-29)
+
+Branch `pointer-swap`. D137 found `he1_01` registers one `DoorDesc` against three
+doorways a player sees. Dumping the *other* setter explains the discrepancy.
+
+### ✅ What `he1_01` actually registers
+
+`evt_door_set_door_descs` — **1** entry, scripts and all:
+
+| | name | mapGrpName | interactScript |
+|---|---|---|---|
+| `DoorDesc[0]` | `ie_doa` | `ie_naka` | `0x80D2FB78` |
+
+`evt_door_set_map_door_descs` — **3** entries, destinations and *no scripts*:
+
+| | name_l | destMap | destDoor |
+|---|---|---|---|
+| `MapDoorDesc[0]` | `doa2_l` | `he1_02` | `doa1_l` |
+| `MapDoorDesc[1]` | `doa1_l` | `he1_01` | `doa1_l` |
+| `MapDoorDesc[2]` | `ie_doa_02` | `he1_06` | `ie_doa` |
+
+Against the three a player reports:
+
+1. **Door into Bestovius's house** — the scriptable one, `DoorDesc[0]`.
+   `MapDoorDesc[2]` carries its destination, `he1_06`.
+2. **The door to Bestovius inside the house** — **not on this map at all.**
+   The interior is `he1_06`.
+3. **Star door out of the area** — `MapDoorDesc[0]`, to `he1_02`. A loading
+   zone, no scripts, **nothing for `code.patches` to reach**.
+
+`MapDoorDesc[1]` is self-referential (`he1_01` → `he1_01`), so it is the arrival
+point rather than an exit.
+
+⚠️ **A physical door can have two records**: a `DoorDesc` for its scripts and a
+`MapDoorDesc` for where it goes. 🔶 Which record owns which behaviour is
+inference, not measurement — the names differ (`ie_doa` against `ie_doa_02`) and
+nothing here proves they are the same object.
+
+### ⚠️ What this means for `door:` selectors
+
+**"How many doors does this map have" has no single answer.** A map with three
+visible doorways exposes one patchable script. `code.patches`' `door:` reaches
+`DoorDesc` only, and `MapDoorDesc` has no script fields to patch — that is not a
+gap in `bleck`, it is the shape of the data.
+
+🟢 So `bleck doors <map>` (D137) should report **both** tables. Reporting only
+`DoorDesc` would make a map look emptier than it is and send someone hunting for
+an index that does not exist.
+
+### ⛔ The same mistake, three times in one session
+
+Each of these probes was read with too few words: the door names truncated
+mid-record, then the zone dump cut off entry `[2]` — which was the entry that
+answered the question. The project instructions say to ask for more words than seem necessary
+because they are free, and the log is re-readable without a re-run. Two boots
+were spent relearning that.

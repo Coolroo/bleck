@@ -55,6 +55,7 @@ typedef unsigned int u32;
 
 #define MAP_INIT_SCRIPT 0x18
 #define DOOR_SETTER_HEADER 0x0003005Cu
+#define EVT_USER_FUNC 0x005Cu
 #define EVT_END_SCRIPT 0x0001u
 #define EVT_MAX_OPCODE 0x0077u
 #define EVT_MAX_ARGC 16u
@@ -62,6 +63,7 @@ typedef unsigned int u32;
 
 extern void *mapDataPtr(const char *name);
 extern void evt_door_set_door_descs(void);
+extern void evt_door_set_map_door_descs(void);
 
 static volatile u32 *const names = (volatile u32 *) NAMES;
 
@@ -78,9 +80,16 @@ static void copy_text(u32 slot, const char *text)
         out[i] = (unsigned char) text[i];
 }
 
-/* The descriptor array, read out of the init script's bytecode exactly as
-   `bleck`'s patch runtime does -- the address is the setter call's argument. */
-static unsigned char *door_descs(const char *map, s32 *count)
+/*
+    The array a given setter was called with, read out of the init script's
+    bytecode -- the address is sitting there as the call's argument.
+
+    ⚠️ Matched on the FUNCTION POINTER, not on a header word. The door setter's
+    argc was measured at 3 (D102) against a header that declares 1, so assuming
+    an argc for a second setter would be repeating that mistake rather than
+    learning from it. Any `USER_FUNC` calling the wanted function counts.
+*/
+static unsigned char *setter_array(const char *map, void *fn, s32 *count)
 {
     unsigned char *data = (unsigned char *) mapDataPtr(map);
     u32 *script;
@@ -103,8 +112,7 @@ static unsigned char *door_descs(const char *map, s32 *count)
             return 0;
         if (opcode > EVT_MAX_OPCODE || argc > EVT_MAX_ARGC)
             return 0;
-        if (header == DOOR_SETTER_HEADER
-            && script[at + 1] == (u32) &evt_door_set_door_descs)
+        if (opcode == EVT_USER_FUNC && argc >= 3 && script[at + 1] == (u32) fn)
         {
             *count = (s32) script[at + 3];
             return (unsigned char *) script[at + 2];
@@ -125,7 +133,7 @@ void bleck_dump_door_names(const char *map)
         names[word] = 0;
     names[0] = NAMES_MAGIC;
 
-    descs = door_descs(map, &count);
+    descs = setter_array(map, (void *) &evt_door_set_door_descs, &count);
     names[1] = (u32) count;
     names[2] = (u32) descs;
     if (descs == 0 || count <= 0)
@@ -140,5 +148,72 @@ void bleck_dump_door_names(const char *map)
         copy_text(base + 1, *(const char **) (desc + DOOR_NAME));
         copy_text(base + 7, *(const char **) (desc + DOOR_MAPGRP));
         copy_text(base + 13, *(const char **) (desc + DOOR_HITGRP));
+    }
+}
+
+/*
+    The OTHER kind of door.
+
+    ⚠️ A map's visible doorways are not all `DoorDesc`s. `MapDoorDesc` is 0x20
+    and carries a destination instead of scripts:
+
+        +0x04 name_l   +0x14 destMapName
+        +0x08 name_r   +0x18 destDoorName
+
+    **These have no scripts at all**, so `code.patches`' `door:` selector cannot
+    reach them and never will -- there is nothing there to patch. Reporting
+    them is what makes "the map has three doors but a count of one" legible
+    rather than looking like a broken read.
+*/
+#define MAPDOOR_SIZE 0x20
+#define MAPDOOR_NAME_L 0x04
+#define MAPDOOR_DEST_MAP 0x14
+#define MAPDOOR_DEST_DOOR 0x18
+
+#define ZONES 0x80005800
+#define ZONES_MAGIC 0x5A4F4E45U /* 'ZONE' */
+
+#define PER_ZONE 19
+
+static volatile u32 *const zones = (volatile u32 *) ZONES;
+
+static void copy_zone_text(u32 slot, const char *text)
+{
+    volatile unsigned char *out = (volatile unsigned char *) (zones + slot);
+    u32 i;
+
+    for (i = 0; i < TEXT_BYTES; i++)
+        out[i] = 0;
+    if (text == 0)
+        return;
+    for (i = 0; i < TEXT_BYTES - 1 && text[i] != 0; i++)
+        out[i] = (unsigned char) text[i];
+}
+
+void bleck_dump_map_doors(const char *map)
+{
+    unsigned char *descs;
+    s32 count = -1;
+    s32 i;
+    u32 word;
+
+    for (word = 0; word < 4 + DOOR_MAX * PER_ZONE; word++)
+        zones[word] = 0;
+    zones[0] = ZONES_MAGIC;
+
+    descs = setter_array(map, (void *) &evt_door_set_map_door_descs, &count);
+    zones[1] = (u32) count;
+    zones[2] = (u32) descs;
+    if (descs == 0 || count <= 0)
+        return;
+
+    for (i = 0; i < count && i < DOOR_MAX; i++)
+    {
+        unsigned char *desc = descs + i * MAPDOOR_SIZE;
+        u32 base = 4 + (u32) i * PER_ZONE;
+
+        copy_zone_text(base, *(const char **) (desc + MAPDOOR_NAME_L));
+        copy_zone_text(base + 6, *(const char **) (desc + MAPDOOR_DEST_MAP));
+        copy_zone_text(base + 12, *(const char **) (desc + MAPDOOR_DEST_DOOR));
     }
 }

@@ -107,6 +107,7 @@ extern void *mapDataPtr(const char *name);
 extern void *evtEntry(const s32 *script, u32 priority, u8 flags);
 extern void evt_door_set_door_descs(void);
 extern void bleck_dump_door_names(const char *map);
+extern void bleck_dump_map_doors(const char *map);
 
 typedef void(SeqFunc)(void *);
 
@@ -262,6 +263,7 @@ void mod_prolog(void)
     REPLACEMENT = (u32) replacement;
 
     bleck_dump_door_names(DOOR_MAP);
+    bleck_dump_map_doors(DOOR_MAP);
 
     field = door_field(DOOR_MAP, DOOR_INDEX, DOOR_INTERACT);
     FIELD = (u32) field;
