@@ -9815,3 +9815,53 @@ survive that.
 One person, thirty seconds: boot `door-swap`, walk into `he1_01`'s first door,
 read word 3. The self-test already rules out malformed bytecode, so the result
 is unambiguous either way.
+
+---
+
+## D137 — ✅ `he1_01` has exactly ONE scriptable door, and it is Bestovius's (2026-07-29)
+
+Branch `pointer-swap`. "Walk into the first door" turned out to be unanswerable
+as asked — the map visibly has three — so the probe was extended to dump every
+`DoorDesc`'s names.
+
+```
+count           : 1
+descs           : 0x80D2FBB0
+interactScript  : 0x80D2FB78
+name            : 'ie_doa'        -- 家 doa, "house door"
+mapGrpName      : 'ie_naka'       -- 家の中, "inside the house"
+```
+
+### ✅ Three doors on screen, one `DoorDesc`
+
+`evt_door_set_door_descs` registers **one** descriptor on Lineland Road. The
+other two are almost certainly `MapDoorDesc` (0x20, registered by
+`evt_door_set_map_door_descs`) — plain loading zones carrying `destMapName` and
+`destDoorName` and **no scripts at all**.
+
+⚠️ **So "door" means two different things in this game**, and only one of them is
+patchable. `code.patches`' `door:` selector reaches `DoorDesc` only. A map with
+five visible doorways may expose one script-bearing door, or none.
+
+### ✅ It is the door the player already used
+
+`ie_naka` is Bestovius's house — matching the D104 attended run, where using the
+patched door "took me to the guy who gives mario the flipping powers house".
+`interactScript` `0x80D2FB78` is also exactly the pointer D135 recorded as the
+original before swapping it, so the swapped door and the used door are the same
+one. No ambiguity is left in the human test.
+
+### ⛔ `door:he1_01:9` in `mods/door-attended` addressed nothing
+
+With `count` 1, index 9 is out of range. D103 predicted the behaviour — "one past
+the end resolves to nothing and reports status 4 at run time rather than writing
+anywhere" — and this is the first measurement of a real map's count confirming
+such a selector was live in a committed mod all along.
+
+### 🟢 Worth building: `bleck doors <map>`
+
+The index is a registration position with nothing user-visible about it, and
+until now the only way to learn a map's count was to guess and read a status
+word. A command reporting count and names per map would remove that entirely.
+The probe here is the whole implementation; it needs the data lifted out of a
+running game once per map, the way `bleck maps` and the NPC catalog already are.

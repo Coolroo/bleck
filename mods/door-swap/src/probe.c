@@ -106,6 +106,7 @@ typedef unsigned char u8;
 extern void *mapDataPtr(const char *name);
 extern void *evtEntry(const s32 *script, u32 priority, u8 flags);
 extern void evt_door_set_door_descs(void);
+extern void bleck_dump_door_names(const char *map);
 
 typedef void(SeqFunc)(void *);
 
@@ -259,6 +260,8 @@ void mod_prolog(void)
     replacement[2] = (s32) EVT_END_EVT;
     replacement[3] = (s32) EVT_END_SCRIPT;
     REPLACEMENT = (u32) replacement;
+
+    bleck_dump_door_names(DOOR_MAP);
 
     field = door_field(DOOR_MAP, DOOR_INDEX, DOOR_INTERACT);
     FIELD = (u32) field;
