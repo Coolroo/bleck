@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "door-trigger",
+  "version": "0.1.0",
+  "description": "Run a door's vanilla interact script from code. If the map changes, doors become testable unattended.",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "boot": "he1_01",
+    "hooks": [ { "function": "__assert2", "call": "on_assert", "mode": "before" } ]
+  }
+}

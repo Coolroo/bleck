@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "door-swap",
+  "version": "0.1.0",
+  "description": "Replace a door's interact script by swapping the pointer, not patching bytecode",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "boot": "he1_01",
+    "hooks": [ { "function": "__assert2", "call": "on_assert", "mode": "before" } ]
+  }
+}

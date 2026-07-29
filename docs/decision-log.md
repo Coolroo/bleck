@@ -9682,3 +9682,366 @@ invalid on sight.
 Kept rather than deleted: the next kind wants "designed but not built yet"
 rather than "unknown table kind", and that distinction cost a paragraph to
 explain in D125.
+
+---
+
+## D135 — 🔶 A door's script pointer CAN be swapped; the map does not freeze (2026-07-29)
+
+Branch `pointer-swap`. Route 2 from [`tool-comparison.md`](./tool-comparison.md):
+whole-script replacement without touching bytecode, and without GPL-3 code.
+
+### Why this was worth trying
+
+`code.patches` mutates bytecode in place, so it is limited to **same-size**
+replacement -- the one mutation that moves no jump-table label. Swapping the
+pointer gives arbitrary logic with no jump-table problem at all, because the
+replacement is built whole. That is most of what `evtpatch` is wanted for, and
+`evtpatch` is GPL-3.
+
+⛔ **D51 already ruled this out for `MapData.initScript`**: the swap succeeded by
+every mechanical check and the map froze mid-load, the untested explanation
+being that the loader waits on the specific `EvtEntry` it created.
+
+🔶 The hypothesis here was that a **door** is different -- its interact script is
+started by the player, not by the map-load sequence, so nothing waits on a
+particular entry.
+
+### ✅ What three unattended runs establish
+
+`mods/door-swap` writes `&replacement` into `he1_01` door 0's `interactScript`
+field (`DoorDesc + 0x40`) at `_prolog`, where `code.patches` already reaches.
+
+| | |
+|---|---|
+| Map loads normally | ✅ 33,660 `SEQ_GAME` frames, **no freeze** |
+| `__assert2` fired | ✅ never |
+| Field after the swap | ✅ ours |
+| **Field re-resolved every frame during gameplay** | ✅ **still ours** |
+| Replacement bytecode valid | ✅ ran via `evtEntry`, `USER_FUNC` fired once |
+
+⚠️ **The per-frame re-read is the one that mattered.** Writing at `_prolog` and
+reading back at `_prolog` proves nothing -- the descriptor array lives in data
+the map loads, so the load could have restored the original and every earlier
+check would still have passed. Re-resolving from `mapDataPtr` each frame is what
+turns "we wrote it" into "it is still ours when the player could use the door".
+
+⚠️ **The self-test exists to disambiguate the human test.** If a player uses the
+door and nothing happens, that could mean malformed bytecode *or* a door that
+never reads this field. Running the swapped-in script directly through
+`evtEntry` settles the first, so the human result is readable either way.
+
+### 🔶 What is not established
+
+**Whether the door actually invokes the field when used.** Input cannot be
+injected (D48), so this needs a person to walk into `he1_01`'s first door.
+`RAN` climbing past 1 is the answer.
+
+⛔ **Not merged to `main`, and no manifest surface built.** A declaration for
+whole-script replacement is premature while the last link is unproven -- and the
+useful half of this finding is the *technique*, which the probe records.
+
+### Encoding notes, since they are easy to get wrong
+
+- A bare `USER_FUNC` call is **argc 1**: argc counts the function pointer.
+  `evt_door_set_door_descs` is argc 3 for a pointer plus two arguments (D102).
+- A script ends `{END_EVT, END_SCRIPT}` = `{2, 1}`, copied from what `bleck`
+  emits for an empty script rather than invented. Emitting only one terminator
+  froze the game once already.
+- The replacement array is filled at run time rather than statically
+  initialised, so no relocation of a function address into a data array is
+  involved -- one fewer thing to be wrong about if it had failed.
+
+### ⛔ Read the whole compiler error
+
+The first build failed with `implicit declaration of evtEntry`, and I chased the
+declaration -- which was present and correct. The *actual* first error, four
+lines above and cut off by tailing the output, was `unknown type name 'u8'`: the
+declaration failed to parse, so the call went implicit. The project instructions already say
+not to truncate this output.
+
+---
+
+## D136 — 🔶 The door reads `interactScript` live, from the DOL (2026-07-29)
+
+Branch `pointer-swap`, following D135. The last open link was "does the door
+actually read the field when used?", which needs a human to walk into one. Most
+of it turns out to be answerable statically.
+
+### ✅ The field is dereferenced at use time, not cached
+
+`DoorDesc` is confirmed from `evt_door.h`: `interactScript` +0x40,
+`initScript` +0x50, `moveScript` +0x54 — counted, matching what `bleck` uses.
+
+Scanning `evt_door.c`'s range for loads of those three offsets finds them in
+exactly one place, together:
+
+```
+800e17a4  lwz r5, 0x40(r30)   ; interactScript
+800e17a8  bl  0x800de9b8      ; evtSetValue
+800e17b8  lwz r5, 0x50(r30)   ; initScript
+800e17c8  lwz r5, 0x54(r30)   ; moveScript
+```
+
+`0x800de9b8` is **`evtSetValue`**. So this is an evt user func that reads
+`desc->interactScript` and returns it to a *calling script* through an output
+slot.
+
+Two things follow, and both favour the swap:
+
+1. **The load is live.** The pointer is fetched from the descriptor at the
+   moment it is asked for, not copied at map load, so a field swapped at
+   `_prolog` is what gets returned.
+2. **It is run as an ordinary child script**, handed to a caller rather than
+   awaited by the loader — which is exactly the difference from
+   `MapData.initScript`, where D51's freeze was blamed on the loader waiting for
+   the specific `EvtEntry` it created.
+
+### 🔶 Why this is still not a ✅
+
+**Nothing observed a door being used.** That the field is read live is measured;
+that a door *use* reaches this code path is an inference, however reasonable.
+The repo's rule is that an untested inference is not a finding, and D126, D127
+and D133 are all entries where sound reasoning reached a wrong conclusion this
+week.
+
+⚠️ Also unestablished: what the caller does with the pointer. If it runs the
+script and then waits on *its* entry the way the map loader does, a replacement
+that returns immediately might still misbehave — the probe's replacement is a
+single `USER_FUNC` and returns straight away, which is the least likely shape to
+survive that.
+
+### What would close it
+
+One person, thirty seconds: boot `door-swap`, walk into `he1_01`'s first door,
+read word 3. The self-test already rules out malformed bytecode, so the result
+is unambiguous either way.
+
+---
+
+## D137 — ✅ `he1_01` has exactly ONE scriptable door, and it is Bestovius's (2026-07-29)
+
+Branch `pointer-swap`. "Walk into the first door" turned out to be unanswerable
+as asked — the map visibly has three — so the probe was extended to dump every
+`DoorDesc`'s names.
+
+```
+count           : 1
+descs           : 0x80D2FBB0
+interactScript  : 0x80D2FB78
+name            : 'ie_doa'        -- 家 doa, "house door"
+mapGrpName      : 'ie_naka'       -- 家の中, "inside the house"
+```
+
+### ✅ Three doors on screen, one `DoorDesc`
+
+`evt_door_set_door_descs` registers **one** descriptor on Lineland Road. The
+other two are almost certainly `MapDoorDesc` (0x20, registered by
+`evt_door_set_map_door_descs`) — plain loading zones carrying `destMapName` and
+`destDoorName` and **no scripts at all**.
+
+⚠️ **So "door" means two different things in this game**, and only one of them is
+patchable. `code.patches`' `door:` selector reaches `DoorDesc` only. A map with
+five visible doorways may expose one script-bearing door, or none.
+
+### ✅ It is the door the player already used
+
+`ie_naka` is Bestovius's house — matching the D104 attended run, where using the
+patched door "took me to the guy who gives mario the flipping powers house".
+`interactScript` `0x80D2FB78` is also exactly the pointer D135 recorded as the
+original before swapping it, so the swapped door and the used door are the same
+one. No ambiguity is left in the human test.
+
+### ⛔ `door:he1_01:9` in `mods/door-attended` addressed nothing
+
+With `count` 1, index 9 is out of range. D103 predicted the behaviour — "one past
+the end resolves to nothing and reports status 4 at run time rather than writing
+anywhere" — and this is the first measurement of a real map's count confirming
+such a selector was live in a committed mod all along.
+
+### 🟢 Worth building: `bleck doors <map>`
+
+The index is a registration position with nothing user-visible about it, and
+until now the only way to learn a map's count was to guess and read a status
+word. A command reporting count and names per map would remove that entirely.
+The probe here is the whole implementation; it needs the data lifted out of a
+running game once per map, the way `bleck maps` and the NPC catalog already are.
+
+---
+
+## D138 — ✅ Two kinds of door, and only one is patchable (2026-07-29)
+
+Branch `pointer-swap`. D137 found `he1_01` registers one `DoorDesc` against three
+doorways a player sees. Dumping the *other* setter explains the discrepancy.
+
+### ✅ What `he1_01` actually registers
+
+`evt_door_set_door_descs` — **1** entry, scripts and all:
+
+| | name | mapGrpName | interactScript |
+|---|---|---|---|
+| `DoorDesc[0]` | `ie_doa` | `ie_naka` | `0x80D2FB78` |
+
+`evt_door_set_map_door_descs` — **3** entries, destinations and *no scripts*:
+
+| | name_l | destMap | destDoor |
+|---|---|---|---|
+| `MapDoorDesc[0]` | `doa2_l` | `he1_02` | `doa1_l` |
+| `MapDoorDesc[1]` | `doa1_l` | `he1_01` | `doa1_l` |
+| `MapDoorDesc[2]` | `ie_doa_02` | `he1_06` | `ie_doa` |
+
+Against the three a player reports:
+
+1. **Door into Bestovius's house** — the scriptable one, `DoorDesc[0]`.
+   `MapDoorDesc[2]` carries its destination, `he1_06`.
+2. **The door to Bestovius inside the house** — **not on this map at all.**
+   The interior is `he1_06`.
+3. **Star door out of the area** — `MapDoorDesc[0]`, to `he1_02`. A loading
+   zone, no scripts, **nothing for `code.patches` to reach**.
+
+`MapDoorDesc[1]` is self-referential (`he1_01` → `he1_01`), so it is the arrival
+point rather than an exit.
+
+⚠️ **A physical door can have two records**: a `DoorDesc` for its scripts and a
+`MapDoorDesc` for where it goes. 🔶 Which record owns which behaviour is
+inference, not measurement — the names differ (`ie_doa` against `ie_doa_02`) and
+nothing here proves they are the same object.
+
+### ⚠️ What this means for `door:` selectors
+
+**"How many doors does this map have" has no single answer.** A map with three
+visible doorways exposes one patchable script. `code.patches`' `door:` reaches
+`DoorDesc` only, and `MapDoorDesc` has no script fields to patch — that is not a
+gap in `bleck`, it is the shape of the data.
+
+🟢 So `bleck doors <map>` (D137) should report **both** tables. Reporting only
+`DoorDesc` would make a map look emptier than it is and send someone hunting for
+an index that does not exist.
+
+### ⛔ The same mistake, three times in one session
+
+Each of these probes was read with too few words: the door names truncated
+mid-record, then the zone dump cut off entry `[2]` — which was the entry that
+answered the question. The project instructions say to ask for more words than seem necessary
+because they are free, and the log is re-readable without a re-run. Two boots
+were spent relearning that.
+
+---
+
+## D139 — ⛔ A door's interact script does not drive the transition (2026-07-29)
+
+Branch `pointer-swap`. Attempt at making doors testable without a person, so
+door work stops costing a human per iteration. **It did not work**, and the
+negative is worth more than the attempt.
+
+### The instrument can see what it looked for
+
+`MAPCHANGE_FRAMES` climbed to 156 during the boot into `he1_01`, and
+`scripts/ingame.py` prints `map=` every poll. A map change is visible to this
+rig; "no transition" is a real reading, not a blind one (the project instructions' rule).
+
+### ⛔ Two grounded attempts, both negative
+
+**1. Run the interact script bare.** `evtEntry` on `DoorDesc[0].interactScript`
+returned a real entry (`0x807E7AA0`), no assert, and the map stayed `he1_01`.
+
+**2. Run it with an active door set.** `evtDoorGetActiveDoorDesc` (`0x800e11b0`)
+returns `*(doorWork + 0x2D8)` when bit 11 of the flags halfword at `+0` is set,
+so both were set first — verified in the report, flags `0x0200` -> `0x0A00`.
+Same outcome: entry created, no assert, no transition, 41,090 frames of normal
+gameplay.
+
+### 🔶 What that suggests
+
+The `DoorDesc` interact script is probably the *interaction* — the animation and
+whatever dialogue — while the **transition belongs to `MapDoorDesc`**. D138 found
+`MapDoorDesc[2]` (`ie_doa_02` -> `he1_06`) covering the same doorway, and that is
+the record naming a destination. Two records, two jobs.
+
+Recorded as 🔶: it fits everything measured and nothing has tested it.
+
+### ⛔ An arithmetic error that froze the game
+
+`DOOR_WORK` was written as `0x805AD660`. It is `r13 - 32480` = **`0x805AE020`** —
+I was out by `0x9C0`, read a pointer out of unrelated memory, and the game
+froze on the frame the write fired.
+
+Two habits came out of it, both now in the probe:
+
+- **Compute addresses, do not eyeball them.** This is the second arithmetic
+  slip this session; the other put "1,299 items" into five files (D132).
+- **Refuse an implausible pointer rather than writing through it.** The probe
+  now range-checks against MEM1 before dereferencing. A freeze reports nothing,
+  so a bad write costs a whole run to even notice.
+
+### Where this leaves door testing
+
+⛔ **Doors still need a person**, and two attempts at avoiding that failed.
+🔶 The next lever is `MapDoorDesc` — either driving a transition through it, or
+`evt_door_set_event`, which the builtin catalog types as
+`evt_door_set_event(char *door, int unknown, EvtScriptCode *script)` and which
+D138's disassembly showed writing into a per-map-door slot array.
+
+The 30-second human test on the `pointer-swap` branch is still the cheapest way
+to settle the swap itself.
+
+---
+
+## D140 — ✅ The door's interact script is its *animation*, not its transition (2026-07-29)
+
+Branch `pointer-swap`. D139 guessed why running the script did nothing and left
+it 🔶. Reading the bytecode settles it, and the guess was wrong.
+
+### ✅ The whole script, dumped from RAM
+
+`he1_01` door 0's `interactScript` at `0x80D2FB78` is **four instructions**:
+
+```
+MULF      LW(0), <float constant>
+USER_FUNC 0x800ED75C, 0x80CB35EC, 0, LW(0), 0
+END_EVT
+END_SCRIPT
+```
+
+`0xFE363C80` is `-30000000` — evt's encoding for a local-work variable, not a
+literal. `0x800ED75C` is unnamed in the `eu0` list but sits between
+`evt_mapobj_trans` (`0x800ED6C0`) and `evt_mapobj_scale` (`0x800ED7F8`), so it is
+an `evt_mapobj_*` transform.
+
+### ✅ So it is a per-call animation step
+
+The script multiplies a local variable by a constant and applies it to a map
+object. **`LW(0)` comes from whatever started it** — the door's opening angle,
+supplied by a parent. Run detached, `LW(0)` is 0, the object is transformed by
+nothing, and the script ends. Exactly what D139 measured: a real `EvtEntry`, no
+assert, no visible effect.
+
+⛔ **There is no branch in it at all.** The suggestion that it checks the
+player's position and bails is ruled out — there is nothing to check with. The
+proximity requirement a player experiences lives in whatever *calls* this, not
+here.
+
+### ✅ This confirms D139's 🔶 with evidence
+
+The `DoorDesc` interact script animates the door; the **transition belongs to
+`MapDoorDesc`** (D138: `ie_doa_02` -> `he1_06` covers the same doorway). Two
+records, two jobs — now measured rather than inferred.
+
+### ⚠️ What that means for the pointer swap, and for the human test
+
+The swap on this branch replaces a **door-opening animation**, not the door's
+behaviour. So the test to ask for is sharper than "does anything happen":
+
+> Use Bestovius's door. **You should still reach `he1_06`** — the transition is
+> not in the script we replaced. Word 3 climbing is the swap working; the door
+> failing to animate on the way is the same finding seen from the other side.
+
+⚠️ A swap that silently kept working *because the transition never depended on
+it* would have looked like success. Knowing what the script does is what makes
+the result readable.
+
+### 🔶 Still open
+
+Whether replacing a script that a parent drives per-call is safe in general.
+This one is called repeatedly with state in `LW(0)`; a replacement that ignores
+it stops the animation rather than breaking the entry, but that is this script's
+shape, not a rule.
