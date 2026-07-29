@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from bleck.backends import doors
 from bleck.formats import tables
 from bleck.mods import manifest as mod_manifest
 from bleck.mods import registry
@@ -136,7 +137,7 @@ class TestBecomingPatches:
         mod = a_mod(
             tmp_path / "d",
             WITH_CODE,
-            HEADER + "he1_01,0,interact,0,MULF,on_a\nhe1_01,9,init,4,MULF,on_b\n",
+            HEADER + "he1_01,0,interact,0,MULF,on_a\nmac_02,3,init,4,MULF,on_b\n",
         )
         found = code_parts.door_patches(mod)
         assert [item.patch.call for item in found] == ["on_a", "on_b"]
@@ -144,7 +145,7 @@ class TestBecomingPatches:
         # descriptors, with the door itself carried as an index.
         assert found[0].patch.emit_target == "he1_01"
         assert found[0].patch.index == 0
-        assert found[1].patch.index == 9
+        assert found[1].patch.index == 3
 
     def test_a_bad_selector_is_refused_by_the_shared_validator(self, tmp_path):
         mod = a_mod(tmp_path / "d", WITH_CODE, HEADER + "he1_01,0,interact,0,NOPE,f\n")
@@ -157,11 +158,17 @@ class TestBecomingPatches:
         mod = a_mod(
             tmp_path / "d",
             WITH_CODE,
-            HEADER + "he1_01,0,interact,0,MULF,ok\nhe1_01,1,interact,0,BAD_OP,f\n",
+            # ⚠️ Row 3 names a REAL door, so the failure is the bad opcode --
+            # what this test is about. `he1_01,1` would also fail, but on the
+            # door index, and the assertion below would still pass while
+            # testing something else entirely.
+            HEADER + "he1_01,0,interact,0,MULF,ok\nmac_02,1,interact,0,BAD_OP,f\n",
         )
         with pytest.raises(ManifestError) as caught:
             code_parts.door_patches(mod)
-        assert "tables/doors.csv:3" in str(caught.value)
+        message = str(caught.value)
+        assert "tables/doors.csv:3" in message
+        assert "BAD_OP" in message
 
     def test_a_declared_table_that_is_missing_says_so(self, tmp_path):
         mod = a_mod(tmp_path / "d", WITH_CODE)
@@ -171,3 +178,87 @@ class TestBecomingPatches:
     def test_no_doors_table_means_no_patches(self, tmp_path):
         mod = a_mod(tmp_path / "d", {"code": {"sources": ["src"], "target": "eu0"}})
         assert not code_parts.door_patches(mod)
+
+
+class TestTheDoorCatalog:
+    """`bleck doors` and the build-time bounds check both read this (D141).
+
+    ⚠️ The catalog is generated from a running game and committed. These assert
+    the *shape* and the checking behaviour, not particular door names -- a
+    regenerated catalog must not break the suite.
+    """
+
+    def test_the_shipped_catalog_has_both_kinds(self):
+        found = doors.catalog()
+        assert found, "no door catalog shipped"
+        assert found.scriptable, "no map has a scriptable door"
+        # Far more loading zones than scriptable doors: that asymmetry is the
+        # whole reason `bleck doors` reports both (D138).
+        zones = sum(len(entry.zones) for entry in found.maps)
+        scriptable = sum(len(entry.doors) for entry in found.scriptable)
+        assert zones > scriptable
+
+    def test_every_scriptable_door_has_at_least_one_script(self):
+        for entry in doors.catalog().scriptable:
+            for door in entry.doors:
+                assert door.scripts.names(), f"{entry.map_name}[{door.index}]"
+
+    def test_indices_are_positions_in_order(self):
+        """⚠️ Not ids. A gap would mean the dump lost an entry."""
+        for entry in doors.catalog().maps:
+            assert [d.index for d in entry.doors] == list(range(len(entry.doors)))
+            assert [z.index for z in entry.zones] == list(range(len(entry.zones)))
+
+    def test_an_absent_map_is_not_found_rather_than_empty(self):
+        """⚠️ `find` returning None must stay distinguishable from a map with no
+        doors: the first is "unknown", the second is "checked and there are
+        none", and the bounds check phrases them differently."""
+        assert doors.catalog().find("not_a_map") is None
+
+
+class TestBoundsCheckingDoorSelectors:
+    """⛔ Before D141 a `door:` index could name a door that does not exist and
+    fail silently at run time. `mods/door-attended` carried `door:he1_01:9` for
+    weeks that way, and `he1_01` has exactly one door."""
+
+    def patch(self, selector):
+        return mod_manifest.Manifest.from_json(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "name": "m",
+                    "code": {
+                        "sources": ["src"],
+                        "target": "eu0",
+                        "patches": [
+                            {"script": selector, "at": 0, "expect": "MULF", "call": "f"}
+                        ],
+                    },
+                }
+            )
+        )
+
+    def test_a_real_door_is_accepted(self):
+        assert self.patch("door:he1_01:0").code.patches[0].index == 0
+
+    def test_an_index_past_the_end_names_what_exists(self):
+        with pytest.raises(ManifestError) as caught:
+            self.patch("door:he1_01:9")
+        message = str(caught.value)
+        assert "has no door 9" in message
+        assert "Its door(s) are: 0" in message
+
+    def test_a_map_with_only_zones_says_so(self):
+        """Different message on purpose: "you picked the wrong index" and "there
+        is nothing here to pick" send someone to different places."""
+        with pytest.raises(ManifestError) as caught:
+            self.patch("door:he1_02:0")
+        message = str(caught.value)
+        assert "registers no scriptable door" in message
+        assert "loading zone" in message
+
+    def test_an_absent_catalog_skips_the_check(self, monkeypatch):
+        """⚠️ Empty means *unknown*. Refusing every selector because a data file
+        was not shipped would be worse than the silence this replaced."""
+        monkeypatch.setattr(doors, "catalog", doors.DoorCatalog)
+        assert self.patch("door:he1_01:9").code.patches[0].index == 9

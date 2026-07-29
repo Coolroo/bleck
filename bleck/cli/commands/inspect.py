@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from bleck.backends import disc, maps
+from bleck.backends import disc, doors, maps
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import read_bytes
@@ -169,3 +169,59 @@ def register(add: AddCommand) -> None:
     p.add_argument("--groups", action="store_true", help="summarise by group instead")
     p.add_argument("--group", metavar="NAME", help="only one group, e.g. CARD")
     p.set_defaults(func=cmd_items)
+
+    d = add("doors", help="what doors a map has, for door: selectors")
+    d.add_argument("map", nargs="?", help="map name, e.g. he1_01. Omit to list all")
+    d.set_defaults(func=cmd_doors)
+
+
+def cmd_doors(args: argparse.Namespace) -> int:
+    """What doors a map registers, of both kinds.
+
+    ⚠️ **Two tables, and only one is patchable** (D138). Listing only the
+    scriptable ones would make a map with five visible doorways look empty; the
+    zones are shown precisely so "this map has doors but none you can patch" is
+    a readable answer rather than a confusing silence.
+    """
+    found = doors.catalog()
+    if not found:
+        raise UserError(
+            "no door catalog shipped with this build\n"
+            "  regenerate it with `uv run python scripts/dump_doors.py "
+            "--out bleck/backends/doorcatalog.json`"
+        )
+
+    if not args.map:
+        scriptable = found.scriptable
+        print(f"{len(scriptable)} map(s) register a door a patch can reach:\n")
+        for entry in scriptable:
+            names = ", ".join(door.name or "?" for door in entry.doors)
+            print(f"  {entry.map_name:<10} {len(entry.doors):>2}  {names}")
+        total = sum(len(entry.doors) for entry in scriptable)
+        zones = sum(len(entry.zones) for entry in found.maps)
+        print(
+            f"\n{total} scriptable door(s) in the whole game, and {zones} "
+            f"loading zone(s) across {len(found.maps)} map(s)."
+        )
+        return 0
+
+    entry = found.find(args.map)
+    if entry is None:
+        raise UserError(
+            f"{args.map} registers no doors of either kind.\n"
+            f"  `bleck doors` lists the maps that do."
+        )
+
+    print(f"{args.map}:")
+    if entry.doors:
+        print(f"  {len(entry.doors)} scriptable door(s) -- `door:{args.map}:<index>`")
+        for door in entry.doors:
+            print(f"    {door.describe()}")
+    else:
+        print("  no scriptable doors -- nothing here for a `door:` patch")
+    if entry.zones:
+        print(f"  {len(entry.zones)} loading zone(s), which carry a destination")
+        print("  and no scripts, so they cannot be patched:")
+        for zone in entry.zones:
+            print(f"    {zone.describe()}")
+    return 0

@@ -10045,3 +10045,73 @@ Whether replacing a script that a parent drives per-call is safe in general.
 This one is called repeatedly with state in `LW(0)`; a replacement that ignores
 it stops the animation rather than breaking the entry, but that is this script's
 shape, not a rule.
+
+---
+
+## D141 — ✅ `bleck doors`, and `door:` indices are bounds-checked (2026-07-29)
+
+D137 found a `door:he1_01:9` patch sitting in `mods/door-attended`, committed
+and addressing nothing, because `he1_01` has exactly one door. Nothing could
+have caught it: the count lives in the game's data, so it was a run-time
+question and the generated code reported `NO_SCRIPT` silently.
+
+### ✅ The catalog
+
+`scripts/dump_doors.py` reads every map from **outside** the game with
+`dolphin-memory-engine`, following `dump_maps.py` — no in-game C at all.
+`mapDataPtr` is populated by the REL prolog for every map, loaded or not (D88),
+so **one boot covers the whole game**.
+
+| | |
+|---|---|
+| maps registering a door of either kind | **368** |
+| maps with a *scriptable* door | **11** |
+| scriptable doors, whole game | **35** |
+| loading zones | **691** |
+
+✅ **Cross-validated**: the catalog's `he1_01` entry matches what the in-game C
+probe measured in D137/D138 exactly — same door name, group, and all three zone
+destinations — by a completely different mechanism.
+
+Nearly every scriptable door is a house door in Flipside/Flopside (`mac_*`).
+`door:` reaches **35 things in the entire game**.
+
+### ✅ The check that pays for it
+
+`doors.selector_problem(map, index)` returns a message or "", and
+`_parse_selector` raises it. Two distinct messages on purpose:
+
+```
+he1_01 has no door 9. Its door(s) are: 0.
+  An index is a position in the order the map registers them, not an id.
+
+he1_02 registers no scriptable door, so 'door:he1_02:0' can never match.
+  It registers 2 loading zone(s), which carry a destination and no scripts.
+```
+
+"You picked the wrong index" and "there is nothing here to pick" send someone to
+different places, and with 357 of 368 maps in the second category the
+distinction is the common case.
+
+⚠️ **An absent catalog means "unknown", not "no doors".** Refusing every
+selector because a data file was not shipped would be worse than the silence it
+replaces, so the check is skipped.
+
+⛔ **It immediately caught four dead selectors in the test suite**, including one
+in a door-table test written earlier the same day. Those tests now name real
+doors rather than the check being loosened.
+
+### ✅ `codespec.py` split rather than squeezed
+
+The check pushed `codespec.py` to 1,043 lines against a 1,000 ceiling. Trimming
+prose to squeak under would have left it permanently at the edge, so selector
+parsing — `map:`, `item:`, `door:`, `npcdrv:`, four shapes with four rule sets —
+moved to `bleck/mods/manifest/selectors.py`. 783 and 262 lines now.
+`DEFERRED_PATCH_KINDS` is re-exported from its old home so callers do not move.
+
+### ⛔ Scripted text replacement failed silently, again
+
+A fourth time this session: a heredoc `str.replace` whose pattern did not match,
+reporting nothing and leaving the file untouched until a test caught it. D131
+records the rule — targeted edits, not scripted rewrites — and I broke it twice
+more after writing it. Read the diff, not the exit code.

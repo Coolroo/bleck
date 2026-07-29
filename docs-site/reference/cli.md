@@ -126,6 +126,41 @@ $ bleck items --groups
     names both ship inside `bleck`. If the English names are unavailable the
     command says so and still lists every id and `ITEM_ID_*` constant.
 
+### `bleck doors`
+
+```bash
+bleck doors [<map>]
+```
+
+What doors a map registers — the indices a [`door:`](manifest.md) selector
+takes. With no map, lists every map that has one.
+
+```
+$ bleck doors he1_01
+he1_01:
+  1 scriptable door(s) -- `door:he1_01:<index>`
+    [0] ie_doa in ie_naka  (interact, init, move)
+  3 loading zone(s), which carry a destination
+  and no scripts, so they cannot be patched:
+    [0] doa2_l -> he1_02
+    [1] doa1_l -> he1_01
+    [2] ie_doa_02 -> he1_06
+```
+
+!!! warning "Two kinds of door, and only one is patchable"
+
+    A **`DoorDesc`** has interact/init/move scripts and is what `door:` reaches.
+    A **`MapDoorDesc`** is a loading zone: it carries a destination and **no
+    scripts at all**, so there is nothing in it to patch.
+
+    Across the whole game that is **35 scriptable doors** against **691 loading
+    zones**, on 11 maps out of 368. A map with three visible doorways may expose
+    one — Lineland Road does.
+
+An index is a **position in the order the map registers its doors**, not an id
+and nothing visible in game. `bleck` checks it when building, so a selector that
+can never match is an error rather than a silent no-op at run time.
+
 ## Archives
 
 ### `bleck ls`

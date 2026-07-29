@@ -183,10 +183,13 @@ Every mod has a `mod.json` at its root.
 
                 The index is a **position in that list, in registration
                 order**, not an id — the game gives no way to look a door up
-                by name. The list lives in the game's data, so the index
-                cannot be checked while building: one past the end resolves
-                to nothing and reports status `4` at run time rather than
-                writing anywhere.
+                by name. `bleck` checks it against a committed catalog while
+                building, so a selector that can never match is an error;
+                [`bleck doors <map>`](cli.md#bleck-doors) names each one.
+
+                ⚠️ Only **11 of 368 maps** register a door a patch can reach.
+                Most visible doorways are loading zones carrying a destination
+                and no scripts.
 
                 An **item** may be a number (`item:65`, `item:0x41`) or a
                 name: its English name (`fire_burst`), its internal name

@@ -312,7 +312,11 @@ class TestDoorScript:
             manifest({**WHOLE, "script": "door:he1_01:0:init:extra"})
 
     @pytest.mark.parametrize(
-        "selector", ["door:he1_01:0", "door:he1_01:1:init", "door:mac_01:2:move"]
+        # ⚠️ Real doors only. The index is bounds-checked against the catalog
+        # (D141), and `he1_01` has exactly one -- these used to name doors 1 and
+        # 2 of maps that do not have them.
+        "selector",
+        ["door:he1_01:0", "door:mac_02:1:init", "door:mac_02:2:move"],
     )
     def test_a_door_selector_round_trips_as_written(self, selector):
         written = manifest({**WHOLE, "script": selector}).to_json()
@@ -439,11 +443,11 @@ class TestManifest:
     def test_a_door_resolves_to_a_map_and_an_index(self):
         """The generated C needs them apart: it looks the map up, then indexes
         the descriptor array the map's init script registered."""
-        parsed = manifest({**WHOLE, "script": "door:he1_01:2"}).code.patches[0]
+        parsed = manifest({**WHOLE, "script": "door:mac_02:2"}).code.patches[0]
         assert parsed.kind == "door"
-        assert parsed.emit_target == "he1_01"
+        assert parsed.emit_target == "mac_02"
         assert parsed.index == 2
-        assert parsed.selector == "door:he1_01:2"
+        assert parsed.selector == "door:mac_02:2"
 
     def test_a_negative_offset_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError, match="cannot be negative"):
