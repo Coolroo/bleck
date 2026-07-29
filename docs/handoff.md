@@ -1,17 +1,22 @@
 # Handoff — picking this up fresh
 
-Last updated 2026-07-28. A mod can now change the game's **own** content: one
+Last updated 2026-07-29. A mod can now change the game's **own** content: one
 instruction of a vanilla `evt` script (D89–D92) or a game C function by name
 (D94–D96), both declared in `mod.json` and both refused rather than written when
 the target is not what the build expected. Code mods build C++ and run it
-in-game (D85, D105), and
-`--output riivolution` produces a patch for real hardware instead of a 4.3 GB
-image (D86).
+in-game (D85, D105), and `--output riivolution` produces a patch for real
+hardware instead of a 4.3 GB image (D86).
+
+**Since then:** placements are declarable in CSV tables keyed by kind
+(`enemies`, `coins`) as well as inline (D124–D126, D131); **any enemy template
+can be placed in any map** and behaves normally (D127, `mods/mr-l`); coins
+cannot be added to a map that places none, and the reason is now known rather
+than guessed (D128–D130). `bleck` is **MIT** (D132).
 
 This is the conversational context that is **not** already captured elsewhere.
 For anything else:
 
-- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D107)
+- [`decision-log.md`](./decision-log.md) — why every choice was made (D1–D132)
 - [`state-of-spm-modding.md`](./state-of-spm-modding.md) — the ecosystem.
   **Substantially revised 2026-07-27**; read the revision section
 - [`scripting.md`](./scripting.md) — the scripting language, and its limits
@@ -36,6 +41,7 @@ was left untouched.
 | Make a **vanilla** script call into it — a map's init script, an item's use script | `code.patches` | D89, D90, D92 |
 | Replace a **game C function** by name, or run **before** / **after** it with the original intact | `code.hooks` | D94, D95, D97 |
 | **Trace** a game function without breaking it — arguments, return value, original still runs | a pattern, not a manifest key | D96 |
+| Change what a map **places** — enemies in any of 100 slots, coins where the map has budget | `setup`, `tables` | D122–D131 |
 
 ⚠️ **One of those has a hole worth knowing.** An item patch has been *applied*
 and never *entered* — using an item needs menu navigation and input cannot be
@@ -68,6 +74,40 @@ no Dolphin config, no fork, stock builds. Three addresses give full visibility:
 | `0x80512360` | `seqWork` — current sequence at +0x00, stage at +0x04 |
 | `0x8050C990` | `evtGetWork()`'s return. `gw[]` at +0x04, so `gw[n]` at +4+4n |
 | `0x80005000` | Free scratch for a probe block (unused TRK interrupt table) |
+
+### A hang that is really an assert will tell you why (D130)
+
+**Reach for this before bisecting anything that freezes.** `__assert2` is in the
+symbol list at `0x8019c54c`, and its call sites pass `(file, line, func, expr)`.
+Hook it with `mode: "before"`, copy the four arguments into a probe block, and
+the game names its own cause:
+
+```json
+"hooks": [ { "function": "__assert2", "call": "on_assert", "mode": "before" } ]
+```
+
+That turned "the map freezes" into `swdrv.c:505`,
+`(wp->gameCoinId - 1) < assign_tbl[i].num` in a single run, after four runs of
+bisecting had only narrowed it to one byte. A frozen game and a deliberate
+refusal are indistinguishable from outside, and most of this repo's freezes were
+probably the latter.
+
+⚠️ **Assert messages are Shift-JIS**, like the message files. Decoding as ASCII
+throws away the sentence that explains everything —
+`コインのフラグが溢れました`, "the coin flags have overflowed".
+
+⚠️ Record a frame counter alongside it. If the hook never fires, that means
+nothing unless you can show the game reached the code at all.
+
+### Reading the DOL when the symbol list is thin
+
+`eu0` names two setup symbols, so nothing in the item path could be looked up.
+What worked (D128): find a string — an assert `__FILE__`, a `printf` format —
+and cross-reference it. The game builds addresses as **base register plus
+offset**, not one `lis`/`addi` pair, so a naive two-instruction search finds
+nothing; a scanner that tracks register values across `lis`/`addis`/`addi` finds
+all of them. `powerpc-eabi-objdump` from devkitPPC disassembles a slice of the
+DOL by virtual address.
 
 ⚠️ **Gameplay is reached ~45 seconds after boot with no controller input.** The
 game runs `LOGO -> MAPCHANGE -> GAME`, loading `aa4_01` then `ls4_12` — its

@@ -345,10 +345,10 @@ user-visible problem. The recorded answer is a PyO3 port of *just the
 compressor*, not a rewrite. Eighty decision entries of hard-won behaviour do not
 live in the language, and a rewrite re-discovers every bug.
 
-### 🟡 Licensing — deferred, not forgotten
+### ✅ ~~Licensing~~ — *done (D132)*
 
-Blocks sharing and nothing else. Must be settled before any release, since
-`docs-site` tells people to clone a repo that is all-rights-reserved by default.
+MIT. `LICENSE` and `THIRD-PARTY-NOTICES.md` exist, and `catalog.json` carries
+the notice `spm-headers`' MIT licence requires of derived data.
 
 ---
 
@@ -366,27 +366,15 @@ proven. What remained:
 
 > ⚠️ **Superseded in part by D37.** The scripting track shipped without
 > resolving item 1: scripts name game functions and `elf2rel` binds them at
-> build time, so `bleck` vendors no upstream material at all. Licensing is still
-> worth settling, but it **no longer blocks this track**. See
-> [`scripting.md`](./scripting.md).
+> build time, so `bleck` vendors no upstream material at all. Item 1 was
+> settled later, in D132. See [`scripting.md`](./scripting.md).
 
-### 1. 🟡 Decide the licensing question — *no longer blocks the scripting path*
+### 1. ✅ ~~Decide the licensing question~~ — *done (D132)*
 
-`spm-rel-loader` is **GPLv3**, including the Gecko loader code we need.
-`spm-headers` is MIT except its `mod/` folder, which is also GPLv3. `bleck` is
-currently **unlicensed**.
-
-Three options:
-
-- **Don't vendor.** `bleck` fetches or requires the user to supply
-  `spm-rel-loader`. Keeps the toolkit license-clean; costs a setup step.
-- **Vendor and adopt GPLv3**, for the code-mod portion or the whole project.
-- **Vendor only the MIT parts** (`spm-headers`' `include`/`linker`) and fetch the
-  GPL loader separately.
-
-⚠️ Nothing upstream has been copied into this repo yet — the clones live in
-scratchpad precisely so this stays open. **This decision should come first**,
-because unwinding a licensing mistake later is far worse than making it now.
+MIT, third option taken: derive only from `spm-headers`' MIT `include/` and
+`linker/`, vendor nothing, and ship the notice with the derived data. The
+GPLv3 parts (`spm-rel-loader`, `spm-headers/mod/`) stay out, which is what kept
+the choice available at all.
 
 ### 2. ✅ ~~Install `g++-powerpc-linux-gnu`~~ — *done (D85)*
 
@@ -555,5 +543,4 @@ risky part of this project.
 to be item 2 here.** D97 shipped both modes without one; the remaining case for
 a trampoline is two cache flushes per call, and it is 🟡 far down the list above.
 
-Licensing (step 1 of the historical plan) still has to be settled before any
-release, and still blocks nothing else.
+Licensing (step 1 of the historical plan) is settled: MIT, D132.
