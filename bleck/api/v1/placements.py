@@ -161,8 +161,8 @@ class PlacementEdit(BaseModel):
         )
 
 
-class ItemEdit(BaseModel):
-    """One change to one placed item. What an editor sends back.
+class CoinEdit(BaseModel):
+    """One change to one placed coin. What an editor sends back.
 
     ⚠️ **`index` is optional and absent means add.** Items are a counted list,
     not fixed slots, so there is no empty item to fill -- which is why this is
@@ -181,13 +181,6 @@ class ItemEdit(BaseModel):
         ),
     )
     position: Position | None = None
-    type: int | None = Field(
-        default=None,
-        description=(
-            "⚠️ Only 0 -- a coin -- exists. `setupItemTemplates` holds exactly "
-            "one entry, so any other value indexes past the end of it."
-        ),
-    )
     flags: int | None = Field(
         default=None,
         ge=0,
@@ -198,17 +191,10 @@ class ItemEdit(BaseModel):
 
     @property
     def _sets_anything(self) -> bool:
-        return (
-            self.position is not None or self.type is not None or self.flags is not None
-        )
+        return self.position is not None or self.flags is not None
 
     @model_validator(mode="after")
-    def _says_something(self) -> ItemEdit:
-        if self.type is not None and self.type != setup.Item.COIN:
-            raise ValueError(
-                f"type {self.type} is not a thing the game can place; "
-                f"`setupItemTemplates` holds only id {setup.Item.COIN}, a coin"
-            )
+    def _says_something(self) -> CoinEdit:
         if self.clear:
             if self.index is None:
                 raise ValueError("`clear` needs an `index`; there is no empty item")
@@ -220,31 +206,28 @@ class ItemEdit(BaseModel):
             return self
         if self.index is None and self.position is None:
             raise ValueError(
-                "an added item needs a position; give `index` to change one the "
+                "an added coin needs a position; give `index` to move one the "
                 "map already places"
             )
         if not self._sets_anything:
             raise ValueError(
-                "an edit must change something: set `position`, `type`, "
-                "`flags`, or `clear`"
+                "an edit must change something: set `position`, `flags`, or `clear`"
             )
         return self
 
     @classmethod
-    def of(cls, edit: manifest_placements.ItemEdit) -> ItemEdit:
+    def of(cls, edit: manifest_placements.CoinEdit) -> CoinEdit:
         return cls(
             index=edit.index,
             position=Position.of(edit.position) if edit.position else None,
-            type=edit.type,
             flags=edit.flags,
             clear=edit.clear,
         )
 
-    def to_manifest(self) -> manifest_placements.ItemEdit:
-        return manifest_placements.ItemEdit(
+    def to_manifest(self) -> manifest_placements.CoinEdit:
+        return manifest_placements.CoinEdit(
             index=self.index,
             position=self.position.to_setup() if self.position else None,
-            type=self.type,
             flags=self.flags,
             clear=self.clear,
         )
@@ -257,7 +240,7 @@ class SetupEdits(Document):
         default_factory=dict,
         description="Map name to the slots changed in it.",
     )
-    items: dict[str, list[ItemEdit]] = Field(
+    coins: dict[str, list[CoinEdit]] = Field(
         default_factory=dict,
         description=(
             "Map name to the placed items changed in it. A separate key rather "
@@ -273,20 +256,20 @@ class SetupEdits(Document):
                 placement.map_name: [PlacementEdit.of(edit) for edit in placement.edits]
                 for placement in declared
             },
-            items={
-                placement.map_name: [ItemEdit.of(edit) for edit in placement.items]
+            coins={
+                placement.map_name: [CoinEdit.of(edit) for edit in placement.coins]
                 for placement in declared
-                if placement.items
+                if placement.coins
             },
         )
 
     def to_manifest(self) -> list[manifest_placements.MapPlacements]:
-        names = dict.fromkeys([*self.setup, *self.items])
+        names = dict.fromkeys([*self.setup, *self.coins])
         return [
             manifest_placements.MapPlacements(
                 map_name=name,
                 edits=[edit.to_manifest() for edit in self.setup.get(name, [])],
-                items=[edit.to_manifest() for edit in self.items.get(name, [])],
+                coins=[edit.to_manifest() for edit in self.coins.get(name, [])],
             )
             for name in names
         ]

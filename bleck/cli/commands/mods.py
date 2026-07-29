@@ -96,7 +96,7 @@ class TableScaffold:
 #: here and one in `SCAFFOLDS`.
 _COLUMNS = {
     manifest.TableKind.ENEMIES: tables.enemies.COLUMNS,
-    manifest.TableKind.ITEMS: tables.items.COLUMNS,
+    manifest.TableKind.COINS: tables.coins.COLUMNS,
 }
 
 SCAFFOLDS = (
@@ -110,19 +110,19 @@ SCAFFOLDS = (
         ),
     ),
     TableScaffold(
-        kind=manifest.TableKind.ITEMS,
-        path="tables/items.csv",
-        hint="place items",
+        kind=manifest.TableKind.COINS,
+        path="tables/coins.csv",
+        hint="place coins",
         comment=(
-            "# One item per row. Leave 'index' empty to add one, or give it to "
-            "change an item the map already places."
+            "# One coin per row. Leave 'index' empty to add one, or give it to "
+            "move a coin the map already places."
         ),
     ),
 )
 
 #: Kept as a name because tests and docs refer to it.
 ENEMY_TABLE = SCAFFOLDS[0].path
-ITEM_TABLE = SCAFFOLDS[1].path
+COIN_TABLE = SCAFFOLDS[1].path
 
 
 def _scaffold_table(path: Path, scaffold: TableScaffold) -> None:

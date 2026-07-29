@@ -238,7 +238,7 @@ bleck mod new <name> [--description ...] [--author ...]
 ```
 
 Writes `mod.json`, an empty `overlay/`, and an empty table per kind —
-`tables/enemies.csv` and `tables/items.csv`, each a comment line and a header
+`tables/enemies.csv` and `tables/coins.csv`, each a comment line and a header
 row — which the manifest already points at. Add rows to place enemies or coins;
 see [`tables`](manifest.md).
 

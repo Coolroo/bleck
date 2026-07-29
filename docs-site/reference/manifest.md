@@ -441,13 +441,13 @@ Every mod has a `mod.json` at its root.
     look like it had.
 
     A map may instead be written as an object, which is how it declares
-    **placed items** as well as enemies:
+    **placed coins** as well as enemies:
 
     ```json
     "setup": {
       "he1_03": {
         "enemies": [ { "slot": 0, "template": 148 } ],
-        "items": [
+        "coins": [
           { "position": [-300, 50, 0] },
           { "index": 1, "clear": true }
         ]
@@ -458,24 +458,24 @@ Every mod has a `mod.json` at its root.
     The bare list is not deprecated — it means `enemies`, and stays exactly as
     valid.
 
-    An item edit takes an optional `index`, a `position`, `type`, `flags` and
-    `clear`. **Leaving `index` out adds an item**; giving it changes one the map
-    already places. That is the opposite of an enemy edit, and deliberately so:
-    enemies live in 100 fixed slots, while items are a counted list with no
-    empty entries. For the same reason `clear` needs an `index` — there is no
-    empty item to clear.
+    A coin edit takes an optional `index`, a `position`, `flags` and `clear`.
+    **Leaving `index` out adds a coin**; giving it moves one the map already
+    places. That is the opposite of an enemy edit, and deliberately so: enemies
+    live in 100 fixed slots, while coins are a counted list with no empty
+    entries. For the same reason `clear` needs an `index` — there is no empty
+    coin to clear.
 
-    !!! warning "Only coins exist"
+    !!! note "Coins, not items"
 
-        `type` must be `0`. The game's `setupItemTemplates` holds exactly one
-        entry — a coin — so any other value indexes past the end of it, and
-        `bleck` refuses it rather than writing it. Every one of the 299 items
-        the game ships is a coin with `flags` `0x11`; `0x10` and `0x1` are what
-        make an item spawn at all.
+        A setup file's item section can hold nothing but coins. The game's
+        `setupItemTemplates` has exactly one entry, and the spawner takes a
+        different code path for it than for every other item — so there is no
+        `type` to set. All 299 the game ships are coins with `flags` `0x11`;
+        `0x10` and `0x1` are what make one spawn at all.
 
-    !!! danger "Only 14 maps can have items at all"
+    !!! danger "Only 14 maps can have coins at all"
 
-        Adding an item to one of the 213 maps that place none **hangs the
+        Adding a coin to one of the 213 maps that place none **hangs the
         game** — the map never renders. `bleck` refuses it at build time rather
         than producing a disc that freezes.
 
@@ -486,10 +486,10 @@ Every mod has a `mod.json` at its root.
         overflowed"*. [`bleck setup show <map>`](cli.md#bleck-setup) says whether a
         map is one of the 14.
 
-        Adding items to one of the 14 maps that *do* place them works —
-        `he1_03` was taken from 5 coins to 7 and reached gameplay. At most 512
-        items per map: the game copies the file's own count into a fixed buffer
-        without clamping it, and the busiest map it ships places 48.
+        Adding coins to one of the 14 maps that *do* place them works —
+        `he1_03` was taken from 5 to 7 and reached gameplay. At most 512 per
+        map: the game copies the file's own count into a fixed buffer without
+        clamping it, and the busiest map it ships places 48.
 
     !!! note
 
@@ -505,7 +505,7 @@ Every mod has a `mod.json` at its root.
     ```json
     "tables": {
       "enemies": "tables/enemies.csv",
-      "items": "tables/items.csv"
+      "coins": "tables/coins.csv"
     }
     ```
 
@@ -517,7 +517,7 @@ Every mod has a `mod.json` at its root.
     ```
 
     **The key says what the table's rows describe, not what to call the file.**
-    It is a closed set — `enemies` and `items` — so a label like `"lineland"` is
+    It is a closed set — `enemies` and `coins` — so a label like `"lineland"` is
     refused rather than read as enemy placements on the strength of being
     present. `doors` is designed and not built; declaring one says so, instead
     of accepting a table nothing will ever read.
@@ -553,10 +553,10 @@ Every mod has a `mod.json` at its root.
     | `copy_from` | A slot to copy first, as above |
     | `clear` | `true` to empty the slot |
 
-    An **item** table's, which are deliberately not the same:
+    A **coin** table's, which are deliberately not the same:
 
     ```csv
-    # mods/my-mod/tables/items.csv
+    # mods/my-mod/tables/coins.csv
     map,index,x,y,z
     he1_03,,-300,50,0
     he1_03,1,999,0,0
@@ -565,13 +565,12 @@ Every mod has a `mod.json` at its root.
     | Column | |
     |---|---|
     | `map` | Required unless the table is bound to a map |
-    | `index` | **Optional. Leave it empty to add an item**, or name one the map already places |
+    | `index` | **Optional. Leave it empty to add a coin**, or name one the map already places |
     | `x`, `y`, `z` | All three or none. Required when adding |
-    | `type` | Must be `0` — a coin is the only item the game can place |
-    | `flags` | `0x11` spawns; base-prefixed, so `0x11` and `17` both work |
-    | `clear` | `true` to remove the item. Needs an `index` |
+        | `flags` | `0x11` spawns; base-prefixed, so `0x11` and `17` both work |
+    | `clear` | `true` to remove the coin. Needs an `index` |
 
-    Enemies have 100 fixed slots and items are a counted list, so `slot` and
+    Enemies have 100 fixed slots and coins are a counted list, so `slot` and
     `index` are different words for genuinely different things. Indexed edits
     resolve against the list **as the game ships it**, so the order rows appear
     in cannot change what a table means.

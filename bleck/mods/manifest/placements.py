@@ -65,7 +65,7 @@ SPAWN_FLAGS = setup.Item.SPAWNS
 
 
 @dataclass(frozen=True)
-class ItemEdit:
+class CoinEdit:
     """One change to one placed item.
 
     ⚠️ **An item has no slot.** Enemies live in 100 fixed slots and are addressed
@@ -81,10 +81,9 @@ class ItemEdit:
     """Which existing item, or `None` to add one."""
 
     position: setup.Position | None = None
-    type: int | None = None
     flags: int | None = None
     clear: bool = False
-    """Remove the item. Needs an `index`; there is nothing else to remove."""
+    """Remove the coin. Needs an `index`; there is nothing else to remove."""
 
     @property
     def is_add(self) -> bool:
@@ -97,8 +96,6 @@ class ItemEdit:
         parts = []
         if self.position is not None:
             parts.append(f"at {self.position.describe()}")
-        if self.type is not None:
-            parts.append(f"type {self.type}")
         if self.flags is not None:
             parts.append(f"flags 0x{self.flags:02x}")
         return f"{where}: {', '.join(parts)}"
@@ -111,8 +108,6 @@ class ItemEdit:
             body["clear"] = True
         if self.position is not None:
             body["position"] = list(self.position.as_tuple())
-        if self.type is not None:
-            body["type"] = self.type
         if self.flags is not None:
             body["flags"] = self.flags
         return body
@@ -124,7 +119,7 @@ class MapPlacements:
 
     map_name: str
     edits: list[PlacementEdit]
-    items: list[ItemEdit] = field(default_factory=list)
+    coins: list[CoinEdit] = field(default_factory=list)
     """Changes to the item section. Separate from `edits` because an item is
     addressed differently from an enemy, but carried on the same object because
     both end up in **one** generated `.dat`."""
@@ -145,7 +140,7 @@ class TableKind(StrEnum):
     """
 
     ENEMIES = "enemies"
-    ITEMS = "items"
+    COINS = "coins"
 
 
 #: Kinds the design calls for that nothing reads yet. Named apart from a plain
@@ -161,7 +156,7 @@ PLANNED_KINDS = ("doors",)
 #: `has_placements` gates `mods_with_placements`, and a mod that generates
 #: nothing still reports "chain OK" (D126). Doors will not belong here; they are
 #: code patches, not setup content.
-PLACEMENT_KINDS = (TableKind.ENEMIES, TableKind.ITEMS)
+PLACEMENT_KINDS = (TableKind.ENEMIES, TableKind.COINS)
 
 
 @dataclass(frozen=True)
@@ -313,7 +308,7 @@ def _table_path(path: str, where: str) -> str:
 
 
 #: What the long form of a `setup.<map>` block may say.
-_SETUP_KEYS = {"enemies", "items"}
+_SETUP_KEYS = {"enemies", "coins"}
 
 
 def _parse_setup(raw: object, source: str) -> list[MapPlacements]:
@@ -346,7 +341,7 @@ def _parse_map(map_name: str, body: object, where: str) -> MapPlacements:
     if not isinstance(body, dict):
         raise ManifestError(
             f"{where}: must be a list of enemy edits, or an object like "
-            f'{{"enemies": [...], "items": [...]}}'
+            f'{{"enemies": [...], "coins": [...]}}'
         )
 
     unknown = sorted(set(body) - _SETUP_KEYS)
@@ -360,7 +355,7 @@ def _parse_map(map_name: str, body: object, where: str) -> MapPlacements:
         edits=[
             _parse_edit(e, f"{where}.enemies") for e in _listed(body, "enemies", where)
         ],
-        items=[_parse_item(e, f"{where}.items") for e in _listed(body, "items", where)],
+        coins=[_parse_coin(e, f"{where}.coins") for e in _listed(body, "coins", where)],
     )
 
 
@@ -371,7 +366,7 @@ def _listed(body: dict, key: str, where: str) -> list:  # pylint: disable=contai
     return found
 
 
-def _parse_item(raw: object, where: str) -> ItemEdit:
+def _parse_coin(raw: object, where: str) -> CoinEdit:
     if not isinstance(raw, dict):
         raise ManifestError(f"{where}: each item edit must be an object")
 
@@ -381,27 +376,26 @@ def _parse_item(raw: object, where: str) -> ItemEdit:
         raise ManifestError(f"{where}: 'clear' must be true or false")
 
     position = _parse_position(raw.get("position"), where)
-    kind = _parse_item_type(raw.get("type"), where)
     flags = _parse_flags(raw.get("flags"), where)
-    _check_item(
-        ItemEdit(index=index, position=position, type=kind, flags=flags, clear=clear),
+    _check_coin(
+        CoinEdit(index=index, position=position, flags=flags, clear=clear),
         where,
     )
-    return ItemEdit(index=index, position=position, type=kind, flags=flags, clear=clear)
+    return CoinEdit(index=index, position=position, flags=flags, clear=clear)
 
 
-def _check_item(edit: ItemEdit, where: str) -> None:
+def _check_coin(edit: CoinEdit, where: str) -> None:
     """The rules an item edit must satisfy, shared with the CSV reader.
 
     ⚠️ **Adding needs a position and editing does not.** An added item with no
     coordinates would land at the origin, which is off the map in most rooms --
     an item nobody can reach looks exactly like an item that did not spawn.
     """
-    given = edit.position is not None or edit.type is not None or edit.flags is not None
+    given = edit.position is not None or edit.flags is not None
     if edit.clear:
         if edit.index is None:
             raise ManifestError(
-                f"{where}: 'clear' needs an 'index' -- items are a list, not "
+                f"{where}: 'clear' needs an 'index' -- coins are a list, not "
                 f"fixed slots, so there is no empty item to clear"
             )
         if given:
@@ -418,7 +412,7 @@ def _check_item(edit: ItemEdit, where: str) -> None:
     if not given:
         raise ManifestError(
             f"{where}: item {edit.index} changes nothing. "
-            f"Give a position, 'type', 'flags', or 'clear'"
+            f"Give a position, 'flags', or 'clear'"
         )
 
 
@@ -429,22 +423,6 @@ def _parse_index(raw: object, where: str) -> int | None:
         raise ManifestError(f"{where}: 'index' must be a whole number")
     if raw < 0:
         raise ManifestError(f"{where}: 'index' {raw} is negative")
-    return raw
-
-
-def _parse_item_type(raw: object, where: str) -> int | None:
-    """⚠️ Refuses anything but a coin, because the game has nothing else."""
-    if raw is None:
-        return None
-    if not isinstance(raw, int) or isinstance(raw, bool):
-        raise ManifestError(f"{where}: 'type' must be a whole number")
-    if raw != COIN:
-        raise ManifestError(
-            f"{where}: 'type' {raw} is not a thing the game can place. "
-            f"`setupItemTemplates` holds exactly one entry, id {COIN} -- a coin "
-            f"-- so any other type indexes past the end of it.\n"
-            f"  All 299 items the game ships are type {COIN}."
-        )
     return raw
 
 

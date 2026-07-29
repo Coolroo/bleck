@@ -21,7 +21,7 @@ from bleck.common.errors import BleckError
 from bleck.formats import lz77, setup, tables, u8
 from bleck.mods.manifest import (
     MANIFEST_NAME,
-    ItemEdit,
+    CoinEdit,
     MapPlacements,
     PlacementEdit,
     TableKind,
@@ -55,9 +55,9 @@ class PlacementBuild:
     applied: int
     used_before: int
     used_after: int
-    items_applied: int = 0
-    items_before: int = 0
-    items_after: int = 0
+    coins_applied: int = 0
+    coins_before: int = 0
+    coins_after: int = 0
 
     warnings: list[str] = field(default_factory=list)
     """Empty today. It held the item-count warning until D129 measured that
@@ -71,12 +71,12 @@ class PlacementBuild:
             f"-> {self.used_before} enemies becomes {self.used_after}"
         )
         # Reported only when there are any: every map has enemies and 14 of 227
-        # have items, so an unconditional ", 0 items" would be noise on nearly
+        # have coins, so an unconditional ", 0 coins" would be noise on nearly
         # every line.
-        if self.items_applied or self.items_before:
+        if self.coins_applied or self.coins_before:
             out += (
-                f", {self.items_applied} item edit(s) "
-                f"-> {self.items_before} items becomes {self.items_after}"
+                f", {self.coins_applied} coin edit(s) "
+                f"-> {self.coins_before} coins becomes {self.coins_after}"
             )
         return out
 
@@ -114,50 +114,50 @@ def placements_for(mod: Mod) -> list[MapPlacements]:
     they merge here rather than in the manifest: this is the first point that
     has the mod's *directory*, and a table is a path until then.
 
-    ⚠️ Enemies and items merge **per map**, not per source, because both end up
+    ⚠️ Enemies and coins merge **per map**, not per source, because both end up
     in one generated `.dat`. A mod that adds an enemy in a table and a coin
     inline must not produce two files, the second overwriting the first.
     """
     declared: dict[str, list[SourcedEdit]] = {}
-    items: dict[str, list[SourcedItem]] = {}
+    coins: dict[str, list[SourcedCoin]] = {}
     for placement in mod.manifest.setup:
         where = f"{MANIFEST_NAME} setup.{placement.map_name}"
         declared.setdefault(placement.map_name, []).extend(
             SourcedEdit(edit=edit, source=where) for edit in placement.edits
         )
-        items.setdefault(placement.map_name, []).extend(
-            SourcedItem(edit=edit, source=where) for edit in placement.items
+        coins.setdefault(placement.map_name, []).extend(
+            SourcedCoin(edit=edit, source=where) for edit in placement.coins
         )
 
     for row in _table_rows(mod):
         declared.setdefault(row.map_name, []).append(
             SourcedEdit(edit=_edit_of(row), source=f"{row.source}:{row.line}")
         )
-    for row in _item_rows(mod):
-        items.setdefault(row.map_name, []).append(
-            SourcedItem(edit=_item_of(row), source=f"{row.source}:{row.line}")
+    for row in _coin_rows(mod):
+        coins.setdefault(row.map_name, []).append(
+            SourcedCoin(edit=_coin_of(row), source=f"{row.source}:{row.line}")
         )
 
     for map_name, found in declared.items():
         _refuse_collisions(mod, map_name, found)
-    for map_name, found_items in items.items():
-        _refuse_item_collisions(mod, map_name, found_items)
+    for map_name, found_coins in coins.items():
+        _refuse_coin_collisions(mod, map_name, found_coins)
 
     return [
         MapPlacements(
             map_name=name,
             edits=[item.edit for item in declared.get(name, [])],
-            items=[item.edit for item in items.get(name, [])],
+            coins=[coin.edit for coin in coins.get(name, [])],
         )
-        for name in dict.fromkeys([*declared, *items])
+        for name in dict.fromkeys([*declared, *coins])
     ]
 
 
 @dataclass(frozen=True)
-class SourcedItem:
-    """One item edit and where it was written, so a collision can name both."""
+class SourcedCoin:
+    """One coin edit and where it was written, so a collision can name both."""
 
-    edit: ItemEdit
+    edit: CoinEdit
     source: str
 
 
@@ -178,10 +178,10 @@ class SourcedRow:
 
 
 @dataclass(frozen=True)
-class SourcedItemRow:
-    """An item table row that remembers which file it was read from."""
+class SourcedCoinRow:
+    """A coin table row that remembers which file it was read from."""
 
-    row: tables.items.Row
+    row: tables.coins.Row
     source: str
 
     @property
@@ -203,24 +203,23 @@ def _table_path(mod: Mod, ref) -> Path:
     return path
 
 
-def _item_rows(mod: Mod) -> list[SourcedItemRow]:
-    """Every item-table row this mod declares."""
-    out: list[SourcedItemRow] = []
-    for ref in mod.manifest.tables_of(TableKind.ITEMS):
-        table = tables.items.read(
+def _coin_rows(mod: Mod) -> list[SourcedCoinRow]:
+    """Every coin-table row this mod declares."""
+    out: list[SourcedCoinRow] = []
+    for ref in mod.manifest.tables_of(TableKind.COINS):
+        table = tables.coins.read(
             _table_path(mod, ref), source=ref.path, map_name=ref.map_name
         )
-        out += [SourcedItemRow(row=row, source=table.source) for row in table.rows]
+        out += [SourcedCoinRow(row=row, source=table.source) for row in table.rows]
     return out
 
 
-def _item_of(sourced: SourcedItemRow) -> ItemEdit:
-    """An item table row as the same declaration an inline edit makes."""
+def _coin_of(sourced: SourcedCoinRow) -> CoinEdit:
+    """A coin table row as the same declaration an inline edit makes."""
     row = sourced.row
-    return ItemEdit(
+    return CoinEdit(
         index=row.index,
         position=row.position,
-        type=row.type,
         flags=row.flags,
         clear=row.clear,
     )
@@ -274,11 +273,11 @@ def _refuse_collisions(mod: Mod, map_name: str, declared: list[SourcedEdit]) -> 
         seen[item.edit.slot] = item.source
 
 
-def _refuse_item_collisions(mod: Mod, map_name: str, declared: list[SourcedItem]) -> None:
-    """Refuse one mod editing the same item twice.
+def _refuse_coin_collisions(mod: Mod, map_name: str, declared: list[SourcedCoin]) -> None:
+    """Refuse one mod editing the same coin twice.
 
     ⚠️ Only *indexed* edits can collide. Two rows that both add an item are two
-    items, which is the whole point -- deduplicating adds would make a table of
+    coins, which is the whole point -- deduplicating adds would make a table of
     thirty coins silently place fewer.
     """
     seen: dict[int, str] = {}
@@ -288,7 +287,7 @@ def _refuse_item_collisions(mod: Mod, map_name: str, declared: list[SourcedItem]
         first = seen.get(item.edit.index)
         if first is not None:
             raise EditError(
-                f"{mod.name}: item {item.edit.index} of {map_name} is declared "
+                f"{mod.name}: coin {item.edit.index} of {map_name} is declared "
                 f"twice -- in {first} and in {item.source}.\n"
                 f"  Which one wins is not defined, so declare it in one place."
             )
@@ -317,21 +316,22 @@ def _refuse_new_section(mod: Mod, placement, data: setup.SetupFile) -> None:
     Refused rather than warned about, because the output is a disc that hangs on
     entering the map. A warning scrolls past; this cannot.
     """
-    if data.has_item_section or not placement.items:
+    if data.has_item_section or not placement.coins:
         return
     raise EditError(
-        f"{mod.name}: {placement.map_name} ships no items, and adding one "
+        f"{mod.name}: {placement.map_name} places no coins, and adding one "
         f"hangs the game (D130).\n"
-        f"  A coin needs a save flag so it stays collected, and each map has a "
-        f"fixed budget of them. A map that places no items has no spare -- the "
-        f"game asserts 'the coin flags have overflowed' and the map never "
-        f"finishes loading.\n"
-        f"  The 14 maps that already place items have room. "
+        f"  A coin needs a save flag so it stays collected once picked up, and "
+        f"every map has a fixed budget of them -- spent by coins in blocks as "
+        f"well as floating ones. A map with no floating coins has usually "
+        f"already spent it, and the game asserts 'the coin flags have "
+        f"overflowed' before the map finishes loading.\n"
+        f"  The 14 maps that already place coins have room. "
         f"`bleck setup show <map>` says whether a map is one of them."
     )
 
 
-def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]:
+def _apply_coins(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]:
     """The map's item list with this mod's edits applied.
 
     ⚠️ **Indexed edits resolve against the list as it shipped**, then removals
@@ -345,20 +345,20 @@ def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
     added: list[setup.Item] = []
     removed: set[int] = set()
 
-    for edit in placement.items:
+    for edit in placement.coins:
         if edit.index is None:
             added.append(
                 setup.Item(
                     flags=setup.Item.SPAWNS if edit.flags is None else edit.flags,
-                    type=setup.Item.COIN if edit.type is None else edit.type,
+                    type=setup.Item.COIN,
                     position=edit.position,
                 )
             )
             continue
         if edit.index >= len(kept):
             raise EditError(
-                f"{mod.name}: {placement.map_name} places {len(kept)} item(s), "
-                f"so there is no item {edit.index}.\n"
+                f"{mod.name}: {placement.map_name} places {len(kept)} coin(s), "
+                f"so there is no coin {edit.index}.\n"
                 f"  Leave 'index' empty to add one; "
                 f"`bleck setup show {placement.map_name}` lists what is there."
             )
@@ -383,7 +383,7 @@ def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
 def _edited_item(item: setup.Item, edit) -> setup.Item:
     return setup.Item(
         flags=item.flags if edit.flags is None else edit.flags,
-        type=item.type if edit.type is None else edit.type,
+        type=item.type,
         position=item.position if edit.position is None else edit.position,
     )
 
@@ -431,7 +431,7 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
             source = _copy_source(mod, placement, edit, original)
         slots[edit.slot] = _apply_edit(slots[edit.slot], edit, mod.name, source)
 
-    items = _apply_items(mod, placement, data)
+    items = _apply_coins(mod, placement, data)
     updated = setup.SetupFile(
         version=data.version,
         enemies=slots,
@@ -467,9 +467,9 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         applied=len(placement.edits),
         used_before=before,
         used_after=len(updated.used),
-        items_applied=len(placement.items),
-        items_before=len(data.items),
-        items_after=len(updated.items),
+        coins_applied=len(placement.coins),
+        coins_before=len(data.items),
+        coins_after=len(updated.items),
     )
 
 

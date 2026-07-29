@@ -9448,3 +9448,57 @@ impossible.
 - Whether a map *not* in `assign_tbl` (195 of 227) can take coins at all. The
   allocator returns `-1` rather than asserting; what happens next is untested.
 - Whether added coins are visible and collectible. Still needs eyes.
+
+---
+
+## D131 — ✅ The item table becomes the *coin* table (2026-07-29)
+
+D130 established that the engine treats coins as a special case rather than one
+item type among many, and the naming should say so.
+
+`setupItemTemplates` holds one entry, and the spawner branches on
+`itemTemplateId == 1` at `0x80078c34`, taking a wholly different path from every
+other item. The two paths do not even fail alike:
+
+| | coins (template 1) | everything else |
+|---|---|---|
+| flag source | **static** budget in `assign_tbl` (DOL) | **dynamic** 32-entry table in RAM |
+| when exhausted | ⛔ **asserts** -- hangs the map | returns `-1` |
+| `-1` behaviour | never reached; asserts first | read as "not collected", spawns |
+
+Non-coin items degrade gracefully; coins assert. That asymmetry is the whole
+reason D127 cost four runs to understand, and it is not a detail a name should
+hide.
+
+### ✅ What changed
+
+`TableKind.ITEMS` -> `COINS`, `tables/items.csv` -> `tables/coins.csv`,
+`formats/tables/items.py` -> `coins.py`, `ItemEdit` -> `CoinEdit`, and inline
+`setup.<map>.items` -> `.coins`.
+
+⛔ **The `type` column is deleted, not kept-and-refused.** Refusing a non-zero
+`type` was the earlier design and it was worse: a column that exists to be
+rejected still advertises that something else might work. There is exactly one
+placeable type, so the honest schema has no field for it.
+
+⚠️ `setup.Item.type` stays in the *format* layer -- the bytes have that field and
+existing values round-trip. Only the authoring vocabulary drops it. The format
+says `SetupItem`; the thing you can actually place is a coin.
+
+Free today for the same reason D125 was: `tables` landed this session and has
+never been in a release.
+
+### ⛔ A self-inflicted detour worth recording
+
+Two scripted bulk edits went wrong in ways the tests caught but a careless eye
+would not:
+
+1. A Python slice computed `s[:start] + s[end:]` where `start > end`, which
+   **duplicated 89 lines** of `edits.py` rather than deleting a function. Caught
+   from `git diff --stat` showing insertions where deletions were expected.
+2. A heredoc rewrote `\n` inside test string literals as real newlines, breaking
+   four assertions into syntax errors.
+
+Both came from doing structural edits with text substitution because there were
+"only a few" call sites. There were fifty. Prefer a targeted edit per site, or
+verify with `git diff --stat` before trusting a scripted rewrite.

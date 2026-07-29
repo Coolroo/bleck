@@ -33,7 +33,7 @@ from bleck.mods.manifest.placements import (  # noqa: F401
     PLACEMENT_KINDS,
     PLANNED_KINDS,
     SPAWN_FLAGS,
-    ItemEdit,
+    CoinEdit,
     MapPlacements,
     PlacementEdit,
     TableKind,
@@ -230,9 +230,9 @@ def _map_json(placement: MapPlacements) -> object:
     mention items, and `bleck setup apply` writes this file back.
     """
     enemies = [edit.to_json() for edit in placement.edits]
-    if not placement.items:
+    if not placement.coins:
         return enemies
-    return {"enemies": enemies, "items": [item.to_json() for item in placement.items]}
+    return {"enemies": enemies, "coins": [coin.to_json() for coin in placement.coins]}
 
 
 def _parse_dependencies(raw: object, source: str) -> list[Requirement]:

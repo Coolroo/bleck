@@ -11,8 +11,8 @@ from bleck.api.v1.mods import (
     Table,
 )
 from bleck.api.v1.placements import (
+    CoinEdit,
     EnemyPlacement,
-    ItemEdit,
     MapPlacements,
     PlacementEdit,
     Position,
@@ -23,11 +23,11 @@ __all__ = [
     "API_VERSION",
     "Banner",
     "Code",
+    "CoinEdit",
     "Dependency",
     "Document",
     "EnemyPlacement",
     "Hook",
-    "ItemEdit",
     "MapPlacements",
     "ModDocument",
     "Patch",

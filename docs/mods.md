@@ -149,24 +149,30 @@ accepted and ignored. Read rows through `Manifest.tables_of(kind)`; iterating
 `manifest.tables` is the bug D125 removed, where every declared table was
 applied as enemy placements whatever it was called.
 
-### Items are not enemies (D126)
+### Coins are not enemies, and are not "items" either (D126, D130)
 
 `bleck/formats/tables/` is a package, one module per kind — `common.py` for the
-file's shape, `enemies.py` and `items.py` for what a row *means*. An enemy has
-one of 100 fixed `slot`s; an item is a position in a counted list, so its column
+file's shape, `enemies.py` and `coins.py` for what a row *means*. An enemy has
+one of 100 fixed `slot`s; a coin is a position in a counted list, so its column
 is `index` and **an empty one adds**. Inline, a map may be written as
-`{"enemies": [...], "items": [...]}`; a bare list still means enemies.
+`{"enemies": [...], "coins": [...]}`; a bare list still means enemies.
+
+⚠️ **`coins`, not `items`, because the engine says so.** `setupItemTemplates`
+holds one entry and the spawner branches on `itemTemplateId == 1`, taking a
+different path from every other item. A setup file can place nothing else, so
+there is no `type` column — the previous name invited authors to try.
 
 ⚠️ **`PLACEMENT_KINDS` gates the whole placement build.** A kind missing from it
 is skipped while `bleck mod check` still prints `chain OK` — that was the D126
 bug, and it survived a full green test suite because every unit tested a layer
 that worked.
 
-⛔ **Only 14 of 227 maps can hold items** (D127). Giving a section to a map that
-ships none hangs the game, so `edits.py` refuses it; changing the count of an
-existing one is untested and warns. Both tiers exist because this is the first
-thing in `bleck` that changes a setup file's **size** — the enemy array is 100
-fixed slots, so every earlier edit was size-preserving.
+⛔ **Only 14 of 227 maps can hold coins** (D127, D130). A coin is a save flag
+from a fixed per-map budget in `assign_tbl`, and the budget is spent by coins in
+*blocks* as well as floating ones — which never appear in a setup file. So a map
+with no floating coins has usually already spent it, and one more makes the game
+assert "the coin flags have overflowed". `edits.py` refuses it. Growing an
+existing section is fine (D129, measured).
 
 ✅ **Any enemy template can go in any map** (D127). Mr. L (137, `e_dark_luigi`)
 was placed on Lineland Road and fought normally. Models come from `files/a/` on
