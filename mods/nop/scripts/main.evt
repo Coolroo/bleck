@@ -1,0 +1,18 @@
+-- Deliberately empty.
+--
+-- This host has the REL loader enabled as a Dolphin Gecko cheat (D86), so every
+-- R8PP01 disc runs it -- including one built with no mod at all, which then
+-- reports "ERROR: mod.rel was not found". The loader is looking for a file a
+-- vanilla disc has no reason to carry.
+--
+-- So this mod exists to be found and do nothing: a valid mod.rel, an empty
+-- entry script, and `"banner": false` so the disc also looks stock. Use it when
+-- what you want is the unmodified game on a host that cannot boot one.
+--
+-- The empty body is safe as of D106. Before it, a script that fell off its end
+-- left its evt entry alive and hung the game, which this would have done
+-- immediately -- so this file is also the smallest possible regression test for
+-- that fix.
+
+script main {
+}

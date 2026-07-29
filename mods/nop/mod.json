@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "nop",
+  "version": "0.1.0",
+  "description": "Does nothing. Satisfies the Gecko loader so a stock-behaviour disc can boot on a host with the cheat enabled",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false
+  }
+}
