@@ -7729,3 +7729,704 @@ most of the game's enemies believing they changed a Goomba.
   no known addresses to search for.
 
 827 tests, pylint 10.00/10.
+
+---
+
+## D113 — ✅ The item table decoded, and two D109 statements are wrong (2026-07-28)
+
+An **unattended verification boot** of a new `mods/attended`, run purely to
+check the instrument before spending a human's time on it. It produced four
+findings before anybody touched a controller, which is the argument for the
+practice.
+
+### ⛔ "All 33 entries are effect items" (D109) is wrong
+
+`itemEventDataTable` holds these ids, in table order — read off the live table,
+not inferred:
+
+```
+41 42 43 44 45 46 47 48 49 4A 4B 4C 4D 4E 4F
+55 56 57 58 59 5A
+A0 A1 92 93 94 95 D0 A3 D6 CE B0 32
+```
+
+`item_data_ids.h` puts `ITEM_ID_USE_*` at 65–119 (0x41–0x77) and
+`ITEM_ID_COOK_*` at 120–215 (0x78–0xD7). So **twelve of the 33 are cooked
+items** (0x92–0x95, 0xA0, 0xA1, 0xA3, 0xB0, 0xCE, 0xD0, 0xD6) and **one is from
+the key range** (0x32). D109 looked at the first entries, generalised, and the
+generalisation reached the project instructions and the handoff.
+
+⛔ It stays true that **0x50 (Shroom Shake) and 0xD4 are absent** — which is what
+D109 was actually reasoning about, and why the last attended run learned
+nothing. The correction is to the *reason*, not the outcome.
+
+### ✅ Fourteen of the 33 do not open with `USER_FUNC`
+
+All 33 were patched at `at: 0` with `expect: USER_FUNC 4`. **19 applied, 14
+refused** — and the refusals are the guard working, not a defect:
+
+| opening word | entries | meaning |
+|---|---|---|
+| `0004005C` | 19 | `USER_FUNC` argc 4 — matched |
+| `00020032` | 13 | argc 2, opcode **0x32** — declined |
+| `0001000A` | 1 (id 0x32) | argc 1, opcode 0x0A — declined |
+
+The head of 0x46's script, dumped rather than guessed:
+
+```
+00020032 FE363C80 00000001   opcode 0x32, argc 2
+0001005F 803FBEF8            opcode 0x5F, argc 1
+0001005F 803FC868
+0003005C                     <- the first USER_FUNC, argc 3, at word 7
+```
+
+So a refused id is patchable at a different `at`, per id. 🔶 Only 0x46 was
+dumped; the other thirteen are assumed similar and that is not measured.
+
+### ⛔ `pouchGetPtr()` is NOT null in the attract demo
+
+D109 recorded it null "before the load, after the load, during `SEQ_GAME`, at
+every point tried" and built a conclusion on it — that the demo has no player
+session, so there is nothing to load into. This run read **`0x80511A28`**, every
+frame, in `ls4_12`.
+
+What *is* true is that `pouchAddItem(0x41)` **refuses** there — ~12,000 calls
+across a boot, every one returning false, and no crash. So the shape is "there
+is a pouch and it will not take an item", not "there is no pouch". D109's
+conclusion may still hold; ⛔ its stated evidence does not.
+
+⚠️ This is the fifth time a probe has reported a *derived* claim as a
+measurement. The null it saw was real; the pointer it was reading was not the
+one it named.
+
+### ✅ `npcdrv:2:death` is `USER_FUNC` argc **4**
+
+D112 left this as REFUSED with the opening word unrecorded. It is `0004005C`.
+Changing `expect` to `USER_FUNC 4` makes it **APPLIED**, so both npc patches now
+apply and `npcdrv:999` still reports NO_SCRIPT as the control.
+
+### ✅ `mods/attended` — both attended questions in one boot
+
+`item:` (🔶 since D92) and `npcdrv:` (🔶 since D112) both need a person: one
+needs a menu, the other needs an enemy hit. They share a save, a map (`he1_01`
+places two Goombas) and a boot, and **both write their report to the same
+address**, so they cannot simply run side by side. One report block with
+disjoint words merges them.
+
+Rejected alternatives:
+
+- ⛔ **Two mods, two boots.** Doubles a human's setup, and setup is the
+  expensive part, not the run.
+- ⛔ **A distinct handler per item id, for attribution.** False precision: 22
+  distinct scripts across 33 entries, so ids sharing a script overwrite each
+  other's patch and the last one wins. One shared handler makes that harmless.
+- ⛔ **Patching only the ids a player is likely to hold.** That is the mistake
+  the last attended run made in a different costume. All 33 are patched, and
+  the per-id status table is reported — because **a refused patch and a hook
+  that never fires produce the same zero**, and without the status table, using
+  an item whose guard declined would read as "the item hook does not work".
+
+The mod also grants a Fire Burst with `pouchAddItem`, retrying while refused and
+again whenever the pouch pointer moves, so the run does not depend on what the
+save happens to carry. 🔶 Whether that ever succeeds in a real session is
+unknown — it refuses in the demo.
+
+### ⚠️ The method, restated because it paid
+
+The run above was not an experiment. It was a check that the instrument works,
+made before asking a person for twenty minutes. It cost three unattended boots
+and returned: the real id list, the real opening words, a correct `expect` for
+`npcdrv:2:death`, and two corrections to D109. **Every one of those would
+otherwise have been discovered by burning an attended run.**
+
+---
+
+## D115 — ✅ BOTH attended hooks ENTER: item and npcdrv, one boot (2026-07-28)
+
+The attended run D113 built the instrument for. `mods/attended`, `he1_01`, save
+slot 1. Two 🔶 closed and a third finding nobody was looking for.
+
+⚠️ Numbered D115 because D114 was being written concurrently. Nothing was
+skipped.
+
+### ✅ The item hook ENTERS — 🔶 D92 closed, open since 2026-07-27
+
+`ITEM_ENTERED` went 0 → **1** at t+48s, when the player used a **Fire Burst**
+(id `0x41`, patch index 0, status **2 APPLIED**). Frame counter running, magic
+intact, every other precondition reported alongside.
+
+So the whole `item:` chain is proven end to end: resolve an id through
+`itemEventDataTable`, guard the opening word, overwrite it in place with a
+same-size `USER_FUNC`, and the game calls into the mod when the player uses the
+item.
+
+### ✅ The npcdrv hook ENTERS — 🔶 D112 closed, and NOT how it was expected to
+
+`NPC_ENTERED` went 0 → **1** at t+24s with `NPC_WHICH` = **2**, the *death*
+script. The onhit counter stayed at 0.
+
+⚠️ **The player hit a Squiglet, not a Goomba** — the Goombas were behind a wall.
+The patch targets `npcdrv:2` (Goomba); the Squiglet is template **250**. It
+fired anyway, because **280 templates share template 2's death script** — the
+number `bleck_patch_shared[]` reported at build time (D112).
+
+That is the first *in-game* confirmation that the sharing warning is real and
+load-bearing. An author who patched `npcdrv:2:death` believing they were editing
+Goombas would have edited most of the game's enemies, and would have found out
+from a Squiglet.
+
+⛔ The onhit script did not fire, and that is not a failure: only **40**
+templates share template 2's onhit, and the Squiglet is evidently not one of
+them. 🔶 Untested: whether hitting an actual Goomba fires onhit. The negative
+control held throughout — `npcdrv:999` stayed **4 NO_SCRIPT**.
+
+### ✅ A mod can put an item in the player's pouch
+
+`pouchAddItem(0x41)` **returned true** and `GRANT_ADDS` reached 1, in a real
+session. Unlooked-for, and it matters: `code.boot` can now set up a test's
+preconditions instead of asking a human to.
+
+⚠️ The interesting part is the failure that preceded it. **3,564 attempts
+refused** during the attract demo, then success the moment the save's session
+began — at the *same pouch pointer*, `0x80511A28`, throughout.
+
+⛔ **So a pointer's identity is not a session discriminator.** The probe was
+written to re-grant "whenever the pouch pointer moves", on the assumption that a
+new session means a new allocation. It never moved. What actually saved the run
+was the *other* rule — retry while refused — which was added for a different
+reason. Had only the pointer heuristic been there, the grant would have been
+recorded as impossible.
+
+That is the same family as D109's null-pouch reading, arriving from the opposite
+direction: **`pouchGetPtr()` is a stable address whose contents mean different
+things at different times**, and every conclusion drawn from the pointer alone
+has now been wrong twice.
+
+### What this leaves
+
+| | |
+|---|---|
+| `map:` | ✅ applied and entered (D88) |
+| `item:` | ✅ applied and entered — **here** |
+| `door:` | ✅ applied (D103, D104); 🔶 never observed entering |
+| `npcdrv:` | ✅ applied and entered — **here**, via `death` |
+
+🔶 `door:` is now the only selector never seen to run. It needs a human to walk
+through a door, which is a smaller ask than either of these were.
+
+---
+
+## D116 — ✅ `door:` ENTERS too — every selector is now proven end to end (2026-07-28)
+
+Attended run, `mods/door-attended`, `he1_01`, save slot 1. The player used the
+map's one door.
+
+| | status | enters |
+|---|---|---|
+| `door:he1_01:0:interact` | **2 APPLIED** | **62** |
+| `door:he1_01:0:init` | **2 APPLIED** | **1** |
+| `door:he1_01:0:move` | 3 REFUSED | — |
+| `door:he1_01:9:interact` | **4 NO_SCRIPT** | — |
+
+`ENTERED` = 63 = 62 + 1, so the per-script counters and the total agree.
+
+🔶 D103's gap, open since this morning, is closed. **All four selectors —
+`map:`, `item:`, `npcdrv:`, `door:` — have now been observed both applying and
+running in a live game.**
+
+### ✅ The measured `expect` worked
+
+D104 left `initScript`'s opening word unrecorded and its patch REFUSED. The
+verification boot read it — `0x0002001A`, opcode 0x1A argc 2, nothing like
+`interact`'s `MULF` — and with `expect` set to that word it **APPLIED**. Same
+loop as D103: guess, get REFUSED, read the word, apply. The guard is what makes
+the guess safe.
+
+### ✅ `moveScript` is an empty script, and it corroborates D106
+
+`DoorDesc[0].moveScript` (`0x80D2FB70`) opens `00000002 00000001` — `END_EVT`
+then `END_SCRIPT` — and the two words after it belong to `interactScript`
+(`0x80D2FB78`), which sits 8 bytes later. So the door's move script does nothing
+at all, and it is exactly two terminators.
+
+⚠️ That is an **independent confirmation of D106**, which was derived from a
+freeze rather than from an example: the compiler now emits `END_EVT` followed by
+`END_SCRIPT`, and here is the game's own empty script doing precisely that.
+D106 was reasoned to; this is the game agreeing.
+
+It also stays correctly REFUSED. A one-word instruction cannot be replaced by a
+two-word `USER_FUNC` without moving a label, which is why `bleck` rejects an
+argc-0 `expect` at build time.
+
+### ✅ D104's overwritten status field, fixed and the control finally seen
+
+D104 recorded that `STATUS(3)` and `GAME_FRAMES` shared `probe[5]`, so the
+out-of-bounds row was overwritten every frame and **its status was never
+observed**. The new layout is disjoint and the control read **4 NO_SCRIPT** —
+the first time that bound has actually been watched rather than assumed.
+
+Three descriptor pointers also matched D102's values, read by a different route
+in a different run: `0x80D2FB78`, `0x80D2F9E0`, `0x80D2FB70`.
+
+### 🔶 62 entries is not "used the door once"
+
+The interacts arrived in a single ~1 second burst — 62 entries at 60 fps is
+about one per frame. Two readings, and they are not equivalent:
+
+1. 🔶 The interact script is (re)started every frame while the player overlaps
+   the door.
+2. 🔶 **The patch broke the door.** `at: 0` replaces the original instruction —
+   the same-size rule carries the *arguments* through but not the *operation* —
+   so `interact`'s opening `MULF` is simply gone. If the door therefore never
+   opens, the player keeps standing in it and the script keeps retriggering,
+   which would produce exactly this.
+
+The map did not change during the run, which is consistent with (2) and not
+with a door that worked.
+
+⚠️ If (2) holds it is a general caution rather than a defect: **`code.patches`
+at `at: 0` destroys the instruction it replaces.** Observing without disturbing
+is what `code.hooks` `mode: "before"`/`"after"` exists for (D97), and a patch
+aimed at a script that must still function should target an instruction whose
+loss is harmless. Nothing measured yet distinguishes the two readings; the next
+step is to ask whether the door visibly opened.
+
+⛔ Do not record "the interact script runs per frame" as a finding on this
+evidence. It is one of two explanations and the cheaper one to test is the
+question, not another boot.
+
+---
+
+## D114 — ✅ `item:fire_burst`: the item table as a committed catalog (2026-07-28)
+
+⚠️ Out of order on purpose: 114 was reserved while D113 was still being written,
+and D115/D116 were appended before this landed. Appended rather than inserted,
+per the append-only rule.
+
+```json
+{ "script": "item:0x41",       "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+{ "script": "item:fire_burst", "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+```
+
+Both patch item 65. `item:<id>` was the only spelling since D92, and a number is
+unreadable: nothing in `0x41` says *Fire Burst*, so no patch could be reviewed
+without a lookup table in somebody's head. `bleck/formats/itemcatalog.json` is
+that table, committed, and `bleck/formats/items.py` resolves against it while the
+manifest is read.
+
+### ✅ The table decodes, and two independent sources agree
+
+538 entries at `itemDataTable` = `0x803F5F98`, stride `0x2C`, from
+spm-headers' `item_data.h`. Two cross-checks, both from *outside* the dump —
+which is the kind D112 says is the only kind that catches a shifted read:
+
+1. The next symbol in `spm.eu0.lst` is `itemEventDataTable` at `0x803FBC10`, and
+   `0x803FBC10 - 0x803F5F98 = 0x5C78 = 538 * 0x2C` **exactly**. The table ends
+   where the next symbol begins.
+2. Every id's `itemName`, read out of the game's `.data`, matches the
+   `ITEM_ID_*` constant at that position in `item_data_ids.h`, read out of a
+   header: id 0x41 is `HONOO_SAKURETU` and `ITEM_ID_USE_HONOO_SAKURETU`. Even
+   the odd lowercase in `COIN_x3` / `ITEM_ID_WORLD_COIN_x3` lines up. The dump
+   script fails loudly on any disagreement, and on the `/* 0x041 */` comments
+   disagreeing with member position.
+
+All 538 rows carry a non-empty `itemName`, an `ITEM_ID_*` constant, a `nameMsg`
+key and an English name.
+
+### ✅ The names are romaji, not English — and English is a second lookup
+
+⚠️ This is the finding most likely to be assumed wrong. `ItemData.itemName` is
+the *developers'* name:
+
+| id | `itemName` | `nameMsg` | English |
+|---|---|---|---|
+| 0x41 | `HONOO_SAKURETU` | `in_honoo_sakuretsu` | Fire Burst |
+| 0x42 | `KOORI_NO_IBUKI` | `in_koori_no_ibuki` | Ice Storm |
+| 0x45 | `POW_BLOCK` | `in_pow_block` | POW Block |
+| 0x47 | `KINKAI_100` | `in_kinkai_100` | Gold Bar |
+
+So `item:fire_burst` — the obvious thing to want to write — is **not** available
+from `itemDataTable` alone. `nameMsg` is a *key*, not text; it resolves in
+`files/msg/<lang>/*.txt`, which is a flat run of NUL-terminated `key\0value\0`
+pairs from byte 0. All 538 keys resolve in `files/msg/UK`, so the catalog carries
+an `english` column and `fire_burst` works.
+
+⚠️ Note `SAKURETU` (name) against `sakuretsu` (message key) — the two spellings
+of the same word are not derivable from each other. Anyone tempted to compute one
+from the other should not.
+
+### ✅ Read from `sys/main.dol`, not from a running game
+
+The table and every string it points at are static `.data`, so the DOL answers
+this without an emulator: no boot, no 2-minute run, no human, byte-identical
+every time. `scripts/dump_items.py` defaults to it and keeps `--boot` for the
+`dump_npcs.py`-style path.
+
+Rejected alternatives:
+
+- ⛔ **Boot and read live memory** (the specified approach, and what
+  `dump_npcs.py` does). Right for tables that are only populated at run time;
+  wasteful for one that ships in the binary. It also collided with reality: a
+  Dolphin was already running someone else's attended session, and a second one
+  makes `dolphin-memory-engine` attach to *a* Dolphin, not necessarily ours.
+- ⛔ **Attach to the Dolphin that was already running.** Correct in principle —
+  reads do not perturb a session, and it holds the same static table — but the
+  permission classifier refused the command twice, so it was not done.
+- ⛔ **Parse the DOL for strings and guess.** The catalog is only worth having if
+  the id beside each name is right; guessing is what the two cross-checks exist
+  to prevent.
+
+🔶 **The catalog has not been cross-checked against a running game.** Nothing
+suggests the game rewrites this table, and both checks above are strong, but
+"the DOL says X" is not "the running game says X" and should not be recorded as
+if it were. `uv run python scripts/dump_items.py --boot --out <tmp>` and a diff
+settles it in one boot.
+
+### ✅ Aliases in tiers, because a flat map is ambiguous far more often
+
+Four aliases per item — `itemName`, the full constant, the constant without
+`ITEM_ID_`, the constant without its group prefix as well, and the English name —
+matched case-insensitively with `-`, `_` and spaces equivalent. Matched in three
+tiers, most specific first, and **the first tier that matches decides**:
+
+| Tier | Aliases | Ambiguous |
+|---|---|---|
+| `itemName`, `ITEM_ID_*`, `*` without `ITEM_ID_` | 1605 | 8 |
+| the constant without its group prefix | 533 | 4 |
+| the English name | 494 | 22 |
+
+The English tier is last because it is where the collisions are:
+`Unavailable Item` is the English name of **18** ids (every unused world item),
+`Door Key` of six. Four internal names are shared by two items each — `MARIO`,
+`PEACH`, `KOOPA`, `LUIGI`, each a character item *and* its card.
+
+Rejected alternatives:
+
+- ⛔ **One flat alias map.** Would make `pow_block` ambiguous between an internal
+  name and an English one that happen to be the same word, when both name the
+  same item and one of them is more specific.
+- ⛔ **Falling through to the next tier when a tier is ambiguous.** It would
+  answer a different question than the one asked, silently.
+- ⛔ **Picking the lowest id when a name is shared.** `mario` would patch the
+  character item when the card was meant, report APPLIED, and be undiagnosable.
+  Ambiguity lists every candidate (capped at 6) and refuses.
+
+### ✅ The manifest keeps the name that was written
+
+`item:fire_burst` round-trips as `item:fire_burst`; only the build sees 65. The
+resolved id rides beside the target as `ScriptPatch.item_id` rather than
+replacing it.
+
+- ⛔ **Rejected: canonicalise to `item:0x41` on parse.** One line less code, and
+  it erases the readable half of a document an editor is meant to round-trip
+  (`docs/vision.md`). `bleck setup apply` already writes manifests back.
+- `ScriptPatch.__post_init__` refuses an item patch with no resolved id, because
+  a silent -1 would patch item id -1 and report NO_SCRIPT — "the game has no such
+  item" rather than "bleck built this wrong".
+
+### ⚠️ Names are a convenience; ids are not
+
+With no `itemcatalog.json` on disk, every id still parses and only a name errors,
+saying the catalog is absent and how to regenerate it. This is the `NpcNames`
+precedent (`bleck/formats/setup.py`) and it is load-bearing: a packaging mistake
+must not turn into "bleck cannot read my manifest". `bleck.spec` now bundles four
+catalogs, not three.
+
+### ⛔ Not built
+
+- **A `bleck items` command.** The error messages name the catalog file instead.
+  Worth building when someone needs to browse 538 items, not before.
+- **Localised names beyond `files/msg/UK`.** eu0 ships six other languages; a
+  selector that resolved differently per language would be a trap, not a feature.
+
+869 tests, pylint 10.00/10.
+
+---
+
+## D117 — ✅ The patched door still WORKS, and the rig missed the map change (2026-07-28)
+
+D116 left two readings of its 62 interact entries and said the question, not
+another boot, was the cheaper discriminator. It was.
+
+> "The door opened and took me to the guy who gives Mario the flipping powers'
+> house, and then a Tippi conversation opened. I closed the game."
+
+### ✅ Reading (1). The patch did NOT break the door
+
+⛔ D116's reading (2) is dead: the door opened, the map changed, the scripted
+conversation on the far side ran. So replacing `interactScript`'s opening
+instruction left the door fully functional.
+
+That is a stronger result than it sounds. The original word was `MULF` argc 2 —
+a float multiply on `0xFE363C80` (an evt variable) and `0xF1B1E5C7` (a float
+constant). `code.patches` preserves argument *count* and the trailing argument
+words but **destroys the operation**, so that multiply is simply gone, and the
+door works anyway.
+
+✅ So the 62 entries are real behaviour: one use of a door runs its interact
+script many times. 🔶 Whether that is a per-frame restart or a loop inside the
+script is still not established, and nothing here distinguishes them.
+
+⚠️ The general caution from D116 stands even though its specific reading was
+wrong: **`at: 0` replaces, it does not observe.** Losing a `MULF` was harmless
+here and will not always be. `code.hooks` `mode: "before"`/`"after"` (D97) is
+the tool for watching a script without altering it.
+
+### ⚠️ The rig reported `map=he1_01` for the entire run
+
+Every sample, t+6s through t+21s, read `he1_01`, and `seq` never left `GAME(2)`.
+The player was demonstrably in another map by the end.
+
+⛔ **This is not D70/D73/D74 again.** That was `seqWork.p0`, and D75 replaced it
+with `seq_mapchange_wp->mapName`, which survives a transition. The reader is
+the fixed one.
+
+🔶 The likely explanation is **sampling, not decoding**: the probe is read every
+3 s, the emulator ran at ~458 fps (`GAME_FRAMES` 2696 → 6821 across 9 wall
+seconds, ≈68 game-seconds), and the door was used somewhere around t+12s. A
+`MAPCHANGE` sequence lasting a second of game time can fall entirely between two
+samples, and the map name would then be re-read only after the next map's work
+was populated — which may not have happened before the run ended at t+24s.
+
+⚠️ Recording it as a finding **about the rig** rather than explaining it away,
+because "works by eye, invisible to the instrument" is the exact discrepancy
+the project instructions say went unspoken for a day.
+
+### The fix, when this next matters
+
+**Count, do not sample.** The probe already wraps all six sequence mains, so it
+can accumulate a per-sequence frame counter and a map-change counter in its own
+report block. A sequence that occurs for one frame is then *counted*, and cannot
+fall between two 3-second reads. `SEQ_SEEN` in D108 was the same idea, applied
+to the same class of problem, and this is the argument for making it standard
+rather than per-probe.
+
+⛔ Not doing it now: nothing currently open depends on it, and D71 is the
+recorded warning about building the instrument for a question nobody asked.
+
+---
+
+## D118 — ✅ The catalog checked against an independently measured id list (2026-07-28)
+
+D114 built `itemcatalog.json` from `sys/main.dol` and left 🔶 that it had never
+been checked against a running game. This is a cheaper check that is not the
+same one, and it passed.
+
+### ✅ 33 names resolved to the 33 ids D113 measured
+
+`mods/attended` patched all 33 entries of `itemEventDataTable` **by hex id**,
+taken from a live table read (D113). Rewriting the same manifest **by name** and
+regenerating produced the identical id column, in the identical order:
+
+```
+fire_burst -> 65   ice_storm -> 66   ...   return_pipe -> 50
+```
+
+Two chains that share no step — one reading the live `itemEventDataTable`, the
+other reading `itemDataTable` out of the DOL and a name out of `files/msg/UK` —
+land on the same 33 numbers. 🔶 D114's gap is narrower than it was, though not
+closed: both chains still read the same *table*, and only a `--boot` dump would
+show the game does not rewrite it.
+
+✅ It also made D113's oddest reading obvious rather than surprising. The one
+key-range id in the table, `0x32`, is **Return Pipe** — an item with a use
+script, which is exactly why it is there. As a number it looked like an anomaly
+worth explaining; as a name it explains itself. That is the whole argument for
+the catalog.
+
+### ✅ The ambiguity guard earned its place immediately
+
+`0xB0` is `Mistake`, and `Mistake` is the English name of more than one id, so
+the parser refuses it. `mods/attended` keeps that one row as `item:0xB0` beside
+32 names, which is the intended outcome: a name that cannot be resolved
+unambiguously is an error, not a coin toss, and hex remains available.
+
+### ✅ The generated comment names both the name and the id
+
+`ScriptPatch.selector` produced `item:65` regardless of what the author wrote —
+its docstring said "how this patch was written in the manifest" and it was not
+that. It now emits `item:fire_burst (65)`, or `item:0xB0 (176)`, and plain
+`item:65` only when the two would be redundant.
+
+The reason is D104's: a reader of generated C should not have to know that 80
+means `initScript`, and by the same token should not have to know that 65 means
+Fire Burst. The id stays because a name alone cannot be checked against a memory
+dump.
+
+---
+
+## D119 — ✅ `ItemId`: the ids as a generated enum, and why English names cannot be members (2026-07-28)
+
+D114 committed `itemcatalog.json` and resolved names out of its `enum` column —
+538 strings that Python only ever compared and sliced. The ids are a **closed
+set of bare values**, which is exactly D100's rule for when something becomes an
+enum, so they are now `ItemId` in `bleck/formats/itemids.py`, and the two alias
+tiers built from constants are built from *it* rather than from the JSON.
+
+```python
+ItemId.USE_HONOO_SAKURETU   # 65
+ItemId(0x20A).name          # 'CARD_MARIO'
+len(ItemId)                 # 538
+```
+
+`item:fire_burst`, `item:HONOO_SAKURETU`, `item:ITEM_ID_USE_HONOO_SAKURETU` and
+`item:0x41` all still reach 65, and a manifest still keeps the spelling its
+author wrote. 894 tests (872 before), pylint 10.00/10.
+
+### ⛔ English names are not enum members, and cannot be
+
+The obvious "finish the job" move — one member per spelling, or one enum with
+English aliases — is impossible, not merely unwise:
+
+- **`Unavailable Item` is the English name of 18 ids** and `Door Key` of six.
+  An `Enum` cannot hold one name against several values at all; the closest it
+  gets is alias machinery that would silently make two ids the *same object*.
+  That is precisely what the ambiguity guard exists to prevent, moved out of a
+  build error and into the type system where nothing could report it.
+- **They are not identifiers.** `POW Block`, `Gold Bar x3`, `Mistake!` —
+  normalising them into members would invent a spelling that appears in no
+  source, and the invented spelling would then be the one an error message
+  quoted back.
+- **They are localised.** `files/msg/UK` is one of seven languages on the disc
+  (D114). A member is a fact about the game; an English name is a fact about one
+  message file.
+
+So the split is: **`ItemId` holds what is 1:1 with an id; the JSON holds what is
+not.** `itemName` (romaji), the `nameMsg` key and the English text stay columns.
+
+### ✅ `itemName` adds no alias the enum lacks — measured, not assumed
+
+All 538 internal names equal their constant's bare form under `normalize`
+(`HONOO_SAKURETU` = `ITEM_ID_USE_HONOO_SAKURETU` minus its prefix and group).
+The count of disagreements is **0**.
+
+⚠️ Worth stating plainly because it is *nearly* a rule and must not be treated
+as one: D114 already recorded that `nameMsg`'s `in_honoo_sakuretsu` is **not**
+derivable from `HONOO_SAKURETU` (`SAKURETU` against `sakuretsu`), so this table
+is two names that agree and one that does not. `itemName` stays a column;
+nothing computes it from a member.
+
+The practical consequence, now pinned by a test: with no catalog on disk,
+`item:HONOO_SAKURETU` still resolves — as **tier 2**, via the constant, not as
+tier 1 via `itemName`. A test written expecting it to fail is what measured
+this.
+
+### ✅ An absent catalog is now *less* of a loss, deliberately
+
+D114's promise was "every id still works". It is now "every id and every
+`ITEM_ID_*` constant still works", because those live in a module rather than a
+data file. Only the English tier goes quiet.
+
+⚠️ This forced a reordering in `codespec._resolve_item`: it used to check `if
+not known` **first** and refuse every name. It now **resolves first** and falls
+back to "there is no catalog" only when resolution found nothing — because
+"bleck has no catalog" and "bleck has no such name" stopped being the same
+question. `TestWithoutTheCatalog` pins both halves, including the *absence* of
+the English name: a tier that quietly stopped working would look identical from
+the outside.
+
+### `ItemInfo.enum` is an `ItemId | None`, not a string
+
+Chosen, and it did come out cleaner: `_short`, `_bare` and `group` collapse to
+`.name` and one `split`, `ENUM_PREFIX` survives in exactly one place, and the
+row's `enum` column stops being read at all — the constant follows from the id,
+so a catalog and a module cannot disagree about it by construction.
+
+⚠️ **It costs the `IntEnum` trap, and the trap fired immediately.** `ItemId.NULL
+== 0`, so it is **falsy**:
+
+```
+assert all(found.name and found.enum for found in ...)   # reported item 0 unnamed
+assert all(found.name and found.enum is not None ...)    # correct
+```
+
+and `f"{info.enum}"` prints `65`, not `USE_HONOO_SAKURETU`, which would have put
+a bare number inside the `[ITEM_ID_CHAR_MARIO]` column of the ambiguity message.
+Both are answered by one property, `ItemInfo.constant`, now the only place a
+member becomes text. This is the hazard D100 recorded for `Sequence`, and it is
+worth noticing that *knowing about it in advance did not prevent it* — a test
+caught it.
+
+⛔ **Rejected: keep `enum: str`.** Zero migration and no falsy-member trap, but
+it leaves the constant duplicated between the module and the JSON with nothing
+tying them together, and leaves four string-slicing helpers in place.
+
+⛔ **Rejected: drop the JSON's `enum` column now that nothing reads it.** It is
+what lets the drift guard regenerate `itemids.py` in a clone with no spm-headers
+checkout. Keeping a column solely so a test can rebuild the module from it is a
+real cost, paid on purpose.
+
+### ✅ One read of the game, two projections
+
+`scripts/dump_items.py --enum-out` writes the module beside `--out`'s JSON, from
+the same parsed header and the same table read. `--enum-out` without `--headers`
+is refused *before* anything slow runs: a member name **is** its constant, so
+there is nothing to write, and learning that after a 90 s boot would be absurd.
+
+The renderer refuses to emit a module at all when a member name is not an
+identifier, is reserved, or when a name or a value repeats — a silently aliased
+member makes two different items the same object, and every lookup after it is
+wrong in a way nothing downstream can attribute.
+
+✅ The drift guard was checked against a positive: renaming one row's `enum` in
+memory makes the regenerated text differ. A comparison that could only ever
+report "same" would have been worth nothing.
+
+### ⚠️ `itemgen` lives in the package, not in `scripts/`
+
+Generation code inside a shipped package looks wrong, and the reason is
+concrete: the drift guard must call the **same** renderer the dump script calls,
+and `scripts/dump_items.py` cannot be imported on Linux at all — it imports
+`scripts/ingame.py`, which imports `scripts/keys.py`, which imports
+`ctypes.wintypes`, and that module raises on any non-Windows host. A test
+importing the dump script would pass on this Windows host and fail on the dev
+host.
+
+⛔ **Rejected: a standalone `scripts/itemenum.py` imported by the test.** Same
+one-renderer property, but pylint resolves imports from the repo root only, so
+`import itemenum` in a test is an `import-error`, and the fix is either a
+`sys.path` insert with a disable comment or a change to the shared pylint
+config. Not worth it for a 60-line module.
+
+⛔ **Rejected: the test reimplements the rendering.** Two renderers that must
+agree is the exact thing generating the enum was meant to avoid.
+
+⚠️ `itemgen` must never import `bleck.formats.items`, tempting though its
+`ENUM_PREFIX` is: `items` imports the generated module, so that edge makes the
+generator unimportable exactly when `itemids.py` is missing or broken — which is
+when it is needed. The constant is defined twice on purpose.
+
+### ⛔ `ItemId` reaches no published schema
+
+Checked, not assumed: `ModDocument.model_json_schema()` contains no `ItemId`,
+and `bleck mod schema` emits none. `code.patches[].script` is a `str` and stays
+one — a pydantic field typed with an `IntEnum` would rewrite every
+`"script": "item:fire_burst"` as a number on the next save, which is D100's
+`Sequence` finding applied before it could happen rather than after.
+`test_a_selector_round_trips_as_written` is the pin.
+
+### Two pylint failures the generated file had to answer
+
+Recorded because the fix is invisible in the output:
+
+1. **`invalid-name` on `WORLD_COIN_x3`.** The header really does spell it with a
+   lowercase `x` (D114 noticed the same oddity in `itemName`). A member must be
+   its constant exactly or the 1:1 that makes the enum checkable against the
+   header is gone, so the generated module disables the check with that sentence
+   beside it.
+2. **`line-too-long` on the regeneration command.** ruff's `E501` is off but
+   pylint's `C0301` is not. A shell `\` continuation inside a normal docstring
+   is read as a *Python* line continuation and eats the newline, so the
+   generated docstring is a **raw** string and the command wraps normally.
+
+⚠️ The generated text must also be byte-for-byte what `ruff format` produces:
+`bleck` is a lint target, so `scripts/lint.py --fix` rewrites the committed
+module in place, and any disagreement surfaces as a drift-guard failure with no
+obvious cause.
+
+### ⚠️ `codespec.py` is at the 1000-line pylint ceiling
+
+Adding this pushed it to 1004 and `too-many-lines` failed the build. It came
+back under by tightening prose — but the next addition to that module hits the
+same wall, and trimming comments to fit is the wrong answer twice. Splitting the
+selector parsers out of `codespec.py` is the work this defers.

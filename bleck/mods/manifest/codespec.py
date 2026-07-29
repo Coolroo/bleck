@@ -8,6 +8,7 @@ import difflib
 import re
 from dataclasses import dataclass, field
 
+from bleck.formats import items
 from bleck.mods.errors import ManifestError
 from bleck.script import emit, evt
 
@@ -84,7 +85,9 @@ class MapHook:
 
 #: Re-exported so a manifest reader need not know the enum lives in the emitter.
 #: `map:<name>` resolves through `mapDataPtr` (D88); `item:<id>` walks
-#: `itemEventDataTable` (D91).
+#: `itemEventDataTable` (D91), and its target may be written as a **name** --
+#: `item:fire_burst` -- which `bleck/formats/items.py` turns into an id while
+#: the manifest is read (D114).
 PatchKind = emit.PatchKind
 
 #: Kinds known to exist that have no mechanism yet, and why. Named separately so
@@ -106,6 +109,9 @@ class _Selector:
 
     kind: PatchKind
     target: str
+
+    item_id: int = -1
+    """The id an `item:` target names, once a name has been resolved."""
 
 
 @dataclass(frozen=True)
@@ -136,6 +142,22 @@ class ScriptPatch:
     call: str
     """A function in this mod's own sources, with evt's user-func signature."""
 
+    item_id: int = -1
+    """The id an `item:` target resolved to, -1 for every other kind.
+
+    Carried rather than re-derived, because `target` keeps whatever the manifest
+    said -- `fire_burst` as readily as `0x41` -- and a name is not a number.
+    """
+
+    def __post_init__(self) -> None:
+        # A silent -1 here would patch item id -1 and report NOT_FOUND, which
+        # reads as "the game has no such item" rather than "bleck built this
+        # wrong". Every path into an item patch goes through `build_patch`.
+        if self.kind is PatchKind.ITEM and self.item_id < 0:
+            raise ManifestError(
+                f"item patch {self.target!r} was built without a resolved id"
+            )
+
     @property
     def selector(self) -> str:
         return f"{self.kind}:{self.target}"
@@ -153,7 +175,7 @@ class ScriptPatch:
         -1 for `map:`, which needs neither.
         """
         if self.kind is PatchKind.ITEM:
-            return int(self.target, 0)
+            return self.item_id
         if self.kind is PatchKind.DOOR:
             return int(self.target.split(":")[1], 0)
         if self.kind is PatchKind.NPC:
@@ -587,11 +609,12 @@ def build_patch(script: str, at: int, expect: str, call: str, where: str) -> Scr
         expect=expect,
         expect_word=_parse_expect(expect, where),
         call=call,
+        item_id=selector.item_id,
     )
 
 
 def _parse_selector(raw: str, where: str) -> _Selector:
-    """Split `map:he1_01` or `item:0x41` into its kind and its target."""
+    """Split `map:he1_01`, `item:0x41` or `item:fire_burst` into kind and target."""
     name, _, target = raw.partition(":")
     if name in DEFERRED_PATCH_KINDS:
         raise ManifestError(
@@ -604,12 +627,12 @@ def _parse_selector(raw: str, where: str) -> _Selector:
         raise ManifestError(
             f"{where}: 'script' is {raw!r}, which names no script bleck can "
             f"reach.\n  Supported selectors: {emit.SUPPORTED_SELECTORS}.\n"
-            f"  'map:he1_01' patches that map's init script; 'item:0x41' "
-            f"patches that item's use script; 'door:he1_01:0' patches the "
-            f"interact script of that map's first door."
+            f"  'map:he1_01' patches that map's init script; 'item:0x41' (or "
+            f"'item:fire_burst') patches that item's use script; 'door:he1_01:0' "
+            f"patches the interact script of that map's first door."
         )
     if kind is PatchKind.ITEM:
-        return _Selector(kind=kind, target=_parse_item_id(target, where))
+        return _parse_item_target(target, where)
     if kind is PatchKind.DOOR:
         return _Selector(kind=kind, target=_parse_door(target, where))
     if kind is PatchKind.NPC:
@@ -716,24 +739,80 @@ def _check_door_script(name: str, raw: str, where: str) -> None:
     )
 
 
-def _parse_item_id(raw: str, where: str) -> str:
-    """Check an `item:` target is a whole number, and hand it back as written.
+def _parse_item_target(raw: str, where: str) -> _Selector:
+    """Resolve an `item:` target: a whole number, or a name from the catalog.
 
-    ⚠️ Membership is not checked here: `itemEventDataTable` lives in the game's
-    data, so "is there such an item" is a run-time question. The generated code
-    answers it with a NOT_FOUND status rather than patching a fallback.
+    The target is handed back **as written**, with the id beside it. A manifest
+    that says `fire_burst` still says `fire_burst` after a round trip -- the
+    number is what the build needs, not what the author wrote (D114).
+
+    ⚠️ Membership is not checked for a number: `itemEventDataTable` lives in the
+    game's data, so "is there such an item" is a run-time question. The generated
+    code answers it with a NOT_FOUND status rather than patching a fallback. A
+    *name* is checked, because the catalog is what turns it into a number at all.
     """
     try:
         value = int(raw, 0)
     except ValueError:
-        raise ManifestError(
-            f"{where}: {raw!r} is not an item id. Write a number, decimal or "
-            f"hexadecimal -- 'item:65' or 'item:0x41'.\n"
-            f"  `mods/item-probe` reports the ids itemEventDataTable holds."
-        ) from None
+        resolved = _resolve_item(raw, where)
+        return _Selector(kind=PatchKind.ITEM, target=raw, item_id=resolved)
     if value < 0:
         raise ManifestError(f"{where}: item id {raw!r} cannot be negative")
-    return raw
+    return _Selector(kind=PatchKind.ITEM, target=raw, item_id=value)
+
+
+#: How many candidates an ambiguous item name lists before it summarises.
+AMBIGUOUS_SHOWN = 6
+
+
+def _resolve_item(raw: str, where: str) -> int:
+    """The id a written item name means, or a `ManifestError` saying why not.
+
+    ⚠️ Resolution runs **before** the catalog is checked for: since `ItemId` is
+    a module, an `ITEM_ID_*` constant resolves with no JSON on disk and only the
+    English name needs one (D119). Asking first is what tells the two apart.
+    """
+    known = items.catalog()
+    match = known.resolve(raw)
+    if match.item is not None:
+        return match.item.id
+    if match.ambiguous:
+        # Capped: `unavailable_item` is the English name of eighteen ids, and a
+        # wall of them buries the sentence that says what to do about it.
+        shown = match.ambiguous[:AMBIGUOUS_SHOWN]
+        # ⚠️ `constant`, never `enum`: an `ItemId` is an int and formats as one.
+        listed = "\n".join(
+            f"    {found.selector:<12} {found.describe()}  [{found.constant}]"
+            for found in shown
+        )
+        rest = len(match.ambiguous) - len(shown)
+        more = f"\n    ... and {rest} more" if rest else ""
+        raise ManifestError(
+            f"{where}: {raw!r} names {len(match.ambiguous)} items, so bleck "
+            f"cannot tell which one is meant:\n{listed}{more}\n"
+            f"  Write the id, or the full ITEM_ID_* constant."
+        )
+    hint = (
+        f"\n  Did you mean {', '.join(repr(near) for near in match.near)}?"
+        if match.near
+        else ""
+    )
+    if not known:
+        raise ManifestError(
+            f"{where}: {raw!r} is a name, and bleck has no item catalog to "
+            f"resolve it with ({items.ITEM_CATALOG} is missing) -- without it "
+            f"only the ITEM_ID_* constants resolve, since those live in "
+            f"itemids.py.{hint}\n  Write the id instead -- 'item:65' or "
+            f"'item:0x41' -- or regenerate it with scripts/dump_items.py."
+        )
+    raise ManifestError(
+        f"{where}: {raw!r} is neither an item id nor an item bleck knows.{hint}\n"
+        f"  An item is written as a number -- 'item:65', 'item:0x41' -- or as a "
+        f"name: its internal name ('HONOO_SAKURETU'), its constant "
+        f"('ITEM_ID_USE_HONOO_SAKURETU'), or its English name ('fire_burst').\n"
+        f"  All {len(known)} names are in {items.ITEM_CATALOG.name}; "
+        f"`mods/item-probe` reports which ids itemEventDataTable holds."
+    )
 
 
 def _parse_expect(raw: str, where: str) -> int:

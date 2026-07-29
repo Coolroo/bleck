@@ -301,12 +301,80 @@ declarative since D90:
 |---|---|---|
 | `map:he1_01` | `mapDataPtr("he1_01")->initScript` | ✅ measured end to end (D89, D90, D92) |
 | `item:0x41` | the `itemEventDataTable` entry with that `itemId`, then its `useScript` | ✅ resolves, guard matches, bytes change (D92). 🔶 the hook has never been observed *entering* |
+| `item:fire_burst` | the same item, named rather than numbered (D114) | ✅ resolved from the committed catalog while the manifest is read |
 | `door:he1_01:0` | `mapDataPtr(map)->initScript`, walked for `evt_door_set_door_descs`, then `descs[index].interactScript` | ✅ resolves, guard matches, bytes change (D103). 🔶 the hook has never been observed *entering* |
 | `door:he1_01:0:init` | the same door's `initScript` (+0x50); `move` is +0x54 | ✅ the three pointers cross-check against D102 (D104). 🔶 never entered |
 
 ⛔ **`DEFERRED_PATCH_KINDS` is now empty.** `door` was its only member; it is a
 real kind. The dict stays as the shape for the next kind that is explained and
 refused.
+
+### `item:<id|name>`
+
+```json
+{ "script": "item:0x41",       "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+{ "script": "item:fire_burst", "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+```
+
+Both lines name item 65. A target that parses as a number — decimal or `0x` hex
+— is used as written and never looked up; anything else is a **name**, resolved
+while the manifest is read, so a typo fails the build instead of patching
+whatever id it happened to mean (D114).
+
+Names come from two committed artifacts, and which one supplies which spelling
+matters (D119):
+
+| Artifact | Holds | Written by |
+|---|---|---|
+| `bleck/formats/itemids.py` | `ItemId`, one member per id, named after its `ITEM_ID_*` constant | **generated** — `scripts/dump_items.py --enum-out` |
+| `bleck/formats/itemcatalog.json` | `itemName`, the message key, and the English name that key resolves to | `scripts/dump_items.py --out` |
+
+Both come out of **one** read of the game, so they cannot disagree;
+`tests/test_items.py` regenerates the module from the JSON and compares the
+text, which is the whole reason the module is generated rather than typed.
+
+Four spellings of one item are accepted, matched case-insensitively with `-`,
+`_` and spaces all equivalent:
+
+| Written | Where it comes from |
+|---|---|
+| `0x41`, `65` | the id itself |
+| `HONOO_SAKURETU` | `ItemData.itemName`, the internal name — **romaji, not English** |
+| `ITEM_ID_USE_HONOO_SAKURETU`, `USE_HONOO_SAKURETU`, `HONOO_SAKURETU` | the constant from spm-headers' `item_data_ids.h`, with `ITEM_ID_` and the group prefix each optional |
+| `fire_burst` | the English name, from `files/msg/UK` |
+
+✅ **`itemName` and the bare constant are the same word for all 538 items** —
+measured, not assumed (D119). So the internal-name row above adds no alias the
+enum does not already carry, and `item:HONOO_SAKURETU` keeps working with no
+catalog on disk. The catalog's unique contribution to *resolution* is the
+English column alone.
+
+⚠️ **The name you write is the name the manifest keeps.** `item:fire_burst`
+round-trips as `item:fire_burst`; only the build sees `65`. Rewriting it to the
+id would erase the readable half of the document an editor is meant to hold
+(`docs/vision.md`).
+
+⚠️ **An ambiguous name is refused, not guessed.** Four internal names are shared
+by two items each (`MARIO`, `PEACH`, `KOOPA`, `LUIGI` — the character item and
+its card), and English names collide far more often: `Unavailable Item` is the
+name of eighteen ids. Those report every candidate and ask for the id or the
+full `ITEM_ID_*` constant.
+
+⚠️ **Names are a convenience.** With no catalog on disk, every id still works,
+and so does every `ITEM_ID_*` constant — those live in `itemids.py`, which is a
+module rather than a data file. Only the **English** tier goes quiet, and it
+errors saying the catalog is missing and how to regenerate it (D119).
+
+⚠️ **`ItemId` is an `IntEnum`, so a member *is* an `int`.** `f"{ItemId.NULL}"`
+is `"0"`, and `ItemId.NULL` is falsy — `if info.enum` reports item 0 as
+unnamed, which it did the first time the enum landed. Test with `is not None`;
+print `ItemInfo.constant`, which is the one place a member becomes text. The
+same trap is `Sequence`'s in D100.
+
+⛔ **`ItemId` is not in any published schema.** A pydantic field typed with an
+`IntEnum` would rewrite every `"script": "item:fire_burst"` as a number on the
+next save. The v1 API's `script` stays a plain string, and the selector
+round-trip test is what pins it.
 
 ### `door:<map>:<index>[:interact|init|move]`
 

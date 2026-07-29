@@ -149,6 +149,38 @@ refuses is a single-word instruction, where the pointer would not fit.
 `map:<name>` is a map's init script, `item:<id>` is an item's use script, and
 `door:<map>:<index>` is a door's script.
 
+#### Items, by name
+
+An item may be written by name instead of by number. These all patch item 65:
+
+```json
+{ "script": "item:0x41",                       "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+{ "script": "item:fire_burst",                 "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+{ "script": "item:HONOO_SAKURETU",             "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+{ "script": "item:ITEM_ID_USE_HONOO_SAKURETU", "at": 0, "expect": "USER_FUNC 4", "call": "on_use" }
+```
+
+You can write the English name (`fire_burst`), the game's internal name
+(`HONOO_SAKURETU` — romaji, not English), or the `ITEM_ID_*` constant with the
+`ITEM_ID_` and group prefixes optional. Case, `-`, `_` and spaces do not matter.
+The name is resolved to an id while your manifest is read, so a misspelling
+fails the build with a suggestion — and your `mod.json` keeps the name you
+wrote.
+
+!!! warning "Some names mean more than one item"
+
+    `mario` is both the character item and its card, and `unavailable item` is
+    the English name of eighteen unused ids. `bleck` lists the candidates and
+    refuses rather than picking one; write the id or the full `ITEM_ID_*`
+    constant.
+
+!!! note "If the item catalog is missing"
+
+    Ids and `ITEM_ID_*` constants always work — they are built into `bleck`.
+    English names come from a data file shipped alongside it, so if that file
+    is missing, `item:fire_burst` reports what happened and how to restore it
+    while `item:65` and `item:ITEM_ID_USE_HONOO_SAKURETU` carry on.
+
 #### Doors
 
 A door selector is `door:<map>:<index>[:interact|init|move]`. The last part

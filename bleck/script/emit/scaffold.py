@@ -398,6 +398,13 @@ class ScriptPatch:
             named = _DOOR_BY_OFFSET.get(self.field_offset, "?")
             return f"{self.kind}:{self.target}:{self.index}:{named}"
         if self.kind is PatchKind.ITEM:
+            # `target` is whatever the author wrote -- a name like `fire_burst`,
+            # or `0x41`. Naming it *and* the id it resolved to is the point of
+            # the comment: a reader of the generated C should not have to look
+            # 65 up, and an author checking a name resolved as intended should
+            # not have to convert hex. Only the bare decimal id is redundant.
+            if self.target and self.target != str(self.index):
+                return f"{self.kind}:{self.target} ({self.index})"
             return f"{self.kind}:{self.index}"
         if self.kind is PatchKind.NPC:
             named = _NPC_BY_OFFSET.get(self.field_offset, "?")

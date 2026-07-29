@@ -12,6 +12,7 @@ import re
 import pytest
 
 from bleck.api import v1
+from bleck.formats import items
 from bleck.mods import code
 from bleck.mods import manifest as mod_manifest
 from bleck.mods.registry import Mod
@@ -216,12 +217,44 @@ class TestPatchKind:
     """The kind is half of a wire string -- `map:he1_01` -- so the enum has to
     survive a round trip through `mod.json` without leaking its member name."""
 
-    @pytest.mark.parametrize("selector", ["map:he1_01", "item:0x41", "item:65"])
+    @pytest.mark.parametrize(
+        "selector", ["map:he1_01", "item:0x41", "item:65", "item:fire_burst"]
+    )
     def test_a_selector_round_trips_as_written(self, selector):
         expect = "USER_FUNC 4" if selector.startswith("item") else "DEBUG_PUT_MSG"
         written = manifest({**WHOLE, "script": selector, "expect": expect}).to_json()
         assert f'"script": "{selector}"' in written
         assert "PatchKind" not in written
+
+    @pytest.mark.parametrize(
+        ("selector", "expected"),
+        [
+            ("item:fire_burst", "item:fire_burst (65)"),
+            ("item:0x41", "item:0x41 (65)"),
+            ("item:65", "item:65"),
+        ],
+    )
+    def test_the_generated_comment_names_the_item_and_its_id(self, selector, expected):
+        """Reading `mod.c` should not need a lookup table in somebody's head.
+
+        The comment used to say `item:65` whatever the author wrote, which threw
+        away the more informative half: a name says what was meant, and the id
+        says what it resolved to. Only a bare decimal id is redundant with
+        itself.
+        """
+        patch = manifest(
+            {**WHOLE, "script": selector, "expect": "USER_FUNC 4"}
+        ).code.patches[0]
+        emitted = emit.ScriptPatch(
+            kind=patch.kind,
+            target=patch.emit_target,
+            at=patch.at,
+            expect=patch.expect_word,
+            call=patch.call,
+            index=patch.index,
+            field_offset=patch.field_offset,
+        )
+        assert emitted.selector == expected
 
     def test_the_supported_list_is_derived_from_the_members(self):
         """It used to be prose sitting two lines below the tuple it described,
@@ -437,9 +470,9 @@ class TestManifest:
     def test_a_map_patch_needs_neither(self):
         assert manifest(WHOLE).code.patches[0].index == -1
 
-    def test_a_non_numeric_item_id_is_refused(self):
+    def test_a_name_that_is_no_item_is_refused(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:
-            manifest({**WHOLE, "script": "item:fire-burst"})
+            manifest({**WHOLE, "script": "item:fire-blast", "expect": "USER_FUNC 4"})
         assert "item:0x41" in str(caught.value)
 
     def test_an_object_instead_of_a_list_is_refused(self):
@@ -447,6 +480,95 @@ class TestManifest:
             mod_manifest.Manifest.from_json(
                 '{"name": "m", "code": {"script": "s", "patches": {}}}'
             )
+
+
+@pytest.mark.skipif(not items.ITEM_CATALOG.is_file(), reason="no item catalog")
+class TestItemNames:
+    """`item:fire_burst` where `item:0x41` was the only spelling (D114).
+
+    The id path is untouched by design, so it is checked alongside every name
+    form rather than trusted to have survived.
+    """
+
+    def patch(self, target: str):
+        return manifest(
+            {**WHOLE, "script": f"item:{target}", "expect": "USER_FUNC 4"}
+        ).code.patches[0]
+
+    @pytest.mark.parametrize(
+        "target",
+        [
+            "0x41",
+            "65",
+            "HONOO_SAKURETU",
+            "honoo_sakuretu",
+            "USE_HONOO_SAKURETU",
+            "ITEM_ID_USE_HONOO_SAKURETU",
+            "fire_burst",
+            "FIRE-BURST",
+            "Fire Burst",
+        ],
+    )
+    def test_every_spelling_reaches_the_same_item(self, target):
+        assert self.patch(target).index == 0x41
+
+    def test_the_name_written_is_the_name_kept(self):
+        """A manifest is a document an editor round-trips (`docs/vision.md`), so
+        resolving `fire_burst` to `0x41` in the file would erase what was said."""
+        parsed = self.patch("fire_burst")
+        assert parsed.target == "fire_burst"
+        assert parsed.selector == "item:fire_burst"
+        written = manifest(
+            {**WHOLE, "script": "item:fire_burst", "expect": "USER_FUNC 4"}
+        ).to_json()
+        assert '"script": "item:fire_burst"' in written
+
+    def test_an_unknown_name_suggests_a_near_one(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            self.patch("fire_blast")
+        assert "Did you mean" in str(caught.value)
+        assert "fire_burst" in str(caught.value)
+
+    def test_a_shared_name_is_ambiguous_rather_than_guessed(self):
+        """`MARIO` is both the character item and its card. Picking one would
+        patch the wrong script and report success."""
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            self.patch("mario")
+        message = str(caught.value)
+        assert "names 2 items" in message
+        assert "ITEM_ID_CHAR_MARIO" in message
+        assert "ITEM_ID_CARD_MARIO" in message
+
+    def test_a_long_ambiguity_is_summarised(self):
+        """`Unavailable Item` is the English name of eighteen ids."""
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            self.patch("unavailable_item")
+        assert "and 12 more" in str(caught.value)
+
+
+class TestWithoutTheItemCatalog:
+    """⚠️ Names are a convenience. Losing the catalog must not cost anyone an
+    id, and must say so plainly for anyone who wrote a name."""
+
+    @pytest.fixture(autouse=True)
+    def _absent(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(items, "ITEM_CATALOG", tmp_path / "absent.json")
+        items.catalog.cache_clear()
+        yield
+        items.catalog.cache_clear()
+
+    def test_an_id_still_works(self):
+        parsed = manifest(
+            {**WHOLE, "script": "item:0x41", "expect": "USER_FUNC 4"}
+        ).code.patches[0]
+        assert parsed.index == 0x41
+
+    def test_a_name_says_the_catalog_is_missing(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "script": "item:fire_burst", "expect": "USER_FUNC 4"})
+        message = str(caught.value)
+        assert "no item catalog" in message
+        assert "dump_items.py" in message
 
 
 class TestExpect:

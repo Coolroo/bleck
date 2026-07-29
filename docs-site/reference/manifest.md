@@ -168,6 +168,7 @@ Every mod has a `mod.json` at its root.
                 |---|---|
                 | `map:he1_01` | that map's init script |
                 | `item:0x41` | that item's use script |
+                | `item:fire_burst` | the same, by name |
                 | `door:he1_01:0` | that door's interact script |
                 | `door:he1_01:0:init` | that door's init script |
                 | `door:he1_01:0:move` | that door's move script |
@@ -186,6 +187,20 @@ Every mod has a `mod.json` at its root.
                 cannot be checked while building: one past the end resolves
                 to nothing and reports status `4` at run time rather than
                 writing anywhere.
+
+                An **item** may be a number (`item:65`, `item:0x41`) or a
+                name: its English name (`fire_burst`), its internal name
+                (`HONOO_SAKURETU`), or its `ITEM_ID_*` constant with the
+                `ITEM_ID_` and group prefixes optional. Case, `-`, `_` and
+                spaces are all equivalent. Names resolve while the manifest
+                is read, and the manifest keeps the one you wrote. A name
+                that means two items — `mario` is a character item *and* a
+                card — is refused with the candidates listed.
+
+                Ids and `ITEM_ID_*` constants are built into `bleck`;
+                English names come from a data file shipped beside it. If
+                that file is missing, only the English spelling stops
+                resolving, and it says so.
             - `at` — word offset into the script where the instruction begins.
             - `expect` — the opcode you expect to find there. **Required.**
               An opcode name (`"DEBUG_PUT_MSG"`), a name with its argument

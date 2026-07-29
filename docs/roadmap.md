@@ -94,8 +94,10 @@ wiki or repository:
 - ✅ A PowerPC code patch needs `dcbst`/`sync`/`icbi`/`isync`, measured against
   a no-flush control that silently did nothing (D94).
 - ✅ `GetBasicPlayer` returns `arg0 + 0xD8`, and it is in no header (D96).
-- ✅ `itemEventDataTable` holds 33 entries, all *effect* items — an item with no
-  scripted use, like Shroom Shake, is simply absent (D107 follow-up).
+- ✅ `itemEventDataTable` holds 33 entries — 20 from the *use* range, 12 cooked,
+  one from the key range; the full id list is in D113. An item with no scripted
+  use, like Shroom Shake, is simply absent. ⛔ D109 said "all effect items" and
+  that is wrong; only 19 of the 33 even open with `USER_FUNC`.
 - ✅ The self-healing detour: a function can be watched, arguments **and**
   return value, without a trampoline (D96).
 - ✅ A door's interact script opens with `MULF`, so there is no useful default

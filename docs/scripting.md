@@ -300,18 +300,35 @@ are carried through untouched, which for a `USER_FUNC` target reads as *redirect
 the call, keep its arguments*. The only size `bleck` refuses at build time is a
 **one-word** instruction, where the function pointer would not fit (D91, D92).
 
-Three selector kinds resolve: `map:<name>` through `mapDataPtr`, `item:<id>`
-through `itemEventDataTable`, and `door:<map>:<index>[:interact|init|move]`
-through the map's init script (D103, D104). ⚠️ Item scripts are shared — 22
-distinct scripts across 33 entries — so patching one id can change several; the
-generated code reports how many in `bleck_patch_shared[]`. ⛔ `door:` was
+Three selector kinds resolve: `map:<name>` through `mapDataPtr`,
+`item:<id|name>` through `itemEventDataTable`, and
+`door:<map>:<index>[:interact|init|move]` through the map's init script (D103,
+D104). ⚠️ Item scripts are shared — 22 distinct scripts across 33 entries — so
+patching one id can change several; the generated code reports how many in
+`bleck_patch_shared[]`. An item may be **named** instead of numbered —
+`item:fire_burst`, `item:HONOO_SAKURETU`, `item:ITEM_ID_USE_HONOO_SAKURETU` are
+all id 65 — resolved while the manifest is read, and kept as written afterwards
+(D114). The ids themselves are a **generated** `IntEnum`, `ItemId` in
+`bleck/formats/itemids.py`, and the committed catalog adds only the names that
+cannot be derived from an id (D119) — so a constant resolves even with no
+catalog on disk, while an English name does not. ⚠️ Only the *id* reaches the
+game: a name is a spelling of the number, not a second lookup at run time.
+⚠️ An `ItemId` member is an `int` and formats as one, so it never goes near a
+manifest or a published schema. ⛔ `door:` was
 deferred and is not any more: `DoorDesc` still has no lookup by name (D91), so
 the index is a **position** in the array the map registers, walked out of the
 init script's bytecode. ⚠️ A door interact script opens with `MULF`, so `expect`
-must be measured per door. ⛔ `npcdrv:` is still not a selector, and 🔶 it is
-not the same shape as `door:` — an NPC's script pointers are fields on a live
-`NPCEntry`, copied in at spawn, so nothing carries them at `mod_prolog` (D107).
-See [`function-behaviour.md`](function-behaviour.md) for what is measured.
+must be measured per door. ✅ `npcdrv:<template>:<init|move|onhit|death>`
+resolves an enemy's behaviour scripts through `npcEnemyTemplates` (D110–D112).
+⛔ **D107 said this was impossible** — it found the script pointers on a live
+`NPCEntry`, copied in at spawn, and concluded nothing carried them at
+`mod_prolog`. They are copied *from* somewhere, and that somewhere is static.
+⚠️ Enemy scripts are shared far more heavily than item scripts: **280**
+templates share a Goomba's death script and **40** its onhit, so
+`npcdrv:2:death` changes most of the game's enemies. `bleck_patch_shared[]`
+reports the count, and D115 confirmed it in-game — a patch aimed at a Goomba
+fired on a Squiglet. See [`function-behaviour.md`](function-behaviour.md) for
+what is measured.
 
 ⚠️ **The guard is not optional, and it is the point.** A patch that writes into
 an unexpected script is the failure mode worth designing out: without it, a

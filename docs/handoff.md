@@ -732,7 +732,7 @@ change and runs the same `pytest` and `lint.py` a contributor runs.
 
 ### ⚠️ The two packaging traps, both already hit
 
-1. **The three JSON catalogs are found with `Path(__file__).with_name()`**, so
+1. **The four JSON catalogs are found with `Path(__file__).with_name()`**, so
    they must be bundled at paths mirroring the package. Get it wrong and the
    binary starts happily and then reports an *empty* catalog — which reads as a
    corrupt install rather than a build bug.
@@ -1003,28 +1003,31 @@ pushed; `main` is at **827 tests, pylint 10.00/10, mkdocs --strict clean**.
 
 ## What needs a human, with exact commands
 
-**1. The item hook** — 🔶 open since D92. ⛔ **Not** Shroom Shake: it has no
-scripted use. `itemEventDataTable` holds 33 entries, all *effect* items — use
-**Fire Burst, POW Block, Stopwatch, Ice Storm or Thunder Rage**.
+✅ **1 and 2 are done** (D115). `mods/attended` merged them into one boot and
+both hooks were observed *entering*: an item (Fire Burst) and an npcdrv death
+script. `pouchAddItem` also works from a mod, which was not what anyone was
+looking for. Re-run it with:
 
 ```powershell
-uv run python scripts/ingame.py item-use --words 46 --seconds 300
+uv run python scripts/ingame.py attended --words 161 --seconds 420
 ```
 
-Load the save, use the item, watch word 5 (`ENTERED`).
-⚠️ `mods/item-use/mod.json` still patches ids `0x50`/`0xD4`, which are **not in
-the table** — repoint it at a real id first.
+✅ **The door hook too** (D116, D117). `mods/door-attended`, one walk through
+`he1_01`'s single door: `interact` entered **62** times, `init` once, and the
+door still worked afterwards — so replacing an instruction did not break the
+script it sat in.
 
-**2. The npcdrv handler** — needs an enemy hit.
+**Every selector is now proven applying *and* running in a live game**:
+`map:` (D88), `item:` and `npcdrv:` (D115), `door:` (D116). That was the whole
+outstanding 🔶 set, closed in three runs of a human's time.
 
-```powershell
-uv run bleck mod build npc-patch --force
-uv run python scripts/ingame.py npc-patch --map he1_01 --words 12 --seconds 300
-```
+⚠️ One open instrument question came out of it: the rig reported `map=he1_01`
+for a run in which the player demonstrably changed maps. ⛔ Not the old
+`seqWork.p0` bug — D75 fixed that. 🔶 Probably 3-second sampling against a
+~458 fps emulator. The fix, when something depends on it, is in D117: **count
+sequences in the probe, do not sample them.**
 
-Hit a Goomba; watch word 10.
-
-**3. The release tag** — the only never-run CI path.
+**1. The release tag** — the only never-run CI path.
 
 ```powershell
 git tag v0.1.0-rc1; git push origin v0.1.0-rc1
