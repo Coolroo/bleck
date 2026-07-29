@@ -237,6 +237,7 @@ def check(
     report.code_builds = compile_code(chain, override)
     report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
+    report.warnings += [note for b in report.placement_builds for note in b.warnings]
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan, report.placement_builds)
@@ -255,6 +256,7 @@ def build(
     report.code_builds = compile_code(chain, override)
     report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
+    report.warnings += [note for b in report.placement_builds for note in b.warnings]
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan, report.placement_builds)

@@ -139,7 +139,9 @@ class TestOnlyCoinsExist:
 class TestApplying:
     """What the generated `.dat` actually holds."""
 
-    def build(self, tmp_path, body, table=None, base_items=(), enemies=0):
+    def build(self, tmp_path, body, table=None, base_items=((0, 0, 0),), enemies=0):
+        """⚠️ `base_items` defaults to a map that already ships one, because a
+        map with none refuses every addition (D127)."""
         mod = a_mod(tmp_path / "m", body, table)
         data = setup.parse(setup_file(base_items, enemies), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
@@ -148,12 +150,14 @@ class TestApplying:
         )
 
     def test_an_added_item_lands_with_spawning_flags(self, tmp_path):
-        found = self.build(
+        every = self.build(
             tmp_path,
             {"tables": {"items": "tables/items.csv"}},
             HEADER + "m1,,-300,50,0\n",
         )
-        assert len(found) == 1
+        # One shipped item from `base_items`, plus the added one.
+        assert len(every) == 2
+        found = every[1:]
         assert found[0].position == setup.Position(-300.0, 50.0, 0.0)
         # Defaulted rather than left at zero: 0x10 and 0x1 are required to
         # spawn, so a zeroed item is one that silently never appears.
@@ -209,13 +213,19 @@ class TestApplying:
         assert not found[0].spawns
 
 
-class TestTheSectionIsCreatedWhenAbsent:
-    """🔶 213 maps ship no item section. The game reads `itemCount` at 0x2BC4
-    either way -- past the end of those files, where upstream notes it reads
-    zeroed padding -- so writing a real count there should be read normally.
-    Not yet watched happen in game."""
+class TestCreatingASectionIsRefused:
+    """⛔ **It hangs the game** (D127), measured on `he1_01`.
 
-    def test_a_map_with_no_section_gains_one(self, tmp_path):
+    D126 argued it should work: the game reads `itemCount` at 0x2BC4 whatever
+    the file's length, and for the 213 maps ending exactly there it lands on
+    zeroed padding, so a real count should read the same way. Three coins were
+    written -- a section byte-for-byte the shape `he1_03` ships -- and the map
+    never rendered. The reasoning was sound and the conclusion was wrong.
+
+    Refused rather than warned, because the artifact is a disc that hangs.
+    """
+
+    def test_a_map_with_no_section_refuses_an_addition(self, tmp_path):
         mod = a_mod(
             tmp_path / "m",
             {"tables": {"items": "tables/items.csv"}},
@@ -225,17 +235,65 @@ class TestTheSectionIsCreatedWhenAbsent:
         assert not data.has_item_section
 
         placement = mod_edits.placements_for(mod)[0]
-        items = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
-        rebuilt = setup.SetupFile(
+        with pytest.raises(mod_edits.EditError) as caught:
+            mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+        message = str(caught.value)
+        assert "ships no item section" in message
+        # Says how to find out whether a map is one of the 14 that can.
+        assert "bleck setup show" in message
+
+    def test_a_map_that_ships_items_still_accepts_them(self, tmp_path):
+        """The refusal is about *creating* a section, not about items."""
+        mod = a_mod(
+            tmp_path / "m",
+            {"tables": {"items": "tables/items.csv"}},
+            HEADER + "m1,,-300,50,0\n",
+        )
+        data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        placement = mod_edits.placements_for(mod)[0]
+        found = mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
+        assert len(found) == 2
+
+    def test_changing_the_count_of_an_existing_section_only_warns(self, tmp_path):
+        """🔶 Untested rather than known-bad, and moving a coin the map already
+        places is plainly safe -- so a warning, not a refusal. Silence would
+        imply it had been checked."""
+        mod = a_mod(
+            tmp_path / "m",
+            {"tables": {"items": "tables/items.csv"}},
+            HEADER + "m1,,-300,50,0\n",
+        )
+        data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        placement = mod_edits.placements_for(mod)[0]
+        updated = setup.SetupFile(
             version=data.version,
             enemies=data.enemies,
-            items=items,
-            has_item_section=bool(items),
+            items=mod_edits._apply_items(mod, placement, data),  # pylint: disable=protected-access
+            has_item_section=True,
         )
-        raw = rebuilt.to_bytes()
-        # 8 bytes of count + version, then 16 per item.
-        assert len(raw) == len(setup_file()) + 8 + 16
-        assert setup.parse(raw, origin="t.dat").items[0].spawns
+        notes = mod_edits._item_count_warning(  # pylint: disable=protected-access
+            mod, placement, data, updated
+        )
+        assert len(notes) == 1
+        assert "1 to 2 item(s)" in notes[0]
+
+    def test_a_size_preserving_edit_says_nothing(self, tmp_path):
+        mod = a_mod(
+            tmp_path / "m",
+            {"tables": {"items": "tables/items.csv"}},
+            "map,index,x,y,z\nm1,0,-300,50,0\n",
+        )
+        data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
+        placement = mod_edits.placements_for(mod)[0]
+        updated = setup.SetupFile(
+            version=data.version,
+            enemies=data.enemies,
+            items=mod_edits._apply_items(mod, placement, data),  # pylint: disable=protected-access
+            has_item_section=True,
+        )
+        assert not mod_edits._item_count_warning(  # pylint: disable=protected-access
+            mod, placement, data, updated
+        )
 
 
 class TestTheManifestSide:

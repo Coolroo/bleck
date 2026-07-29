@@ -162,6 +162,17 @@ is skipped while `bleck mod check` still prints `chain OK` — that was the D126
 bug, and it survived a full green test suite because every unit tested a layer
 that worked.
 
+⛔ **Only 14 of 227 maps can hold items** (D127). Giving a section to a map that
+ships none hangs the game, so `edits.py` refuses it; changing the count of an
+existing one is untested and warns. Both tiers exist because this is the first
+thing in `bleck` that changes a setup file's **size** — the enemy array is 100
+fixed slots, so every earlier edit was size-preserving.
+
+✅ **Any enemy template can go in any map** (D127). Mr. L (137, `e_dark_luigi`)
+was placed on Lineland Road and fought normally. Models come from `files/a/` on
+demand rather than a per-map preload, so placement is not restricted to what a
+map already knows about.
+
 | Column | |
 |---|---|
 | `map` | required unless the table is bound |

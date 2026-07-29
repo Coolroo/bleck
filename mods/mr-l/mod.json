@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "mr-l",
+  "version": "0.2.0",
+  "description": "Puts Mr. L on Lineland Road -- an enemy the map never had (D127)",
+  "base": "eu0",
+  "tables": {
+    "enemies": "tables/enemies.csv"
+  },
+  "code": {
+    "boot": "he1_01",
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false
+  }
+}

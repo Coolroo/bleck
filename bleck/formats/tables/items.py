@@ -22,12 +22,13 @@ coin -- and all 1,299 items across the 14 maps that place any are type 0 with
 flags 0x11. Any other `type` is refused rather than written, because it would
 index past the end of that array.
 
-🔶 **Adding items to a map that ships none is not verified in game.** 213 of the
-227 maps have no item section at all, and the game reads `itemCount` from
-offset 0x2BC4 unconditionally -- past the end of those files, where upstream
-notes it "reads uninitialised memory that happens to be 0 because of disc
-alignment". Writing a real count there should therefore be read normally, but
-"should" is doing the work: nothing has watched a coin appear in such a map.
+⛔ **Adding items to a map that ships none HANGS THE GAME** (D127). 213 of the
+227 maps have no item section, and the reasoning said they could gain one: the
+game reads `itemCount` at 0x2BC4 whatever the file's length, landing on zeroed
+padding for those files, so a real count should read the same way. Three coins
+on `he1_01` -- a section byte-for-byte the shape `he1_03` ships -- and the map
+never rendered. `bleck/mods/build/edits.py` refuses it; the reasoning was sound
+and the conclusion was wrong, which is why it needed a run.
 """
 
 from __future__ import annotations

@@ -473,16 +473,25 @@ Every mod has a `mod.json` at its root.
         the game ships is a coin with `flags` `0x11`; `0x10` and `0x1` are what
         make an item spawn at all.
 
+    !!! danger "Only 14 maps can have items at all"
+
+        Adding an item to one of the 213 maps that place none **hangs the
+        game** — the map never renders. `bleck` refuses it at build time rather
+        than producing a disc that freezes.
+
+        This was measured, not assumed: three coins on Lineland Road, written as
+        a section byte-for-byte the shape a map with coins ships, and it never
+        loaded. [`bleck setup show <map>`](cli.md#bleck-setup) says whether a
+        map is one of the 14.
+
+        Changing how *many* items a map that already has them places is
+        untested, and warns.
+
     !!! note
 
         `bleck` writes **both** copies of the setup file — the standalone
         `files/setup/<map>.dat` the game reads, and the byte-identical one
         inside the map archive, so nothing stale is left on the disc.
-
-        Adding an item to one of the 213 maps that place none **creates** the
-        item section, growing the file by 8 bytes plus 16 per item. The game
-        reads the item count from that offset either way, so this should be read
-        normally — but it has not yet been watched happen in game.
 
 `tables` <span class="pf-type">object</span>
 

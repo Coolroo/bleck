@@ -14,7 +14,7 @@ so a generated file must exist by then.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck.common.errors import BleckError
@@ -58,6 +58,7 @@ class PlacementBuild:
     items_applied: int = 0
     items_before: int = 0
     items_after: int = 0
+    warnings: list[str] = field(default_factory=list)
 
     def describe(self) -> str:
         out = (
@@ -289,6 +290,34 @@ def _refuse_item_collisions(mod: Mod, map_name: str, declared: list[SourcedItem]
         seen[item.edit.index] = item.source
 
 
+def _refuse_new_section(mod: Mod, placement, data: setup.SetupFile) -> None:
+    """⛔ Refuse giving items to a map that ships none. **It hangs the game.**
+
+    D126 reasoned that it should work: the game reads `itemCount` at `0x2BC4`
+    whatever the file's length, and for the 213 maps that end exactly there it
+    lands on zeroed padding, so a real count written at that offset should be
+    read the same way. D127 tested it -- three coins on `he1_01`, byte-for-byte
+    the same section shape `he1_03` ships -- and the map never rendered.
+
+    Refused rather than warned about, because the output is a disc that hangs on
+    entering the map. A warning scrolls past; this cannot.
+
+    ⚠️ **Which part is fatal is still unknown**: the coins needing an asset the
+    map does not load, or the file growing at all. `mods/items-empty` is built
+    to split those and has not been run.
+    """
+    if data.has_item_section or not placement.items:
+        return
+    raise EditError(
+        f"{mod.name}: {placement.map_name} ships no item section, and adding "
+        f"one hangs the game (D127).\n"
+        f"  Measured, not assumed: three coins on he1_01 -- a section shaped "
+        f"exactly like the one he1_03 ships -- and the map never rendered.\n"
+        f"  Only 14 of the game's 227 maps place items; those can be edited. "
+        f"`bleck setup show <map>` says whether a map is one of them."
+    )
+
+
 def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]:
     """The map's item list with this mod's edits applied.
 
@@ -297,6 +326,8 @@ def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
     what a table means -- an author should not have to reason about whether
     row 4 renumbered the item row 5 refers to.
     """
+    _refuse_new_section(mod, placement, data)
+
     kept = list(data.items)
     added: list[setup.Item] = []
     removed: set[int] = set()
@@ -416,7 +447,33 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         items_applied=len(placement.items),
         items_before=len(data.items),
         items_after=len(updated.items),
+        warnings=_item_count_warning(mod, placement, data, updated),
     )
+
+
+def _item_count_warning(
+    mod: Mod, placement, data: setup.SetupFile, updated: setup.SetupFile
+) -> list[str]:
+    """🔶 Warn when an edit changes how *many* items a map places.
+
+    Adding a section outright is refused (`_refuse_new_section`); this is the
+    weaker case, where the map already has one and the count moves. That still
+    changes the file's **size**, which is what D127 found untested territory --
+    every placement edit before items was size-preserving, because the enemy
+    array is 100 fixed slots.
+
+    A warning rather than a refusal: moving a coin the map already places is
+    plainly safe, and nothing suggests a different count is fatal. Nothing shows
+    it is safe either, and silence would imply it had been checked.
+    """
+    if len(data.items) == len(updated.items):
+        return []
+    return [
+        f"{mod.name}: {placement.map_name} goes from {len(data.items)} to "
+        f"{len(updated.items)} item(s), which changes the setup file's size. "
+        f"Adding a section to a map with none hangs the game (D127); changing "
+        f"the count of an existing one is untested. Worth watching in game."
+    ]
 
 
 def _refuse_orphans(mod: Mod, placement, updated: setup.SetupFile) -> None:

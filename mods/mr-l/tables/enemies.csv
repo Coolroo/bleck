@@ -1,0 +1,13 @@
+# he1_01 ships 3 enemies in slots 0-2 (two Goombas and a Squiglet) and leaves
+# 97 empty. Mr. L goes in slot 3, which D122 showed does spawn.
+#
+# copy_from 0 is not decoration: a declared edit builds on whatever the slot
+# holds, and an empty slot is zeros -- where every shipped enemy carries three
+# undocumented values that reach the live NPC (D123). Slot 0 is a Goomba, so
+# Mr. L inherits a working enemy's bytes and overwrites only what we name.
+#
+# THE OPEN QUESTION: e_dark_luigi lives in files/a/ as a global asset, but
+# nothing has shown that a map loads a model just because its setup names the
+# template. If Mr. L is absent or invisible, that is the answer.
+map,slot,template,x,y,z,copy_from
+he1_01,3,Mr. L,-300,0,0,0

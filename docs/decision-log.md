@@ -9102,3 +9102,94 @@ carrying `file:line`.
 1,017 tests, pylint 10.00/10. Against the real disc: `he1_03` (5 shipped coins)
 with one removed, one moved and two added produced exactly the expected 6-item
 list with enemies untouched, and `he1_01` (no item section) grew by 24 bytes.
+
+---
+
+## D127 — ✅ Enemy templates are placeable across maps; ⛔ item sections are not (2026-07-29)
+
+Two attended runs on `he1_01` (Lineland Road), and both inverted the prediction
+made before them.
+
+### ✅ Mr. L spawns in a map that never had him
+
+`he1_01` slot 3, template **137** (`e_dark_luigi`), `copy_from: 0` so it
+inherits a shipped Goomba's undocumented bytes. **He was there.**
+
+The worry was that a map only loads the models its own setup file names, so a
+foreign template would spawn invisible or hang the load. It does not:
+`e_dark_luigi` lives in `files/a/` as a global asset and the map loaded it on
+demand. **Any enemy can be placed in any map**, which is a far larger capability
+than "swap the enemies a map already has" and was assumed unavailable.
+
+🔶 Not yet shown: that he *behaves* -- attacks, takes damage, can be jumped on.
+Present and rendering is what was observed.
+
+### ⛔ Creating an item section crashes the game
+
+Three coins added to `he1_01`, one of the 213 maps whose setup file ends exactly
+at `0x2BC4`. The map **never rendered**. D126's 🔶 is refuted.
+
+⚠️ **The upstream comment was a red herring.** `setupReadItemInfo` "reads
+uninitialised memory that happens to be 0 because of disc alignment" describes
+*reading* a file with no section. It says nothing about what happens when a real
+count is written there, and I treated it as if it did.
+
+The bytes are not malformed -- byte-for-byte the same shape as `he1_03`'s real
+section: count, version `20051201`, `flags 0x11`, `type 0`, three floats.
+
+⚠️ **This was the first time `bleck` ever changed a setup file's *size*.** The
+enemy array is 100 fixed slots, so every previous placement edit was
+size-preserving. Whatever this breaks has never been exercised before.
+
+### ⛔ My own two mistakes, both procedural
+
+1. **I put two experiments in one build** -- a new enemy and a new item section,
+   plus a boot override -- and the freeze could not name either. That is D51's
+   shape exactly, and it cost a run to undo. The bisect took two more.
+2. **I predicted the wrong one.** I said in writing that I expected the coins to
+   be fine and Mr. L to fail, on the reasoning that a model must be preloaded.
+   The opposite held. Recording it because the prediction was stated before the
+   run and is therefore worth something as a calibration point.
+
+⚠️ The first run was also not a clean test of the boot override: the save was
+loaded manually instead, so what actually got exercised was a map change rather
+than the boot path.
+
+### Next: which part of the growth is fatal
+
+`mods/items-empty` writes a **well-formed section holding zero items** (+8 bytes,
+`00 00 00 00 01 31 f5 01`) into the standalone copy only -- `0 archive(s)
+merged`, so the map archive is untouched. It splits:
+
+- **A** the coins need an asset `he1_01` does not load
+- **B** the file growing at all is fatal
+- **C** growing the copy inside `files/map/he1_01.bin` corrupts the archive
+
+C is the least likely of the three: D25 already validated modified textures
+through an archive rebuild, and compressed sizes differ, so a changed member
+size is not new. Recorded so the ruling-out is on the record either way.
+
+### ✅ Mr. L fights (appended after the run)
+
+He jumped to attack, used the spring attack, damaged the player and took damage.
+So the template's behaviour scripts run, not just its model: **placing a foreign
+enemy gives you a working enemy**, which is the version of this finding that
+matters. `mods/mr-l` is the worked example.
+
+### ✅ The guard, since the crash is confirmed and the cause is not
+
+`bleck` now refuses to add items to a map with no section, rather than building
+a disc that hangs. Three tiers, matching what is actually known:
+
+| Case | Behaviour | Why |
+|---|---|---|
+| Map ships no section | ⛔ **refused** | measured hang |
+| Count changes in a map that has one | 🔶 warns | untested; the file's size still moves |
+| Size-preserving edit | silent | same risk class as an enemy edit |
+
+⚠️ **Which part of the growth is fatal is still open**, and `mods/items-empty`
+(a well-formed section with **zero** items, standalone copy only) is built and
+unrun -- the machine that could run it is no longer available. Whoever picks
+this up should run that first: it splits "the coins need an asset" from "the
+file growing at all is fatal", and the answer decides whether the refusal can
+ever be relaxed.
