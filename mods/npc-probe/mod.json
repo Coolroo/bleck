@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "npc-probe",
+  "version": "0.1.0",
+  "description": "Where do an NPC's behaviour scripts come from, and are they reachable?",
+  "base": "eu0",
+  "code": { "sources": ["src"], "target": "eu0", "module_id": 2 }
+}

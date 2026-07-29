@@ -7341,3 +7341,83 @@ shape of fix.
   the compiler emits rather than what the VM requires.
 - `mods/end-scope` is the worked example: the script that froze, the same script
   with `return`, and the same script again after the fix.
+
+---
+
+## D107 — ✅ NPC behaviour scripts exist, are static, and decode (2026-07-28)
+
+`mods/npc-probe`, three runs. The research question D106's follow-up posed —
+*where do an NPC's behaviour scripts come from, and are they reachable* — with a
+clear answer and a clear next obstacle.
+
+### ✅ Measured, booting into `he1_01`
+
+| | |
+|---|---|
+| `npcGetWorkPtr()` | `0x805283E0`, usable every gameplay frame |
+| `work->num` | **80**, constant — a **capacity**, not a live count |
+| `work->entries` | `0x807BB960` |
+| live slots (control) | **3** |
+| slots carrying scripts | **3** — all of them |
+| `templateinitScript` | `0x8043B8F8` |
+| `templatemoveScript` | `0x804938E8` |
+| `templateonHitScript` | `0x80494E28` |
+| `templatedeathScript` | `0x80439F10` |
+| first word of the init script | **`0x0002005C`** — `USER_FUNC`, argc 2 |
+
+✅ **The first word decoding as a real evt header is the evidence.** Four
+non-null pointers are four numbers; a word that decodes as `USER_FUNC` with a
+sane argument count is bytecode.
+
+✅ **The scripts live in DOL static data** (`0x8043…`–`0x8049…`, inside the
+data span D95 recorded reaching `0x805B7720`), not on the heap. So the
+*bytecode* is at a fixed address even though the *pointer* is on a live entry.
+
+### ⛔ Two wrong readings first, and both were mine
+
+**Run 1 read `entries[0]` and found four nulls.** `num` sat at exactly 80 for
+the whole run and never moved — a capacity, with `npcGetMaxEntries` as a
+separate symbol — so slot 0 was simply unused. "The scripts are null" was a fact
+about a slot, not about NPCs. ⚠️ D93 restated: a measurement of the wrong place
+reads exactly like a measurement of nothing.
+
+**Run 2 scanned all 80 slots and still found nothing** — because it ran on
+`aa4_01` and `ls4_12`, and ⛔ **the attract demo's maps contain no NPCs at all**.
+That is D94's error for the third time in this repository: a real measurement of
+the wrong maps.
+
+✅ What broke the cycle was adding a **control that could distinguish the two**:
+count slots whose head word is non-zero, i.e. live at all, independently of
+whether the script offsets are right. With `--map he1_01` it read 3, and the
+script counts followed. Without it, run 3's numbers would have been one more
+plausible zero.
+
+### The design question this opens
+
+`npcdrv:` is **not** the same shape as `door:`, and the difference is real:
+
+- `door:` — the descriptor array's address is an argument in a map's **init
+  script**, so it is readable at `mod_prolog`, before anything runs.
+- NPC scripts — the pointers are fields on a **live `NPCEntry`**, copied in at
+  spawn. Nothing carries them at `mod_prolog`; run 2 confirms they are absent
+  until a map with NPCs is loaded.
+
+🔶 So a build-time `npcdrv:` selector needs the **template**, not the entry, and
+where templates live is still unknown. `npcEntryFromTemplate` (`0x801be198`) and
+`npcEntryFromSetupEnemy` (`0x801bf7a0`) are the two spawn paths; the second
+takes a record from the setup file, which `bleck` already parses and edits (D80)
+— that is the promising thread.
+
+⛔ `work->setupFile` (`NPCWork` +0x18) read **0** on every frame in every map
+tried, so either the offset is wrong or it is populated on a path these runs did
+not take. Not chased yet.
+
+🔶 Alternatives, unranked: intercept a spawn function with `code.hooks`
+`mode: "after"` (D97) and rewrite the entry's pointers per spawn; or find the
+static template table and patch it like a door. The first is certainly possible
+now; the second would be a declaration rather than a hook, which is what
+`vision.md` asks for.
+
+⚠️ Also still open: `npcNameToPtr` (`0x801b6f2c`) means NPCs **can** be looked
+up by name, unlike doors. That is a nicer selector shape if it can be reached at
+a useful time.
