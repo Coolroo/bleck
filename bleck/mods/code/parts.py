@@ -290,7 +290,7 @@ def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.Scri
             expect=patch.expect_word,
             call=patch.call,
             index=patch.index,
-            door_offset=patch.door_offset,
+            field_offset=patch.field_offset,
         )
         for patch in spec.patches
     ]

@@ -218,6 +218,11 @@ _PATCH_KINDS = {
         resolve=runtime_patch.PATCH_DOOR_RESOLVE,
         needs=(PatchKind.MAP,),
     ),
+    PatchKind.NPC: _PatchKind(
+        constant="BLECK_PATCH_NPC",
+        resolver=runtime_patch.PATCH_NPC_RESOLVER,
+        resolve=runtime_patch.PATCH_NPC_RESOLVE,
+    ),
 }
 
 
@@ -242,7 +247,7 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
     used = [kind for kind in _PATCH_KINDS if kind in wanted]
     rows = "".join(
         f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
-        f"{patch.index}, {patch.door_offset}, {patch.at}u, 0x{patch.expect:08X}u, "
+        f"{patch.index}, {patch.field_offset}, {patch.at}u, 0x{patch.expect:08X}u, "
         f"(const void *) &{patch.call}}},"
         f"  {patch.comment}\n"
         for index, patch in enumerate(patches)

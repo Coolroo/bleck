@@ -65,6 +65,7 @@ PATCH_BLOCK = """
 #define BLECK_PATCH_MAP 0
 #define BLECK_PATCH_ITEM 1
 #define BLECK_PATCH_DOOR 2
+#define BLECK_PATCH_NPC 3
 
 /* bleck_patch_status[] values. */
 #define BLECK_PATCH_PENDING 1
@@ -87,8 +88,10 @@ typedef struct
        door index for BLECK_PATCH_DOOR, -1 where the kind needs neither. */
     s32 index;
 
-    /* Which of a DoorDesc's three scripts, as a byte offset. -1 elsewhere. */
-    s32 doorOffset;
+    /* Byte offset of the script field within its record. -1 where unused:
+       a DoorDesc offset for BLECK_PATCH_DOOR, an NPCTemplate offset for
+       BLECK_PATCH_NPC. */
+    s32 fieldOffset;
 
     u32 at;
     u32 expect;
@@ -340,7 +343,77 @@ static u32 *bleck_door_script(const char *map, s32 index, s32 offset)
 #: scripts, nothing has measured whether doors share theirs.
 PATCH_DOOR_RESOLVE = """        if (patch->kind == BLECK_PATCH_DOOR)
             script = bleck_door_script(patch->target, patch->index,
-                                       patch->doorOffset);
+                                       patch->fieldOffset);
+"""
+
+#: Resolving `npcdrv:<template>:<script>`. Everything here is measured -- there
+#: is no `NPCTemplate` in any header (D110, D111).
+PATCH_NPC_RESOLVER = """
+/*
+    Enemy behaviour scripts.
+
+    `npcEnemyTemplates` is a static table in DOL data, so a template's scripts
+    are readable at load time -- before any NPC spawns, and with no interception.
+    D107 concluded otherwise by finding the pointers on a live NPCEntry and
+    inferring they existed nowhere else; they are copied there from here.
+
+    LAYOUT IS MEASURED, NOT DECLARED. `NPCTemplate` is in no header. The stride
+    came from three markers repeating every 0x68 bytes, and the field offsets
+    from locating four addresses that had already been read off a live entry in
+    a different run (D111). Entry n is template id n, which `bleck setup show`
+    already prints for every enemy a map places.
+
+    WARNING: TEMPLATES SHARE SCRIPTS. 0x80439F10 sits at +0x4C in entries 0, 1
+    and 2, so patching one template's death script changes every template
+    pointing at it -- the same hazard as item use scripts, where 33 entries hold
+    22 distinct scripts. `bleck_patch_shared[]` reports how many, counted here
+    rather than left for the author to discover in game.
+*/
+
+extern u32 npcEnemyTemplates[];
+
+/* Measured, D111. */
+#define BLECK_NPC_TEMPLATE_SIZE 0x68
+
+/*
+    How far the count is trusted. The table's end was never measured, so this is
+    a bound on the SEARCH, not a claim about the game: a template beyond it
+    reports NO_SCRIPT rather than reading whatever follows the table.
+*/
+#define BLECK_NPC_MAX_TEMPLATES 512
+
+static u32 *bleck_npc_script(s32 template, s32 offset)
+{
+    unsigned char *base = (unsigned char *) npcEnemyTemplates;
+
+    if (template < 0 || template >= BLECK_NPC_MAX_TEMPLATES || offset < 0)
+        return 0;
+    return *(u32 **) (base + template * BLECK_NPC_TEMPLATE_SIZE + offset);
+}
+
+/* Templates pointing at the same script, so an author is told how many enemies
+   a patch actually changes. */
+static u32 bleck_npc_sharers(const u32 *script, s32 offset)
+{
+    unsigned char *base = (unsigned char *) npcEnemyTemplates;
+    u32 count = 0;
+    s32 i;
+
+    if (script == 0)
+        return 0;
+    for (i = 0; i < BLECK_NPC_MAX_TEMPLATES; i++)
+        if (*(u32 **) (base + i * BLECK_NPC_TEMPLATE_SIZE + offset) == script)
+            count += 1;
+    return count;
+}
+"""
+
+#: The npcdrv arm of `bleck_apply_patches`.
+PATCH_NPC_RESOLVE = """        if (patch->kind == BLECK_PATCH_NPC)
+        {
+            script = bleck_npc_script(patch->index, patch->fieldOffset);
+            bleck_patch_shared[i] = bleck_npc_sharers(script, patch->fieldOffset);
+        }
 """
 
 #: One patched script's name, held out of the table so it is a real string.

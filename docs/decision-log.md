@@ -7662,3 +7662,70 @@ one would have produced a selector that patched the wrong template.
 `npcdrv:<template-id>:<init|move|onhit|death>` now has everything `door:` had:
 a static base, a stride, field offsets, and an index that is already what
 `bleck setup show` prints. Plus a shared count, which doors did not need.
+
+---
+
+## D112 — ✅ `npcdrv:<template>:<script>` built, and D111's offsets were all wrong (2026-07-28)
+
+```json
+{ "script": "npcdrv:2:onhit", "at": 0, "expect": "USER_FUNC 3", "call": "on_hit" }
+```
+
+Resolved at load from `npcEnemyTemplates` — static DOL data, no interception,
+no spawn hook. ⛔ D107's "npcdrv cannot be a build-time patch" is superseded.
+
+### ⛔ Every offset in D111 was 4 bytes too high
+
+D111 read them off a hex dump **I reformatted by hand**, and the reformat was
+shifted by one word. All four were wrong, and all four looked self-consistent:
+they sat in the right entry, at plausible spacing, in the right order.
+
+Caught only because the first in-game run read `0x8043B39C` at `+0x40` where
+D107 had measured `onHitScript = 0x80494E28`. Dumping the entry verbatim gave:
+
+| field | D111 | measured | value |
+|---|---|---|---|
+| init | 0x38 | **0x34** | `0x8043B8F8` |
+| move | 0x3C | **0x38** | `0x804938E8` |
+| onhit | 0x40 | **0x3C** | `0x80494E28` |
+| death | 0x4C | **0x48** | `0x80439F10` |
+
+✅ All four now match addresses D107 measured off a **live** entry by a
+different route.
+
+⚠️ **The lesson is narrower than "check your work".** D111's stride was derived
+from markers *within* the same dump, so the shift cancelled out and the stride
+came out right. Only a value from **outside** that dump could expose it — which
+is why cross-run agreement, not internal consistency, is what these entries keep
+turning on.
+
+### ✅ Measured in-game, `--map he1_01`
+
+Three patches, three different statuses — the discriminator:
+
+| | |
+|---|---|
+| `npcdrv:2:onhit` | **2 APPLIED** |
+| `npcdrv:2:death` | **3 REFUSED** — resolved, guard declined |
+| `npcdrv:999:onhit` | **4 NO_SCRIPT** — past the searched range |
+
+REFUSED on `death` is informative rather than a failure: the script was found
+and its opening word is not `USER_FUNC 3`. 🔶 What it is has not been recorded.
+
+### ⚠️ Sharing is extreme
+
+**40** templates share template 2's onhit script; **280** share its death
+script. So `npcdrv:2:death` would change 280 enemies. `bleck_patch_shared[]`
+reports it, as it does for items (D91) — without that number an author changes
+most of the game's enemies believing they changed a Goomba.
+
+### 🔶 Not proven
+
+- **The handler has never been entered** — that needs an enemy to be hit, so it
+  is attended, like `item:` and `door:`.
+- 🔶 `BLECK_NPC_MAX_TEMPLATES` is 512, a bound on the **search**, not a measured
+  table size. The table's end was never found.
+- 🔶 Only 4 of the 10 `templateXxxScript` fields are reachable; the other six had
+  no known addresses to search for.
+
+827 tests, pylint 10.00/10.

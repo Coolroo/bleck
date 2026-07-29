@@ -156,23 +156,29 @@ class ScriptPatch:
             return int(self.target, 0)
         if self.kind is PatchKind.DOOR:
             return int(self.target.split(":")[1], 0)
+        if self.kind is PatchKind.NPC:
+            return int(self.target.split(":")[0], 0)
         return -1
 
     @property
-    def door_offset(self) -> int:
-        """Byte offset into `DoorDesc` for a `door:` patch, -1 otherwise.
+    def field_offset(self) -> int:
+        """Byte offset of the script field within its record, -1 where unused.
 
-        A selector may name which of the door's three scripts it means --
-        `door:he1_01:0:init` -- and omitting it means `interact`.
+        A door selector may name which of its three scripts it means, and
+        omitting it means `interact`. A `npcdrv:` selector must name one --
+        none of an enemy's four is the obvious default.
         """
-        if self.kind is not PatchKind.DOOR:
-            return -1
         parts = self.target.split(":")
-        named = parts[2] if len(parts) == 3 else emit.DoorScript.INTERACT.value
-        script = emit.DoorScript.parse(named)
-        if script is None:  # pragma: no cover -- `_parse_door` rejects these
-            raise ManifestError(f"door script {named!r} was never validated")
-        return script.offset
+        if self.kind is PatchKind.DOOR:
+            named = parts[2] if len(parts) == 3 else emit.DoorScript.INTERACT.value
+            found = emit.DoorScript.parse(named)
+        elif self.kind is PatchKind.NPC:
+            found = emit.NpcScript.parse(parts[1])
+        else:
+            return -1
+        if found is None:  # pragma: no cover -- the parsers reject these
+            raise ManifestError(f"script name in {self.target!r} was never validated")
+        return found.offset
 
     @property
     def emit_target(self) -> str:
@@ -181,7 +187,9 @@ class ScriptPatch:
         For `door:` that is the MAP, not the whole selector -- the index and the
         script offset travel separately, because the runtime needs them apart.
         """
-        return self.target.split(":")[0] if self.kind is PatchKind.DOOR else self.target
+        if self.kind in (PatchKind.DOOR, PatchKind.NPC):
+            return self.target.split(":")[0]
+        return self.target
 
 
 #: Re-exported so a manifest reader does not have to know the enum lives in the
@@ -604,6 +612,8 @@ def _parse_selector(raw: str, where: str) -> _Selector:
         return _Selector(kind=kind, target=_parse_item_id(target, where))
     if kind is PatchKind.DOOR:
         return _Selector(kind=kind, target=_parse_door(target, where))
+    if kind is PatchKind.NPC:
+        return _Selector(kind=kind, target=_parse_npc(target, where))
     _check_map_name(target, where)
     return _Selector(kind=kind, target=target)
 
@@ -649,6 +659,44 @@ def _parse_door(raw: str, where: str) -> str:
         raise ManifestError(f"{where}: door index {parts[1]!r} cannot be negative")
     if len(parts) == 3:
         _check_door_script(parts[2], raw, where)
+    return raw
+
+
+def _parse_npc(raw: str, where: str) -> str:
+    """Check `2:onhit` and hand it back as written.
+
+    ⚠️ The template id is **not** range-checked: how many templates the table
+    holds was never measured (D111), so a build-time bound would be invented
+    rather than known. The generated code compares against a measured entry
+    count instead.
+    """
+    parts = raw.split(":")
+    if len(parts) != 2 or not all(parts):
+        raise ManifestError(
+            f"{where}: 'npcdrv:{raw}' names no enemy script.\n"
+            f"  A template selector is 'npcdrv:<template>:<script>' -- "
+            f"'npcdrv:2:onhit' is what a Goomba does when hit.\n"
+            f"  `bleck setup show <map>` prints the template id of every enemy "
+            f"a map places."
+        )
+    try:
+        value = int(parts[0], 0)
+    except ValueError:
+        raise ManifestError(
+            f"{where}: template {parts[0]!r} is not a number. It is the id "
+            f"`bleck setup show` prints, e.g. 'npcdrv:2:onhit'."
+        ) from None
+    if value < 0:
+        raise ManifestError(f"{where}: template id {parts[0]!r} cannot be negative")
+    if emit.NpcScript.parse(parts[1]) is None:
+        known = ", ".join(emit.NPC_SCRIPTS)
+        close = difflib.get_close_matches(parts[1], emit.NPC_SCRIPTS, n=1, cutoff=0.6)
+        hint = f"\n  Did you mean {close[0]!r}?" if close else ""
+        raise ManifestError(
+            f"{where}: 'npcdrv:{raw}' names {parts[1]!r}, which is not one of an "
+            f"enemy template's scripts.{hint}\n  A template carries: {known}.\n"
+            f"  There is no default -- none of the four is the obvious one."
+        )
     return raw
 
 

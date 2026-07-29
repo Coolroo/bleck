@@ -43,6 +43,18 @@ DOOR_PATCH = emit.ScriptPatch(
 )
 
 
+#: Goomba's on-hit script. Template 2, +0x40 (D111).
+NPC_PATCH = emit.ScriptPatch(
+    kind=emit.PatchKind.NPC,
+    target="2",
+    at=0,
+    expect=0x00010072,
+    call="on_hit",
+    index=2,
+    field_offset=0x3C,
+)
+
+
 def generated(patches=(PATCH,)):
     return emit.generate_bare(origin="x", patches=list(patches)).text
 
@@ -239,7 +251,7 @@ class TestDoorScript:
     )
     def test_the_script_part_picks_the_offset(self, selector, offset):
         parsed = manifest({**WHOLE, "script": selector}).code.patches[0]
-        assert parsed.door_offset == offset
+        assert parsed.field_offset == offset
         assert parsed.emit_target == "he1_01"
         assert parsed.index == 0
 
@@ -248,7 +260,7 @@ class TestDoorScript:
         what this door does" means, so it is the one worth defaulting to."""
         plain = manifest({**WHOLE, "script": "door:he1_01:0"}).code.patches[0]
         named = manifest({**WHOLE, "script": "door:he1_01:0:interact"}).code.patches[0]
-        assert plain.door_offset == named.door_offset
+        assert plain.field_offset == named.field_offset
 
     def test_an_unknown_script_is_refused_with_the_three(self):
         with pytest.raises(mod_manifest.ManifestError) as caught:
@@ -284,7 +296,7 @@ class TestDoorScript:
                 expect=0x00010072,
                 call="on_door",
                 index=0,
-                door_offset=offset,
+                field_offset=offset,
             )
             for offset in (0x40, 0x50, 0x54)
         ]
@@ -293,6 +305,58 @@ class TestDoorScript:
         assert "0, 80," in out  # init
         assert "0, 84," in out  # move
         assert "door:he1_01:0:init" in out  # the comment names what it patched
+
+
+class TestNpcScript:
+    """`npcdrv:<template>:<script>` — enemy behaviour, from a static table whose
+    layout is measured rather than declared (D110, D111)."""
+
+    @pytest.mark.parametrize(
+        ("selector", "offset"),
+        [
+            ("npcdrv:2:init", 0x34),
+            ("npcdrv:2:move", 0x38),
+            ("npcdrv:2:onhit", 0x3C),
+            ("npcdrv:250:death", 0x48),
+        ],
+    )
+    def test_the_script_part_picks_the_measured_offset(self, selector, offset):
+        parsed = manifest({**WHOLE, "script": selector}).code.patches[0]
+        assert parsed.field_offset == offset
+        assert parsed.index == int(selector.split(":")[1])
+
+    def test_there_is_no_default_script(self):
+        """Unlike a door, where `interact` is the obvious one. None of an
+        enemy's four is, so omitting it is refused rather than guessed."""
+        with pytest.raises(mod_manifest.ManifestError, match="names no enemy script"):
+            manifest({**WHOLE, "script": "npcdrv:2"})
+
+    def test_an_unknown_script_lists_the_four(self):
+        with pytest.raises(mod_manifest.ManifestError) as caught:
+            manifest({**WHOLE, "script": "npcdrv:2:explode"})
+        assert "init, move, onhit, death" in str(caught.value)
+
+    def test_a_near_miss_is_suggested(self):
+        with pytest.raises(mod_manifest.ManifestError, match="Did you mean 'death'"):
+            manifest({**WHOLE, "script": "npcdrv:2:deth"})
+
+    def test_a_selector_round_trips_as_written(self):
+        written = manifest({**WHOLE, "script": "npcdrv:250:death"}).to_json()
+        assert '"script": "npcdrv:250:death"' in written
+
+    def test_the_generated_code_counts_sharers(self):
+        """Templates share scripts -- 0x80439F10 sits at +0x4C in entries 0, 1
+        and 2 -- so a patch changes every template pointing at it. Without a
+        count an author changes every Goomba-like enemy believing otherwise."""
+        out = generated([NPC_PATCH])
+        assert "bleck_npc_sharers(script, patch->fieldOffset)" in out
+        assert "#define BLECK_NPC_TEMPLATE_SIZE 0x68" in out
+
+    def test_a_template_beyond_the_searched_range_resolves_to_nothing(self):
+        """The table's end was never measured, so the bound is on the SEARCH.
+        Past it the patch reports NO_SCRIPT rather than reading past the table."""
+        out = generated([NPC_PATCH])
+        assert "template >= BLECK_NPC_MAX_TEMPLATES" in out
 
 
 class TestManifest:

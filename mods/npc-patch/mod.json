@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "npc-patch",
+  "version": "0.1.0",
+  "description": "Does npcdrv:<template>:<script> resolve to a real enemy script and apply?",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"], "target": "eu0", "module_id": 2, "banner": false,
+    "patches": [
+      { "script": "npcdrv:2:onhit",   "at": 0, "expect": "USER_FUNC 3", "call": "on_npc" },
+      { "script": "npcdrv:2:death",   "at": 0, "expect": "USER_FUNC 3", "call": "on_npc" },
+      { "script": "npcdrv:999:onhit", "at": 0, "expect": "USER_FUNC 3", "call": "on_npc" }
+    ]
+  }
+}

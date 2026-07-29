@@ -92,6 +92,7 @@ class PatchKind(StrEnum):
     MAP = "map"
     ITEM = "item"
     DOOR = "door"
+    NPC = "npcdrv"
 
     @property
     def example(self) -> str:
@@ -110,6 +111,7 @@ _PATCH_KIND_EXAMPLES = {
     PatchKind.MAP: "map:<name>",
     PatchKind.ITEM: "item:<id>",
     PatchKind.DOOR: "door:<map>:<index>[:interact|init|move]",
+    PatchKind.NPC: "npcdrv:<template>:<init|move|onhit|death>",
 }
 
 
@@ -205,6 +207,52 @@ SEQUENCE_NAMES = tuple(seq.manifest_name for seq in Sequence)
 #: Where the banner is drawn unless a mod says otherwise. The title screen is
 #: where someone looks to see which disc they put in.
 DEFAULT_BANNER_SEQUENCES = (Sequence.TITLE.manifest_name,)
+
+
+# Which of an NPC template's behaviour scripts a `npcdrv:` selector names.
+# ⚠️ `NPCTemplate` is in NO header -- every offset here was measured by finding
+# addresses already read off a live entry (D110, D111), not read from a struct.
+class NpcScript(StrEnum):
+    """One of the `EvtScriptCode *` fields an enemy template carries.
+
+    Written as the third part of the selector: `npcdrv:2:onhit`. There is no
+    default -- unlike a door, no one of these is the obvious "what it does".
+    """
+
+    INIT = "init"
+    MOVE = "move"
+    ONHIT = "onhit"
+    DEATH = "death"
+
+    @property
+    def offset(self) -> int:
+        """Byte offset within a template entry. Measured, D111."""
+        return _NPC_SCRIPT_OFFSETS[self]
+
+    @classmethod
+    def parse(cls, raw: str) -> NpcScript | None:
+        return next((script for script in cls if script.value == raw), None)
+
+
+#: Template entries are 0x68 bytes and entry n is template id n (D111).
+#:
+#: ⛔ D111 recorded these 4 bytes higher, from a hex dump reformatted by hand
+#: that was shifted one word. Every offset was wrong and every one looked
+#: self-consistent. These are read straight off template 2's entry and each
+#: matches an address D107 measured off a live NPCEntry: init 0x8043B8F8, move
+#: 0x804938E8, onHit 0x80494E28, death 0x80439F10 (D112).
+_NPC_SCRIPT_OFFSETS = {
+    NpcScript.INIT: 0x34,
+    NpcScript.MOVE: 0x38,
+    NpcScript.ONHIT: 0x3C,
+    NpcScript.DEATH: 0x48,
+}
+
+#: For an error listing what a template selector accepts.
+NPC_SCRIPTS = tuple(script.value for script in NpcScript)
+
+#: Back the other way, so a generated comment names what it patched.
+_NPC_BY_OFFSET = {script.offset: script.value for script in NpcScript}
 
 #: The script a `code.boot` declaration is desugared into.
 BOOT_SCRIPT = "bleck_boot"
@@ -328,11 +376,12 @@ class ScriptPatch:
     call: str
     """A C function in the mod's own sources, with evt's user-func signature."""
 
-    door_offset: int = -1
-    """Byte offset into `DoorDesc` for a `door:` patch, -1 otherwise.
+    field_offset: int = -1
+    """Byte offset of the script field within its record, -1 where unused.
 
-    Carried rather than derived here because the emitter has no `DoorScript` --
-    the selector was already resolved when this was built.
+    A `DoorDesc` offset for `door:`, an `NPCTemplate` offset for `npcdrv:`.
+    Carried rather than derived, because the selector was already resolved when
+    this was built.
     """
 
     index: int = -1
@@ -346,10 +395,13 @@ class ScriptPatch:
     def selector(self) -> str:
         """How this patch was written in the manifest, for a comment."""
         if self.kind is PatchKind.DOOR:
-            named = _DOOR_BY_OFFSET.get(self.door_offset, "?")
+            named = _DOOR_BY_OFFSET.get(self.field_offset, "?")
             return f"{self.kind}:{self.target}:{self.index}:{named}"
         if self.kind is PatchKind.ITEM:
             return f"{self.kind}:{self.index}"
+        if self.kind is PatchKind.NPC:
+            named = _NPC_BY_OFFSET.get(self.field_offset, "?")
+            return f"{self.kind}:{self.index}:{named}"
         return f"{self.kind}:{self.target}"
 
     @property
