@@ -977,3 +977,111 @@ What to know before extending it:
    answer is a PyO3 port of *just the compressor* — not a rewrite. 80 decision
    entries of hard-won behaviour do not live in the language, and a rewrite
    re-discovers every bug.
+
+---
+
+# Session state — 2026-07-28 (end)
+
+Written to survive a context compaction. Everything below is committed and
+pushed; `main` is at **827 tests, pylint 10.00/10, mkdocs --strict clean**.
+
+## What shipped today
+
+| | entry |
+|---|---|
+| `code.hooks` `mode: "before"` / `"after"` — interception via a generated PowerPC **assembly** wrapper | D97 |
+| `HookMode`, `ToolKey`, `PatchKind`, `Sequence`, `DoorScript`, `NpcScript` as enums | D98, D100 |
+| Python pinned to **3.13** (`.python-version`), ruff `py313`; `uv.lock` lost 254 lines of backports | D99 |
+| ⛔ **A script that fell off its end hung the game** — `END_EVT` was missing. Fixed | D105, D106 |
+| ✅ C++ runs in-game; ✅ `switch` takes the right arm in-game | D105 |
+| `door:<map>:<index>[:interact\|init\|move]` | D103, D104 |
+| `npcdrv:<template>:<init\|move\|onhit\|death>` | D110–D112 |
+| `bleck/cli/types.py` — `AddCommand` protocol | — |
+
+⛔ **Superseded today**: D91, D93, D94 (doors *are* reachable), D107 (npcdrv
+*is* a build-time patch), D111 (its offsets were 4 bytes wrong).
+
+## What needs a human, with exact commands
+
+**1. The item hook** — 🔶 open since D92. ⛔ **Not** Shroom Shake: it has no
+scripted use. `itemEventDataTable` holds 33 entries, all *effect* items — use
+**Fire Burst, POW Block, Stopwatch, Ice Storm or Thunder Rage**.
+
+```powershell
+uv run python scripts/ingame.py item-use --words 46 --seconds 300
+```
+
+Load the save, use the item, watch word 5 (`ENTERED`).
+⚠️ `mods/item-use/mod.json` still patches ids `0x50`/`0xD4`, which are **not in
+the table** — repoint it at a real id first.
+
+**2. The npcdrv handler** — needs an enemy hit.
+
+```powershell
+uv run bleck mod build npc-patch --force
+uv run python scripts/ingame.py npc-patch --map he1_01 --words 12 --seconds 300
+```
+
+Hit a Goomba; watch word 10.
+
+**3. The release tag** — the only never-run CI path.
+
+```powershell
+git tag v0.1.0-rc1; git push origin v0.1.0-rc1
+```
+
+## Next unsupervised task
+
+**The findings write-up.** `roadmap.md` has the item and an inventory of eight
+things this repo knows that the ecosystem does not. It is synthesis across
+~112 entries, so it wants a fresh context rather than an incremental push. The
+`evt_door.h` argc bug is a genuine upstream correction and should go back as a
+PR regardless of what shape the rest takes.
+
+⛔ **The trampoline is on the backburner by decision** — an optimisation on a
+path that already works, whose failure mode is a silently wrong branch. Do not
+start it without asking.
+
+## ⚠️ Methodology, earned the hard way
+
+**Five instrument errors in two days**, and every one was caught by
+**cross-run agreement** — a value measured by a different probe, in a different
+run, by a different route. Internal consistency caught none of them.
+
+1. **A correct measurement of the wrong place.** D93 searched one function at
+   one argc; D94 hooked a function in maps that do not call it; D107 read
+   `entries[0]`, an unused slot. ⚠️ **The attract demo reaches only `aa4_01` and
+   `ls4_12`, and neither has NPCs or the doors that mattered.** Use
+   `--map <name>`.
+2. **A probe gated on something that never happens.** `SEQ_TITLE` never occurs
+   in an unattended boot, so an entire instrument sat behind a dead branch and
+   reported a null pointer as though it had been read.
+3. **An early return leaving zeros**, indistinguishable from reading zeros.
+   Report the pointer as a sentinel.
+4. **A field overwritten by another** (`STATUS(3)` collided with
+   `GAME_FRAMES`).
+5. **A hand-reformatted dump shifted one word** — every offset wrong, every one
+   self-consistent, and the stride derived from the same dump cancelled the
+   error out.
+
+**The rule these converge on: a probe must report the precondition it depends
+on, not just the value it went looking for.** And prefer searching for
+*already-measured values* over guessing a struct layout — that is what made
+D110 cheap and D111 wrong.
+
+⚠️ Two more, not instrument errors but the same family: `spm-headers` is
+**not ground truth** (`evt_door.h`'s argc is simply wrong, D102), and a
+pydantic field's docstring is **published** into `bleck mod schema`.
+
+## Traps that cost time today
+
+- Heredocs mangle `\n` inside Python f-strings — **use the Edit tool** for code
+  containing escapes. This corrupted `codespec.py` twice.
+- Generated C must be **pure ASCII**; an emoji in a comment fails the build.
+- `runtime_c.py` keeps hitting pylint's 1000-line limit. `runtime_patch.py` and
+  `runtime_trace.py` were split out along real seams.
+- Script comments are `--`, the default arm is `else`, and `gw` is
+  `GW(0)..GW(31)`.
+- An idle Dolphin window breaks `ingame.py`; the memory reader may attach to it.
+  `mods/nop` exists so a stock-behaviour disc can boot on this host, which runs
+  the REL loader as a Gecko cheat.
