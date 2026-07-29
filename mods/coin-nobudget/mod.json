@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "name": "coin-nobudget",
+  "version": "0.1.0",
+  "description": "One coin in an1_02, which has NO assign_tbl entry at all.",
+  "base": "eu0",
+  "_comment": [
+    "he1_01 (budget 4) and he2_02 (budget 29) both asserted on one coin, because",
+    "their budgets were already spent by block coins. an1_02 is one of the 204",
+    "maps with a setup file and no budget entry, so the allocator returns -1",
+    "rather than asserting -- and swGetCoinCollected @ 0x8003875c reads -1 as",
+    "'not collected' and returns 0. PREDICTION: it spawns and the map loads.",
+    "The overlay is hand-written because bleck refuses this file (D130).",
+    "an1_02 places 15 enemies, so the NPC count is the control."
+  ],
+  "code": {
+    "sources": ["src"], "target": "eu0", "module_id": 2, "banner": false,
+    "boot": "an1_02",
+    "hooks": [ { "function": "__assert2", "call": "on_assert", "mode": "before" } ]
+  }
+}

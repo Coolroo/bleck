@@ -167,12 +167,17 @@ is skipped while `bleck mod check` still prints `chain OK` — that was the D126
 bug, and it survived a full green test suite because every unit tested a layer
 that worked.
 
-⛔ **Only 14 of 227 maps can hold coins** (D127, D130). A coin is a save flag
-from a fixed per-map budget in `assign_tbl`, and the budget is spent by coins in
-*blocks* as well as floating ones — which never appear in a setup file. So a map
-with no floating coins has usually already spent it, and one more makes the game
-assert "the coin flags have overflowed". `edits.py` refuses it. Growing an
-existing section is fine (D129, measured).
+⛔ **A coin is a save flag, and 32 maps have a fixed budget of them** (D130,
+D133). The budget is spent by coins in *blocks* too, which never appear in a
+setup file, so a budgeted map that places no floating coins has already spent it
+and one more makes the game assert "the coin flags have overflowed".
+`edits.py` refuses exactly that case.
+
+⚠️ **The other 204 maps take coins fine** — no entry means flag id `-1`, which
+the collected-check reads as "not collected". `bleck/backends/coinflags.py`
+reads `assign_tbl` from the base DOL at build time (never committed: the address
+is `eu0`-specific, D95's reasoning). 🔶 A `-1` coin has nowhere to record being
+picked up, so it may respawn; that warns rather than refuses.
 
 ✅ **Any enemy template can go in any map** (D127). Mr. L (137, `e_dark_luigi`)
 was placed on Lineland Road and fought normally. Models come from `files/a/` on

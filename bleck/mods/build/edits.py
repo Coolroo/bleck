@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from bleck.backends import coinflags
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, setup, tables, u8
 from bleck.mods.manifest import (
@@ -43,6 +44,9 @@ ARCHIVE = "files/map/{map_name}.bin"
 #: The other copy. Written too -- see the note in `_apply_map`.
 STANDALONE = "files/setup/{map_name}.dat"
 
+#: Where the coin-flag table is read from, relative to an extracted base.
+DOL_PATH = "sys/main.dol"
+
 
 @dataclass(frozen=True)
 class PlacementBuild:
@@ -60,10 +64,9 @@ class PlacementBuild:
     coins_after: int = 0
 
     warnings: list[str] = field(default_factory=list)
-    """Empty today. It held the item-count warning until D129 measured that
-    growing an existing section is fine; the plumbing stays because
-    `bleck mod build` already collects these and the next placement finding
-    should not have to re-add it."""
+    """Anything worth saying that is not worth refusing over -- today, a coin
+    placed on a map with no flag budget, which spawns but may not stay
+    collected (D133)."""
 
     def describe(self) -> str:
         out = (
@@ -151,6 +154,14 @@ def placements_for(mod: Mod) -> list[MapPlacements]:
         )
         for name in dict.fromkeys([*declared, *coins])
     ]
+
+
+@dataclass(frozen=True)
+class CoinResult:
+    """A map's rebuilt coin list, and anything the build wants to say about it."""
+
+    items: list[setup.Item]
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -294,44 +305,81 @@ def _refuse_coin_collisions(mod: Mod, map_name: str, declared: list[SourcedCoin]
         seen[item.edit.index] = item.source
 
 
-def _refuse_new_section(mod: Mod, placement, data: setup.SetupFile) -> None:
-    """⛔ Refuse giving items to a map that ships none. **It hangs the game.**
+def _check_coin_budget(
+    mod: Mod, placement, data: setup.SetupFile, base: Path
+) -> list[str]:
+    """Refuse the coin additions measured to hang, and warn about the rest.
 
-    ✅ **The reason, in the game's own words** (D130). Hooking `__assert2` caught
-    it: `swdrv.c:505`, `(wp->gameCoinId - 1) < assign_tbl[i].num`, message
+    ✅ **The reason, in the game's own words** (D130). Hooking `__assert2`:
+    `swdrv.c:505`, `(wp->gameCoinId - 1) < assign_tbl[i].num`, message
     `コインのフラグが溢れました` -- "the coin flags have overflowed".
 
-    A coin is *persistent*: collect it and it must stay collected, so each one
-    owns a save flag. Flags come from a fixed per-map budget in `assign_tbl`, and
-    **every coin the map creates draws on it -- including coins the map places
-    itself, which never appear in the setup file.** `he1_01`'s budget is 4 and
-    its own objects had already taken all 4, measured: `gameCoinId` was 5 when
-    the assert fired.
+    A coin is *persistent*, so each owns a save flag from a per-map budget in
+    `assign_tbl`. **The budget is spent by coins the setup file cannot see** --
+    coins in blocks are map objects. `he1_01`'s budget is 4, it ships no setup
+    items, and one added coin still overflowed; `gameCoinId` was 5 when the
+    assert fired.
 
-    ⚠️ So "ships no item section" is a *proxy*, not the rule. The rule is
-    remaining budget, and the slack cannot be computed from the setup file
-    because the map's own coins are invisible to it. This refuses the case
-    measured to fail; a map with real slack is refused too, conservatively.
+    Three cases, all measured (D130, D133):
 
-    Refused rather than warned about, because the output is a disc that hangs on
-    entering the map. A warning scrolls past; this cannot.
+    | map | one added coin |
+    |---|---|
+    | in `assign_tbl`, ships coins (`he1_03`, 62/5) | ✅ works |
+    | in `assign_tbl`, ships none (`he1_01` 4, `he2_02` 29) | ⛔ **asserts** |
+    | **not** in `assign_tbl` (`an1_02`) | ✅ works, flag id -1 |
+
+    ⚠️ **Absence from the table is the common case, not a failure**: 204 of the
+    227 maps with a setup file have no entry, the allocator returns -1 instead of
+    asserting, and the collected-check reads -1 as "not collected". Refusing
+    those -- which is what the first version of this guard did -- blocks the
+    large majority of maps for no reason.
+
+    🔶 A -1 flag has nowhere to record the coin being picked up, so such a coin
+    may reappear on every map load. Warned about, not refused: it is a gameplay
+    surprise, not a hang, and nothing has measured it either way.
     """
-    if data.has_item_section or not placement.coins:
-        return
-    raise EditError(
-        f"{mod.name}: {placement.map_name} places no coins, and adding one "
-        f"hangs the game (D130).\n"
-        f"  A coin needs a save flag so it stays collected once picked up, and "
-        f"every map has a fixed budget of them -- spent by coins in blocks as "
-        f"well as floating ones. A map with no floating coins has usually "
-        f"already spent it, and the game asserts 'the coin flags have "
-        f"overflowed' before the map finishes loading.\n"
-        f"  The 14 maps that already place coins have room. "
-        f"`bleck setup show <map>` says whether a map is one of them."
-    )
+    if not placement.coins:
+        return []
+
+    budgets = coinflags.read(base / DOL_PATH)
+    if not budgets:
+        # ⚠️ Unknown, not "no budgets". Fall back to the conservative rule so a
+        # build against an unreadable DOL cannot emit a disc that hangs.
+        if data.has_item_section:
+            return []
+        raise EditError(
+            f"{mod.name}: cannot read the coin-flag table out of "
+            f"{base / DOL_PATH}, so whether {placement.map_name} has room for a "
+            f"coin is unknown.\n"
+            f"  Adding one to a map with no room hangs the game (D130), so this "
+            f"is refused rather than guessed."
+        )
+
+    entry = budgets.find(placement.map_name)
+    if entry is None:
+        return [
+            f"{mod.name}: {placement.map_name} has no coin-flag budget, so its "
+            f"coins get flag id -1 and the game has nowhere to record them as "
+            f"collected. They spawn (D133), but may come back every time the "
+            f"map loads."
+        ]
+
+    if not data.has_item_section:
+        raise EditError(
+            f"{mod.name}: {placement.map_name} reserves {entry.flags} coin "
+            f"flag(s) and places no coins of its own in the setup file, which "
+            f"means its blocks have already spent them. Adding one hangs the "
+            f"game (D130).\n"
+            f"  A coin needs a save flag so it stays collected, and the game "
+            f"asserts 'the coin flags have overflowed' before the map finishes "
+            f"loading.\n"
+            f"  Maps with no budget entry at all take coins fine -- it is "
+            f"specifically the ones already at their limit that cannot."
+        )
+    return []
 
 
-def _apply_coins(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]:
+def _apply_coins(mod: Mod, placement, data: setup.SetupFile, base: Path) -> CoinResult:
     """The map's item list with this mod's edits applied.
 
     ⚠️ **Indexed edits resolve against the list as it shipped**, then removals
@@ -339,7 +387,7 @@ def _apply_coins(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
     what a table means -- an author should not have to reason about whether
     row 4 renumbered the item row 5 refers to.
     """
-    _refuse_new_section(mod, placement, data)
+    notes = _check_coin_budget(mod, placement, data, base)
 
     kept = list(data.items)
     added: list[setup.Item] = []
@@ -377,7 +425,7 @@ def _apply_coins(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]
             f"list overruns the allocation rather than being truncated (D128).\n"
             f"  The busiest map the game ships places 48."
         )
-    return items
+    return CoinResult(items=items, warnings=notes)
 
 
 def _edited_item(item: setup.Item, edit) -> setup.Item:
@@ -431,7 +479,8 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
             source = _copy_source(mod, placement, edit, original)
         slots[edit.slot] = _apply_edit(slots[edit.slot], edit, mod.name, source)
 
-    items = _apply_coins(mod, placement, data)
+    coins = _apply_coins(mod, placement, data, base)
+    items = coins.items
     updated = setup.SetupFile(
         version=data.version,
         enemies=slots,
@@ -470,6 +519,7 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         coins_applied=len(placement.coins),
         coins_before=len(data.items),
         coins_after=len(updated.items),
+        warnings=coins.warnings,
     )
 
 

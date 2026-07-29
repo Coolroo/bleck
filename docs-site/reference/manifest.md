@@ -473,11 +473,17 @@ Every mod has a `mod.json` at its root.
         `type` to set. All 299 the game ships are coins with `flags` `0x11`;
         `0x10` and `0x1` are what make one spawn at all.
 
-    !!! danger "Only 14 maps can have coins at all"
+    !!! danger "Some maps have no room for another coin"
 
-        Adding a coin to one of the 213 maps that place none **hangs the
-        game** — the map never renders. `bleck` refuses it at build time rather
-        than producing a disc that freezes.
+        A coin is persistent, so each needs a save flag, and 32 maps reserve a
+        fixed number of them — spent by coins in blocks as well as floating
+        ones. Adding a coin to one of those that has already spent its
+        allowance **hangs the game**, and `bleck` refuses it at build time
+        rather than producing a disc that freezes.
+
+        Every other map — 204 of the 227 with a setup file — takes coins fine.
+        `bleck` warns there instead: those coins have no save flag, so they may
+        reappear each time the map loads.
 
         The reason is that a coin is persistent, so each one needs a save flag,
         and every map has a fixed budget of them — spent by coins in blocks as

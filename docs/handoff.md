@@ -86,7 +86,8 @@ the game names its own cause:
 "hooks": [ { "function": "__assert2", "call": "on_assert", "mode": "before" } ]
 ```
 
-That turned "the map freezes" into `swdrv.c:505`,
+`mods/coin-nobudget` is the worked example. That technique turned "the map
+freezes" into `swdrv.c:505`,
 `(wp->gameCoinId - 1) < assign_tbl[i].num` in a single run, after four runs of
 bisecting had only narrowed it to one byte. A frozen game and a deliberate
 refusal are indistinguishable from outside, and most of this repo's freezes were

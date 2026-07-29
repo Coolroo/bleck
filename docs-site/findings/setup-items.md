@@ -168,14 +168,31 @@ owns a bit in the save file. `swdrv` allocates those from a fixed per-map budget
 stride 8, matched by `strcmp` on the map name, 853 flags in total. A map that is
 not in the table returns `-1` without asserting.
 
-**32 maps have a budget; only 14 ship items.** So having a budget is not the
-same as having room:
+**32 maps have a budget; only 14 ship coins.** Having a budget is not the same
+as having room — and *not* having one turns out to be fine:
 
 | map | budget | ships | one added coin |
 |---|---:|---:|---|
 | `he1_01` | 4 | 0 | ⛔ assert |
 | `he2_02` | 29 | 0 | ⛔ assert |
 | `he1_03` | 62 | 5 | ✅ works |
+| `an1_02` | **no entry** | 0 | ✅ works |
+
+A map absent from the table gets flag id `-1`, and the collected-check reads
+`-1` as "not collected", so the coin spawns:
+
+```
+8003875c  cmpwi r3, -1
+80038760  bne   0x8003876c   ; a real id -> bit test
+80038764  li    r3, 0        ; -1 -> not collected
+```
+
+**204 of the 227 maps with a setup file are in that position.** The maps that
+cannot take a coin are specifically the ones *in* the table that have already
+spent their allowance.
+
+🔶 A `-1` flag has nowhere to record the pickup, so such a coin may reappear on
+every map load. Not measured either way.
 
 ### The budget counts coins the setup file cannot see
 

@@ -9555,3 +9555,71 @@ addresses, offsets, arities — are not expression.
 Recorded because checking took ten minutes and moved the conclusion from "we are
 in violation" to "one missing notice". It does not settle the social question,
 which is the server's to set.
+
+---
+
+## D133 — ⛔ The coin guard was wrong about 204 maps (2026-07-29)
+
+D130 refused coins on any map with no item section, reasoning that its blocks
+must have spent the budget. That is true of the two maps measured — and false
+of the large majority.
+
+### ✅ A map with no `assign_tbl` entry takes a coin fine
+
+`assign_tbl` holds **32** maps. **204 of the 227 with a setup file are not in
+it**, and the allocator handles that case differently: it returns `-1` at
+`0x800386d8` rather than asserting, and the collected-check reads `-1` as "no":
+
+```
+8003875c  cmpwi r3, -1
+80038760  bne   0x8003876c   ; a real id -> bit test
+80038764  li    r3, 0        ; -1 -> not collected
+80038768  blr
+```
+
+**Prediction written before the run**, from that listing: the coin spawns and
+the map loads. One coin added to `an1_02` (no entry, 15 enemies as the control):
+
+```
+seq=GAME(2) stage=1  map=an1_02  npcs[16]  probe: ... FIRED=0
+```
+
+`__assert2` never fired, and the game ran 25,949 frames. Confirmed.
+
+| map | in `assign_tbl` | ships coins | one added coin |
+|---|---|---|---|
+| `he1_03` | 62 | 5 | ✅ works |
+| `he1_01` | 4 | 0 | ⛔ asserts |
+| `he2_02` | 29 | 0 | ⛔ asserts |
+| `an1_02` | **no entry** | 0 | ✅ **works** |
+
+⛔ **So "ships no item section" was the wrong predictor.** The right one is
+"is in `assign_tbl` and ships no coins of its own" — a map already at its limit.
+D130's guard blocked 204 maps that work.
+
+### ✅ Read the table, do not ship it
+
+`bleck/backends/coinflags.py` reads `assign_tbl` out of the base's `main.dol` at
+build time, for the same reason the hook guard word is derived that way (D95):
+the address is `eu0`-specific and a committed copy would silently describe the
+wrong build.
+
+⚠️ **Empty means *unknown*, never "no map has a budget".** An unreadable DOL
+falls back to refusing, because guessing permissively there emits a disc that
+hangs. A shape check on the 32 map names is what stops a wrong address being
+mistaken for data.
+
+### 🔶 What is allowed now, and the catch
+
+A coin on an unbudgeted map gets flag id `-1`, which has nowhere to record the
+pickup — so it may reappear on every map load. **Warned, not refused**: that is
+a gameplay surprise, not a hang, and nothing has measured it either way. It
+would also be the exploit shape — collect, leave, return, collect again.
+
+### ⛔ Third scripted-edit failure this session
+
+D131 recorded two bulk text substitutions that silently did the wrong thing.
+This entry cost a third: a heredoc replacement whose pattern did not match, which
+reported nothing and left the file untouched until a test caught it. The rule
+already written in D131 — targeted edits, not scripted rewrites — was ignored by
+me while writing the entry that says so. Use the editor; check the diff.
