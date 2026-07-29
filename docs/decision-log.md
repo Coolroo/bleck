@@ -9682,3 +9682,79 @@ invalid on sight.
 Kept rather than deleted: the next kind wants "designed but not built yet"
 rather than "unknown table kind", and that distinction cost a paragraph to
 explain in D125.
+
+---
+
+## D135 — 🔶 A door's script pointer CAN be swapped; the map does not freeze (2026-07-29)
+
+Branch `pointer-swap`. Route 2 from [`tool-comparison.md`](./tool-comparison.md):
+whole-script replacement without touching bytecode, and without GPL-3 code.
+
+### Why this was worth trying
+
+`code.patches` mutates bytecode in place, so it is limited to **same-size**
+replacement -- the one mutation that moves no jump-table label. Swapping the
+pointer gives arbitrary logic with no jump-table problem at all, because the
+replacement is built whole. That is most of what `evtpatch` is wanted for, and
+`evtpatch` is GPL-3.
+
+⛔ **D51 already ruled this out for `MapData.initScript`**: the swap succeeded by
+every mechanical check and the map froze mid-load, the untested explanation
+being that the loader waits on the specific `EvtEntry` it created.
+
+🔶 The hypothesis here was that a **door** is different -- its interact script is
+started by the player, not by the map-load sequence, so nothing waits on a
+particular entry.
+
+### ✅ What three unattended runs establish
+
+`mods/door-swap` writes `&replacement` into `he1_01` door 0's `interactScript`
+field (`DoorDesc + 0x40`) at `_prolog`, where `code.patches` already reaches.
+
+| | |
+|---|---|
+| Map loads normally | ✅ 33,660 `SEQ_GAME` frames, **no freeze** |
+| `__assert2` fired | ✅ never |
+| Field after the swap | ✅ ours |
+| **Field re-resolved every frame during gameplay** | ✅ **still ours** |
+| Replacement bytecode valid | ✅ ran via `evtEntry`, `USER_FUNC` fired once |
+
+⚠️ **The per-frame re-read is the one that mattered.** Writing at `_prolog` and
+reading back at `_prolog` proves nothing -- the descriptor array lives in data
+the map loads, so the load could have restored the original and every earlier
+check would still have passed. Re-resolving from `mapDataPtr` each frame is what
+turns "we wrote it" into "it is still ours when the player could use the door".
+
+⚠️ **The self-test exists to disambiguate the human test.** If a player uses the
+door and nothing happens, that could mean malformed bytecode *or* a door that
+never reads this field. Running the swapped-in script directly through
+`evtEntry` settles the first, so the human result is readable either way.
+
+### 🔶 What is not established
+
+**Whether the door actually invokes the field when used.** Input cannot be
+injected (D48), so this needs a person to walk into `he1_01`'s first door.
+`RAN` climbing past 1 is the answer.
+
+⛔ **Not merged to `main`, and no manifest surface built.** A declaration for
+whole-script replacement is premature while the last link is unproven -- and the
+useful half of this finding is the *technique*, which the probe records.
+
+### Encoding notes, since they are easy to get wrong
+
+- A bare `USER_FUNC` call is **argc 1**: argc counts the function pointer.
+  `evt_door_set_door_descs` is argc 3 for a pointer plus two arguments (D102).
+- A script ends `{END_EVT, END_SCRIPT}` = `{2, 1}`, copied from what `bleck`
+  emits for an empty script rather than invented. Emitting only one terminator
+  froze the game once already.
+- The replacement array is filled at run time rather than statically
+  initialised, so no relocation of a function address into a data array is
+  involved -- one fewer thing to be wrong about if it had failed.
+
+### ⛔ Read the whole compiler error
+
+The first build failed with `implicit declaration of evtEntry`, and I chased the
+declaration -- which was present and correct. The *actual* first error, four
+lines above and cut off by tailing the output, was `unknown type name 'u8'`: the
+declaration failed to parse, so the call went implicit. The project instructions already say
+not to truncate this output.
