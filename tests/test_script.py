@@ -47,6 +47,57 @@ def header(opcode: evt.Opcode, count: int) -> int:
     return evt.instruction_header(opcode, count)
 
 
+class TestTermination:
+    """Every compiled script must end its evt ENTRY, not just its instruction
+    list (D106).
+
+    ⚠️ These are the tests the suite did not have. Every other bytecode
+    assertion here compares the compiler against itself -- it says "emit these
+    words", so it passes on any self-consistent compiler, including one that
+    omits a terminator the VM requires. A script missing `END_EVT` left its
+    entry alive and hung the game, and 809 tests passed on both versions.
+
+    So these assert a property the *VM* imposes, across shapes rather than one
+    example: whatever the body, the entry gets terminated.
+    """
+
+    @pytest.mark.parametrize(
+        ("label", "body"),
+        [
+            ("empty", ""),
+            ("one statement", " wait(1)"),
+            ("explicit return", " return"),
+            ("statement then return", " wait(1)\n return"),
+            ("infinite loop", " loop {\n wait(1)\n }"),
+            ("switch", " switch gw[0] {\n case 1 {\n wait(1)\n }\n }"),
+        ],
+    )
+    def test_a_script_ends_its_entry_whatever_the_body(self, label, body):
+        out = values(f"script main {{\n{body}\n}}")
+        expected = [int(evt.Opcode.END_EVT), int(evt.Opcode.END_SCRIPT)]
+        assert out[-2:] == expected, label
+
+    def test_a_return_does_not_replace_the_trailing_pair(self):
+        """`return` emits END_EVT where it stands, and the trailing pair is
+        emitted anyway -- unreachable, so nothing has to reason about whether
+        the last statement on every path happened to be one."""
+        out = values("script main {\n return\n}")
+        assert out.count(int(evt.Opcode.END_EVT)) == 2
+
+    def test_every_script_in_a_program_terminates(self):
+        """Not only the entry script. A map hook or a combo script that ends
+        hung the game exactly the same way, which is what made patching `main`
+        the wrong shape of fix."""
+        source = (
+            "script main {\n wait(1)\n}\n"
+            "script on_arrive {\n gw[0] = 1\n}\n"
+            "script on_combo {\n gw[1] = 2\n}\n"
+        )
+        expected = [int(evt.Opcode.END_EVT), int(evt.Opcode.END_SCRIPT)]
+        for name in ("main", "on_arrive", "on_combo"):
+            assert values(source, name)[-2:] == expected, name
+
+
 class TestLexer:
     def test_tracks_line_and_column(self):
         tokens = tokenize("script main {\n    wait(1)\n}")
