@@ -9924,3 +9924,62 @@ mid-record, then the zone dump cut off entry `[2]` — which was the entry that
 answered the question. The project instructions say to ask for more words than seem necessary
 because they are free, and the log is re-readable without a re-run. Two boots
 were spent relearning that.
+
+---
+
+## D139 — ⛔ A door's interact script does not drive the transition (2026-07-29)
+
+Branch `pointer-swap`. Attempt at making doors testable without a person, so
+door work stops costing a human per iteration. **It did not work**, and the
+negative is worth more than the attempt.
+
+### The instrument can see what it looked for
+
+`MAPCHANGE_FRAMES` climbed to 156 during the boot into `he1_01`, and
+`scripts/ingame.py` prints `map=` every poll. A map change is visible to this
+rig; "no transition" is a real reading, not a blind one (the project instructions' rule).
+
+### ⛔ Two grounded attempts, both negative
+
+**1. Run the interact script bare.** `evtEntry` on `DoorDesc[0].interactScript`
+returned a real entry (`0x807E7AA0`), no assert, and the map stayed `he1_01`.
+
+**2. Run it with an active door set.** `evtDoorGetActiveDoorDesc` (`0x800e11b0`)
+returns `*(doorWork + 0x2D8)` when bit 11 of the flags halfword at `+0` is set,
+so both were set first — verified in the report, flags `0x0200` -> `0x0A00`.
+Same outcome: entry created, no assert, no transition, 41,090 frames of normal
+gameplay.
+
+### 🔶 What that suggests
+
+The `DoorDesc` interact script is probably the *interaction* — the animation and
+whatever dialogue — while the **transition belongs to `MapDoorDesc`**. D138 found
+`MapDoorDesc[2]` (`ie_doa_02` -> `he1_06`) covering the same doorway, and that is
+the record naming a destination. Two records, two jobs.
+
+Recorded as 🔶: it fits everything measured and nothing has tested it.
+
+### ⛔ An arithmetic error that froze the game
+
+`DOOR_WORK` was written as `0x805AD660`. It is `r13 - 32480` = **`0x805AE020`** —
+I was out by `0x9C0`, read a pointer out of unrelated memory, and the game
+froze on the frame the write fired.
+
+Two habits came out of it, both now in the probe:
+
+- **Compute addresses, do not eyeball them.** This is the second arithmetic
+  slip this session; the other put "1,299 items" into five files (D132).
+- **Refuse an implausible pointer rather than writing through it.** The probe
+  now range-checks against MEM1 before dereferencing. A freeze reports nothing,
+  so a bad write costs a whole run to even notice.
+
+### Where this leaves door testing
+
+⛔ **Doors still need a person**, and two attempts at avoiding that failed.
+🔶 The next lever is `MapDoorDesc` — either driving a transition through it, or
+`evt_door_set_event`, which the builtin catalog types as
+`evt_door_set_event(char *door, int unknown, EvtScriptCode *script)` and which
+D138's disassembly showed writing into a per-map-door slot array.
+
+The 30-second human test on the `pointer-swap` branch is still the cheapest way
+to settle the swap itself.
