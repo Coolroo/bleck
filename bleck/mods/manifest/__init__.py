@@ -29,7 +29,11 @@ from bleck.mods.manifest.codespec import (  # noqa: F401
     _parse_code,
 )
 from bleck.mods.manifest.placements import (  # noqa: F401
+    COIN,
+    PLACEMENT_KINDS,
     PLANNED_KINDS,
+    SPAWN_FLAGS,
+    ItemEdit,
     MapPlacements,
     PlacementEdit,
     TableKind,
@@ -139,7 +143,13 @@ class Manifest:
 
     @property
     def has_placements(self) -> bool:
-        return bool(self.setup or self.tables_of(TableKind.ENEMIES))
+        """Whether this mod changes any map's setup file at all.
+
+        ⚠️ Gates `mods_with_placements`, so a placement kind missing from
+        `PLACEMENT_KINDS` is skipped by the whole build while it still reports
+        "chain OK" (D126).
+        """
+        return bool(self.setup) or any(self.tables_of(kind) for kind in PLACEMENT_KINDS)
 
     @property
     def has_code(self) -> bool:
@@ -165,8 +175,7 @@ class Manifest:
         }
         if self.setup:
             body["setup"] = {
-                placement.map_name: [edit.to_json() for edit in placement.edits]
-                for placement in self.setup
+                placement.map_name: _map_json(placement) for placement in self.setup
             }
         # Omitted rather than written as an empty object, like `setup` and
         # `code`: most mods declare no tables.
@@ -211,6 +220,19 @@ class Manifest:
             setup=_parse_setup(raw.get("setup"), source),
             tables=_parse_tables(raw.get("tables"), source),
         )
+
+
+def _map_json(placement: MapPlacements) -> object:
+    """One map's declared placements, in the shortest shape that says them.
+
+    ⚠️ **A map with no items stays a bare list.** The long form is not an
+    upgrade; promoting every map to it would rewrite manifests that never
+    mention items, and `bleck setup apply` writes this file back.
+    """
+    enemies = [edit.to_json() for edit in placement.edits]
+    if not placement.items:
+        return enemies
+    return {"enemies": enemies, "items": [item.to_json() for item in placement.items]}
 
 
 def _parse_dependencies(raw: object, source: str) -> list[Requirement]:

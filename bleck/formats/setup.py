@@ -355,6 +355,11 @@ class Item:
     #: Upstream: "0x10 and 0x1 required to spawn, others unused".
     SPAWNS = 0x11
 
+    #: The only type the game can place. `setupItemTemplates` holds exactly one
+    #: entry, id 0, so any other value indexes past the end of it. Every one of
+    #: the 1,299 items across the 14 maps that place any is this.
+    COIN = 0
+
     @property
     def spawns(self) -> bool:
         return self.flags & self.SPAWNS == self.SPAWNS

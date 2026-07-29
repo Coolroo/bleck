@@ -48,11 +48,11 @@ def setup_file(slots) -> bytes:
     return bytes(out)
 
 
-def parse(text: str, source: str = "tables/enemies.csv") -> tables.Table:
-    return tables.parse(text, source)
+def parse(text: str, source: str = "tables/enemies.csv") -> tables.enemies.Table:
+    return tables.enemies.parse(text, source)
 
 
-def rows(text: str) -> list[tables.TableRow]:
+def rows(text: str) -> list[tables.enemies.Row]:
     return parse(text).rows
 
 
@@ -76,7 +76,7 @@ class TestBoundToOneMap:
     the filename. `"tables": {"n": {"path": ..., "map": ...}}` is that."""
 
     def test_a_bound_table_needs_no_map_column(self):
-        found = tables.parse(
+        found = tables.enemies.parse(
             "slot,template,x,y,z\n3,7,-300,0,0\n", "tables/he1_01.csv", "he1_01"
         )
         assert found.map_name == "he1_01"
@@ -84,7 +84,7 @@ class TestBoundToOneMap:
 
     def test_a_bound_table_may_not_also_carry_one(self):
         with pytest.raises(tables.TableError) as caught:
-            tables.parse(HEADER + "he1_01,3,7,0,0,0\n", "t.csv", "he1_01")
+            tables.enemies.parse(HEADER + "he1_01,3,7,0,0,0\n", "t.csv", "he1_01")
         message = str(caught.value)
         assert "bound to 'he1_01'" in message
         # Says both ways out, since either is a reasonable thing to have meant.
@@ -92,7 +92,7 @@ class TestBoundToOneMap:
 
     def test_an_unbound_table_still_requires_the_column(self):
         with pytest.raises(tables.TableError, match="missing required column"):
-            tables.parse("slot,template\n3,7\n", "t.csv")
+            tables.enemies.parse("slot,template\n3,7\n", "t.csv")
 
     def test_the_two_forms_declare_the_same_edits(self, tmp_path):
         loose = a_mod(
@@ -589,12 +589,12 @@ class TestScaffolding:
         root = self.create(monkeypatch, tmp_path)
         text = (root / mods_cli.ENEMY_TABLE).read_text(encoding="utf-8")
         assert text.splitlines()[0].startswith("#")
-        assert not tables.parse(text, mods_cli.ENEMY_TABLE).rows
+        assert not tables.enemies.parse(text, mods_cli.ENEMY_TABLE).rows
 
     def test_the_scaffolded_header_names_every_column(self, monkeypatch, tmp_path):
         root = self.create(monkeypatch, tmp_path)
         text = (root / mods_cli.ENEMY_TABLE).read_text(encoding="utf-8")
-        assert text.splitlines()[1] == ",".join(tables.COLUMNS)
+        assert text.splitlines()[1] == ",".join(tables.enemies.COLUMNS)
 
 
 # --- applying a table to a real setup file ----------------------------------
@@ -679,7 +679,7 @@ class TestApplyingATable:
         mod = a_mod(
             tmp_path / "fresh",
             {"tables": {"enemies": mods_cli.ENEMY_TABLE}},
-            f"# a comment\n{','.join(tables.COLUMNS)}\n",
+            f"# a comment\n{','.join(tables.enemies.COLUMNS)}\n",
         )
         assert mod.manifest.has_placements
         assert mod_edits.placements_for(mod) == []

@@ -178,13 +178,15 @@ def cmd_edits(args: argparse.Namespace) -> int:
     edits = api.SetupEdits.of(mod.manifest.setup)
     if args.json:
         return _emit(edits)
-    if not edits.setup and not mod.manifest.tables:
+    if not edits.setup and not edits.items and not mod.manifest.tables:
         print(f"{mod.name} declares no placement changes")
         return 0
-    for map_name, entries in edits.setup.items():
+    for map_name in dict.fromkeys([*edits.setup, *edits.items]):
         print(f"  {map_name}")
-        for edit in entries:
-            print(f"    {edit.model_dump_json(exclude_none=True)}")
+        for edit in edits.setup.get(map_name, []):
+            print(f"    enemy  {edit.model_dump_json(exclude_none=True)}")
+        for item in edits.items.get(map_name, []):
+            print(f"    item   {item.model_dump_json(exclude_none=True)}")
     _note_tables(mod)
     return 0
 

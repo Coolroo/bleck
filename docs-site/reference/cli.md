@@ -237,9 +237,10 @@ Raw LZ77, one layer only. Prints sizes if no output is given.
 bleck mod new <name> [--description ...] [--author ...]
 ```
 
-Writes `mod.json`, an empty `overlay/`, and an empty `tables/enemies.csv` — a
-comment line and a header row — which the manifest already points at. Add rows
-to place enemies; see [`tables`](manifest.md).
+Writes `mod.json`, an empty `overlay/`, and an empty table per kind —
+`tables/enemies.csv` and `tables/items.csv`, each a comment line and a header
+row — which the manifest already points at. Add rows to place enemies or coins;
+see [`tables`](manifest.md).
 
 ### `bleck mod list`
 

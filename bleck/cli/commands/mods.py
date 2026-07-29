@@ -8,6 +8,7 @@ import argparse
 import difflib
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -47,7 +48,8 @@ def cmd_new(args: argparse.Namespace) -> int:
         raise UserError(f"{root} already exists (use --force to overwrite)")
 
     (root / manifest.OVERLAY_DIR).mkdir(parents=True, exist_ok=True)
-    _scaffold_table(root / ENEMY_TABLE)
+    for scaffold in SCAFFOLDS:
+        _scaffold_table(root / scaffold.path, scaffold)
     manifest.write(
         root,
         manifest.Manifest(
@@ -56,23 +58,75 @@ def cmd_new(args: argparse.Namespace) -> int:
             description=args.description,
             author=args.author,
             base=_base().name,
-            tables=[manifest.TableRef(kind=manifest.TableKind.ENEMIES, path=ENEMY_TABLE)],
+            tables=[
+                manifest.TableRef(kind=scaffold.kind, path=scaffold.path)
+                for scaffold in SCAFFOLDS
+            ],
         ),
     )
     print(f"created {root}/")
     print(f"  edit {root}/{manifest.MANIFEST_NAME}")
-    print(f"  place enemies in {root}/{ENEMY_TABLE}")
+    for scaffold in SCAFFOLDS:
+        print(f"  {scaffold.hint} in {root}/{scaffold.path}")
     print(f"  then `bleck mod vendor {args.name} <disc-path>`")
     return 0
 
 
-#: Scaffolded by `bleck mod new`, and referenced from the manifest it writes.
-#: Posix-style: it is stored in `mod.json` and must survive a Windows round trip.
-ENEMY_TABLE = "tables/enemies.csv"
+@dataclass(frozen=True)
+class TableScaffold:
+    """An empty table `bleck mod new` writes, and the manifest entry for it."""
+
+    kind: manifest.TableKind
+    path: str
+    """Posix-style: it is stored in `mod.json` and must survive a Windows round
+    trip."""
+
+    hint: str
+    """What the `mod new` output tells the author this file is for."""
+
+    comment: str
+    """The one line at the top of the generated file."""
+
+    @property
+    def columns(self) -> tuple[str, ...]:  # pylint: disable=container-return
+        return _COLUMNS[self.kind]
 
 
-def _scaffold_table(path: Path) -> None:
-    """An empty enemy table: one comment line and the header row, nothing else.
+#: Column lists by kind. Data rather than a branch, so a new kind is one entry
+#: here and one in `SCAFFOLDS`.
+_COLUMNS = {
+    manifest.TableKind.ENEMIES: tables.enemies.COLUMNS,
+    manifest.TableKind.ITEMS: tables.items.COLUMNS,
+}
+
+SCAFFOLDS = (
+    TableScaffold(
+        kind=manifest.TableKind.ENEMIES,
+        path="tables/enemies.csv",
+        hint="place enemies",
+        comment=(
+            "# One enemy per row. Blank lines and '#' lines are skipped; "
+            "'template' takes a number or a name."
+        ),
+    ),
+    TableScaffold(
+        kind=manifest.TableKind.ITEMS,
+        path="tables/items.csv",
+        hint="place items",
+        comment=(
+            "# One item per row. Leave 'index' empty to add one, or give it to "
+            "change an item the map already places."
+        ),
+    ),
+)
+
+#: Kept as a name because tests and docs refer to it.
+ENEMY_TABLE = SCAFFOLDS[0].path
+ITEM_TABLE = SCAFFOLDS[1].path
+
+
+def _scaffold_table(path: Path, scaffold: TableScaffold) -> None:
+    """An empty table: one comment line and the header row, nothing else.
 
     Empty rather than pre-filled, because an example row is a placement, and a
     placement nobody asked for is exactly the class of surprise this repo keeps
@@ -80,9 +134,7 @@ def _scaffold_table(path: Path) -> None:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "# One enemy per row. Blank lines and '#' lines are skipped; "
-        "'template' takes a number or a name.\n"
-        f"{','.join(tables.COLUMNS)}\n",
+        f"{scaffold.comment}\n{','.join(scaffold.columns)}\n",
         encoding="utf-8",
     )
 

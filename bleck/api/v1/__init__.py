@@ -12,6 +12,7 @@ from bleck.api.v1.mods import (
 )
 from bleck.api.v1.placements import (
     EnemyPlacement,
+    ItemEdit,
     MapPlacements,
     PlacementEdit,
     Position,
@@ -26,6 +27,7 @@ __all__ = [
     "Document",
     "EnemyPlacement",
     "Hook",
+    "ItemEdit",
     "MapPlacements",
     "ModDocument",
     "Patch",

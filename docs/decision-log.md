@@ -9000,3 +9000,105 @@ Schema.
 
 Free to do now and expensive later: `tables` has never been in a release. The
 `v0.1.0-rc1` tag predates it.
+
+---
+
+## D126 — ✅ Placed items, and a silent no-op caught by trying it (2026-07-29)
+
+D125 left `items` refused as "designed but not built". This builds it, one
+module per kind rather than one parser with two modes.
+
+### ✅ An item is not an enemy, and the columns say so
+
+```csv
+# mods/my-mod/tables/items.csv
+map,index,x,y,z
+he1_03,,-300,50,0      <- no index: adds an item
+he1_03,1,999,0,0       <- an index: edits the one already there
+```
+
+The enemy array is **100 fixed slots** addressed by `slot`; the item section is
+a **variable-length counted list**, so the column is `index` and it is
+*optional*. Reusing the word `slot` was rejected: it would tell a reader the
+number means something it does not.
+
+Three consequences fall straight out of the shape and are worth stating,
+because each is a rule the enemy table needed and this one does not:
+
+- ⛔ **No orphan rule.** D79's trap is that the game stops reading enemies at
+  the first empty slot. A counted, dense array cannot have a hole, so removing
+  a middle item is ordinary.
+- **`clear` requires an `index`.** There is no empty item to clear.
+- **Indexed edits resolve against the list as it shipped**, then removals apply,
+  then additions append. So row order cannot change what a table means -- an
+  author should not have to work out whether row 4 renumbered what row 5 refers
+  to.
+
+### ✅ Only coins exist, and that is enforced
+
+`setupItemTemplates` holds exactly **one** entry, id 0 -- a coin. Measured
+against the disc rather than taken on trust: all **1,299** items across the
+**14** maps that place any are type 0 with flags `0x11`. A non-zero `type` is
+therefore refused rather than written, because it would index past the end of a
+one-element array. `flags` is read base-prefixed (`0x11`, not 17) since it is a
+bit pattern, and `0x10 | 0x1` is what makes an item spawn at all.
+
+### 🔶 Creating an item section where none exists
+
+184 setup files are exactly `0x2BC4` bytes -- `4 + 100 * 0x70` -- which is where
+`itemCount` lives. So for the 213 maps that place nothing, **the game reads
+eight bytes past the end of the file**. Upstream's own comment on
+`setupReadItemInfo` admits it: *"This reads uninitialised memory that happens to
+be 0 because of disc alignment."*
+
+That makes adding a section plausible rather than proven: a real count written
+at that offset is read the same way the zero was. `bleck` writes it and grows
+the file by `8 + 16 * n` (verified: 11,204 → 11,228 for one coin). 🔶 **Nothing
+has yet watched a coin appear in a map that shipped none.**
+
+⚠️ It also names a hazard that predates this work: any rebuild that changes what
+follows a setup file could turn that padding into garbage, and every one of
+those 213 maps would then read a garbage `itemCount`.
+
+### ⛔ The bug: a whole kind skipped, reporting success
+
+The first end-to-end run built a mod declaring only an items table. It printed
+`chain OK` and generated **nothing**.
+
+`has_placements` gates `mods_with_placements`, and it still read
+`setup or tables_of(ENEMIES)`. An items-only mod was not "a mod with
+placements", so the build never visited it -- and nothing failed, so nothing was
+reported. This is the D51 shape exactly: every mechanical check passed and the
+effect was absent.
+
+Fixed by naming the set once, `PLACEMENT_KINDS`, rather than enumerating kinds
+at the call site where the next one will be forgotten the same way. A test
+iterates it, so a kind added without wiring fails there.
+
+⚠️ **It was caught by building a real mod against a real map, not by the unit
+tests** -- which all passed, because each tested a layer that worked. Worth
+remembering next time a feature looks finished at 1,017 green.
+
+### ✅ One module per kind
+
+`bleck/formats/tables.py` became `bleck/formats/tables/`:
+
+    common.py    comments, header, cells -- the file's shape
+    enemies.py   slot, template names, copy_from
+    items.py     index, type, flags
+
+⛔ **Rejected: one parser with a `kind` parameter.** The column *lists* are data
+(`common.Schema`) and stay shared; the column *meanings* are not, and a single
+`_row` branching on kind was already growing the pair of unrelated validators
+that made the split obvious.
+
+Stdlib `csv` still does the tokenizing, as it always did -- what is hand-written
+is the schema and domain layer, which no CSV library covers: template names
+resolved against the NPC catalog, all-or-none positions, and every message
+carrying `file:line`.
+
+### Verified
+
+1,017 tests, pylint 10.00/10. Against the real disc: `he1_03` (5 shipped coins)
+with one removed, one moved and two added produced exactly the expected 6-item
+list with enemies untouched, and `he1_01` (no item section) grew by 24 bytes.

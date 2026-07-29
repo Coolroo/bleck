@@ -19,7 +19,13 @@ from pathlib import Path
 
 from bleck.common.errors import BleckError
 from bleck.formats import lz77, setup, tables, u8
-from bleck.mods.manifest import MANIFEST_NAME, MapPlacements, PlacementEdit, TableKind
+from bleck.mods.manifest import (
+    MANIFEST_NAME,
+    ItemEdit,
+    MapPlacements,
+    PlacementEdit,
+    TableKind,
+)
 from bleck.mods.registry import Mod
 from bleck.mods.resolver import Chain
 
@@ -49,12 +55,24 @@ class PlacementBuild:
     applied: int
     used_before: int
     used_after: int
+    items_applied: int = 0
+    items_before: int = 0
+    items_after: int = 0
 
     def describe(self) -> str:
-        return (
+        out = (
             f"{self.mod}: {self.map_name} setup, {self.applied} edit(s) "
             f"-> {self.used_before} enemies becomes {self.used_after}"
         )
+        # Reported only when there are any: every map has enemies and 14 of 227
+        # have items, so an unconditional ", 0 items" would be noise on nearly
+        # every line.
+        if self.items_applied or self.items_before:
+            out += (
+                f", {self.items_applied} item edit(s) "
+                f"-> {self.items_before} items becomes {self.items_after}"
+            )
+        return out
 
 
 @dataclass(frozen=True)
@@ -89,33 +107,59 @@ def placements_for(mod: Mod) -> list[MapPlacements]:
     Inline `setup` and CSV `tables` say the same thing in different shapes, so
     they merge here rather than in the manifest: this is the first point that
     has the mod's *directory*, and a table is a path until then.
+
+    ⚠️ Enemies and items merge **per map**, not per source, because both end up
+    in one generated `.dat`. A mod that adds an enemy in a table and a coin
+    inline must not produce two files, the second overwriting the first.
     """
     declared: dict[str, list[SourcedEdit]] = {}
+    items: dict[str, list[SourcedItem]] = {}
     for placement in mod.manifest.setup:
-        found = declared.setdefault(placement.map_name, [])
-        found += [
-            SourcedEdit(edit=edit, source=f"{MANIFEST_NAME} setup.{placement.map_name}")
-            for edit in placement.edits
-        ]
+        where = f"{MANIFEST_NAME} setup.{placement.map_name}"
+        declared.setdefault(placement.map_name, []).extend(
+            SourcedEdit(edit=edit, source=where) for edit in placement.edits
+        )
+        items.setdefault(placement.map_name, []).extend(
+            SourcedItem(edit=edit, source=where) for edit in placement.items
+        )
 
     for row in _table_rows(mod):
         declared.setdefault(row.map_name, []).append(
             SourcedEdit(edit=_edit_of(row), source=f"{row.source}:{row.line}")
         )
+    for row in _item_rows(mod):
+        items.setdefault(row.map_name, []).append(
+            SourcedItem(edit=_item_of(row), source=f"{row.source}:{row.line}")
+        )
 
     for map_name, found in declared.items():
         _refuse_collisions(mod, map_name, found)
+    for map_name, found_items in items.items():
+        _refuse_item_collisions(mod, map_name, found_items)
+
     return [
-        MapPlacements(map_name=name, edits=[item.edit for item in found])
-        for name, found in declared.items()
+        MapPlacements(
+            map_name=name,
+            edits=[item.edit for item in declared.get(name, [])],
+            items=[item.edit for item in items.get(name, [])],
+        )
+        for name in dict.fromkeys([*declared, *items])
     ]
+
+
+@dataclass(frozen=True)
+class SourcedItem:
+    """One item edit and where it was written, so a collision can name both."""
+
+    edit: ItemEdit
+    source: str
 
 
 @dataclass(frozen=True)
 class SourcedRow:
     """A table row that remembers which file it was read from."""
 
-    row: tables.TableRow
+    row: tables.enemies.Row
     source: str
 
     @property
@@ -127,6 +171,55 @@ class SourcedRow:
         return self.row.line
 
 
+@dataclass(frozen=True)
+class SourcedItemRow:
+    """An item table row that remembers which file it was read from."""
+
+    row: tables.items.Row
+    source: str
+
+    @property
+    def map_name(self) -> str:
+        return self.row.map_name
+
+    @property
+    def line(self) -> int:
+        return self.row.line
+
+
+def _table_path(mod: Mod, ref) -> Path:
+    path = mod.root / ref.path
+    if not path.is_file():
+        raise EditError(
+            f"{mod.name}: no table at {ref.path}, declared under "
+            f"'tables.{ref.kind}' in {MANIFEST_NAME}"
+        )
+    return path
+
+
+def _item_rows(mod: Mod) -> list[SourcedItemRow]:
+    """Every item-table row this mod declares."""
+    out: list[SourcedItemRow] = []
+    for ref in mod.manifest.tables_of(TableKind.ITEMS):
+        table = tables.items.read(
+            _table_path(mod, ref), source=ref.path, map_name=ref.map_name
+        )
+        out += [SourcedItemRow(row=row, source=table.source) for row in table.rows]
+    return out
+
+
+def _item_of(sourced: SourcedItemRow) -> ItemEdit:
+    """An item table row as the same declaration an inline edit makes."""
+    row = sourced.row
+    return ItemEdit(
+        index=row.index,
+        position=row.position,
+        type=row.type,
+        flags=row.flags,
+        clear=row.clear,
+    )
+
+
 def _table_rows(mod: Mod) -> list[SourcedRow]:
     """Every enemy-table row this mod declares.
 
@@ -136,13 +229,9 @@ def _table_rows(mod: Mod) -> list[SourcedRow]:
     """
     out: list[SourcedRow] = []
     for ref in mod.manifest.tables_of(TableKind.ENEMIES):
-        path = mod.root / ref.path
-        if not path.is_file():
-            raise EditError(
-                f"{mod.name}: no table at {ref.path}, declared under "
-                f"'tables.{ref.kind}' in {MANIFEST_NAME}"
-            )
-        table = tables.read(path, source=ref.path, map_name=ref.map_name)
+        table = tables.enemies.read(
+            _table_path(mod, ref), source=ref.path, map_name=ref.map_name
+        )
         out += [SourcedRow(row=row, source=table.source) for row in table.rows]
     return out
 
@@ -177,6 +266,72 @@ def _refuse_collisions(mod: Mod, map_name: str, declared: list[SourcedEdit]) -> 
                 f"  Which one wins is not defined, so declare it in one place."
             )
         seen[item.edit.slot] = item.source
+
+
+def _refuse_item_collisions(mod: Mod, map_name: str, declared: list[SourcedItem]) -> None:
+    """Refuse one mod editing the same item twice.
+
+    ⚠️ Only *indexed* edits can collide. Two rows that both add an item are two
+    items, which is the whole point -- deduplicating adds would make a table of
+    thirty coins silently place fewer.
+    """
+    seen: dict[int, str] = {}
+    for item in declared:
+        if item.edit.index is None:
+            continue
+        first = seen.get(item.edit.index)
+        if first is not None:
+            raise EditError(
+                f"{mod.name}: item {item.edit.index} of {map_name} is declared "
+                f"twice -- in {first} and in {item.source}.\n"
+                f"  Which one wins is not defined, so declare it in one place."
+            )
+        seen[item.edit.index] = item.source
+
+
+def _apply_items(mod: Mod, placement, data: setup.SetupFile) -> list[setup.Item]:
+    """The map's item list with this mod's edits applied.
+
+    ⚠️ **Indexed edits resolve against the list as it shipped**, then removals
+    happen, then additions append. So the order rows appear in cannot change
+    what a table means -- an author should not have to reason about whether
+    row 4 renumbered the item row 5 refers to.
+    """
+    kept = list(data.items)
+    added: list[setup.Item] = []
+    removed: set[int] = set()
+
+    for edit in placement.items:
+        if edit.index is None:
+            added.append(
+                setup.Item(
+                    flags=setup.Item.SPAWNS if edit.flags is None else edit.flags,
+                    type=setup.Item.COIN if edit.type is None else edit.type,
+                    position=edit.position,
+                )
+            )
+            continue
+        if edit.index >= len(kept):
+            raise EditError(
+                f"{mod.name}: {placement.map_name} places {len(kept)} item(s), "
+                f"so there is no item {edit.index}.\n"
+                f"  Leave 'index' empty to add one; "
+                f"`bleck setup show {placement.map_name}` lists what is there."
+            )
+        if edit.clear:
+            removed.add(edit.index)
+            continue
+        kept[edit.index] = _edited_item(kept[edit.index], edit)
+
+    return [item for index, item in enumerate(kept) if index not in removed] + added
+
+
+def _edited_item(item: setup.Item, edit) -> setup.Item:
+    return setup.Item(
+        flags=item.flags if edit.flags is None else edit.flags,
+        type=item.type if edit.type is None else edit.type,
+        position=item.position if edit.position is None else edit.position,
+    )
 
 
 def _archive_member(base: Path, map_name: str) -> bytes:
@@ -222,12 +377,18 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
             source = _copy_source(mod, placement, edit, original)
         slots[edit.slot] = _apply_edit(slots[edit.slot], edit, mod.name, source)
 
+    items = _apply_items(mod, placement, data)
     updated = setup.SetupFile(
         version=data.version,
         enemies=slots,
-        items=data.items,
+        items=items,
         item_version=data.item_version,
-        has_item_section=data.has_item_section,
+        # ⚠️ Adding an item to a map that ships none has to *create* the
+        # section. The game reads `itemCount` at 0x2BC4 either way -- for the
+        # 213 maps without one that is past the end of the file, where upstream
+        # notes it reads zeroed padding -- so writing a real count there is
+        # read normally. 🔶 Not yet watched happen in game.
+        has_item_section=data.has_item_section or bool(items),
     )
     _refuse_orphans(mod, placement, updated)
 
@@ -252,6 +413,9 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         applied=len(placement.edits),
         used_before=before,
         used_after=len(updated.used),
+        items_applied=len(placement.items),
+        items_before=len(data.items),
+        items_after=len(updated.items),
     )
 
 

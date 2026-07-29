@@ -440,11 +440,49 @@ Every mod has a `mod.json` at its root.
     an **empty** slot is refused, because it would carry nothing and quietly
     look like it had.
 
+    A map may instead be written as an object, which is how it declares
+    **placed items** as well as enemies:
+
+    ```json
+    "setup": {
+      "he1_03": {
+        "enemies": [ { "slot": 0, "template": 148 } ],
+        "items": [
+          { "position": [-300, 50, 0] },
+          { "index": 1, "clear": true }
+        ]
+      }
+    }
+    ```
+
+    The bare list is not deprecated — it means `enemies`, and stays exactly as
+    valid.
+
+    An item edit takes an optional `index`, a `position`, `type`, `flags` and
+    `clear`. **Leaving `index` out adds an item**; giving it changes one the map
+    already places. That is the opposite of an enemy edit, and deliberately so:
+    enemies live in 100 fixed slots, while items are a counted list with no
+    empty entries. For the same reason `clear` needs an `index` — there is no
+    empty item to clear.
+
+    !!! warning "Only coins exist"
+
+        `type` must be `0`. The game's `setupItemTemplates` holds exactly one
+        entry — a coin — so any other value indexes past the end of it, and
+        `bleck` refuses it rather than writing it. Every one of the 1,299 items
+        the game ships is a coin with `flags` `0x11`; `0x10` and `0x1` are what
+        make an item spawn at all.
+
     !!! note
 
         `bleck` writes **both** copies of the setup file — the standalone
         `files/setup/<map>.dat` the game reads, and the byte-identical one
         inside the map archive, so nothing stale is left on the disc.
+
+        Adding an item to one of the 213 maps that place none **creates** the
+        item section, growing the file by 8 bytes plus 16 per item. The game
+        reads the item count from that offset either way, so this should be read
+        normally — but it has not yet been watched happen in game.
 
 `tables` <span class="pf-type">object</span>
 
@@ -453,7 +491,8 @@ Every mod has a `mod.json` at its root.
 
     ```json
     "tables": {
-      "enemies": "tables/enemies.csv"
+      "enemies": "tables/enemies.csv",
+      "items": "tables/items.csv"
     }
     ```
 
@@ -465,10 +504,13 @@ Every mod has a `mod.json` at its root.
     ```
 
     **The key says what the table's rows describe, not what to call the file.**
-    It is a closed set — today just `enemies` — so a label like `"lineland"` is
+    It is a closed set — `enemies` and `items` — so a label like `"lineland"` is
     refused rather than read as enemy placements on the strength of being
-    present. `items` and `doors` are designed and not built; declaring one says
-    so, instead of accepting a table nothing will ever read.
+    present. `doors` is designed and not built; declaring one says so, instead
+    of accepting a table nothing will ever read.
+
+    `bleck mod new` scaffolds both files, empty, and references them from the
+    manifest it writes.
 
     The value is a path relative to the mod, or an object with a `path` and a
     `map`, or a **list** of either:
@@ -487,6 +529,8 @@ Every mod has a `mod.json` at its root.
     have a `map` column; two places to say the same thing is two places for them
     to disagree.
 
+    An **enemy** table's columns:
+
     | Column | |
     |---|---|
     | `map` | Required unless the table is bound to a map |
@@ -495,6 +539,29 @@ Every mod has a `mod.json` at its root.
     | `x`, `y`, `z` | All three or none. Two is an error, not a silent zero |
     | `copy_from` | A slot to copy first, as above |
     | `clear` | `true` to empty the slot |
+
+    An **item** table's, which are deliberately not the same:
+
+    ```csv
+    # mods/my-mod/tables/items.csv
+    map,index,x,y,z
+    he1_03,,-300,50,0
+    he1_03,1,999,0,0
+    ```
+
+    | Column | |
+    |---|---|
+    | `map` | Required unless the table is bound to a map |
+    | `index` | **Optional. Leave it empty to add an item**, or name one the map already places |
+    | `x`, `y`, `z` | All three or none. Required when adding |
+    | `type` | Must be `0` — a coin is the only item the game can place |
+    | `flags` | `0x11` spawns; base-prefixed, so `0x11` and `17` both work |
+    | `clear` | `true` to remove the item. Needs an `index` |
+
+    Enemies have 100 fixed slots and items are a counted list, so `slot` and
+    `index` are different words for genuinely different things. Indexed edits
+    resolve against the list **as the game ships it**, so the order rows appear
+    in cannot change what a table means.
 
     A header row is required and column **order is free**. An unknown column is
     an error that names it and lists the ones that exist. Every message names

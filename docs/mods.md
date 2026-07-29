@@ -144,11 +144,23 @@ column. `bleck/formats/tables.py` reads them; `bleck/mods/build/edits.py` merges
 both sources and applies them.
 
 ⚠️ **The `tables` key is the *kind*, not a label** (D125) — a closed
-`TableKind`, today only `enemies`, with `items` and `doors` refused as unbuilt
-rather than accepted and ignored. Read rows through
-`Manifest.tables_of(kind)`; iterating `manifest.tables` is the bug D125 removed,
-where every declared table was applied as enemy placements whatever it was
-called.
+`TableKind`, `enemies` and `items`, with `doors` refused as unbuilt rather than
+accepted and ignored. Read rows through `Manifest.tables_of(kind)`; iterating
+`manifest.tables` is the bug D125 removed, where every declared table was
+applied as enemy placements whatever it was called.
+
+### Items are not enemies (D126)
+
+`bleck/formats/tables/` is a package, one module per kind — `common.py` for the
+file's shape, `enemies.py` and `items.py` for what a row *means*. An enemy has
+one of 100 fixed `slot`s; an item is a position in a counted list, so its column
+is `index` and **an empty one adds**. Inline, a map may be written as
+`{"enemies": [...], "items": [...]}`; a bare list still means enemies.
+
+⚠️ **`PLACEMENT_KINDS` gates the whole placement build.** A kind missing from it
+is skipped while `bleck mod check` still prints `chain OK` — that was the D126
+bug, and it survived a full green test suite because every unit tested a layer
+that worked.
 
 | Column | |
 |---|---|

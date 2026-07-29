@@ -6,7 +6,7 @@ build time so the change stays reviewable and undoable (`docs/vision.md`).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import PurePosixPath
 
@@ -59,12 +59,75 @@ class PlacementEdit:
         return body
 
 
+# Re-exported from the format layer, which owns what the bytes mean.
+COIN = setup.Item.COIN
+SPAWN_FLAGS = setup.Item.SPAWNS
+
+
+@dataclass(frozen=True)
+class ItemEdit:
+    """One change to one placed item.
+
+    ⚠️ **An item has no slot.** Enemies live in 100 fixed slots and are addressed
+    by number; the item section is a *variable-length list* with an explicit
+    count, so there is no such thing as an empty item slot. `index` is a position
+    in that list, and **absent means append** -- which is how a map gains an item
+    it never had. That is also why there is no orphan rule here: the D79 trap is
+    that the game stops reading enemies at the first empty slot, and a dense
+    counted array cannot have a hole.
+    """
+
+    index: int | None = None
+    """Which existing item, or `None` to add one."""
+
+    position: setup.Position | None = None
+    type: int | None = None
+    flags: int | None = None
+    clear: bool = False
+    """Remove the item. Needs an `index`; there is nothing else to remove."""
+
+    @property
+    def is_add(self) -> bool:
+        return self.index is None and not self.clear
+
+    def describe(self) -> str:
+        where = "new item" if self.is_add else f"item {self.index}"
+        if self.clear:
+            return f"{where}: removed"
+        parts = []
+        if self.position is not None:
+            parts.append(f"at {self.position.describe()}")
+        if self.type is not None:
+            parts.append(f"type {self.type}")
+        if self.flags is not None:
+            parts.append(f"flags 0x{self.flags:02x}")
+        return f"{where}: {', '.join(parts)}"
+
+    def to_json(self) -> dict[str, object]:  # pylint: disable=container-return
+        body: dict[str, object] = {}
+        if self.index is not None:
+            body["index"] = self.index
+        if self.clear:
+            body["clear"] = True
+        if self.position is not None:
+            body["position"] = list(self.position.as_tuple())
+        if self.type is not None:
+            body["type"] = self.type
+        if self.flags is not None:
+            body["flags"] = self.flags
+        return body
+
+
 @dataclass(frozen=True)
 class MapPlacements:
     """Every declared change to one map's placements."""
 
     map_name: str
     edits: list[PlacementEdit]
+    items: list[ItemEdit] = field(default_factory=list)
+    """Changes to the item section. Separate from `edits` because an item is
+    addressed differently from an enemy, but carried on the same object because
+    both end up in **one** generated `.dat`."""
 
 
 # `StrEnum` rather than `str, Enum`: the latter still inherits `Enum.__str__`,
@@ -82,13 +145,23 @@ class TableKind(StrEnum):
     """
 
     ENEMIES = "enemies"
+    ITEMS = "items"
 
 
 #: Kinds the design calls for that nothing reads yet. Named apart from a plain
 #: typo so a mod declaring one is told it is unbuilt rather than misspelled --
 #: the alternative, accepting it and reading nothing, is a table that looks
 #: applied and is not.
-PLANNED_KINDS = ("items", "doors")
+PLANNED_KINDS = ("doors",)
+
+#: Kinds that change a map's setup file, and therefore make a mod something the
+#: placement build has to visit.
+#:
+#: ⚠️ **A kind missing from here is skipped by the entire build, silently** --
+#: `has_placements` gates `mods_with_placements`, and a mod that generates
+#: nothing still reports "chain OK" (D126). Doors will not belong here; they are
+#: code patches, not setup content.
+PLACEMENT_KINDS = (TableKind.ENEMIES, TableKind.ITEMS)
 
 
 @dataclass(frozen=True)
@@ -239,8 +312,19 @@ def _table_path(path: str, where: str) -> str:
     return pure.as_posix()
 
 
+#: What the long form of a `setup.<map>` block may say.
+_SETUP_KEYS = {"enemies", "items"}
+
+
 def _parse_setup(raw: object, source: str) -> list[MapPlacements]:
-    """Read the `setup` block: map name -> a list of slot edits."""
+    """Read the `setup` block: map name -> enemy edits, or -> both kinds.
+
+    ⚠️ **Two shapes, and the bare list is not deprecated.** A list of enemy
+    edits is what every existing manifest says and stays exactly as valid; the
+    object form exists only because items had nowhere to go. Rewriting the short
+    form into the long one on every save would churn hand-edited files for a
+    feature most mods do not use.
+    """
     if raw is None:
         return []
     if not isinstance(raw, dict):
@@ -249,16 +333,129 @@ def _parse_setup(raw: object, source: str) -> list[MapPlacements]:
         )
 
     placements = []
-    for map_name, edits in raw.items():
-        if not isinstance(edits, list):
-            raise ManifestError(f"{source}: 'setup.{map_name}' must be a list of edits")
-        placements.append(
-            MapPlacements(
-                map_name=map_name,
-                edits=[_parse_edit(e, f"{source}: setup.{map_name}") for e in edits],
-            )
-        )
+    for map_name, body in raw.items():
+        placements.append(_parse_map(map_name, body, f"{source}: setup.{map_name}"))
     return placements
+
+
+def _parse_map(map_name: str, body: object, where: str) -> MapPlacements:
+    if isinstance(body, list):
+        return MapPlacements(
+            map_name=map_name, edits=[_parse_edit(e, where) for e in body]
+        )
+    if not isinstance(body, dict):
+        raise ManifestError(
+            f"{where}: must be a list of enemy edits, or an object like "
+            f'{{"enemies": [...], "items": [...]}}'
+        )
+
+    unknown = sorted(set(body) - _SETUP_KEYS)
+    if unknown:
+        raise ManifestError(
+            f"{where}: unknown key(s) {', '.join(unknown)}; "
+            f"a map declares {', '.join(sorted(_SETUP_KEYS))}"
+        )
+    return MapPlacements(
+        map_name=map_name,
+        edits=[
+            _parse_edit(e, f"{where}.enemies") for e in _listed(body, "enemies", where)
+        ],
+        items=[_parse_item(e, f"{where}.items") for e in _listed(body, "items", where)],
+    )
+
+
+def _listed(body: dict, key: str, where: str) -> list:  # pylint: disable=container-return
+    found = body.get(key, [])
+    if not isinstance(found, list):
+        raise ManifestError(f"{where}: '{key}' must be a list of edits")
+    return found
+
+
+def _parse_item(raw: object, where: str) -> ItemEdit:
+    if not isinstance(raw, dict):
+        raise ManifestError(f"{where}: each item edit must be an object")
+
+    index = _parse_index(raw.get("index"), where)
+    clear = raw.get("clear", False)
+    if not isinstance(clear, bool):
+        raise ManifestError(f"{where}: 'clear' must be true or false")
+
+    position = _parse_position(raw.get("position"), where)
+    kind = _parse_item_type(raw.get("type"), where)
+    flags = _parse_flags(raw.get("flags"), where)
+    _check_item(
+        ItemEdit(index=index, position=position, type=kind, flags=flags, clear=clear),
+        where,
+    )
+    return ItemEdit(index=index, position=position, type=kind, flags=flags, clear=clear)
+
+
+def _check_item(edit: ItemEdit, where: str) -> None:
+    """The rules an item edit must satisfy, shared with the CSV reader.
+
+    ⚠️ **Adding needs a position and editing does not.** An added item with no
+    coordinates would land at the origin, which is off the map in most rooms --
+    an item nobody can reach looks exactly like an item that did not spawn.
+    """
+    given = edit.position is not None or edit.type is not None or edit.flags is not None
+    if edit.clear:
+        if edit.index is None:
+            raise ManifestError(
+                f"{where}: 'clear' needs an 'index' -- items are a list, not "
+                f"fixed slots, so there is no empty item to clear"
+            )
+        if given:
+            raise ManifestError(
+                f"{where}: item {edit.index} both clears and sets something. "
+                f"Removing it discards the rest"
+            )
+        return
+    if edit.index is None and edit.position is None:
+        raise ManifestError(
+            f"{where}: an added item needs a position. Give 'index' to change "
+            f"an item the map already places, or a position to add one"
+        )
+    if not given:
+        raise ManifestError(
+            f"{where}: item {edit.index} changes nothing. "
+            f"Give a position, 'type', 'flags', or 'clear'"
+        )
+
+
+def _parse_index(raw: object, where: str) -> int | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        raise ManifestError(f"{where}: 'index' must be a whole number")
+    if raw < 0:
+        raise ManifestError(f"{where}: 'index' {raw} is negative")
+    return raw
+
+
+def _parse_item_type(raw: object, where: str) -> int | None:
+    """⚠️ Refuses anything but a coin, because the game has nothing else."""
+    if raw is None:
+        return None
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        raise ManifestError(f"{where}: 'type' must be a whole number")
+    if raw != COIN:
+        raise ManifestError(
+            f"{where}: 'type' {raw} is not a thing the game can place. "
+            f"`setupItemTemplates` holds exactly one entry, id {COIN} -- a coin "
+            f"-- so any other type indexes past the end of it.\n"
+            f"  All 1,299 items the game ships are type {COIN}."
+        )
+    return raw
+
+
+def _parse_flags(raw: object, where: str) -> int | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        raise ManifestError(f"{where}: 'flags' must be a whole number")
+    if not 0 <= raw <= 0xFFFF:
+        raise ManifestError(f"{where}: 'flags' 0x{raw:x} does not fit in 16 bits")
+    return raw
 
 
 def _parse_edit(raw: object, where: str) -> PlacementEdit:
