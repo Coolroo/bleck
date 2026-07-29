@@ -7533,3 +7533,67 @@ because a sentinel existed; where one did not, it cost a run.
 POW Block, Stopwatch, Ice Storm, Thunder Rage, and so on. Shroom Shake has no
 scripted use and is simply absent, so D92's 🔶 needs an attended run with an
 item that is in the table. Nothing in the toolchain needs to change first.
+
+---
+
+## D110 — ✅ NPC behaviour scripts ARE static: `npcEnemyTemplates` holds them (2026-07-28)
+
+⛔ **D107's conclusion was too quick.** It found the script pointers on a live
+`NPCEntry`, noted they are copied in at spawn, and inferred `npcdrv:` could not
+be a build-time patch. The pointers are copied *from* somewhere, and that
+somewhere is static.
+
+### ✅ Measured, at `mod_prolog`, before anything spawned
+
+`mods/npc-template` scanned 16,384 words from `npcEnemyTemplates`
+(`0x80449888`) for the four addresses D107 had already measured off a live
+entry in `he1_01`:
+
+| script | address (D107) | offset from `npcEnemyTemplates` |
+|---|---|---|
+| death | `0x80439F10` | **`0x48`** |
+| move | `0x804938E8` | **`0xA0`** |
+| onHit | `0x80494E28` | **`0xA4`** |
+| init | `0x8043B8F8` | **`0x104`** |
+
+✅ **Four distinct 32-bit addresses, all present.** Coincidence is not an
+available explanation, and the cross-run agreement is what makes it evidence:
+one probe read them from a live entry during gameplay in one map, another found
+the same words in static data at load time with no map loaded.
+
+✅ **Read at `mod_prolog`.** That is the whole point — the same reachability
+`map:`, `item:` and `door:` depend on. A declaration can get at these.
+
+### Why the earlier reasoning went wrong
+
+The route was eliminated by two correct observations and one wrong inference:
+
+- ✅ The setup enemy record carries **no** script references — 112 bytes of
+  position, a template id and two small numbers. Confirmed by hexdump.
+- ✅ `NPCTribe` has **no** script fields either. Confirmed from the header.
+- ⛔ Therefore "the scripts are runtime-only". They were neither of those two
+  places because they are in a third, which nothing had looked for.
+
+⚠️ Same shape as D93: an exhaustive-sounding search over the places one
+happened to think of.
+
+### 🔶 What is still missing before `npcdrv:` can be built
+
+- **The template stride, and which template these belong to.** The four offsets
+  span `0x48`–`0x104`, so either one template entry is at least `0x108` bytes,
+  or these sit in different entries and `entries[0]` in D107 was not template 2.
+  ⚠️ `NPCTemplate` is in **no header** — the type is referenced only in
+  `npcdrv.h` comments — so the layout has to be measured, not read.
+- **A selector shape.** `npcdrv:<template-id>:<script>` is the obvious form, and
+  the template id is already what a setup record stores (`he1_01` places
+  template 2, Goomba). That would compose with `bleck setup show`, which already
+  prints template ids and species names.
+- 🔶 Whether one template is shared across maps, the way item scripts are (D91).
+  If so a patch needs a shared-count report like `bleck_patch_shared[]`.
+
+### Method note
+
+The search was for **known values**, not for a struct layout. Given a type with
+no header and four addresses already measured, finding the addresses yields the
+offsets and confirms the table in one run — where guessing a layout would have
+needed several and could have been quietly wrong.

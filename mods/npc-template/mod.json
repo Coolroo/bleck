@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "npc-template",
+  "version": "0.1.0",
+  "description": "Do an NPC's behaviour scripts live in the static npcEnemyTemplates table?",
+  "base": "eu0",
+  "code": { "sources": ["src"], "target": "eu0", "module_id": 2, "banner": false }
+}
