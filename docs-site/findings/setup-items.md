@@ -1,12 +1,12 @@
 ---
 title: How placed items load, and the 512 ceiling
-description: The item half of setup/*.dat traced through the DOL — a fixed 8192-byte buffer, an asserted version, and why giving items to a map that ships none hangs the game
+description: The item half of setup/*.dat traced through the DOL — coins are save flags drawn from a fixed per-map budget, which is why giving items to a map that ships none hangs the game
 ---
 
 # Placed items: the load path, and its limits
 
 The [setup file format](setup-file-format.md) ends with an optional item
-section. **14 of the game's 227 maps have one**, and every one of the 1,299
+section. **14 of the game's 227 maps have one**, and every one of the 299
 items across them is the same thing: `type` 0, `flags` 0x11 — a coin.
 
 This page traces what the game does with that section, read out of the PAL rev 0
@@ -150,9 +150,55 @@ So:
 - **Adding coins to a map that already has them works.** `he1_03` went from 5 to
   7 and reached gameplay.
 
+## ✅ Why it fails: coins are save flags
+
+Hooking the game's `__assert2` and recording its arguments gives the reason in
+the game's own words:
+
+```
+swdrv.c:505
+  (wp->gameCoinId - 1) < assign_tbl[i].num
+  コインのフラグが溢れました        "the coin flags have overflowed"
+```
+
+A coin is **persistent** — collect it and it must stay collected — so each one
+owns a bit in the save file. `swdrv` allocates those from a fixed per-map budget:
+
+**`assign_tbl` at `0x80326178`** — 32 entries of `{const char *map, s32 num}`,
+stride 8, matched by `strcmp` on the map name, 853 flags in total. A map that is
+not in the table returns `-1` without asserting.
+
+**32 maps have a budget; only 14 ship items.** So having a budget is not the
+same as having room:
+
+| map | budget | ships | one added coin |
+|---|---:|---:|---|
+| `he1_01` | 4 | 0 | ⛔ assert |
+| `he2_02` | 29 | 0 | ⛔ assert |
+| `he1_03` | 62 | 5 | ✅ works |
+
+### The budget counts coins the setup file cannot see
+
+`he1_01` has a budget of 4 and ships **zero** setup items, yet one added coin
+overflowed. The probe recorded `gameCoinId` = 5 when the assert fired — already
+incremented, so **4 were taken before ours existed**.
+
+Lineland Road has coins **inside blocks** and no floating ones. Those block
+coins are map objects, never appear in `setup/*.dat`, and draw on the same pool.
+So the budget is not "how many floating coins a map has" — it is **how many
+collectable coins exist in the map by any route**, and a map whose blocks
+already use the budget has no room for a floating one.
+
+`he1_03`, with 62 flags against 5 setup coins, has plenty to spare.
+
+!!! note "The 512 ceiling is real but not the binding limit"
+
+    The 8192-byte buffer above caps a map at 512 items. The coin-flag budget
+    bites far earlier — the largest entry in `assign_tbl` is 63.
+
 ## Still open
 
-What the coin spawn needs that a map without coins has not loaded. `0x80078b3c`
-entered with `r7 = 0` is where to look. Whether the added coins on a map that
-already has them are *visible and collectible* also still needs a human — the
-instrument used here reads NPC state and cannot see items.
+Whether a map *not* in `assign_tbl` (195 of the 227) can take coins at all: the
+allocator returns `-1` rather than asserting, and what happens next is untested.
+And whether added coins on a map with slack are actually visible and
+collectible — the instrument used here reads NPC and flag state, not rendering.

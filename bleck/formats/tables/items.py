@@ -18,7 +18,7 @@ Two consequences of the list being counted and dense:
 - `clear` needs an `index`. There is no empty item to clear.
 
 ⚠️ **Only type 0 exists.** `setupItemTemplates` holds exactly one entry -- a
-coin -- and all 1,299 items across the 14 maps that place any are type 0 with
+coin -- and all 299 items across the 14 maps that place any are type 0 with
 flags 0x11. Any other `type` is refused rather than written, because it would
 index past the end of that array.
 
@@ -220,7 +220,7 @@ def _type(text: str, where: str) -> int | None:
             f"{where}: 'type' {kind} is not a thing the game can place. "
             f"`setupItemTemplates` holds exactly one entry, id {setup.Item.COIN} "
             f"-- a coin -- so any other type indexes past the end of it.\n"
-            f"  All 1,299 items the game ships are type {setup.Item.COIN}."
+            f"  All 299 items the game ships are type {setup.Item.COIN}."
         )
     return kind
 

@@ -298,27 +298,35 @@ def _refuse_item_collisions(mod: Mod, map_name: str, declared: list[SourcedItem]
 def _refuse_new_section(mod: Mod, placement, data: setup.SetupFile) -> None:
     """⛔ Refuse giving items to a map that ships none. **It hangs the game.**
 
-    D126 reasoned that it should work: the game reads `itemCount` at `0x2BC4`
-    whatever the file's length, and for the 213 maps that end exactly there it
-    lands on zeroed padding, so a real count written at that offset should be
-    read the same way. D127 tested it -- three coins on `he1_01`, byte-for-byte
-    the same section shape `he1_03` ships -- and the map never rendered.
+    ✅ **The reason, in the game's own words** (D130). Hooking `__assert2` caught
+    it: `swdrv.c:505`, `(wp->gameCoinId - 1) < assign_tbl[i].num`, message
+    `コインのフラグが溢れました` -- "the coin flags have overflowed".
+
+    A coin is *persistent*: collect it and it must stay collected, so each one
+    owns a save flag. Flags come from a fixed per-map budget in `assign_tbl`, and
+    **every coin the map creates draws on it -- including coins the map places
+    itself, which never appear in the setup file.** `he1_01`'s budget is 4 and
+    its own objects had already taken all 4, measured: `gameCoinId` was 5 when
+    the assert fired.
+
+    ⚠️ So "ships no item section" is a *proxy*, not the rule. The rule is
+    remaining budget, and the slack cannot be computed from the setup file
+    because the map's own coins are invisible to it. This refuses the case
+    measured to fail; a map with real slack is refused too, conservatively.
 
     Refused rather than warned about, because the output is a disc that hangs on
     entering the map. A warning scrolls past; this cannot.
-
-    ⚠️ **Which part is fatal is still unknown**: the coins needing an asset the
-    map does not load, or the file growing at all. `mods/items-empty` is built
-    to split those and has not been run.
     """
     if data.has_item_section or not placement.items:
         return
     raise EditError(
-        f"{mod.name}: {placement.map_name} ships no item section, and adding "
-        f"one hangs the game (D127).\n"
-        f"  Measured, not assumed: three coins on he1_01 -- a section shaped "
-        f"exactly like the one he1_03 ships -- and the map never rendered.\n"
-        f"  Only 14 of the game's 227 maps place items; those can be edited. "
+        f"{mod.name}: {placement.map_name} ships no items, and adding one "
+        f"hangs the game (D130).\n"
+        f"  A coin needs a save flag so it stays collected, and each map has a "
+        f"fixed budget of them. A map that places no items has no spare -- the "
+        f"game asserts 'the coin flags have overflowed' and the map never "
+        f"finishes loading.\n"
+        f"  The 14 maps that already place items have room. "
         f"`bleck setup show <map>` says whether a map is one of them."
     )
 

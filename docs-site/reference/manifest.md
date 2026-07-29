@@ -469,7 +469,7 @@ Every mod has a `mod.json` at its root.
 
         `type` must be `0`. The game's `setupItemTemplates` holds exactly one
         entry — a coin — so any other value indexes past the end of it, and
-        `bleck` refuses it rather than writing it. Every one of the 1,299 items
+        `bleck` refuses it rather than writing it. Every one of the 299 items
         the game ships is a coin with `flags` `0x11`; `0x10` and `0x1` are what
         make an item spawn at all.
 
@@ -479,9 +479,11 @@ Every mod has a `mod.json` at its root.
         game** — the map never renders. `bleck` refuses it at build time rather
         than producing a disc that freezes.
 
-        This was measured, not assumed: three coins on Lineland Road, written as
-        a section byte-for-byte the shape a map with coins ships, and it never
-        loaded. [`bleck setup show <map>`](cli.md#bleck-setup) says whether a
+        The reason is that a coin is persistent, so each one needs a save flag,
+        and every map has a fixed budget of them — spent by coins in blocks as
+        well as floating ones. A map that places no floating coins has typically
+        already spent it, and the game asserts *"the coin flags have
+        overflowed"*. [`bleck setup show <map>`](cli.md#bleck-setup) says whether a
         map is one of the 14.
 
         Adding items to one of the 14 maps that *do* place them works —

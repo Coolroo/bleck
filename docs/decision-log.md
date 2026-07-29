@@ -9352,3 +9352,99 @@ NPC state and cannot see items, so this is the one part still needing eyes.
 `items-more` were hand-written probes, not worked examples. The byte layouts are
 in this entry and rebuilding any of them is a five-line script; leaving five
 near-identical mods in `mods/` would cost more than it saves.
+
+---
+
+## D130 — ✅ Why the coin hangs: the game says so itself (2026-07-29)
+
+D129 isolated the hang to the coin spawn and left *why* open. Hooking
+`__assert2` answered it in one run, in the game's own words.
+
+### ✅ The assert
+
+```
+swdrv.c:505
+  (wp->gameCoinId - 1) < assign_tbl[i].num
+  コインのフラグが溢れました        "the coin flags have overflowed"
+```
+
+`code.hooks` with `mode: "before"` on `__assert2` (`0x8019c54c`, in the symbol
+list), recording `(file, line, func, expr)` into the probe block. The message is
+**Shift-JIS**, like the message files (D-msg): decoding it as ASCII would have
+lost the one sentence that explains everything.
+
+⚠️ This is a technique worth reusing: **a hang that is really an assert names its
+own cause**, and the two are indistinguishable from outside. Every "the game
+froze" in this repo's history was worth hooking `__assert2` for.
+
+### ✅ Why coins are special: they are save flags
+
+A coin is *persistent* -- collect it and it must stay collected -- so each one
+owns a bit in the save. `swdrv` allocates those from a fixed per-map budget:
+
+**`assign_tbl` @ `0x80326178`**, 32 entries of `{const char *map, s32 num}`,
+stride 8, matched by `strcmp` on the map name. 853 flags total. A map not in the
+table returns `-1` without asserting.
+
+| | |
+|---|---|
+| maps with a budget | **32** |
+| maps that ship items | 14 |
+| **maps with a budget that ship nothing** | **18** |
+
+### ⛔ The budget is consumed by coins the setup file cannot see
+
+`he1_01`'s budget is **4**, and it ships **zero** setup items -- yet one added
+coin overflowed. The probe recorded `gameCoinId` = **5** when the assert fired,
+and the value is already incremented, so **4 were taken before ours existed**.
+
+✅ **Confirmed from play**: Lineland Road has coins **inside blocks** and no
+floating ones. So the 4 flags belong to block coins, which are map objects and
+never appear in `setup/*.dat` -- and block coins and setup coins draw on the
+same pool. That is the whole explanation: the budget is not "how many floating
+coins a map has", it is "how many collectable coins exist in the map by any
+route". `he2_02` (budget 29, ships nothing)
+refused one coin the same way.
+
+That kills the tidy theory. It is **not** "maps in `assign_tbl` can have coins":
+
+| map | budget | ships | one added coin |
+|---|---:|---:|---|
+| `he1_01` | 4 | 0 | ⛔ assert |
+| `he2_02` | 29 | 0 | ⛔ assert |
+| `he1_03` | 62 | 5 | ✅ (7 total, D129) |
+
+`he1_03` has 62 flags against 5 shipped items, so it has room to spare;
+the other two are already at their limit.
+
+⚠️ **The slack is not computable from the setup file**, because the map's own
+coins are invisible to it. `bleck` keeps refusing on "ships no item section",
+which is now understood as a *conservative proxy* rather than the rule. Getting
+the real number would mean reading `gameCoinId` after a map loads -- a runtime
+measurement, not a build-time one.
+
+### ⛔ A number I got wrong and repeated
+
+I wrote **"1,299 items"** into `setup.py`, `tables/items.py`, `placements.py`,
+two published pages and D128. The real total across the 14 maps is **299**.
+Corrected everywhere.
+
+It came from misreading my own survey output and was then copied forward without
+being recomputed -- exactly the failure mode this log exists to catch, and it
+survived four commits because it was never load-bearing enough to check. The
+correction was forced by `assign_tbl` summing to 853, which made 1,299
+impossible.
+
+### Superseded
+
+- **D128's "512 items is the ceiling"** stands as a real limit but is **not the
+  binding one**. The coin-flag budget bites far earlier: the largest budget in
+  the table is 63.
+- **D127's guard rationale** is unchanged in behaviour and corrected in
+  reasoning.
+
+### 🔶 Still open
+
+- Whether a map *not* in `assign_tbl` (195 of 227) can take coins at all. The
+  allocator returns `-1` rather than asserting; what happens next is untested.
+- Whether added coins are visible and collectible. Still needs eyes.

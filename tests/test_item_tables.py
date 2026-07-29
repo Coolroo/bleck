@@ -238,7 +238,10 @@ class TestCreatingASectionIsRefused:
         with pytest.raises(mod_edits.EditError) as caught:
             mod_edits._apply_items(mod, placement, data)  # pylint: disable=protected-access
         message = str(caught.value)
-        assert "ships no item section" in message
+        assert "ships no items" in message
+        # Explains the cause rather than just refusing: a coin is a save flag,
+        # and the map has no spare ones (D130).
+        assert "save flag" in message
         # Says how to find out whether a map is one of the 14 that can.
         assert "bleck setup show" in message
 

@@ -370,7 +370,7 @@ class Item:
 
     #: The only type the game can place. `setupItemTemplates` holds exactly one
     #: entry, id 0, so any other value indexes past the end of it. Every one of
-    #: the 1,299 items across the 14 maps that place any is this.
+    #: the 299 items across the 14 maps that place any is this.
     #:
     #: ✅ Read out of the DOL: `setupItemTemplates[0] = {id: 0,
     #: itemTemplateId: 1}`, and item 1 is `ITEM_ID_WORLD_COIN` (D128).

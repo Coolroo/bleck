@@ -443,7 +443,7 @@ def _parse_item_type(raw: object, where: str) -> int | None:
             f"{where}: 'type' {raw} is not a thing the game can place. "
             f"`setupItemTemplates` holds exactly one entry, id {COIN} -- a coin "
             f"-- so any other type indexes past the end of it.\n"
-            f"  All 1,299 items the game ships are type {COIN}."
+            f"  All 299 items the game ships are type {COIN}."
         )
     return raw
 
