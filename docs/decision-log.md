@@ -9758,3 +9758,60 @@ declaration -- which was present and correct. The *actual* first error, four
 lines above and cut off by tailing the output, was `unknown type name 'u8'`: the
 declaration failed to parse, so the call went implicit. The project instructions already say
 not to truncate this output.
+
+---
+
+## D136 — 🔶 The door reads `interactScript` live, from the DOL (2026-07-29)
+
+Branch `pointer-swap`, following D135. The last open link was "does the door
+actually read the field when used?", which needs a human to walk into one. Most
+of it turns out to be answerable statically.
+
+### ✅ The field is dereferenced at use time, not cached
+
+`DoorDesc` is confirmed from `evt_door.h`: `interactScript` +0x40,
+`initScript` +0x50, `moveScript` +0x54 — counted, matching what `bleck` uses.
+
+Scanning `evt_door.c`'s range for loads of those three offsets finds them in
+exactly one place, together:
+
+```
+800e17a4  lwz r5, 0x40(r30)   ; interactScript
+800e17a8  bl  0x800de9b8      ; evtSetValue
+800e17b8  lwz r5, 0x50(r30)   ; initScript
+800e17c8  lwz r5, 0x54(r30)   ; moveScript
+```
+
+`0x800de9b8` is **`evtSetValue`**. So this is an evt user func that reads
+`desc->interactScript` and returns it to a *calling script* through an output
+slot.
+
+Two things follow, and both favour the swap:
+
+1. **The load is live.** The pointer is fetched from the descriptor at the
+   moment it is asked for, not copied at map load, so a field swapped at
+   `_prolog` is what gets returned.
+2. **It is run as an ordinary child script**, handed to a caller rather than
+   awaited by the loader — which is exactly the difference from
+   `MapData.initScript`, where D51's freeze was blamed on the loader waiting for
+   the specific `EvtEntry` it created.
+
+### 🔶 Why this is still not a ✅
+
+**Nothing observed a door being used.** That the field is read live is measured;
+that a door *use* reaches this code path is an inference, however reasonable.
+The repo's rule is that an untested inference is not a finding, and D126, D127
+and D133 are all entries where sound reasoning reached a wrong conclusion this
+week.
+
+⚠️ Also unestablished: what the caller does with the pointer. If it runs the
+script and then waits on *its* entry the way the map loader does, a replacement
+that returns immediately might still misbehave — the probe's replacement is a
+single `USER_FUNC` and returns straight away, which is the least likely shape to
+survive that.
+
+### What would close it
+
+One person, thirty seconds: boot `door-swap`, walk into `he1_01`'s first door,
+read word 3. The self-test already rules out malformed bytecode, so the result
+is unambiguous either way.
