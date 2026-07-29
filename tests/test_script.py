@@ -56,7 +56,7 @@ class TestLexer:
 
     def test_both_comment_styles_are_ignored(self):
         source = "script main {\n -- lua style\n // c style\n /* block */ wait(1)\n}"
-        assert values(source) == [header(evt.Opcode.WAIT_FRM, 1), 1, 1]
+        assert values(source) == [header(evt.Opcode.WAIT_FRM, 1), 1, 2, 1]
 
     def test_blank_lines_collapse(self):
         tokens = tokenize("a\n\n\n\nb")
@@ -127,6 +127,7 @@ class TestStatements:
         assert values("script main {\n wait(30)\n}") == [
             header(evt.Opcode.WAIT_FRM, 1),
             30,
+            int(evt.Opcode.END_EVT),
             int(evt.Opcode.END_SCRIPT),
         ]
 
@@ -207,6 +208,7 @@ class TestExpressions:
             header(evt.Opcode.SET, 2),
             evt.LW.encode(0),
             -5,
+            int(evt.Opcode.END_EVT),
             int(evt.Opcode.END_SCRIPT),
         ]
 
@@ -392,6 +394,7 @@ class TestSwitch:
             header(evt.Opcode.WAIT_FRM, 1),
             2,
             int(evt.Opcode.END_SWITCH),
+            int(evt.Opcode.END_EVT),
             int(evt.Opcode.END_SCRIPT),
         ]
 

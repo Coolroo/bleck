@@ -567,7 +567,20 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     def compile(self) -> CompiledScript:
         self.compile_body(self.script.body)
-        # Required terminator: without it the VM runs off into adjacent memory.
+        # TWO terminators, and they are not alternatives.
+        #
+        # END_EVT ends the running *entry*; END_SCRIPT ends the instruction
+        # *list*. ⛔ Emitting only the second was D105: a script that fell off
+        # its end left its entry alive, and the game hung a few frames later
+        # with every value the script had written still correct. An explicit
+        # `return` already emitted END_EVT, which is why every mod that ended
+        # one way worked and every mod that ended the other did not.
+        #
+        # Emitted unconditionally. After a `return` this is unreachable, which
+        # costs one word and removes the need to reason about whether the last
+        # statement on every path happened to be one.
+        self.emit(evt.Opcode.END_EVT)
+        # Without this the VM runs off into adjacent memory.
         self.emit(evt.Opcode.END_SCRIPT)
         return CompiledScript(
             name=self.script.name, words=self.words, slots_used=self.slots_used

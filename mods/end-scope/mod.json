@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "end-scope",
+  "version": "0.1.0",
+  "description": "Does a script that ENDS freeze the game only as main, or wherever it runs?",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "maps": { "aa4_01": "on_arrive" }
+  }
+}

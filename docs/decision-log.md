@@ -7268,3 +7268,76 @@ same values.
   `gw` is `GW(0)..GW(31)` and the compiler refuses higher.
 - C++ facts and `switch` facts are read by **different mechanisms** — the probe
   block and `ingame.py --watch-gw` — so one cannot be misread as the other.
+
+---
+
+## D106 — ✅ The freeze was a missing `END_EVT`, not a case for a trailing loop (2026-07-28)
+
+D105 left the fix open and leaned toward warning at build time, with "emit a
+trailing wait" as the reluctant alternative. **Both were wrong**, and the actual
+cause is a one-line compiler bug.
+
+### ⛔ Two terminators, and only one was emitted
+
+`evt` has both:
+
+| | | |
+|---|---|---|
+| `END_SCRIPT` | `0x01` | ends the instruction **list** |
+| `END_EVT` | `0x02` | ends the running **entry** |
+
+`lower.py` emitted `END_EVT` for an explicit `return` (`:377`) and only
+`END_SCRIPT` when a body fell off its end (`:571`). So a script that simply
+finished **left its evt entry alive**, and the game hung a few frames later —
+with every value the script had written still correct, which is what made it
+read as a mysterious freeze rather than a missing terminator.
+
+Now both are emitted, unconditionally. After a `return` the second is
+unreachable; that costs one word and removes any need to reason about whether
+the last statement on every path happened to be one.
+
+### ✅ How it was found — the cheap test, not the new tool
+
+Two hypotheses died first, both from **reading** rather than running:
+
+- ⛔ "the runtime re-starts `main` in a spin" — `bleck_needs_start` is cleared
+  after firing, so `main` starts exactly once.
+- ⛔ "the compiler emits no terminator" — it does; word `[3]` of a minimal
+  script is `1`.
+
+Then the observation that settled it: `lower.py` emits a *different* opcode for
+`return` than for falling off the end. That predicts a script with an explicit
+`return` will not freeze — a two-line change to a probe, no new instrumentation.
+
+| script | result |
+|---|---|
+| `gw[21] = 0x5C0` | ⛔ froze, stuck on `aa4_01` |
+| `gw[21] = 0x5C0; return` | ✅ reached `ls4_12` at t+9s |
+| the first one again, with the compiler fixed | ✅ reached `ls4_12` at t+9s |
+
+⚠️ D71's lesson, restated: the useful move was reading two lines of the lowerer
+and changing one line of a script. The alternative on the table — auto-appending
+a wait loop to every `main` — would have *worked*, hidden the real bug, and left
+it live in map hooks, combos and any other script that ends.
+
+### ⚠️ Why nothing caught it
+
+Every shipped example ends in a way that avoids it: `coin-tick` is
+`loop { wait_ms }`, `map-hook` loops with `wait(1)`, `goto-map` changes map so
+evt state is torn down anyway. **No mod in this repository had a script that
+simply ended** — so the case that a first-time user writes first was the one case
+never exercised. 809 tests pass on either version of the compiler, because the
+bytecode was only ever compared against itself.
+
+⚠️ The scoping run mattered as much as the fix. A map-hook script with no `main`
+at all froze identically, which is what showed the bug was in *scripts* rather
+than in `main` — and therefore that patching `main` would have been the wrong
+shape of fix.
+
+### Housekeeping
+
+- 4 tests asserted exact word sequences and now include `END_EVT`. They are the
+  only tests that could have caught this and did not, because they assert what
+  the compiler emits rather than what the VM requires.
+- `mods/end-scope` is the worked example: the script that froze, the same script
+  with `return`, and the same script again after the fix.

@@ -1,0 +1,12 @@
+-- The script that froze the game in D105, unchanged.
+--
+-- No `return`, no trailing `loop`. The only thing that has changed is that the
+-- compiler now emits END_EVT before END_SCRIPT, so a body that falls off its
+-- end terminates its evt entry the same way an explicit `return` always did.
+--
+-- If the attract demo walks aa4_01 -> ls4_12, the missing terminator was the
+-- whole bug and no trailing wait is needed anywhere.
+
+script on_arrive {
+    gw[21] = 0x5C0
+}
