@@ -102,15 +102,92 @@ offset 0 destroys it.** It happened to be harmless here.
 
 *(Sources: bleck decision log D101, D102, D103, D104, D116, D117.)*
 
+## ✅ What the interact script actually contains
+
+`he1_01` door 0's `interactScript`, dumped from RAM and decoded, is **four
+instructions**:
+
+```
+MULF      LW(0), <float constant>
+USER_FUNC 0x800ED75C, 0x80CB35EC, 0, LW(0), 0
+END_EVT
+END_SCRIPT
+```
+
+`0xFE363C80` is `-30000000` — evt's encoding for a **local-work variable**, not
+a literal. `0x800ED75C` is unnamed in the `eu0` symbol list but sits between
+`evt_mapobj_trans` (`0x800ED6C0`) and `evt_mapobj_scale` (`0x800ED7F8`), so it
+is an `evt_mapobj_*` transform.
+
+**So the interact script is a per-call animation step**: multiply a local by a
+constant, apply it to a map object. `LW(0)` is supplied by whatever starts it.
+That is why one use of a door runs it many times — each call is one frame of the
+door opening, not one "the player used the door" event.
+
+⚠️ **It contains no branch at all**, so it does not check where the player is.
+The requirement to stand on a door and press up lives in whatever *calls* this.
+
+⛔ **The transition is not in it.** Started directly with `evtEntry` — twice,
+once with the active door set — it produced a real `EvtEntry`, no assert, and
+**no map change**. The destination belongs to the `MapDoorDesc` covering the
+same doorway.
+
+## ✅ A game-wide census
+
+Read from every map in one boot (`mapDataPtr` is populated for maps that are not
+loaded), so this is the whole game rather than one level:
+
+| | |
+|---|---|
+| maps registering a door of either kind | **368** |
+| maps with a **scriptable** `DoorDesc` | **11** |
+| `DoorDesc`s in the entire game | **35** |
+| `MapDoorDesc` loading zones | **691** |
+
+Nearly every scriptable door is a house door in Flipside/Flopside (`mac_*`),
+named `ie_*_doa` — 家 (*ie*, house) plus *doa*. A map with three visible
+doorways may expose **one**; Lineland Road does.
+
+## ✅ `EvtDoorWork`, which upstream marks entirely unknown
+
+`spm-headers` declares `EvtDoorWork` as `u16 flags` followed by
+`u8 unknown_0x2[0x57c - 0x2]`. Four of those offsets are now known, read out of
+the functions that use them (`evt_door_wp` = `0x805AE020` on eu0):
+
+| offset | what | how it was found |
+|---:|---|---|
+| `+0x000` | `flags`. **Bit 11 set means the active-door pointer is valid** | `evtDoorGetActiveDoorDesc` tests it |
+| `+0x2D8` | the active `DoorDesc *` | `evtDoorGetActiveDoorDesc` returns it |
+| `+0x36C` | the `MapDoorDesc` array | `evt_door_set_map_door_descs` stores it |
+| `+0x370` | how many | stored beside it |
+| `+0x374` | **per-zone event slots**, 2 words each, indexed `+ index*8 + which*4` | `evt_door_set_event` writes here |
+
+## ✅ A loading zone can carry a script after all
+
+`MapDoorDesc` has no script fields — but
+`evt_door_set_event(char *door, int which, EvtScriptCode *script)` finds a zone
+by its `name_l` and stores a script pointer in the slot array above.
+
+Measured: both slots read `0` beforehand, and after calling it through
+`evtEntry` slot 0 held the supplied script. **And the game uses this itself** —
+scanning every map's init script finds **13** that call it, `mac_02` six times.
+
+That matters more than the read-back. A function whose slots are always empty
+might be vestigial; one the game exercises on 13 maps is a supported path.
+
+⚠️ It is an **evt user func**, so it cannot be called from C — it reads its
+arguments from an `EvtEntry`. And argc counts the function pointer, so three
+arguments is argc **4**.
+
 ## Not established
 
 - 🔶 What the `0x1A` opcode at the head of `initScript` does. It was matched and
   patched, not decoded.
-- 🔶 One door, in one map. `he1_01` has exactly one `DoorDesc`.
+- 🔶 Whether a script attached with `evt_door_set_event` **fires** on zone entry.
+  The attachment lands and the game uses the same mechanism; nothing has watched
+  one run, because that needs a player.
+- 🔶 What the second event slot (`which` = 1) means. Only slot 0 was exercised.
 - ⛔ There is **no lookup by name** for a `DoorDesc`, unlike NPCs
   (`npcNameToPtr`). `evtDoorGetActiveDoorDesc()` returns the door currently in
   use, which is null before gameplay. A door is identified by its position in
   the array its map registers.
-- ⛔ How many doors a map registers cannot be known without reading the game's
-  data — the `count` argument sits beside the array, so a bounds check has to
-  happen at run time.

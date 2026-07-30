@@ -364,3 +364,75 @@ that would have looked different if it were present.
 - [`hook-points.md`](hook-points.md) — when custom code can safely run
 - [`code-mods.md`](code-mods.md) — the trace pattern and its hazards
 - [`disc-layout.md`](disc-layout.md) — facts about the disc rather than the code
+
+---
+
+## `setupReadItemInfo` — `0x80029730` (eu0)
+
+Hands back a setup file's item count, version and array. **No length check of
+any kind**, so for the 184 v6 files that end exactly at `0x2BC4` all three reads
+are past the end of the file:
+
+```
+80029784  lwz  r7, 11204(r3)   ; *(file + 0x2BC4) -> itemCount
+80029788  addi r0, r3, 11212   ;   file + 0x2BCC  -> items
+80029790  lwz  r3, 11208(r3)   ; *(file + 0x2BC8) -> itemVersion
+```
+
+v5 uses `0x2A34` / `0x2A38` / `0x2A3C` for the same three.
+
+⚠️ **The caller caps a map at 512 items** and nothing enforces it: it allocates
+8192 bytes, then `memcpy`s `count * 16` where `count` came from the file
+(`0x8017A9C8`). It also **asserts** `itemVersion == 20051201` (`setup_data.c:355`)
+whenever the count is non-zero, so a wrong version hangs rather than being
+ignored. A count of 0 skips the assert, the copy and the spawn entirely.
+
+*(D128, D129.)*
+
+## `swdrv` coin flags — `swdrv_assign_tbl` `0x80326178` (eu0)
+
+**Neither this address nor `swdrv_wp` (`0x805ADF40`) is in the published symbol
+list**, though `spm-headers` declares both structures.
+
+A coin is persistent, so each owns a save flag from a fixed per-map budget: 32
+entries of `{const char *mapName, s32 num}`, summing to 853. Overflowing it
+**hangs the game** rather than dropping the coin:
+
+```
+swdrv.c:505   (wp->gameCoinId - 1) < assign_tbl[i].num
+              コインのフラグが溢れました   "the coin flags have overflowed"
+```
+
+⚠️ **The budget counts coins the setup file cannot see** — coins in blocks are
+map objects. `he1_01` has a budget of 4, ships no setup items, and still refused
+one coin: `gameCoinId` was 5 at the assert.
+
+⚠️ A map **absent** from the table is not stuck: the allocator returns `-1`, and
+the collected-check at `0x8003875C` reads `-1` as "not collected", so the coin
+spawns. 204 of the 227 maps with a setup file are in that position.
+
+*(D130, D133.)*
+
+## `EvtDoorWork` — `evt_door_wp` `0x805AE020` (eu0)
+
+`spm-headers` has this as `u16 flags` plus `u8 unknown_0x2[0x57c - 0x2]`. Four
+offsets are now known, each read out of the function that uses it:
+
+| offset | what | found in |
+|---:|---|---|
+| `+0x000` | flags; **bit 11 = the active-door pointer is valid** | `evtDoorGetActiveDoorDesc` |
+| `+0x2D8` | active `DoorDesc *` | same |
+| `+0x36C` | `MapDoorDesc` array | `evt_door_set_map_door_descs` |
+| `+0x370` | its count | same |
+| `+0x374` | per-zone event slots, 2 words each: `+ index*8 + which*4` | `evt_door_set_event` |
+
+✅ **`evt_door_set_event(door, which, script)` attaches a script to a loading
+zone**, which has no script field of its own. Verified by read-back — both slots
+`0` before, the supplied script in slot 0 after — and the game uses it on **13**
+maps.
+
+⛔ A door's `interactScript` is **an animation step**, not the door's behaviour:
+four instructions, `MULF LW(0), <float>` then an `evt_mapobj_*` transform. It
+carries no branch, and running it directly changes no map.
+
+*(D138, D140, D143.)*

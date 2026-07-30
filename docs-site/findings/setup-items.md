@@ -213,9 +213,69 @@ already use the budget has no room for a floating one.
     The 8192-byte buffer above caps a map at 512 items. The coin-flag budget
     bites far earlier — the largest entry in `assign_tbl` is 63.
 
+## ✅ Where the budget lives, and what it holds
+
+`spm-headers` declares the structure — `AssignTblEntry {const char *mapName;
+s32 num;}` and `MAX_COIN_MAP 32` — but **not the address, and not the
+contents**. Both are here.
+
+`swdrv_assign_tbl` is at **`0x80326178`** on eu0 (not in the published symbol
+list), 32 entries of 8 bytes, matched by `strcmp` on the map name. The budgets
+sum to **853** flags. `swdrv_wp` is at `0x805ADF40`, with `gameCoinId` at `+4`.
+
+**32 maps have a budget; only 14 ship coins in their setup file.** The other 18
+have a budget that is *already spent* — by coins in blocks, which are map
+objects and never appear in a setup file at all:
+
+| map | budget | setup coins | one added coin |
+|---|---:|---:|---|
+| `he1_03` | 62 | 5 | ✅ works |
+| `he1_01` | 4 | 0 | ⛔ assert |
+| `he2_02` | 29 | 0 | ⛔ assert |
+| `an1_02` | *no entry* | 0 | ✅ works |
+
+`he1_01` reported `gameCoinId` = 5 when it asserted — already incremented, so
+**4 were taken before the added one existed**, exactly its budget. Lineland Road
+has coins in blocks and none floating.
+
+## ✅ A map with no entry at all is fine
+
+`assign_tbl` covers 32 maps. **204 of the 227 with a setup file are not in it**,
+and the allocator handles that differently — it returns `-1` rather than
+asserting, and the "already collected?" check reads `-1` as *no*:
+
+```
+8003875c  cmpwi r3, -1
+80038760  bne   0x8003876c   ; a real id -> bit test
+80038764  li    r3, 0        ; -1 -> not collected
+```
+
+So the coin spawns. The maps that *cannot* take one are specifically those in
+the table that have already spent their allowance.
+
+🔶 A `-1` flag has nowhere to record the pickup, so such a coin may reappear
+every time the map loads. Not measured either way — but it is the shape of an
+infinite-coin exploit, and worth knowing before shipping one.
+
+## ✅ Every collectable is checked before it spawns
+
+This is the general mechanism, not a coin special case. Before spawning
+anything, the game asks whether it has already been collected and abandons the
+spawn if so — which is what stops a saved-and-reloaded item reappearing.
+
+Two paths, and they fail very differently:
+
+| | coins (`itemTemplateId` 1) | everything else |
+|---|---|---|
+| flag source | **static** budget in `assign_tbl` | **dynamic** 32-entry table in RAM |
+| when exhausted | ⛔ **asserts**, hanging the map | returns `-1` |
+| `-1` behaviour | never reached | treated as "not collected", spawns |
+
+Non-coin items degrade gracefully; coins assert. The spawner branches on
+`itemTemplateId == 1` at `0x80078C34`, taking a wholly different path.
+
 ## Still open
 
-Whether a map *not* in `assign_tbl` (195 of the 227) can take coins at all: the
-allocator returns `-1` rather than asserting, and what happens next is untested.
-And whether added coins on a map with slack are actually visible and
-collectible — the instrument used here reads NPC and flag state, not rendering.
+Whether a coin on a map with no budget entry stays collected across a save, and
+what the second door-event slot means. Both need a player rather than a memory
+reader.
