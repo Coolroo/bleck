@@ -12304,3 +12304,53 @@ driven by the game's own data, it should say what it knows and stop.
 
 ⚠️ `image` is pinned to 0.25.5: 0.25.10 requires rustc 1.88 and this host has
 1.87. Recorded so the pin is raised deliberately rather than puzzled over.
+
+---
+
+## D189 — Textures can be looked at, and the disc validated the decoder (2026-07-30)
+
+✅ **`bleck texture list` and `bleck texture export`.** All eight formats decode
+to RGBA; PNG is written from stdlib `zlib` in ~80 lines rather than by adding
+Pillow to a project with two runtime dependencies.
+
+Nothing in this project could *see* a texture before. A declared `invert` was
+checked by building a 460 MB disc and booting Dolphin — 2-3 minutes per glance.
+
+### ⚠️ 21,780 images, not 9,403
+
+`plan-textures.md` measured 898 containers and 9,403 images. The real number is
+**21,780**, because the survey only looked at standalone `.tpl` files. Most of
+the disc's textures live inside `map/*.bin` and `lyt/*.bin.uk` archives, and the
+`/a` model pairs each carry a TPL bank. A scan that skipped those reported a
+third of the truth and looked like it had worked.
+
+### The decoder was validated without eyes first
+
+⛔ **A wrong tile size does not raise.** GameCube textures are stored in
+rectangular tiles whose size differs per format, and decoding one as another
+yields plausible noise rather than an error — the hardest kind of wrong.
+
+✅ So the tiling table was checked against the disc's own layout: for every
+consecutive pair of images in every TPL, does `offset + data_size(image)` land
+exactly on the next image's offset? **1,976 of 1,976.** Eight formats, every
+size, no reference table consulted — the game's file layout agrees with the
+arithmetic or it does not.
+
+⚠️ That validates sizes, not pixel *order within* a tile. That was settled by
+exporting and looking: a CMPR map-pin marked "B" with clean edges, four I4
+smoke-puff frames, an RGBA32 lightning bolt with a correct glow, an RGB5A3
+curve. All eight formats confirmed by eye, which is exactly what the export
+exists to make possible.
+
+### What the tests can and cannot do
+
+The mechanical checks are the layout agreement, decoded sizes, alpha being
+opaque wherever a format has no alpha channel, and a **structure** check —
+correctly decoded images have flat runs; scrambled tiles look like static. That
+last one is weak on its own and deliberately kept, because it is the one
+property a tile-order bug reliably fails.
+
+⛔ **Decoding is not on the build path and must not become so.** A texture edit
+still goes through the CMPR endpoint domain (D187). If a build decoded and
+re-encoded, every rebuild would cost a generation of quality — the exact thing
+the endpoint trick exists to avoid.

@@ -310,3 +310,61 @@ def map_cmpr(data: bytes, image: Image, colours: ColourMap) -> Applied:
             reordered += 1
         struct.pack_into(">HH", out, at, n0, n1)
     return Applied(bytes(out), blocks=image.blocks, reordered=reordered)
+
+
+@dataclass(frozen=True)
+class Tiling:
+    """How one format lays pixels out, and how much space it needs.
+
+    ⛔ **GameCube textures are tiled, not scanline.** Pixels are stored in small
+    rectangular blocks, left to right then top to bottom, and every format uses
+    a different block size. Decoding one as scanline produces an image that
+    looks like plausible noise rather than an obvious failure, which is why the
+    tile sizes below are stated per format rather than assumed.
+    """
+
+    width: int
+    height: int
+    bits: int
+    """Bits per pixel. CMPR is 4 by this measure -- 8 bytes per 4x4 sub-block."""
+
+
+TILING = {
+    Format.I4: Tiling(8, 8, 4),
+    Format.I8: Tiling(8, 4, 8),
+    Format.IA4: Tiling(8, 4, 8),
+    Format.IA8: Tiling(4, 4, 16),
+    Format.RGB565: Tiling(4, 4, 16),
+    Format.RGB5A3: Tiling(4, 4, 16),
+    Format.RGBA32: Tiling(4, 4, 32),
+    Format.CMPR: Tiling(8, 8, 4),
+}
+
+
+@dataclass(frozen=True)
+class Pixels:
+    """A decoded image: 8-bit RGBA, row-major, no padding."""
+
+    width: int
+    height: int
+    rgba: bytes
+
+    def at(self, x: int, y: int) -> tuple[int, int, int, int]:
+        # pylint: disable=container-return
+        start = (y * self.width + x) * 4
+        return tuple(self.rgba[start : start + 4])  # type: ignore[return-value]
+
+
+def _tiles(image: Image) -> tuple[int, int]:  # pylint: disable=container-return
+    """How many tiles across and down, rounded up as the hardware pads."""
+    tile = TILING[image.format]
+    across = (image.width + tile.width - 1) // tile.width
+    down = (image.height + tile.height - 1) // tile.height
+    return across, down
+
+
+def data_size(image: Image) -> int:
+    """Bytes this image occupies, including the padding to whole tiles."""
+    tile = TILING[image.format]
+    across, down = _tiles(image)
+    return across * down * tile.width * tile.height * tile.bits // 8

@@ -14,10 +14,22 @@ from . import (
     scripts,
     stream,
     symbols,
+    texture,
 )
 
 # Order determines how commands appear in `bleck --help`.
-MODULES = [inspect, placement, symbols, archive, mods, scripts, disc, emulate, stream]
+MODULES = [
+    inspect,
+    placement,
+    symbols,
+    texture,
+    archive,
+    mods,
+    scripts,
+    disc,
+    emulate,
+    stream,
+]
 
 __all__ = [
     "MODULES",
@@ -30,4 +42,5 @@ __all__ = [
     "scripts",
     "stream",
     "symbols",
+    "texture",
 ]
