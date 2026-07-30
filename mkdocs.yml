@@ -98,6 +98,7 @@ nav:
   - Findings:
       - findings/index.md
       - How these were measured: findings/method.md
+      - Reproducing these findings: findings/reproducing.md
       - The evt VM:
           - Scripts need END_EVT: findings/evt-script-end.md
           - Instruction encoding: findings/evt-instruction-format.md
