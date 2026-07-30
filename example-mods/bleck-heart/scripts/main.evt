@@ -1,0 +1,18 @@
+-- Move a real Pure Heart, as Count Bleck's attack.
+--
+-- ⚠️ FIRST QUESTION: is `evt_mapobj_trans` absolute or relative? The name says
+-- translate, the signature says (name, s32 x, s32 y, s32 z), and nothing
+-- documents it. So this alternates +Y and -Y by the same amount: if it is
+-- relative the heart bobs, and if it is absolute it snaps between two heights.
+-- Either way the answer is visible, and the heart is doing something.
+
+script main {
+    wait(240)
+
+    loop {
+        evt_mapobj_trans("heart_iwa_07_oreng", 0, 120, 0)
+        wait_ms(700)
+        evt_mapobj_trans("heart_iwa_07_oreng", 0, -120, 0)
+        wait_ms(700)
+    }
+}

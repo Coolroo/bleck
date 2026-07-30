@@ -11364,3 +11364,261 @@ session's cost, and nothing required it.
 🟢 `--seconds 25` is enough for anything that settles at map load. Reserve long
 runs for things that accumulate — the boss hang at frame 2,177 genuinely needed
 them.
+
+## D169 — Count Bleck's own arena has no setup file, so one was synthesised (2026-07-30)
+
+The boss work kept being pushed into rooms chosen for the wrong reason. `mac_06`
+was picked because it has a Pure Heart pillar; `ls4_07` because it has a setup
+file. Neither is his arena, and `ls4_07` turned out to be a corridor of empty
+door frames.
+
+✅ **The arena chain `ls4_10` / `ls4_11` / `ls4_12` ships no setup file.**
+`files/setup/` carries `ls4_01`–`ls4_09` and `ls4_13`, and stops. So the
+enemies table has nothing to patch and `bleck setup show ls4_11` reports "no
+setup file", which had been read as "that map takes no enemies".
+
+✅ **Setup files are fixed size** — every one is 11,204 bytes, version 6, 100
+enemy slots. `ls4_13.dat` and `ls4_09.dat` match to the byte in length despite
+holding 2 and 22 enemies. So a file for a map that shipped without one is not a
+format problem: copy a valid one, clear it, write a single enemy.
+
+🔶 **Untested: whether the game reads a setup file for a map that shipped
+without one.** It may never attempt the load. This is the one thing the next run
+decides, and it is worth knowing either way — a positive result means *any* map
+can host placed enemies, not just the 227 with a file.
+
+⛔ **Rejected: retargeting a door.** Zone destinations (`to_map` / `to_door`)
+live in map data and `bleck` has no writer for them; the `doors` table patches
+door *scripts*, which is a different thing. It would also have been redundant —
+`code.boot` already enters any map directly, so a door was never what blocked
+reaching the arena. The setup file was.
+
+Recorded for the door graph, since it took a catalog query to establish:
+Bestovius's house is `mi1_09`, a dead end reached from `mi1_08` zone 1
+(`doa2_l`). `mi1_10` is the road hub, with six zones.
+
+## D170 — A synthesised setup file is ignored, and `ls4_11` is the prologue (2026-07-30)
+
+⛔ **Supersedes D169's open question.** A setup file written for a map that
+shipped without one is not read. `files/setup/ls4_11.dat` was synthesised from
+`ls4_13.dat` with Count Bleck in slot 0; across 21 samples in `ls4_11` the NPC
+list contains **no `npc_%08d` entry at all**. Setup-placed enemies are named
+that way -- `he1_01` in the same run shows `npc_00000001`, `npc_00000002`,
+`npc_00000003` -- so their absence is positive evidence the file was skipped,
+not merely an absence of the boss. Count Bleck *was* present, as the cutscene's
+own `jigen`.
+
+The instrument was checked before the negative was believed, per the rule: the
+same probe saw setup-placed NPCs in the very next map of the same run.
+
+✅ **`ls4_11` is Count Bleck's throne room during the prologue**, not a boss
+arena. Its cast: `jigen` (Count Bleck, `e_jigen`), `nasta` (Nastasia),
+`dimen` (Dimentio), `dodon` (O'Chunks, `e_ddtas`), `book` (`n_yogen`, the
+Dark Prognosticus) and `manera`. Alongside them sit `nise_jigen`,
+`nise_dodon`, `nise_koopa` and `nise_peach` -- *nise* is Japanese for fake,
+so these are Mimi's disguises. The map then hands off to `he1_01`.
+
+✅ **The cutscene cast exists as map objects as well as NPCs.** `dimen`,
+`dodon`, `jigen`, `manera` and `nasta` appear in both lists simultaneously.
+
+🔶 Effects were non-empty for the first time (1, then 3 entries) but only in
+samples whose names decoded as garbage, so no effect name is yet trustworthy.
+
+## D171 — The Pure Hearts are effects, named `h0`..`h7` (2026-07-30)
+
+✅ **Found.** Count Bleck placed in `he1_04` runs his fight; at frame 6447 the
+effect list goes from 0 entries to **8**, named `h0`, `h1`, `h2`, `h3`,
+`h4`, `h5`, `h6`, `h7`. The count holds at 8 for the rest of the run, which
+is when the hearts are on screen circling the player. `effdark` -- Count Bleck's
+own effect -- was present throughout.
+
+⚠️ **D163 already said this, earlier the same day, and it was not acted on.**
+It found the `pure_heart` string and concluded the hearts live in the effect
+system. What is new here is only the *live* confirmation -- eight entries with a
+shared `mainFunc`, observed while they were on screen.
+
+The part D163 got wrong is what cost the time: it concluded **"no `eff*Heart*Entry`
+symbol, so there is no C entry point to call"** and routed everything through
+`evt_eff` instead, which D164 then found renders nothing from a free-standing
+script. Both statements are about the *symbol list*, not about the game. The
+entry point exists (D172); it is simply unnamed.
+
+So the search did not fail for want of breadth. It failed twice on the same
+move: treating "not in the symbol list" as "not in the game". 1,687 assets, 169
+MOBJ names, 397 archives, 383 map.dat files, 435 templates and 535 tribes were
+searched, and an effect is a fourth thing none of them enumerate -- `effdrv`
+keeps its own array at `effdrv_wp` (`0x805ADF90`), `EffEntry` stride `0x2c`,
+`instanceName` at `+0x18`.
+
+⛔ **The stone heart was never the only option**, and three runs were spent
+trying to recolour `MOBJ_broken_heart` into something acceptable. The rule about
+producing a positive result before trusting a negative applies here in a form
+worth naming: "no Chaos Heart exists" was concluded from four exhaustive
+searches that all shared one blind spot. Exhaustive within a category is not
+exhaustive.
+
+Related symbols, from `spm.eu0.lst`:
+
+| symbol | where | what |
+|---|---|---|
+| `evt_cutscene_pure_heart` | `0x8040E598` (DOL data12) | an evt script; confirmed evt words, not code |
+| `evt_bos_01_pure_heart_set_pos` | REL 1,1 +0x38C9C | Count Bleck's fight sets heart positions |
+| `evt_bos_01_pure_heart_get_pos` | REL 1,1 +0x38D48 | and reads them back |
+| `effNameToPtr` | `0x80061B90` | looks an `EffEntry` up by instance name |
+| `effSetName` | `0x800617FC` | names one |
+
+🔶 `EffEntry.type` is **not** an effect id -- `effdrv.h` documents it as 0 or 1,
+a grouping for entry limits. The effect's kind is its `mainFunc` (`+0x10`), so
+that pointer is what identifies the heart and what the next probe must capture.
+
+## D172 — The Chaos Heart exists, and it is variant 16 of the heart effect (2026-07-30)
+
+✅ **Found, and it directly overturns D163's blocker.** D163 concluded there was
+no C entry point because no `eff*Heart*Entry` symbol exists. There is one -- it
+is simply unnamed. The function that installs the effect that renders the
+Pure Hearts is at \`0x80094E44\` -- it sits
+in a gap between \`effSpmHitEntry\` (\`0x80094020\`) and \`effSpmSpindashEntry\`
+(\`0x800970AC\`) that the symbol list never named, which is why grepping for a
+heart symbol found nothing.
+
+Reached by measurement, not guesswork: the live \`h0\`..\`h7\` entries all carry
+\`mainFunc = 0x80095568\`, and \`dolscan xref 0x80095568\` reports exactly one
+builder, \`0x80094EB0\`, inside the function that installs it.
+
+✅ **Its first argument selects the variant, and 16 is the Chaos Heart.** The
+function branches on it and composes asset names from a string table at
+\`0x803293B0\`:
+
+| index | names built | meaning |
+|---|---|---|
+| \`!= 16\` | \`pure_heart\`+\`A\`, +\`B\`, +\`C\`, +\`D\`, +\`E\` | a Pure Heart |
+| \`== 16\` | \`pure_heart\`+\`A\`, then **\`chaos\`**+\`A\`, +\`C\`, +\`D\`, +\`E\` | **the Chaos Heart** |
+
+The table reads \`pure_heart\`, \`A\`, \`chaos\`, \`C\`, \`D\`, \`E\`, \`B\` -- so
+\`chaos\` is a first-class asset prefix sitting immediately beside
+\`pure_heart\`, and has been all along.
+
+⛔ **Supersedes every "no Chaos Heart exists" conclusion.** Those came from
+searching 1,687 assets, 169 MOBJ names, 397 archives, 383 map.dat files, 435
+templates and 535 tribes. All of them were real searches; none could have found
+this, because the name is *composed at runtime* from two string fragments and
+never appears as a whole string anywhere on the disc. Grepping for \`chaos_heart\`
+or \`ChaosHeart\` was guaranteed to fail.
+
+The lesson is narrower than "search harder": **a name assembled at runtime is
+invisible to any search for the assembled name.** The way in was the live
+\`mainFunc\` pointer, which is data the game cannot hide.
+
+🔶 **Signature is inferred, not declared.** The prologue saves \`r3\` into
+\`r26\` and \`f1\`/\`f2\`/\`f3\` into \`f30\`/\`f29\`/\`f28\`, so it is taken as
+\`(s32 variant, f32 x, f32 y, f32 z)\`. A symbol list has no types and nothing can
+check this. \`mods/chaos-heart\` calls it and reports the returned pointer.
+
+Other measured details: \`EffEntry+0x14\` receives the \`pure_heart\` string;
+\`userWork\` is a 616-byte allocation (observed stride \`0x280\`); the entry sets
+\`flags |= 2\`; \`userWork+0\` holds the variant and \`userWork+4\` a value clamped
+to 8.
+
+## D173 — The Chaos Heart renders, and its position is at userWork +0x10 (2026-07-30)
+
+✅ **It spawns and it renders.** Calling \`0x80094E44(16, x, y, z)\` from a
+sequence hook produced a Chaos Heart beside the player -- glowing, with an aura,
+seen on screen and confirmed in the probe: entry returned non-null, and the
+effect stayed live for the whole 60-second run without flickering or being torn
+down. The inferred signature \`(s32 variant, f32 x, f32 y, f32 z)\` was right.
+
+⚠️ **Effects can be spawned from a sequence hook.** D155 recorded that
+\`npcEntryFromTemplate\` hangs when called that way, and that was taken as a
+general rule about spawning. It is not: an effect entry allocates from a
+different pool and returns cleanly. The NPC restriction is specific to NPCs.
+
+✅ **Position is at userWork +0x10 (x), +0x14 (y), +0x18 (z).** Measured by
+spawning at a known point and dumping the block: the first words read
+\`+0x00 = 16\` (the variant passed in) and \`+0x04 = 8\` (the value the entry
+function clamps to), which is what proves the block is the right one before any
+position claim is made. Then \`+0x10 = -2648.95\` and \`+0x14 = 90.0\`, exactly
+the spawn point -- Mario's x plus 120 and his y plus 110.
+
+⛔ **The float search that was built to find this returned four useless hits**,
+all matching z because z was 0.0 and a 616-byte block is full of zero words. It
+searched for *Mario's* position rather than the *spawn* position, so the two
+values that would have been distinctive were never looked for. The raw 16-word
+window dumped alongside it is what actually carried the answer.
+
+Worth keeping as a rule: **the cheap unconditional dump beat the clever
+targeted search.** The search encoded an assumption and failed silently when the
+assumption was wrong; the raw window encoded nothing and could not.
+
+## D174 — The attack works, and all 174 effects are now enumerable (2026-07-30)
+
+✅ **The Chaos Heart attack runs.** Seen on screen: the heart drifting DVD-logo
+style with five Pure Hearts circling it. The probe agrees -- 6 spawns attempted,
+the Chaos Heart non-null, **5 orbiters made**, 784 driven frames, 9 bounces, and
+the spin index cycling 0x03, 0x37, 0x2A, 0x1E, 0x0F. Position writes to
+userWork +0x10 hold, so the effect does not fight them.
+
+✅ **`scripts/dump_effects.py` lists every effect the game can spawn** -- 174
+named, from 177 `bl effEntry` call sites. This closes the gap that made the
+hearts unfindable: NPCs, map objects and items all had a dump script, and
+effects had none.
+
+It works by tracking registers forward from each call to `effEntry`
+(`0x800616dc`) until the name pointer is stored at `EffEntry+0x14`. A
+two-instruction pattern match finds nothing, for the same reason `dolscan xref`
+exists -- the game builds addresses as `lis` plus `addi` with other work
+interleaved.
+
+**The tool validated itself**: run blind, it reported `pure_heart` at
+`0x80094E44` -- the address D172 reached by hand from a live `mainFunc`. Two
+independent routes to the same answer.
+
+🔶 **Beam candidates, for the five-beams half of the attack.** The names are the
+game's own; none is confirmed to render yet:
+
+| effect | entry | note |
+|---|---|---|
+| `robo_beam` | `0x800A6880` | prologue is `mr r28,r3` then `fmr f26,f1`, `fmr f27,f2` -- the same (s32, f32, f32, ...) shape as `pure_heart` |
+| `robo_short_beam` | `0x80252DA0` | in a REL, not the DOL |
+| `mini_shot` | `0x8024F30C` | |
+
+🔶 Also found: a standalone **`chaos`** effect at `0x800AB2EC`, separate from the
+Chaos Heart variant of `pure_heart`, plus `chaos_end`, `pure_heart_dance`,
+`pure_heart_get` and `pure_heart_use`.
+
+⛔ **Not wired in.** `example-mods/chaos-heart` was left on the five Pure Hearts that are
+proven to render. Swapping in an untested effect would have put the one verified
+result at risk to save a few minutes, and nobody was available to run it.
+
+## D175 — `mods/` is untracked scratch; examples are copied to `example-mods/` (2026-07-30)
+
+⛔ **D147 said `mods/` ships empty, and it did not.** Twelve probe mods were
+tracked there -- `bleck-fight`, `boss-arena`, `boss-harder`, `boss-spawn`,
+`chaos-heart`, `heart-effect`, `heart-find`, `heart-probe`, `invincible`,
+`konton-watch`, `orb-attack`, `pure-heart`. The intent was recorded and then
+quietly violated over the following weeks, because nothing enforced it.
+
+✅ **Now enforced by `.gitignore`**: `/mods/*` with `!/mods/README.md`. The rule
+cannot be forgotten again, because git will not accept the file.
+
+The shape of the rule, chosen over the alternatives:
+
+- **Ignore `mods/` entirely, copy the keepers to `example-mods/`.** ✅ Chosen.
+  Probe mods are written to answer one question and are worthless afterwards;
+  the ones that are not get promoted deliberately, by a human deciding they are
+  worth reading.
+- ⛔ *Track `mods/` and prune periodically.* This is what was already happening.
+  32 superseded probes were deleted in one earlier sweep and the directory
+  refilled within days. A rule needing periodic cleanup is not a rule.
+- ⛔ *Move rather than copy on promotion.* Moving takes the mod out from under
+  the work in progress. Copying leaves the scratch version alone, and the
+  duplication is the point -- one is disposable, one is committed.
+
+Promoted in this pass: **`example-mods/chaos-heart`** (spawns the Chaos Heart
+and drives the attack) and **`example-mods/bleck-heart`** (dumps NPCs, map
+objects and effects live -- the rig that found the hearts). Both verified with
+`bleck mod check --mods-dir example-mods`. Their `overlay/` directories were
+dropped, being build output.
+
+⚠️ **A mod named in `docs/` must live in `example-mods/`**, or the reference
+rots as soon as the scratch copy is deleted. The D171-D174 entries were rewritten
+from `mods/` to `example-mods/` for exactly that reason.

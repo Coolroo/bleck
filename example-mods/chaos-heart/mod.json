@@ -1,8 +1,8 @@
 {
   "schema": 1,
-  "name": "heart-effect",
+  "name": "chaos-heart",
   "version": "0.1.0",
-  "description": "Does pure_heart render as a standalone effect? kemuri_test is the control",
+  "description": "Spawn the Chaos Heart beside the player, using the game's own effect",
   "base": "eu0",
   "code": {
     "script": "scripts/main.evt",
@@ -12,8 +12,5 @@
     "sources": [
       "src"
     ]
-  },
-  "tables": {
-    "enemies": "tables/enemies.csv"
   }
 }

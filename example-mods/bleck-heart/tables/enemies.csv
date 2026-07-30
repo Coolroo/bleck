@@ -1,0 +1,14 @@
+# Count Bleck in he1_04 -- an open Lineland arena, not a corridor and not Flipside.
+#
+# The method is the one that already worked in mac_06: placing template 196 in a
+# map that HAS a setup file runs his whole fight -- platforms, cage, Bowser and
+# all eight Pure Hearts. The room only has to be big enough to watch it in.
+#
+# ⛔ His real arena cannot be used. ls4_10/11/12 ship no setup file, and D170
+# showed the game ignores one that is added; ls4_11 is the prologue throne room
+# anyway, which is four minutes of cutscene.
+#
+# Slot 30 is the first empty one (D79), copy_from 0 inherits a working enemy's
+# undocumented bytes (D123). he1_04 held a 40-part boss for 25,959 frames.
+map,slot,template,x,y,z,copy_from
+he1_04,30,196,-900,0,0,0

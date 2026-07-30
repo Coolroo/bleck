@@ -1,0 +1,7 @@
+-- The spawn is done from C, not here: it is a direct call to an unnamed DOL
+-- function with a mixed integer/float signature, which this language has no way
+-- to declare. This script only has to exist so the module loads.
+
+script main {
+    wait(60)
+}

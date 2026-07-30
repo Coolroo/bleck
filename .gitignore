@@ -40,5 +40,11 @@ dist/
 # Example mods build into their own overlays too.
 example-mods/*/overlay/
 
+# The user's own mods. Scratch space by design -- a probe mod is written to
+# answer one question and is worth nothing afterwards. Anything that turns out
+# to be a worked example gets COPIED to example-mods/ and tracked there.
+/mods/*
+!/mods/README.md
+
 # Agent instructions -- kept on disk, deliberately untracked
 CLAUDE.md
