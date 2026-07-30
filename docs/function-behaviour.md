@@ -438,3 +438,83 @@ four instructions, `MULF LW(0), <float>` then an `evt_mapobj_*` transform. It
 carries no branch, and running it directly changes no map.
 
 *(D138, D140, D143.)*
+
+---
+
+## ✅ Enemy stats: `npcTribes`, and what a boss is made of (D151)
+
+Two tables, both static in DOL data, both in `spm.eu0.lst`:
+
+| | address | stride | entries |
+|---|---|---|---|
+| `npcEnemyTemplates` | `0x80449888` | `0x68` | 435 — behaviour |
+| `npcTribes` | `0x8043BF30` | `0x68` | 535 — **stats** |
+
+A template's `+0x14` is its **tribe id**, and `+0x2C` its flags. ✅ Both were
+confirmed against the committed `npccatalog.json` for templates 255, 196 and
+404 — the catalog was dumped from a running game by a different route, so this
+is cross-validation rather than a self-consistent read.
+
+`NPCTribe` is declared in `spm-headers` (MIT) and is where the numbers live:
+
+| field | offset | type |
+|---|---|---|
+| `catchCardDefense` | +0x0C | s16 |
+| **`maxHp`** | **+0x18** | **u8** |
+| `killXp` | +0x38 | s16 |
+| `coinDropChance` | +0x46 | u16 |
+| `attackStrength` | +0x64 | u8 |
+
+⛔ **`maxHp` is a `u8`, so 255 is a hard ceiling.** Not a design choice — the
+field cannot hold more.
+
+### Measured values
+
+| tribe | | maxHp | attackStrength | killXp |
+|---|---|---|---|---|
+| 0 | Goomba | **1** | 1 | 100 |
+| 292 | Dimentio (stg8) | 80 | 4 | 8000 |
+| 305 | Count Bleck | 150 | 8 | 8000 |
+| 309 | **Super Dimentio** | **200** | 6 | 9990 |
+
+✅ Goomba at 1 HP is the positive control: a wrong offset would not land on a
+plausible value for the one enemy whose stats everybody knows.
+
+⚠️ `attackStrength` **does not set damage** — the header says it is used only by
+the tattle and turn-based combat. Real damage comes from the move script (below).
+
+### Super Dimentio's move script — where the fight actually lives
+
+Template 255 `moveScript` is `0x8045C8C8`, decoded from the DOL:
+
+```
+     evt_npc_set_move_mode(npc, 1)
++4   evt_npc_set_part_attack_power(npc, -1, 2)   <- his damage
+     evt_npc_flag8_onoff(npc, 1, 0x20000000)
+     func_801072a4(npc)
+     evt_npc_wait_for(npc, 500)                  <- opening delay
+     DO
+         <run child script 0x8045D328>           <- the attack itself
++25      evt_npc_wait_for(npc, 1000)             <- cooldown between attacks
+     WHILE
+```
+
+✅ **`move`, `onhit` and `death` are UNIQUE to template 255.** ⛔ `init`
+(`0x8043B8F8`) is **shared by 376 of 435 templates** — patching it would change
+almost every enemy in the game. Checked by comparing pointers across the whole
+table, not assumed.
+
+### Two levers that need no instruction patch
+
+`+8` (attack power) and `+28` (cooldown) are plain **argument words**, not
+instructions. Rewriting them needs no `code.patches`: no handler prototype to
+match, no VM return semantics, and no jump-table concern because nothing moves.
+`mods/boss-harder` does exactly this, guarding on the two header words first.
+
+✅ Verified in one unattended boot: `200 -> 255` HP, `2 -> 4` attack power,
+`1000 -> 350` cooldown, all three guards passed, and the attract demo still ran
+`aa4_01` then `ls4_12`.
+
+⚠️ **The edits are verifiable without reaching the boss**, because they happen at
+`mod_prolog` against static data. The *fight* still needs a human; the *edit*
+does not.

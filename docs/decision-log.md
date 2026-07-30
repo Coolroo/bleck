@@ -10717,3 +10717,71 @@ exist.
 
 🔶 **Not yet run in game.** The mechanism is measured (D146) but this generated
 form has only been built, not booted.
+
+---
+
+## D151 — A boss mod, and where a boss's difficulty actually lives (2026-07-29)
+
+`mods/boss-harder` makes Super Dimentio tougher. Recording it because finding
+the levers turned up several facts, and one of them contradicts the obvious
+guess.
+
+Details and the measured tables are in
+[`function-behaviour.md`](function-behaviour.md); this is the reasoning.
+
+### The obvious lever is the weakest one
+
+🔶 The first instinct was "raise his HP". ⛔ **`NPCTribe.maxHp` is a `u8`.** He
+starts at 200, so the whole available range is 200→255 — a 27% increase, and
+that is the ceiling the data structure imposes. A boss mod built on HP alone
+would barely change the fight.
+
+⛔ **`attackStrength` (+0x64) is also a dead end**: `spm-headers` says outright
+that it feeds the tattle and turn-based combat and *does not affect normal
+damage*. Reading the header before trusting the field name saved a run.
+
+✅ **The damage is in his move script**, as an argument to
+`evt_npc_set_part_attack_power(npc, -1, 2)`, and the pacing is another argument
+to the `evt_npc_wait_for(npc, 1000)` in his attack loop. Those two words are
+what a difficulty mod actually wants.
+
+### Rewriting an argument, not an instruction
+
+⚠️ **`code.patches` was the wrong tool here even though it would have worked.**
+A patch replaces an *instruction* with a `USER_FUNC` of matching argc, so it
+needs a handler whose prototype is right and whose return value drives the VM
+correctly — and nothing can check the prototype (D97). Both levers are plain
+argument words to calls the game already makes, so writing them directly needs
+none of that.
+
+Rejected: patching `+25` with a handler that implements its own wait. It would
+have meant guessing the blocking-return convention for a user func, which is
+not in any header here, to solve a problem that a single store solves.
+
+🟢 This suggests a manifest form worth having — an `args` edit on a script
+selector, "set word N of `npcdrv:255:move` to X, guarded by its header" —
+which is the same shape as `code.patches` without the handler.
+
+### What was checked before writing anything
+
+⛔ **`init` is shared by 376 of 435 templates.** `move`, `onhit` and `death` for
+template 255 are unique to him. Verified by comparing pointers across the whole
+table — the same sharing hazard that made D91's item patches and D112's npcdrv
+selector dangerous, and the reason this mod touches only `move`.
+
+### The rig verified a boss fight nobody played
+
+✅ The edits land at `mod_prolog`, against static tables, so **one 100-second
+unattended boot confirmed all three** — 200→255, 2→4, 1000→350, every guard
+passed — without going anywhere near Castle Bleck. The attract demo still ran
+`aa4_01` then `ls4_12`, which is the control saying nothing was broken.
+
+⚠️ **The first run reported all zeros, and the mod was fine.** The probe block
+was at `0x80005000` in the rig and `0x80003000` in the mod — a wrong instrument,
+not a wrong result, and the eleven existing probes all use the right address.
+`ingame.py` should arguably export it rather than leaving each mod to redeclare
+it.
+
+🔶 **"More attacks" here means more often, not new ones.** A genuinely new attack
+means spawning `Dimentio Stg8 Magic` (template 404, its own tribe) via
+`npcEntryFromTemplate` (`0x801be198`), whose signature is unmeasured.
