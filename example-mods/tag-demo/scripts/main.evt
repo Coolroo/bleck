@@ -1,0 +1,7 @@
+-- The map attachment is declared here, not in mod.json. bleck reads the
+-- attribute and folds it into the manifest's `code` block.
+
+#[map("he1_04")]
+script onLineland {
+    wait(120)
+}

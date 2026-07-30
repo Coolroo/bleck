@@ -102,6 +102,10 @@ class ScriptSource:
         return str(self.path) if self.path is not None else self.origin
 
 
+#: Where `bleck.h` lives, always on a mod's include path so a source can
+#: `#include <bleck.h>` and use the tag macros.
+BLECK_INCLUDE = Path(__file__).resolve().parent / "include"
+
 #: What `code.sources` accepts, as a phrase for error messages.
 _SUFFIX_LIST = ", ".join(languages.SOURCE_SUFFIXES)
 
@@ -197,7 +201,7 @@ def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:
 
 def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     """The map attachments this mod declares, as the emitter wants them."""
-    spec = mod.manifest.code
+    spec = mod.code
     if spec is None:
         return []
     return [
@@ -579,7 +583,7 @@ def banner_for(mod: Mod, spec: CodeSpec | None = None) -> emit.Banner | None:
     The text defaults to the mod's own name. Pass `spec` when the build works
     from a synthesized `code` block rather than the manifest's own.
     """
-    spec = spec if spec is not None else mod.manifest.code
+    spec = spec if spec is not None else mod.code
     if spec is None or not spec.banner.enabled:
         return None
     return emit.Banner(
@@ -647,7 +651,7 @@ def prepare(mod: Mod, override: CodeOverride | None) -> Part:
 
     One mod and several reach a compiled program by this same path.
     """
-    spec = mod.manifest.code
+    spec = mod.code
     boot_map = override.boot_map if override else ""
     if spec is None:
         if not boot_map:
@@ -709,7 +713,9 @@ def link_module(
             target=spec.target,
             module_id=spec.module_id,
             extra_sources=sources,
-            include_dirs=[headers] if headers and headers.is_dir() else [],
+            include_dirs=(
+                ([headers] if headers and headers.is_dir() else []) + [BLECK_INCLUDE]
+            ),
         )
     )
 

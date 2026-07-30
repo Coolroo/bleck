@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "tag-demo",
+  "version": "0.1.0",
+  "description": "Hooks and map attachments declared in the source, not mod.json",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2
+  }
+}

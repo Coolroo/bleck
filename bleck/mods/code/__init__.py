@@ -19,6 +19,7 @@ from bleck.mods import registry as mod_registry
 # Re-exported: callers reach these through `mods.code`.
 # pylint: disable=unused-import
 from bleck.mods.code.parts import (  # noqa: F401
+    BLECK_INCLUDE,
     CODE_WORKDIR,
     CodeBuild,
     CodeError,
@@ -126,7 +127,7 @@ def build_merged(
 
     # One banner for the disc, named for the mod that was asked for rather than
     # a dependency it pulled in.
-    banner = banner_for(target, target.manifest.code or parts[-1].spec)
+    banner = banner_for(target, target.code or parts[-1].spec)
     if banner is not None and len(mods) > 1:
         banner = emit.Banner(
             text=f"{banner.text} +{len(mods) - 1}", sequences=banner.sequences
@@ -154,7 +155,7 @@ def build_mod(
     mod: Mod, workroot: Path, override: CodeOverride | None = None
 ) -> CodeBuild:
     """Compile one mod's script and native sources into its `mod.rel`."""
-    spec = mod.manifest.code
+    spec = mod.code
     boot_map = override.boot_map if override else ""
     if spec is None:
         if not boot_map:
@@ -216,7 +217,9 @@ def build_mod(
             target=spec.target,
             module_id=spec.module_id,
             extra_sources=sources,
-            include_dirs=[headers] if headers and headers.is_dir() else [],
+            include_dirs=(
+                ([headers] if headers and headers.is_dir() else []) + [BLECK_INCLUDE]
+            ),
         )
     )
 

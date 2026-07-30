@@ -14,6 +14,7 @@ from bleck import platforms
 from bleck.common import env
 from bleck.common.errors import BleckError
 from bleck.mods import levels
+from bleck.mods.manifest.code import tags as codetags
 
 from .manifest import (
     MANIFEST_NAME,
@@ -46,6 +47,18 @@ class Mod:
         manifest sees a level-organised mod as empty.
         """
         return levels.tables_for(self, kind)
+
+    @property
+    def code(self):
+        """The `code` block, with any tags in the mod's own sources folded in.
+
+        ⚠️ **Call this, not `manifest.code`.** The manifest holds only what
+        `mod.json` said literally; a `BLECK_HOOK` or `#[map(...)]` lives in a
+        source file and is discovered here, where the root is known. A caller
+        that asks the manifest sees a tag-declared hook as absent -- the same
+        shape as `tables_of` above, and as D126's four repeats.
+        """
+        return codetags.code_of(self)
 
     @property
     def has_placements(self) -> bool:

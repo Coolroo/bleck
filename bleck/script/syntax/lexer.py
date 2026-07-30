@@ -164,6 +164,13 @@ def tokenize(source: str) -> list[Token]:
             _skip_block_comment(scanner)
             continue
 
+        # `#[map("he1_04")]` -- an attribute. It addresses the manifest, not
+        # the compiler, so it is skipped here and read separately by
+        # `mods/manifest/code/tags.py`.
+        if char == "#" and scanner.peek(1) == "[":
+            _skip_line(scanner)
+            continue
+
         if char.isdigit():
             tokens.append(_number(scanner))
             continue

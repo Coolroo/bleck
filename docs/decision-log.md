@@ -11658,3 +11658,81 @@ regular structure.
 
 🟢 This is the hook for adding spawn behaviour to any entity: `onSpawnScript` is
 a plain template field, and `bleck` already rewrites template fields.
+
+## D177 — Keep the hand-written lexer and parser; tree-sitter is deferred (2026-07-30)
+
+⛔ **Rejected for now: replacing `bleck/script/syntax/` with tree-sitter.** The
+question was a fair one -- 987 lines of hand-written lexing and parsing looks
+like work an established library should be doing.
+
+The deciding facts are about distribution, not parsing:
+
+- **It is a native dependency, and a custom one.** A tree-sitter grammar is not a
+  wheel: it is `grammar.js`, generated C, compiled per platform, for aarch64
+  Linux, Windows and macOS, then bundled into PyInstaller. `pyproject.toml`
+  carries **two** runtime dependencies and an explicit comment guarding that
+  count. This is the hardest possible dependency shape for a frozen binary
+  shipped to three platforms.
+- **It optimises for the opposite goal.** Tree-sitter parses *broken* input fast
+  and incrementally so an editor can keep highlighting. A compiler rejects bad
+  input with a precise message. `bleck` already emits good ones -- "script 'x' is
+  declared twice (first at line N)" -- and tree-sitter returns `ERROR` nodes,
+  leaving the diagnostics to be rewritten anyway.
+- **Syntax is not where the cost is.** lexer 297, parser 459, tree 221. The churn
+  is in `emit/` (~2,650 lines across four modules) and the manifest. Adding the
+  `#[...]` attribute in this same session took **six lines** in the lexer; under
+  tree-sitter it is a grammar change, a regenerate, three native rebuilds and a
+  reship.
+
+🟢 **Where it would earn its place: the GUI editor in `vision.md`.** Syntax
+highlighting, folding and an outline are exactly tree-sitter's strengths -- but
+that is a *different consumer*. A grammar can be added for the editor without
+removing the compiler's parser, and the two may disagree harmlessly since only
+one produces bytecode. A TextMate grammar may be enough.
+
+⚠️ **What would change this:** real expression precedence, user-defined
+functions, or a type system. Hand-rolled recursive descent stops paying at that
+point -- but the answer then is a **pure-Python** generator such as Lark, which
+has the same benefit with no native code and no packaging problem. Not
+tree-sitter.
+
+## D178 — Hooks and map attachments are declared in the source, not mod.json (2026-07-30)
+
+A hook names two things: a game function and one of the mod's own. `mod.json`
+could only ever name the second as a **string**, so the manifest had to be kept
+in step with the code by hand, and renaming a C function turned into a link
+error rather than anything a reader could see coming.
+
+✅ **Tags now carry the declaration.** `BLECK_HOOK(mapDataPtr, before)` above a C
+function, `#[map("he1_04")]` above a `script`. `bleck` reads them and folds them
+into the `code` block. `example-mods/tag-demo` declares **zero** hooks and
+**zero** maps in `mod.json` and builds with both.
+
+**Why a macro rather than a comment.** `BLECK_HOOK` is a real macro from
+`bleck/mods/code/include/bleck.h`, which expands to nothing and is always on a
+mod's include path. The C compiler therefore validates the syntax: a typo is a
+build error, not a tag that silently does not apply. A comment form (`//#[...]`)
+was rejected for exactly that -- it puts the whole burden of catching mistakes on
+a scanner that only sees what it already expects.
+
+⛔ **Neither side overrides the other.** A tag and a `mod.json` entry claiming the
+same game function is a hard error naming both sites, file and line. Silent
+precedence in either direction was rejected: a declaration that parses, is
+ignored, and reports success is this repo's most repeated bug (D126, four
+occurrences). Conflicts are keyed by the thing that can only be claimed once --
+the *game* function, not the mod's -- so one mod function serving two targets
+stays legal.
+
+✅ **Only declared sources are scanned.** A `.c` file the mod does not build is
+never read, so a tag in it cannot take effect invisibly.
+
+The structure moved with it: `codespec.py` was 695 lines and about to gain a
+fifth concern, so it became `manifest/code/` -- `specs.py` (shapes),
+`parse.py`, `patches.py`, `hooks.py`, `tags.py`. `codespec.py` remains as a
+re-export shim because `api/v1/mods.py` imports from it and a file move should
+not break the JSON API. 1147 tests passed before and after the split, then 1170
+with the feature.
+
+⚠️ The lexer skips `#[...]` like a comment (six lines). The attribute addresses
+the *manifest*, not the compiler, so tokenising it would have meant threading a
+node through the parser, the tree and the lowerer to be ignored at the end.

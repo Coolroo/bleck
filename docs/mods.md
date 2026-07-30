@@ -582,3 +582,39 @@ how `has_placements` had to move onto `Mod` too.
 ⛔ Four things a level refuses rather than skipping, all D126's shape: a missing
 directory, an empty one, a misspelled `enemys.csv`, and a `doors.csv` in a mod
 with no `code` block.
+
+## Declaring hooks in the source
+
+A hook names a game function and one of the mod's own. `mod.json` can only name
+the second as a string, so the two drift apart the moment a function is renamed.
+Declare it where the function is instead:
+
+```c
+#include <bleck.h>
+
+BLECK_HOOK(mapDataPtr, before)
+void watchMapData(void *work) { ... }
+```
+
+`before` and `after` keep the original working; `replace` takes it over
+(D96, D97). Scripts take attributes the same way:
+
+```
+#[map("he1_04")]
+script onLineland {
+    wait(120)
+}
+```
+
+`#[combo("dev")]` binds a script to a button combination from `bleck.yml`.
+
+⚠️ **`BLECK_HOOK` is a real macro**, from `bleck.h`, always on a mod's include
+path. It expands to nothing -- it exists so the C compiler rejects a typo that
+would otherwise be a tag silently doing nothing.
+
+⛔ **A tag and a `mod.json` entry may not claim the same game function.** That is
+a hard error naming both sites; neither overrides the other. Only the *game*
+function is exclusive, so one mod function may serve two targets.
+
+Only sources the mod actually builds are scanned. `example-mods/tag-demo` is the
+worked example, and declares neither hook nor map in its manifest.

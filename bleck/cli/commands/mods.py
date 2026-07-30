@@ -333,7 +333,7 @@ def _embed_loader(chain: resolver.Chain, staged: Path, args: argparse.Namespace)
     if not coded or args.no_embed_loader:
         return
 
-    target = coded[-1].manifest.code.target
+    target = coded[-1].code.target
     try:
         result = gecko.embed_loader(staged, target, registry.build_root() / ".gecko")
     except gecko.GeckoError as exc:
