@@ -620,3 +620,59 @@ scripting language** rather than hand-assembled as bytecode.
 `evt_mario_get_pos(mx, my, mz)` with three `var`s emits `-30000000`,
 `-29999999`, `-29999998` — i.e. `0xFE363C80/81/82`, the *same* local-work slot
 encoding the game's own script uses at +8. Verified by compiling it, not assumed.
+
+---
+
+## ✅ `npcEntryFromTemplate` — spawning an NPC from code (D154)
+
+```c
+NPCEntry * npcEntryFromTemplate(NPCEnemyTemplate * enemyTemplate);   // 0x801BE198
+```
+
+✅ **The upstream declaration is correct**, checked against the code rather than
+trusted — `evt_door.h`'s argc was wrong (D102), so a declaration is a hypothesis
+until the disassembly agrees. It does:
+
+```
+801be1b8  mr    r29,r3        <- one argument, kept
+801be1c0  lwz   r12,12(r3)    <- reads +0x0C OF THE ARGUMENT: a pointer, not an id
+801be1c4  cmpwi r12,0
+801be1c8  beq   ...           <- zero means "no gate"
+801be1d0  bctrl               <- otherwise call it; if it returns 0, spawn fails
+801be1e4  lwz   r3,20(r29)    <- +0x14, the tribe id
+801be1e8  lis   r4,-32700
+801be1f0  addi  r4,r4,-16592  <- r4 = 0x8043BF30
+```
+
+✅ **`npcTribes = 0x8043BF30` is confirmed a third way**: the function computes
+that exact address to index the tribe. Previously it was read from the symbol
+list and cross-checked against the catalog; now the code itself agrees.
+
+### `+0x0C` is an optional spawn gate
+
+A template may carry a predicate at `+0x0C`. If it is **zero** the spawn
+proceeds unconditionally; otherwise it is called and a zero return makes
+`npcEntryFromTemplate` return `NULL`.
+
+⚠️ The committed catalog's `can_spawn` is 0 for every boss, which reads as
+"cannot be spawned" and is **not** what this field means. Measured:
+
+| template | +0x0C | |
+|---|---|---|
+| 103 | `0x00000000` | Super Dimentio Block Proj (his beam) |
+| 197 | `0x00000000` | Bleck Small Portal |
+| 198 | `0x00000000` | Bleck Large Portal |
+| 255 | `0x00000000` | Super Dimentio |
+
+🔶 So all four should spawn from code. Not yet tried.
+
+### Pieces available for a summoned-orb attack
+
+| | template | tribe | |
+|---|---|---|---|
+| the orb | **198** | 307 | `Bleck Large Portal` — the void Count Bleck opens |
+| a smaller orb | 197 | 306 | `Bleck Small Portal` |
+| a beam | **103** | 311 | `MOBJ_frame_beam`, *Super Dimentio's own* block projectile |
+
+⛔ There is **no Chaos Heart entity** in the 435 templates or 535 tribes. The
+portal is the closest thing the game already has to the void it represents.
