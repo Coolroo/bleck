@@ -510,11 +510,11 @@ Then invert pixel data from `0x40` to the end of each — script in
    solved multi-mod loading. Our behaviour matches the state of the art. See
    the "unclaimed problem" item under next steps.
 
-3. **Rust rewrite** — deferred. The case rests on distribution and compressor
+2. **Rust rewrite** — deferred. The case rests on distribution and compressor
    speed. Revisit after the code track lands; a PyO3 port of just the compressor
    captures most of the benefit at a fraction of the risk.
 
-4. **Hot reload** — designed for, not built. D37 records the reasoning and the
+3. **Hot reload** — designed for, not built. D37 records the reasoning and the
    verified facts (Riivolution re-reads host files on every disc read; SPM links
    `DVDMgrOpen`/`Read`/`Close`). Estimated 1–3 days. ⛔ Reloading a rebuilt REL
    is ruled out: there is no `OSUnlink`.
@@ -526,23 +526,18 @@ Then invert pixel data from `0x40` to the end of each — script in
 Ordered by value. Anything closed has been removed — the decision log is the
 record of what was finished and why.
 
-### The boss work, in progress
+### The boss work
 
-1. **Swap `chaos-heart`'s five orbiters to a real beam.** They are Pure Hearts
-   today: the right geometry, not the beams the design asked for. `robo_beam`
-   (`0x800A6880`) has the same prologue shape as the heart, so `summon()` should
-   take it unchanged. 🔶 Unknown: whether its position sits at `userWork+0x10`,
-   and whether it self-deletes the way Count Bleck's beam *NPC* did at ~314
-   frames. `mods/bleck-chaos` is built and never run; its probe dumps beam 0's
-   `userWork` head unconditionally, so one run answers both.
-2. ~~`bleck` leaves stale generated overlay files behind.~~ ✅ Fixed (D182): a
-   build records what it wrote to `work/build/.generated/<mod>.json` and the
-   next one takes back what it no longer produces. Nothing unrecorded is ever
-   removed.
+1. **The attack is built from effects, and effects do not hit the boss hang**
+   (D183). `chaos-heart` orbits five `robo_beam`s around the Chaos Heart; 22,350
+   frames, no freeze, where the boss *NPC* froze at a fixed ~2,177 (D157). 🔶 The
+   remaining question is whether the NPC-path hang is what stands between this
+   and a real Count Bleck fight — the effect path sidesteps it rather than
+   explaining it.
 
 ### Textures — the last thing that cannot be shared
 
-3. **Decode and re-encode TPL losslessly**, then **CMPR endpoint colour ops**,
+2. **Decode and re-encode TPL losslessly**, then **CMPR endpoint colour ops**,
    then **a declarative `tables/textures.csv`**. This is what makes `tex-koopa`
    and `title-invert` shareable: their whole content is game bytes today, so a
    `.bleck` archive either omits them or carries Nintendo's data.
@@ -551,35 +546,44 @@ record of what was finished and why.
 
 ### The language
 
-4. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining gap.
+3. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining gap.
    ⚠️ Maps did **not** need it (D51) and doors do **not** (D103) — read D51
    before assuming NPCs will.
-5. **Emit `SETI` instead of refusing ambiguous literals** (D39). `var a =
+4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `var a =
    -30000000` is a compile error and need not be.
-6. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
-   ⚠️ `RUN_EVT` is emitted nowhere, so `spawn` starts from scratch.
-7. **Switch to the decomp's symbol table** (D39): ~9,566 named symbols against
+5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+   ⚠️ `RUN_EVT` is emitted nowhere, so `spawn` starts from scratch — and
+   D184 measured the consequence: a spawned script's **parent waits for
+   it**, so `spawn` cannot currently isolate a call that never returns.
+6. **Switch to the decomp's symbol table** (D39): ~9,566 named symbols against
    `spm.eu0.lst`'s 1,111, with sizes and types, so hook targets could be
    *validated* rather than merely resolved. ⚠️ It states no licence (D54), so it
    stays a local convenience and nothing derived from it ships.
 
 ### Toward the base app
 
-8. **More editing surfaces through the API.** The map archive is the prize and
+7. **More editing surfaces through the API.** The map archive is the prize and
    is **not decoded** — research before it is an editing problem.
-9. **A GUI over the API.** Any language; the contract is JSON and the schema is
+8. **A GUI over the API.** Any language; the contract is JSON and the schema is
    published.
-10. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
+9. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
     answer is a PyO3 port of *just the compressor* — not a rewrite.
 
 ### Needs a human, once
 
-11. **A save state.** Driving into a map leaves Mario invisible: no save, no
+10. **A save state.** Driving into a map leaves Mario invisible: no save, no
     profile (D63). `--state` exists on `bleck launch` and `ingame.py`; making
     one needs someone to play far enough and press F1.
-12. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each.
+11. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each.
     `a`, `b`, `1`, `2` are confirmed (D68).
-13. 🔶 **The docs site has never been opened in a browser.** `mkdocs --strict`
+12. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is
+    the route; extend it to the next safe batch. ⛔ `evt_pouch_check_have_item`
+    never returns and nobody knows why.
+13. 🔶 **The banner has never been seen on screen** since it gained the version
+    and the purple loader line (D181). Both strings are confirmed in the
+    module; the title screen is unreachable unattended and the rig reads
+    memory, not pixels.
+14. 🔶 **The docs site has never been opened in a browser.** `mkdocs --strict`
     passing is not the same as looking right.
 
 ## Things worth not rediscovering
