@@ -45,6 +45,10 @@ class Tint:
 PRESETS = {
     "chaos": Tint("chaos", (0.55, 0.12, 0.85), (46, 0, 60)),
     "dark": Tint("dark", (0.35, 0.35, 0.35), (0, 0, 0)),
+    # ⚠️ The mesh inside MOBJ_broken_heart is named `pure_heart` -- the model is
+    # the Pure Heart and only its texture reads as grey stone. This lifts it
+    # back to pink with a bright core, which is what a Pure Heart looks like.
+    "pure": Tint("pure", (1.35, 0.42, 0.95), (70, 10, 55)),
     "invert": Tint("invert", (-1.0, -1.0, -1.0), (255, 255, 255)),
 }
 

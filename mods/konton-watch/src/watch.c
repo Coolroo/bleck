@@ -37,6 +37,7 @@ extern void *npcGetWorkPtr(void);
 #define NPC_FLAG8 0x008
 #define NPC_NAME 0x024
 #define NPC_TRIBE_ID 0x49C
+#define NPC_POSE_NAME 0x048  /* m_Anim.animPoseName */
 
 /* Measured, D165 -- spm.eu0.lst has no mobjdrv_wp. */
 #define MOBJ_WP 0x805ADF10
@@ -86,7 +87,7 @@ static u32 sameText(const char *a, const char *b)
     return 1;
 }
 
-static void remember(const char *name, u32 tribe)
+static void remember(const char *name, u32 tribe, const char *pose)
 {
     u32 i, j;
 
@@ -114,6 +115,17 @@ static void remember(const char *name, u32 tribe)
     /* Tribe id beside the name: it is what identifies the model, and a name
        alone cannot be looked up in the committed catalog. */
     probe[40 + keptCount] = tribe;
+    /* The live model name -- what a tribe-less prop renders as. */
+    if (keptCount == 0 && pose != 0)
+        for (j = 0; j < 4; j++)
+        {
+            u32 word = 0;
+            u32 k;
+
+            for (k = 0; k < 4; k++)
+                word = (word << 8) | (unsigned char) pose[j * 4 + k];
+            probe[46 + j] = word;
+        }
     keptCount += 1;
     DISTINCT = keptCount;
 }
@@ -155,7 +167,7 @@ static void look(void)
                     continue;
                 npcs += 1;
                 name = (const char *) (e + NPC_NAME);
-                remember(name, *(u32 *) (e + NPC_TRIBE_ID));
+                remember(name, *(u32 *) (e + NPC_TRIBE_ID), (const char *) (e + NPC_POSE_NAME));
                 if (looksLikeKonton(name))
                     KONTON_SEEN += 1;
             }
@@ -176,7 +188,7 @@ static void look(void)
                     continue;
                 mobjs += 1;
                 name = (const char *) (e + MOBJ_NAME);
-                remember(name, 0xFFFFFFFFu);
+                remember(name, 0xFFFFFFFFu, 0);
                 if (looksLikeKonton(name))
                     KONTON_SEEN += 1;
             }

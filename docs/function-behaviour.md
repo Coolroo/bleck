@@ -778,3 +778,57 @@ and hidden otherwise. That explains every earlier miss: it has no NPC entry, no
 ⚠️ **The strings cluster around `mac_12_init_evt`, not `mac_01`.** Flipside is
 many maps; the heart-bearing pillar may not be the one `warp-combo` reaches.
 `evt_mapobj_get_position` answers that in one run per map, without guessing.
+
+---
+
+## ⛔ The Chaos Heart has no reusable form. Every heart on the disc is a Pure Heart (D169)
+
+Searched exhaustively, in this order, all of it negative for a Chaos Heart:
+
+| where | how much | result |
+|---|---|---|
+| assets in `files/a/` | 1,687 | only `MOBJ_broken_heart` |
+| model names in the DOL | 169 `MOBJ_*` | same one |
+| archive members | 397 archives | none |
+| **model-internal node names** | 1,687 assets | `pure_heart`, `heartShape` in two files |
+| NPC templates / tribes | 435 / 535 | none |
+| effects | `evt_eff` names | `pure_heart*` only, and it renders nothing standalone |
+| map objects | live, `mac_01` + `ls4_12` | two chests and one `book` |
+| **map geometry, all maps** | **383 `map.dat`** | **34 heart nodes, every one a Pure Heart** |
+
+### ✅ Where the Pure Hearts actually are
+
+Geometry nodes, one colour per Flipside/Flopside pillar map:
+
+| node | map |
+|---|---|
+| `heart_iwa_07_red` | `mac_01` |
+| `heart_iwa_07_oreng` | `mac_06` |
+| `heart_iwa_07_yelow` | `mac_07` |
+| `heart_iwa_07_blue` | `mac_11` |
+| `heart_iwa_07_white` | `mac_12` |
+| `heart_iwa_07_neive` | `mac_16` |
+| `heart_iwa_07_puple` | `mac_17` |
+| `heart_iwa_07` | `mac_02` |
+
+Plus `tt_heart_06`–`tt_heart_13` in `mac_02`/`mac_22`, and `heart_01` / `A2_heart_01` / `A3_heart_01` in seven maps.
+
+⚠️ **They are geometry, not objects.** `mobjNameToPtrNoAssert("heart_01")` returns
+null for all of them — the probes that "found nothing" were asking the wrong
+driver. The right calls are `evt_mapobj_get_position`, `evt_mapobj_trans` and
+`evt_mapobj_flag_onoff`, which address nodes by name.
+
+⛔ **Geometry cannot leave its map.** It is part of the mesh, so a heart can be
+moved, hidden or shown *within* `mac_01`, but not spawned into an arena.
+
+### ⛔ And `MOBJ_broken_heart` is the broken heart, despite its mesh name
+
+Its texture is neutral greyscale (r≈g≈b≈160) and its mesh is called
+`pureheartShape`, which made it look like a tintable Pure Heart. Watched in
+game it renders as pitted stone — the detail is in the texture, so **no runtime
+tint and no recolour can make it read as anything else**. The mesh name is a
+leftover from whoever authored it.
+
+🔶 The Chaos Heart is therefore built inside cutscene event code from parts that
+exist nowhere else. Reproducing it means authoring a new model, which is outside
+what `bleck` can do today.

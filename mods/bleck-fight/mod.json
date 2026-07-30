@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "bleck-fight",
+  "version": "0.1.0",
+  "description": "Drops you before Count Bleck's fight with your save, invincible, watching for the heart",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "boot": "ls4_10"
+  }
+}
