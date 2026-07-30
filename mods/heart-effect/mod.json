@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "name": "heart-effect",
+  "version": "0.1.0",
+  "description": "Does pure_heart render as a standalone effect? kemuri_test is the control",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "boot": "he1_04",
+    "sources": [
+      "src"
+    ]
+  },
+  "tables": {
+    "enemies": "tables/enemies.csv"
+  }
+}

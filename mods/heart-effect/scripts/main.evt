@@ -1,0 +1,41 @@
+-- Does `pure_heart` render as a standalone effect?
+--
+-- ⚠️ A first attempt spawned nothing at all, INCLUDING the control -- which
+-- cannot distinguish "the script never ran" from "the effects rendered
+-- somewhere off screen". This version removes both ambiguities:
+--
+--   * coins go up by 50 first. That is visible on the HUD and proves the
+--     script ran, using the same builtin coin-tick relies on.
+--   * the effects spawn AT MARIO, not at fixed coordinates, so they cannot be
+--     somewhere else in the room.
+--
+-- kemuri_test remains the positive control: Super Dimentio's attack spawns it
+-- this exact way (D153), so if it does not appear the call shape is wrong and
+-- the run says nothing about hearts.
+
+script main {
+    wait(180)
+
+    -- "The script ran." Unmistakable, and independent of anything rendering.
+    evt_pouch_add_coins(50)
+
+    var x = 0.0
+    var y = 0.0
+    var z = 0.0
+    evt_mario_get_pos(x, y, z)
+
+    -- Control: known to work.
+    evt_eff("ctl", "kemuri_test", 12, x, y, z, 1.0, 0, 0, 0, 0, 0, 0, 0)
+
+    wait(90)
+    evt_mario_get_pos(x, y, z)
+    evt_eff("orb", "pure_heart", 12, x, y, z, 1.0, 0, 0, 0, 0, 0, 0, 0)
+
+    wait(90)
+    evt_mario_get_pos(x, y, z)
+    evt_eff("dnc", "pure_heart_dance", 12, x, y, z, 1.0, 0, 0, 0, 0, 0, 0, 0)
+
+    -- A second batch of coins says the script reached the end rather than
+    -- dying partway through one of the calls.
+    evt_pouch_add_coins(50)
+}

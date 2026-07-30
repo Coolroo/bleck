@@ -1,0 +1,8 @@
+# The landmark. Mr. L, wearing MOBJ_broken_heart -- src/marker.c repoints the
+# model and keeps him beside the player, so the effects have somewhere to be
+# looked at.
+#
+# he1_04 ships 30 enemies in slots 0-29, so 30 is the first empty one (D79).
+# copy_from 0 inherits a working enemy's undocumented bytes (D123).
+map,slot,template,x,y,z,copy_from
+he1_04,30,137,-900,160,0,0

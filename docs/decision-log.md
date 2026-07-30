@@ -11271,3 +11271,51 @@ one-shot burst. `pure_heart_dance` sounds like the looping one.
 ⚠️ **The lesson is about where I searched.** 1,687 assets and 169 model names
 were checked exhaustively and the answer was in a different subsystem entirely.
 An exhaustive search of the wrong space reads exactly like a definitive negative.
+
+---
+
+## D164 — ⛔ `evt_eff` renders nothing from a free-standing script (2026-07-30)
+
+Three effects spawned from a script in `he1_04` — `kemuri_test`, `pure_heart`,
+`pure_heart_dance` — and **none appeared**, the control included. So
+`pure_heart` is still untested; this is a result about `evt_eff`.
+
+### What the run positively established
+
+✅ **The script ran to completion.** It adds 50 coins before the calls and 50
+after; **100 arrived**. So no `evt_eff` call killed the script, and "nothing
+happened" is not "nothing ran".
+
+✅ **The landmark worked**, which is what made the negative trustworthy: Mr. L
+wearing `MOBJ_broken_heart` followed the player for **7,860 of 7,981 frames**.
+Something spawned by this mod was visibly on screen the whole time, so "you were
+looking in the wrong place" is excluded.
+
+✅ **The argument shape is correct**, checked rather than assumed:
+
+| | |
+|---|---|
+| bleck emits for `1.0` | `0xF1B1E800` |
+| the game passes for its scale | `0xF1B1E800` |
+| bleck's header | `0x000F005C` (argc 15) |
+| the game's header | `0x000F005C` |
+
+Byte-identical. ⚠️ Float encoding was the prime suspect and it is innocent —
+worth recording, because `bleck`'s float lowering is now confirmed against the
+game's own bytecode rather than against its own tests.
+
+### What is left
+
+🔶 **Effect sets are probably loaded per map.** `effGetSet` searches EffSet ids
+casewise (`spm/evt_eff.h`), and the disc carries per-effect data files such as
+`effdata_sub_pure_heart_get.dat`. An effect whose set is not resident in
+`he1_04` would fail exactly like this: the call returns, the script continues,
+and nothing draws. `kemuri_test` belongs to Super Dimentio's fight, not to a
+Chapter 1 room.
+
+🔶 Cheaper next test than any of this: spawn an effect that `he1_04` itself
+already uses. If that renders, residency is confirmed and the question becomes
+which map hosts hearts.
+
+⛔ **Not the argument shape, not the script, not the viewing angle.** Those three
+cost a run each and are now closed.
