@@ -20,7 +20,7 @@ from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
 from bleck.formats import lz77, tables, u8
-from bleck.mods import builder, manifest, registry, resolver
+from bleck.mods import builder, manifest, pack, registry, resolver
 from bleck.mods.build import outputs
 from bleck.mods.build.overlay import normalize_disc_path, resolve_target
 
@@ -360,6 +360,52 @@ def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
     return 0
 
 
+def cmd_pack(args: argparse.Namespace) -> int:
+    """A mod as a shareable `.bleck` archive, carrying no game data."""
+    mod = _registry().require(args.name)
+    plan = pack.plan(mod)
+    out = Path(args.output) if args.output else Path(f"{mod.name}{pack.SUFFIX}")
+
+    include = False
+    if plan.needs_consent:
+        print("")
+        print(f"WARNING: {plan.describe_assets()}")
+        print("")
+        if args.include_assets:
+            include = True
+            print("  --include-assets given; packing them.")
+        else:
+            print("  Type exactly: yes I understand")
+            print("  Anything else packs the mod without them.")
+            try:
+                include = input("  > ").strip() == "yes I understand"
+            except EOFError:
+                include = False
+            if not include:
+                print("  Packing without them; the mod may be incomplete.")
+
+    result = pack.write(mod, plan, out, include_assets=include)
+    print("")
+    print(f"{result.path}  ({len(result.packed)} file(s))")
+    for name in result.packed:
+        print(f"    {name}")
+    if result.skipped:
+        print(f"  left out, rebuilt on install: {len(result.skipped)} file(s)")
+    if result.assets_included:
+        print("  WARNING: contains game-derived assets; do not share publicly.")
+    return 0
+
+
+def cmd_install(args: argparse.Namespace) -> int:
+    """Unpack a `.bleck` into the mods directory."""
+    done = pack.install(Path(args.file), registry.mods_root(), force=args.force)
+    print(f"{done.name} -> {done.root}  ({len(done.files)} file(s))")
+    if done.assets_included:
+        print("  WARNING: this archive carried game-derived assets.")
+    print(f"  build it with: bleck mod build {done.name}")
+    return 0
+
+
 def register(add: AddCommand) -> None:
     parser = add("mod", help="create, inspect and build mods")
     sub = parser.add_subparsers(dest="mod_command", required=True, metavar="<action>")
@@ -388,6 +434,18 @@ def register(add: AddCommand) -> None:
 
     child = action("chain", cmd_chain, "resolved install order")
     child.add_argument("name")
+
+    child = action("pack", cmd_pack, f"a mod as a shareable {pack.SUFFIX} archive")
+    child.add_argument("name")
+    child.add_argument("-o", "--output", help=f"where to write the {pack.SUFFIX}")
+    child.add_argument(
+        "--include-assets",
+        action="store_true",
+        help="pack game-derived overlay files too, skipping the prompt",
+    )
+
+    child = action("install", cmd_install, f"unpack a {pack.SUFFIX} archive")
+    child.add_argument("file")
 
     child = action("export", cmd_export, "a mod's declarations as JSON")
     child.add_argument("name")

@@ -11028,3 +11028,54 @@ whether it is bosses or just part-heavy NPCs.
 
 ⛔ **Not yet worth more runs without a new instrument.** Four eliminations came
 from four runs; the next one should measure something, not eliminate something.
+
+---
+
+## D158 — `.bleck`: sharing a mod without sharing the game (2026-07-29)
+
+A mod has to be shareable by someone who owns a disc, to someone who owns a
+disc, without either of them sending Nintendo's bytes anywhere. `bleck mod pack`
+writes a `.bleck` — a zip of **what the author wrote** — and `bleck mod install`
+unpacks it. Everything else is rebuilt against the recipient's own copy.
+
+### The classification is by path, and it falls one way on purpose
+
+| kind | packed | |
+|---|---|---|
+| source | ✅ always | `mod.json`, tables, C, scripts |
+| generated | ⛔ never | `files/mod/mod.rel`, and setup files for maps the mod declares |
+| asset | ⚠️ only on consent | anything else under `overlay/` |
+
+⚠️ **An unrecognised overlay path counts as an asset, not as generated.** An
+overlay file *replaces a file on the disc*, so it is game-derived by
+construction; guessing the other way would ship game bytes silently, which is
+the one outcome the format exists to prevent.
+
+✅ Proven end to end: `boss-arena` packs to 3 files (manifest, C, CSV), installs
+into an empty directory, and **builds into a working REL from source alone**.
+
+### Warn and consent, not refuse
+
+⛔ **Refusing an asset mod was the first design and it was wrong.** `tex-koopa`
+*is* a modified game texture — there is no declaration to regenerate it from —
+and refusing would only move it to a hand-made zip where nobody gets a warning
+at all. So `pack` names every offending file, says why, and requires the phrase
+`yes I understand`. `--include-assets` skips the prompt for scripts.
+
+🟢 The real fix is declarative image edits — invert, replace, recolour — which is
+`vision.md`'s rule (*"edits are declared as data, never shipped as baked bytes"*)
+applied to textures. The archive format is what makes the gap visible.
+
+### Three bugs the first version had
+
+1. `Version` is not JSON-serialisable, so the toc write threw.
+2. Setup files were classified as **assets** for `boss-arena`. Its table is
+   *unbound* — the map names live in the CSV rows, not the `TableRef` — so
+   reading the manifest alone missed them. Fixed by asking
+   `edits.placements_for`, which is what the builder itself uses.
+3. `mod.rel` was called an asset for a mod with no `code` block. It is build
+   output whoever wrote it, and a stale one can exist regardless (D156).
+
+⚠️ And the console crashed on `⚠` — `placement.py` already carries the note that
+the Windows console is cp1252 by default. A rule written down in one file did
+not stop it being broken in another.
