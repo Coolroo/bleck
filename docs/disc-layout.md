@@ -492,3 +492,49 @@ uv run bleck maps --areas        # the table above
 uv run bleck maps --chapter 5    # one chapter, in the game's own order
 uv run bleck maps --search mac
 ```
+
+---
+
+## ✅ `map.dat` names its own geometry, and the format announces its structure (D167)
+
+`map.dat` is listed as undecoded — "the prize" — but its **string table is
+plainly readable**, which is enough to enumerate a room's parts without decoding
+a single vertex.
+
+`ls4_12` (Castle Bleck 8-4, the white altar room) holds 330 distinct strings in
+322 KB, including structural markers that name the format's own sections:
+
+```
+world_root   mesh          information        ver1.02
+material_name_table        texture_table      animation_table
+curve_table  light_table   fog_table          vcd_table
+```
+
+✅ And the geometry nodes are named in romanised Japanese, so a room can be read
+like a parts list:
+
+| node | | |
+|---|---|---|
+| `kaidan` | 階段 | the stairs |
+| `daiza` | 台座 | the pedestal |
+| `hokora` | 祠 | the shrine / altar |
+| `hasira`, `hsira_5`–`hsira_12` | 柱 | the pillars |
+| `wedding`, `wed_01`–`wed_07`, `wed_r_01`–`wed_r_08` | | the wedding set |
+| `yuka`, `yane`, `kazari`, `jimen` | | floor, roof, decoration, ground |
+| `A2_ground` / `A3_ground`, `A2_doa` / `A3_doa` | | the 2D and 3D layer pair |
+
+Maya's default names survive throughout — `pCylinder*`, `pPlane*`,
+`polySurface*`, `lambert*` — which dates the pipeline and confirms these are
+authored scene nodes rather than engine constructs.
+
+⚠️ **These names are what `evt_mapobj_*` addresses** (D166), so knowing them is
+what makes `evt_mapobj_trans`, `evt_mapobj_flag_onoff` and
+`evt_mapobj_get_position` usable at all.
+
+⛔ **No `konton` node**, in the one room where the Chaos Heart is created. Nor
+`heart` or `book`. So those are spawned by the cutscene rather than being part
+of the room, which is consistent with them existing nowhere else on the disc.
+
+🟢 This is a real crack in the map format: a full decoder is still a research
+project, but the section names above say where its tables are, and the node
+names are usable *today* without one.

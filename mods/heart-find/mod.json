@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "heart-find",
+  "version": "0.1.0",
+  "description": "Ask a map whether it holds the Pure Heart geometry, reporting through the coin counter",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "boot": "mac_01",
+    "sources": [
+      "src"
+    ]
+  }
+}

@@ -2,13 +2,15 @@
   "schema": 1,
   "name": "heart-probe",
   "version": "0.1.0",
-  "description": "Load save slot 1, go to Flipside, and read every map object's name and model",
+  "description": "Enumerate ls4_12's map objects, where the Chaos Heart (konton) is created",
   "base": "eu0",
   "code": {
-    "sources": ["src"],
+    "sources": [
+      "src"
+    ],
     "target": "eu0",
     "module_id": 2,
     "banner": false,
-    "boot": "mac_01"
+    "boot": "ls4_12"
   }
 }

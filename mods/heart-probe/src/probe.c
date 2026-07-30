@@ -80,26 +80,6 @@ static void copyText(u32 at, const char *text, u32 words)
     }
 }
 
-/* Case-insensitive "does this name contain 'heart' or 'hart'". */
-static u32 looksLikeHeart(const char *s)
-{
-    u32 i;
-
-    for (i = 0; i < 12 && s[i]; i++)
-    {
-        char a = s[i] | 0x20;
-        char b = s[i + 1] | 0x20;
-        char c = s[i + 2] | 0x20;
-        char d = s[i + 3] | 0x20;
-
-        if (a == 'h' && b == 'e' && c == 'a' && d == 'r')
-            return 1;
-        if (a == 'h' && b == 'a' && c == 'r' && d == 't')
-            return 1;
-    }
-    return 0;
-}
-
 static void look(void)
 {
     u8 *work = *(u8 **) MOBJ_WP;
@@ -143,8 +123,6 @@ static void look(void)
             copyText(slot + 4, mobjGetModelName(e), 4);
             slot += 8;
         }
-        if (!looksLikeHeart(name))
-            continue;
         HEART_HITS += 1;
     }
     /* Peaks, not the latest sample: the map populates over time and an early

@@ -1,0 +1,44 @@
+-- Which map-geometry node is the Pure Heart, and is it in this map?
+--
+-- A Pure Heart is a named node inside map.dat (D166), reachable by name through
+-- evt_mapobj_get_position. So this asks for each candidate and reports through
+-- the coin counter -- crude, but it needs no probe plumbing and is unmissable.
+--
+--   +10  the script ran at all
+--   +100 heart_01 answered with a non-zero position
+--   +200 A2_heart_01 answered
+--   +400 A3_heart_iwa answered
+--
+-- ⚠️ A getter is used rather than flag_onoff or trans because a miss should
+-- return nothing rather than move something unknown. __assert2 is hooked in
+-- case the API asserts on an unknown name instead (D130).
+
+script main {
+    wait(180)
+    evt_pouch_add_coins(10)
+
+    var x = 0.0
+    var y = 0.0
+    var z = 0.0
+
+    evt_mapobj_get_position("heart_01", x, y, z)
+    if x != 0.0 or y != 0.0 or z != 0.0 {
+        evt_pouch_add_coins(100)
+    }
+
+    x = 0.0
+    y = 0.0
+    z = 0.0
+    evt_mapobj_get_position("A2_heart_01", x, y, z)
+    if x != 0.0 or y != 0.0 or z != 0.0 {
+        evt_pouch_add_coins(200)
+    }
+
+    x = 0.0
+    y = 0.0
+    z = 0.0
+    evt_mapobj_get_position("A3_heart_iwa", x, y, z)
+    if x != 0.0 or y != 0.0 or z != 0.0 {
+        evt_pouch_add_coins(400)
+    }
+}
