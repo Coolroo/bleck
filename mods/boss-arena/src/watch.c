@@ -31,18 +31,6 @@ extern SeqDef seq_data[];
 extern void *npcGetWorkPtr(void);
 extern u8 npcEnemyTemplates[];
 
-/* ⚠️ THE CONTROL FOR THE HANG. His attack loop is
-   `do { <attack>; evt_npc_wait_for("me", 1000) } while`, and word 28 of the
-   move script is that 1000 (D151, and boss-harder already rewrites it in
-   game). Setting it enormous means he attacks once and then waits out the
-   run. If the freeze survives that, the attack is not the cause. */
-#define TEMPLATE_STRIDE 0x68
-#define TEMPLATE_MOVE_SCRIPT 0x38
-#define SUPER_DIMENTIO_TEMPLATE 255
-#define COOLDOWN_HEADER_AT 25
-#define COOLDOWN_HEADER 0x0003005Cu
-#define COOLDOWN_AT 28
-#define COOLDOWN_QUIET 600000
 
 #define WORK_NUM 0x004
 #define WORK_ENTRIES 0x008
@@ -207,18 +195,6 @@ void mod_prolog(void)
     for (i = 0; i < REPORT_WORDS; i++)
         probe[i] = 0;
     probe[0] = MAGIC;
-
-    {
-        u8 *tpl = npcEnemyTemplates
-                  + SUPER_DIMENTIO_TEMPLATE * TEMPLATE_STRIDE;
-        u32 *script = *(u32 **) (tpl + TEMPLATE_MOVE_SCRIPT);
-
-        if (script != 0 && script[COOLDOWN_HEADER_AT] == COOLDOWN_HEADER)
-        {
-            script[COOLDOWN_AT] = COOLDOWN_QUIET;
-            probe[45] = COOLDOWN_QUIET;
-        }
-    }
 
     for (i = 0; i < SEQ_COUNT; i++)
     {

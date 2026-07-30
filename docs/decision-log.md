@@ -11079,3 +11079,43 @@ applied to textures. The archive format is what makes the gap visible.
 ⚠️ And the console crashed on `⚠` — `placement.py` already carries the note that
 the Windows console is cp1252 by default. A rule written down in one file did
 not stop it being broken in another.
+
+---
+
+## D159 — ✅ The hang was the room, not the boss (2026-07-29)
+
+Super Dimentio runs indefinitely in `he1_04`. The same mod, the same boss, moved
+from a small Chapter 1 room to the largest arena on the disc:
+
+| map | ships | boss | frames | stalls |
+|---|---|---|---|---|
+| `an1_02` | 15 enemies | present | **2,184** | hangs |
+| **`he1_04`** | 30 enemies | present | **25,959** | **none** |
+
+✅ 52 active NPCs, 200/200 HP, no assert, zero stall reports across 110 seconds.
+`mods/boss-arena` now places him there, and the boss research arena is real.
+
+### What the eliminations were worth
+
+D157 ruled out the assert, the entity pool and his attack loop, and the constant
+freeze frame (2177/2184/2177/2177) pointed at "something accumulating at a
+constant rate". ⚠️ **That reading was wrong, and the constancy was a coincidence
+of the room** — an1_02 fails at a fixed point because the *room* does, not
+because a counter fills.
+
+⛔ **Neither is it entity count.** `he1_04` runs with **52** active NPCs where
+`an1_02` died at 38. More NPCs, no hang. Whatever the small room cannot take, it
+is not the number of entities.
+
+🔶 Most likely the geometry. His attack reads the player's position and clamps
+the result to X ±600 and Z ±120 (D153) before `evt_npc_arc_to` — bounds that
+assume an arena, and that a small room may not contain. Untested, and now
+unblocking rather than blocking, so it can wait.
+
+### The lesson is about the eliminations, not the answer
+
+Four runs eliminated four hypotheses and none of them found it, because none of
+them varied the one thing that mattered. ⚠️ **A list of things ruled out is not
+progress toward a cause** — it narrows the space only if the real cause was in
+the space being searched. Moving the boss to a different map took one run and
+would have been a better second experiment than any of the four.
