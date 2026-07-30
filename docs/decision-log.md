@@ -11194,3 +11194,45 @@ are. That removes the largest unknown from the attack design.
 ⚠️ The corollary is a hazard: any entity driven this way is dangerous by
 default. A decorative orb would need its damage explicitly disabled, not
 explicitly enabled — the opposite of what the code currently assumes.
+
+---
+
+## D162 — ✅ An enemy's model can be swapped by one pointer (2026-07-30)
+
+`npcTribes[295].animPoseName` — a `const char *` at `NPCTribe +0x00` — was
+repointed from `"e_dark_luigi"` to `"MOBJ_broken_heart"`, and **Mr. L rendered
+as the heart instead**. Confirmed on screen.
+
+🟢 **This is a general capability, not a one-off.** Any enemy can be made to
+wear any model the game can load, by writing one guarded word. No asset is
+copied, nothing is repacked, and the edit is a declaration away from being a
+manifest field.
+
+⚠️ **Check the sharing first.** Only template 137 uses tribe 295, so nothing else
+changed. A shared tribe would have restyled every template using it — the same
+check D151 ran before touching the move script, and the same hazard D112 found
+for scripts.
+
+### ⛔ There is no Chaos Heart model on the disc
+
+Searched all **1,687** assets in `files/a/`, every `MOBJ_` name the DOL carries
+(169), and the whole filesystem for `heart`/`hart`. What exists:
+
+| | |
+|---|---|
+| `MOBJ_broken_heart` | ✅ the only heart **model** — Chapter 6's stone heart |
+| `effdata_sub_pure_heart_get.*` | a particle *effect*, not a model |
+| `ff_pureheart*.brstm` | sounds |
+
+⛔ So the cutscene Chaos Heart is not a swappable asset. It is presumably built
+into a cutscene or map archive rather than existing as a map object, which is
+consistent with it never appearing in play.
+
+🔶 Untested route if it matters later: the map archives under `files/map/` were
+not searched, only `files/a/`. A cutscene-only model would live there.
+
+### What the orb can wear instead
+
+The 169 `MOBJ_` names are mostly blocks, doors and scenery. `MOBJ_broken_heart`
+remains the closest thing to an ominous floating object, and it *is* a heart —
+just the wrong one.

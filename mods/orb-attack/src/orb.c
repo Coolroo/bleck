@@ -47,16 +47,37 @@ extern void *npcGetWorkPtr(void);
 #define BEAM_TRIBE 0  /* Goomba */
 #define BEAMS 5
 
+/*
+    The orb's model, repointed at `MOBJ_broken_heart`.
+
+    A tribe's `animPoseName` is a `const char *` at NPCTribe +0x00, and eight
+    tribes already point at MOBJ_* map objects -- so this asks for a model the
+    game already knows how to load, rather than inventing one.
+
+    ✅ Safe to repoint: **only template 137 uses tribe 295**, so nothing else in
+    the game changes. A shared tribe would have hit every template using it,
+    which is the hazard D151 checked for before touching the move script.
+
+    ⚠️ There is no Chaos Heart entity anywhere in 435 templates or 535 tribes;
+    this asset is the closest the game has. 🔶 Whether it RENDERS depends on the
+    model being in he1_04's loaded archive set, which is the whole experiment.
+*/
+extern u8 npcTribes[];
+#define TRIBE_STRIDE 0x68
+#define TRIBE_POSE_NAME 0x00
+#define ORB_MODEL_WAS 0x8033B950u  /* "e_dark_luigi" */
+#define ORB_MODEL_NOW 0x8034F9A5u  /* "MOBJ_broken_heart" */
+
 /* he1_04's own enemies span x -2175..325, y 0..200, z -138..138. The orb is
    kept well inside that, since the room's real walls are unmeasured. */
 #define MIN_X (-1800.0f)
 #define MAX_X (-200.0f)
 #define MIN_Y (60.0f)
 #define MAX_Y (260.0f)
-#define ORB_SPEED_X (7.0f)
-#define ORB_SPEED_Y (4.3f)
+#define ORB_SPEED_X (2.5f)
+#define ORB_SPEED_Y (1.6f)
 
-#define RADIUS (170.0f)
+#define RADIUS (85.0f)
 #define SPIN_STEP 1 /* table entries per frame; 64 entries = one turn */
 
 #define TABLE 64
@@ -71,7 +92,7 @@ extern void *npcGetWorkPtr(void);
 */
 #define PROBE 0x80005000
 #define MAGIC 0x0B0A11ACu
-#define REPORT_WORDS 10
+#define REPORT_WORDS 12
 
 static volatile u32 *const probe = (volatile u32 *) PROBE;
 
@@ -84,6 +105,8 @@ static volatile u32 *const probe = (volatile u32 *) PROBE;
 #define ORB_Y_BITS (probe[7])
 #define SPIN_INDEX (probe[8])
 #define MOVED_FRAMES (probe[9])
+#define MODEL_BEFORE (probe[10])
+#define MODEL_AFTER (probe[11])
 
 static SeqFunc *realMain[SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
@@ -228,6 +251,18 @@ void mod_prolog(void)
         probe[i] = 0;
     probe[0] = MAGIC;
     buildTables();
+
+    {
+        u32 *pose = (u32 *) (npcTribes + ORB_TRIBE * TRIBE_STRIDE
+                             + TRIBE_POSE_NAME);
+
+        MODEL_BEFORE = *pose;
+        /* Refuse rather than write: a pointer that is not the one measured
+           means this is not the tribe this mod was built against. */
+        if (*pose == ORB_MODEL_WAS)
+            *pose = ORB_MODEL_NOW;
+        MODEL_AFTER = *pose;
+    }
 
     for (i = 0; i < SEQ_COUNT; i++)
     {
