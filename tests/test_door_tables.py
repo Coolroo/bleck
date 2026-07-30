@@ -262,3 +262,63 @@ class TestBoundsCheckingDoorSelectors:
         was not shipped would be worse than the silence this replaced."""
         monkeypatch.setattr(doors, "catalog", doors.DoorCatalog)
         assert self.patch("door:he1_01:9").code.patches[0].index == 9
+
+
+class TestOneBrokenModDoesNotBreakTheRest:
+    """⚠️ Loading the registry reads **every** manifest, so a single bad one
+    used to fail `mod list`, `mod check <other>` and anything else that
+    enumerates -- naming a mod the user had not asked about.
+
+    That surfaced the moment door selectors started being bounds-checked
+    (D141): two committed mods carried a dead `door:he1_01:9` and every command
+    in the repo stopped working.
+    """
+
+    def a_broken_mod(self, root):
+        root.mkdir(parents=True, exist_ok=True)
+        (root / "mod.json").write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "name": root.name,
+                    "code": {
+                        "sources": ["src"],
+                        "target": "eu0",
+                        "patches": [
+                            {
+                                "script": "door:he1_01:9",
+                                "at": 0,
+                                "expect": "MULF",
+                                "call": "f",
+                            }
+                        ],
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_a_good_mod_still_loads(self, tmp_path):
+        self.a_broken_mod(tmp_path / "bad")
+        (tmp_path / "good").mkdir()
+        (tmp_path / "good" / "mod.json").write_text(
+            json.dumps({"schema": 1, "name": "good"}), encoding="utf-8"
+        )
+        found = registry.load(tmp_path)
+        assert [mod.name for mod in found.mods] == ["good"]
+        assert "bad" in found.broken
+
+    def test_asking_for_the_broken_one_re_raises_the_original(self, tmp_path):
+        """⚠️ The original type and message, not a wrapper: the message already
+        names the file, and callers catch `ManifestError`."""
+        self.a_broken_mod(tmp_path / "bad")
+        with pytest.raises(ManifestError, match="has no door 9"):
+            registry.load(tmp_path).require("bad")
+
+    def test_an_unrelated_name_mentions_the_unreadable_ones(self, tmp_path):
+        """Silently omitting them would make "no mod named X" misleading when X
+        exists but did not parse."""
+        self.a_broken_mod(tmp_path / "bad")
+        with pytest.raises(registry.RegistryError) as caught:
+            registry.load(tmp_path).require("absent")
+        assert "1 mod(s) could not be read: bad" in str(caught.value)

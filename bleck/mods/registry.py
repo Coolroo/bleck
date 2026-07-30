@@ -7,7 +7,7 @@ filesystem.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck import platforms
@@ -57,15 +57,37 @@ class Registry:
     root: Path
     mods: list[Mod]
 
+    broken: dict[str, BleckError] = field(default_factory=dict)
+    """Directory name -> the error its manifest raised.
+
+    ⚠️ Kept rather than raised at load, so one bad mod does not break every
+    command that enumerates (D141). `require` **re-raises the original**, so
+    asking for a broken mod reports exactly what it would have before -- the
+    message already names the file -- while asking for anything else is
+    unaffected.
+    """
+
     def find(self, name: str) -> Mod | None:
         return next((mod for mod in self.mods if mod.name == name), None)
 
     def require(self, name: str) -> Mod:
         found = self.find(name)
-        if found is None:
-            known = ", ".join(sorted(m.name for m in self.mods)) or "none"
-            raise RegistryError(f"no mod named {name!r} in {self.root} (found: {known})")
-        return found
+        if found is not None:
+            return found
+        if name in self.broken:
+            # Re-raised as-is: the original message already names the file, and
+            # wrapping it would change the exception type callers catch.
+            raise self.broken[name]
+        known = ", ".join(sorted(m.name for m in self.mods)) or "none"
+        also = (
+            f"\n  {len(self.broken)} mod(s) could not be read: "
+            f"{', '.join(sorted(self.broken))}"
+            if self.broken
+            else ""
+        )
+        raise RegistryError(
+            f"no mod named {name!r} in {self.root} (found: {known}){also}"
+        )
 
 
 def mods_root() -> Path:
@@ -81,14 +103,30 @@ def build_root() -> Path:
 
 
 def load(root: Path | None = None) -> Registry:
-    """Discover every mod under `root`, defaulting to the configured mods dir."""
+    """Discover every mod under `root`, defaulting to the configured mods dir.
+
+    ⚠️ **One unreadable mod must not break every command.** Loading the registry
+    reads *every* manifest, so a single bad one used to fail `bleck mod list`,
+    `mod check <other>`, and anything else that enumerates -- with a message
+    naming a mod the user had not asked about. That surfaced the moment door
+    selectors started being bounds-checked (D141): two committed mods carried a
+    dead `door:he1_01:9`, and every command in the repo stopped working.
+
+    A broken mod is skipped and remembered. `require` still raises for one asked
+    for by name, with the reason it could not be read -- the error arrives when
+    it is relevant instead of on every unrelated command.
+    """
     where = root if root is not None else mods_root()
     if not where.is_dir():
         return Registry(where, [])
 
     found: list[Mod] = []
+    broken: dict[str, BleckError] = {}
     for candidate in sorted(where.iterdir()):
         if not candidate.is_dir() or not (candidate / MANIFEST_NAME).exists():
             continue
-        found.append(Mod(read(candidate), candidate))
-    return Registry(where, found)
+        try:
+            found.append(Mod(read(candidate), candidate))
+        except BleckError as exc:
+            broken[candidate.name] = exc
+    return Registry(where, found, broken)

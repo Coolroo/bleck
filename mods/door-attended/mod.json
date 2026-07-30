@@ -12,8 +12,15 @@
     "patches": [
       { "script": "door:he1_01:0:interact", "at": 0, "expect": "MULF",  "call": "on_door_interact" },
       { "script": "door:he1_01:0:init",     "at": 0, "expect": "0x0002001A", "call": "on_door_init" },
-      { "script": "door:he1_01:0:move",     "at": 0, "expect": "MULF",  "call": "on_door_move" },
-      { "script": "door:he1_01:9:interact", "at": 0, "expect": "MULF",  "call": "on_door_interact" }
+      { "script": "door:he1_01:0:move",     "at": 0, "expect": "MULF",  "call": "on_door_move" }
+    ],
+    "_comment": [
+      "A fourth patch, door:he1_01:9:interact, was here as an out-of-range",
+      "control. he1_01 has exactly ONE door (D137), so it addressed nothing and",
+      "nobody could tell -- it reported NO_SCRIPT at run time and looked like a",
+      "control that had simply not fired. `bleck doors` now catalogues every",
+      "map's doors and the build refuses such a selector outright (D141),",
+      "which is what surfaced this."
     ]
   }
 }

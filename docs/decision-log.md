@@ -10115,3 +10115,48 @@ A fourth time this session: a heredoc `str.replace` whose pattern did not match,
 reporting nothing and leaving the file untouched until a test caught it. D131
 records the rule — targeted edits, not scripted rewrites — and I broke it twice
 more after writing it. Read the diff, not the exit code.
+
+---
+
+## D142 — ⛔ One broken mod broke every command (2026-07-29)
+
+Immediately after D141 shipped, nothing worked. Building *any* mod failed with:
+
+```
+bleck: mods\door-patch\mod.json: 'code.patches[3]': he1_01 has no door 9.
+```
+
+— while trying to build `zone-event`, which has no doors in it at all.
+
+### ✅ The check was right; two committed mods were wrong
+
+`mods/door-attended` and `mods/door-patch` both carried a `door:he1_01:9`
+patch as an **out-of-range control**. `he1_01` has exactly one door (D137), so
+each addressed nothing and reported `NO_SCRIPT` — indistinguishable from a
+control that had simply not fired. Both are removed, with a comment saying why
+rather than a silent deletion.
+
+⚠️ That is two mods, written at different times, carrying the same dead
+selector. The index being unverifiable was not a theoretical gap.
+
+### ⛔ But the failure mode was mine
+
+`registry.load()` reads **every** manifest, so one unparseable mod failed
+`mod list`, `mod check <anything>`, and every other command that enumerates —
+naming a mod the user had not asked about. Any manifest error could always do
+this; bounds-checking selectors just made it likely enough to hit within a
+minute.
+
+A broken mod is now **skipped and remembered**:
+
+- `Registry.broken` maps directory name -> the error it raised
+- `require(name)` **re-raises the original exception** for a mod asked for by
+  name. Not wrapped: the message already names the file, and wrapping changed
+  the type callers catch — two banner tests caught exactly that
+- `require` on an *unrelated* name mentions how many could not be read, so
+  "no mod named X" is not misleading when X exists but did not parse
+
+⚠️ **The tests that objected were right and the code was wrong.** The first fix
+wrapped the error in a `RegistryError`, which reads fine and quietly breaks
+every `pytest.raises(ManifestError)` and every caller catching it. Re-raising
+the original loses nothing.
