@@ -28,12 +28,112 @@ For anything else:
 
 ---
 
+# Where this is right now
+
+Everything here is committed and pushed. `main` is at **1170 tests**, full
+linter clean, `mkdocs build --strict` clean, and both CI workflows green.
+
+## The headline: the Chaos Heart exists and `bleck` can spawn it
+
+Weeks of searching concluded it did not. That was wrong, and the way it was
+wrong is the useful part.
+
+✅ **Hearts are `effdrv` effects** — a fourth entity kind, alongside NPCs, map
+objects and items. Nothing enumerated them, which is why 1,687 assets, 169 MOBJ
+names, 397 archives, 383 map.dat files, 435 templates and 535 tribes all came up
+empty (D171).
+
+✅ **The spawner is `0x80094E44`**, unnamed, sitting in a gap between
+`effSpmHitEntry` and `effSpmSpindashEntry`. Signature
+`(s32 variant, f32 x, f32 y, f32 z)`, read off the prologue. **Variant 16 is the
+Chaos Heart**; 0..7 are the coloured Pure Hearts (D172).
+
+✅ **Position is `userWork +0x10 / +0x14 / +0x18`** (D173). Verified on screen:
+`example-mods/chaos-heart` drifts the heart DVD-logo style with five Pure Hearts
+orbiting at 72°.
+
+⚠️ **`chaos` is a runtime-composed name.** The `== 16` branch builds asset names
+from the fragment `"chaos"`; the string `chaos_heart` appears nowhere on the
+disc. **No search for the assembled name could ever have found it** — the way in
+was a live `mainFunc` pointer.
+
+⚠️ **D155 was over-generalised.** "Spawning from a sequence hook hangs" is true
+of `npcEntryFromTemplate` only. Effects spawn from one cleanly.
+
+## New tools, all offline
+
+| Script | What it answers |
+|---|---|
+| `dump_effects.py` | **all 174 effects** the game can spawn, by name and entry address |
+| `evtdis.py` | **disassembles the game's own evt scripts**; `--template N` lists a template's script pointers |
+| `dump_builtins.py` | regenerates `docs-site/scripting/`; `--check` is what CI runs |
+
+`evtdis.py` closed a real gap: `bleck` compiled *to* evt and had never read it
+back, so every question about a vanilla script was answered from raw hex.
+
+## Entities have an onSpawn hook (D176)
+
+`NPCEnemyTemplate+0x30` is `onSpawnScript` — documented in `spm-headers` all
+along, and this repo's notes had recorded `+0x34/38/3C/48` and **missed it**.
+
+Count Bleck's platforms come from it: `onSpawnScript 0x8046AA58` → `USER_FUNC
+0x801EF744` (allocates a 780-byte work struct) → creation loop `0x801EF600`,
+which `sprintf`s `LBB_%d`, uses model `MOBJ_frame_block`, and reads a position
+table at `0x8045ED78` (**stride 0x34**). Fourteen platforms, x -600..600 by 300,
+at y 80/160/240/320. Nothing on the disc contains the string `LBB_0`.
+
+## Source tags (D178)
+
+Hooks and map attachments can be declared where they live instead of in
+`mod.json`:
+
+```c
+BLECK_HOOK(mapDataPtr, before)
+void watchMapData(void *work) { ... }
+```
+
+```
+#[map("he1_04")]
+script onLineland { ... }
+```
+
+`BLECK_HOOK` is a real macro from `bleck/mods/code/include/bleck.h`, always on a
+mod's include path, expanding to nothing — so the **C compiler** validates it and
+a typo is a build error rather than a silently-inert tag. ⛔ A tag and a
+`mod.json` entry claiming the same *game* function is a hard error naming both
+sites; neither overrides the other.
+
+`Mod.code` is the seam — call it, never `mod.manifest.code`, or tag-declared
+hooks are invisible. Same shape as `Mod.tables_of`.
+
+## Structure and rules, as of today
+
+- `manifest/codespec.py` (695 lines) → `manifest/code/` — `specs`, `parse`,
+  `patches`, `hooks`, `tags`. `codespec.py` remains a re-export shim because
+  `api/v1/mods.py` imports from it. **1147 tests passed before and after**, so
+  the split was provably behaviour-neutral before the feature landed.
+- ⛔ **`mods/` is git-ignored** except its README (D175). D147 already said it
+  ships empty and twelve probe mods were tracked there anyway; the rule is now
+  enforced by git rather than by memory. Copy — do not move — a keeper into
+  `example-mods/`.
+- ⛔ **tree-sitter rejected** for the parser (D177): a native custom-grammar
+  dependency in a project with two runtime dependencies that ships a frozen
+  binary to three platforms, and it optimises for error tolerance where a
+  compiler wants precise rejection. Revisit only if the GUI editor needs
+  highlighting, and prefer pure-Python Lark if the grammar gets hard.
+- **`docs-site/scripting/`** is a full reference; `builtins.md` and `storage.md`
+  are **generated** and CI fails if they are stale.
+
+---
+
 ## Start here
 
 ### ⚠️ Every mod this doc names lives in `example-mods/`, not `mods/`
 
-`bleck` reads `mods/` by default (`BLECK_MODS_DIR`), and that directory ships
-**empty** — it is where *your* mods go. The ~24 worked examples and probes this
+`bleck` reads `mods/` by default (`BLECK_MODS_DIR`), and that directory is
+**git-ignored entirely** except its `README.md` — it is scratch space for *your*
+mods, and nothing in it is tracked (D175). Write probes there freely; copy one to
+`example-mods/` when it earns a place. The ~24 worked examples and probes this
 document cites are in `example-mods/`, so pass `--mods-dir`, which every command
 accepts:
 
@@ -421,61 +521,65 @@ Then invert pixel data from `0x40` to the end of each — script in
 
 ---
 
-## Next steps
+## What is not done
 
-⚠️ **Most of what used to be on this list is done.** Baking the loader into the
-DOL (D44), native C and C++ sources (D46, D85), several code mods in one REL
-(D78), a setup reader/writer (D80), and the setup-duplication question (D62) all
-closed. What remains, in rough order of value:
+Ordered by value. Anything closed has been removed — the decision log is the
+record of what was finished and why.
 
-⛔ **"A trampoline, so `code.hooks` can offer `mode: \"before\"`/`\"after\"`" was
-item 1 here and is now closed** (D97) — both modes ship, generated as an
-assembly wrapper over D96's self-healing detour. A trampoline itself is *still
-not built* and has dropped to an optimisation: it would avoid two cache flushes
-per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
+### The boss work, in progress
 
-1. **A save state**, which needs a human once (D63). It unblocks the item hook
-   nobody has seen fire, player state, and anything past the attract demo.
-2. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** Raw memory access is the biggest
-   remaining gap in the language.
-   ⚠️ **Maps did *not* need it** (D51): `code.maps` watches the map-change work
-   instead, because repointing a pointer the game owns deadlocked it. Expect the
-   same trap for NPCs — read D51 first. ⚠️ Doors do **not** need it: the
-   descriptor array's address is read straight out of the map init script's
-   bytecode with D89's mechanism, and `door:` ships on that route (D103, D104).
-   ⛔ The sentence here used to say D93 and D94 had shown door registration
-   unreachable; both are superseded.
-3. ✅ ~~**Measure the argc of the door descriptor setters**~~ — *done, and the
-   selector with it.* The setters take **argc 3** (D102), not the argc 2
-   `evt_door.h`'s macro declares — its own comment, `(DoorDesc *descs, s32
-   count)`, was right and the macro was wrong. `door:<map>:<index>` and its
-   `:interact|init|move` suffix are built and measured APPLIED in-game (D103,
-   D104), `DEFERRED_PATCH_KINDS` is empty, and `he1_01` is the map that holds
-   the `set_door_descs` call. 🔶 What is *not* done: the hook has never been
-   entered, `init`/`move` opening opcodes are unrecorded, and five maps is still
-   not the game. ⛔ `npcdrv:` is still not a selector — and D107 shows it is not
-   the same shape: NPC script pointers are fields on a live `NPCEntry` copied in
-   at spawn, not an argument in a map init script, so nothing carries them at
-   `mod_prolog`. The thread to pull is `npcEntryFromSetupEnemy` (`0x801bf7a0`),
-   which takes a record from the setup file `bleck` already parses (D80).
-4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `SETI` (0x33)
-   takes its argument raw, bypassing the zone decoder — confirmed from
-   decompiled source. `var a = -30000000` is currently a compile error and need
-   not be. Small, and removes a papercut the language shipped with.
-5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
-   `switch` is done (D84) and ✅ takes the right arm in-game (D105).
-   ⚠️ `RUN_EVT` is *emitted* nowhere — the map-hook design that used it was
-   ruled out (D51) — so `spawn` starts from scratch.
-6. **Switch to the decomp's symbol table** (D39).
-   `spm-decomp/config/EU0/symbols.txt` has ~9,566 human-named symbols against
-   `spm.eu0.lst`'s 1,111 — and carries sizes and types, so `user_func` targets
-   and `code.hooks` targets could be validated rather than just resolved. One
-   regex parses it. ⚠️ It states no licence (D54), so it must stay a
-   user-supplied clone.
-7. **Run something on a real Wii.** The Riivolution output is built for it and
-   has never touched one.
+1. **Swap `chaos-heart`'s five orbiters to a real beam.** They are Pure Hearts
+   today: the right geometry, not the beams the design asked for. `robo_beam`
+   (`0x800A6880`) has the same prologue shape as the heart, so `summon()` should
+   take it unchanged. 🔶 Unknown: whether its position sits at `userWork+0x10`,
+   and whether it self-deletes the way Count Bleck's beam *NPC* did at ~314
+   frames. `mods/bleck-chaos` is built and never run; its probe dumps beam 0's
+   `userWork` head unconditionally, so one run answers both.
+2. **`bleck` leaves stale generated overlay files behind.** This has already
+   caused a false-positive control run *and* shipped a boss into a map after its
+   CSV row was deleted. Fix before trusting another placement result.
 
----
+### Textures — the last thing that cannot be shared
+
+3. **Decode and re-encode TPL losslessly**, then **CMPR endpoint colour ops**,
+   then **a declarative `tables/textures.csv`**. This is what makes `tex-koopa`
+   and `title-invert` shareable: their whole content is game bytes today, so a
+   `.bleck` archive either omits them or carries Nintendo's data.
+   [`plan-textures.md`](./plan-textures.md) has the measured format survey —
+   CMPR is 90.6% of 9,403 images and **zero** textures are paletted.
+
+### The language
+
+4. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining gap.
+   ⚠️ Maps did **not** need it (D51) and doors do **not** (D103) — read D51
+   before assuming NPCs will.
+5. **Emit `SETI` instead of refusing ambiguous literals** (D39). `var a =
+   -30000000` is a compile error and need not be.
+6. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+   ⚠️ `RUN_EVT` is emitted nowhere, so `spawn` starts from scratch.
+7. **Switch to the decomp's symbol table** (D39): ~9,566 named symbols against
+   `spm.eu0.lst`'s 1,111, with sizes and types, so hook targets could be
+   *validated* rather than merely resolved. ⚠️ It states no licence (D54), so it
+   stays a local convenience and nothing derived from it ships.
+
+### Toward the base app
+
+8. **More editing surfaces through the API.** The map archive is the prize and
+   is **not decoded** — research before it is an editing problem.
+9. **A GUI over the API.** Any language; the contract is JSON and the schema is
+   published.
+10. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
+    answer is a PyO3 port of *just the compressor* — not a rewrite.
+
+### Needs a human, once
+
+11. **A save state.** Driving into a map leaves Mario invisible: no save, no
+    profile (D63). `--state` exists on `bleck launch` and `ingame.py`; making
+    one needs someone to play far enough and press F1.
+12. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each.
+    `a`, `b`, `1`, `2` are confirmed (D68).
+13. 🔶 **The docs site has never been opened in a browser.** `mkdocs --strict`
+    passing is not the same as looking right.
 
 ## Things worth not rediscovering
 
@@ -542,52 +646,9 @@ per call and need no wrapper. See [`roadmap.md`](./roadmap.md).
 
 ---
 
-## ✅ Closed: the enemy that did not spawn (D79)
+## Configuring button combinations
 
-**Answered, and both recorded hypotheses were wrong.**
-
-`example-mods/hard-lineland` declared slots 0, 1 (cleared) and 2, and only the first
-enemy appeared. The cause is neither the template nor the position:
-
-> **The game stops reading `setup/*.dat` entries at the first empty one.**
-> A cleared slot in the middle silently discards everything after it.
-
-```
-slot-check  slots 0, 1(clear), 2   npcs[1] slot0
-slot-gap    slots 0,          2    npcs[3] slot0 slot1 slot2
-```
-
-Same enemy, same positions, one variable. ⛔ "Template 144 is refused here" and
-⛔ "the position is off the visible plane" are both dead — an off-plane enemy
-would still be *in the NPC list*, and this one never spawned at all.
-
-✅ `bleck` now refuses an edit that would leave a gap, naming the slots it would
-orphan. Refusing rather than compacting, because moving entries down would
-change the slot numbers a manifest refers to.
-
-### Why it took a day, and what fixed it
-
-Every placement conclusion before this rested on someone saying what they saw,
-which cannot tell "did not spawn" from "spawned somewhere I did not look".
-
-`scripts/ingame.py --npcs` now lists live NPCs and the setup slot each came
-from — `npcdrv_wp` (`0x805AE188`) to `NPCWork.entries`, filtered on `flag8 & 1`.
-⚠️ `NPCWork.num` is the array's **capacity** (80), not a live count.
-
----
-
-## Where things stand — end of 2026-07-27
-
-Two features landed and are confirmed **in game, by eye**, not by inference:
-
-✅ **Boot maps.** `bleck mod build <mod> --map he1_01`, or `"boot": "he1_01"`
-under `code` in a manifest. The disc drives itself to any of the 383 maps
-instead of playing the attract demo. Works on a mod with **no code block at
-all** — a texture swap gets a small module generated for it (D64).
-
-✅ **Button combinations.** `bleck.yml` names a combination, `mod.json` binds a
-script to it, and the compiler injects the mask. Playing the disc by hand:
-Lineland on its own, then **1+2** warps to Flipside (D77).
+`bleck.yml` names a combination; a manifest binds a script to it.
 
 ```yaml
 # bleck.yml — committed, unlike .env
@@ -598,26 +659,8 @@ combos:
 "code": { "boot": "he1_01", "combos": { "start_map": "warp_home" } }
 ```
 
-Both work **together**, which matters because four decision-log entries claimed
-otherwise. See the retraction below.
-
-### What the button work established
-
-⚠️ **D48 does not say input is unavailable, and reading it that way cost weeks.**
-It measured `SendKeys`/`PostMessage`, which post to a message queue Dolphin never
-reads. It says nothing about the game reading its **own** controller, which it
-does every frame and so can a mod (D66).
-
-| Fact | Where |
-|---|---|
-| `wpadGetWork()` `0x8023697c`, `statuses` `+0x6C`, `buttonsHeld` `+0x00` | D67 |
-| `a=0x0800 b=0x0400 1=0x0200 2=0x0100`, one press each | D68 |
-| Bit 31 is **not** a button — test `(held & mask) == mask`, never equality | D67 |
-| `plus`, `minus`, `home`, d-pad still 🔶 unverified | D68 |
-
-Both were settled by a probe since removed (D148); D66 records the masks.
-
----
+Boot maps and combinations work together (D77), which four decision-log entries
+had claimed otherwise.
 
 ## ⚠️ Read this before trusting the rig
 
@@ -668,62 +711,28 @@ protection system-wide and outlive the process.
 
 ---
 
-## ✅ Done: compiling several mods into one REL
+## Code mods — the three warnings worth carrying
 
-**Landed and verified in game** (D78). Design in
-[`plan-merging.md`](./plan-merging.md), all seven steps marked.
+Design detail lives in [`code-mods.md`](./code-mods.md) and
+[`plan-merging.md`](./plan-merging.md). These are the parts that have bitten:
 
-```
-[t+45s] seq=GAME  map=aa4_01  gw[28]=2  gw[29]=2
-```
-
-`merge-a` writes `gw[28]`, `merge-b` writes `gw[29]`, **both declare
-`script main`**, and both ran to completion. Each slot is the other's
-positive control — the rule D76 cost six runs to learn.
-
-🔶 **One gap**: two mods that both ship `code.sources` would collide on
-`mod_prolog` at link time. Scripts merge cleanly; C does not yet. The plan's
-answer is to detect and refuse naming both.
-
-<details><summary>The original plan text, for reference</summary>
-
-The insight: the Gecko loader opens exactly one `/mod/mod.rel`, but **it does
-not care how many mods went into it**. Merging at *compile* time produces one
-REL, so `chainrel`'s unsolved runtime chaining (D39) is not on this path at all.
-D39 calls this the clearest differentiator available to `bleck`.
-
-### Step 1, and it is landable alone
-
-**Parameterise the emitter's identifier prefix.** `_PREFIX = "bleck_"` is a
-module constant and every generated identifier derives from it; two mods each
-declaring `script main` would collide. Make it per-mod — `bleck_<slug>_` — with
-single-mod output **byte-identical**, which the existing tests already assert.
-
-⚠️ Some names are per-**disc**, not per-mod, and must not be prefixed:
-`_prolog`, `_epilog`, `_unresolved`, `mod_prolog`, and the sequence-hook
-machinery (`bleck_after_seq`, `bleck_seq0..5`, `bleck_hooks`,
-`bleck_real_main`). Only per-program names get namespaced: `bleck_script_*`,
-`bleck_string_*`, `bleck_map_name_*`, and the map/banner/boot/combo tables.
-
-### Step 2 — a real latent bug to fix on the way
-
-`bleck_map_pending` is a `u32` bitmask, one bit per map hook, so the 33rd hook
-shifts past the end. Unreachable with one mod, **plausible once mods merge**,
-and silent today. `bleck_combo_down` has the same shape and *is* already
-guarded — `emit.MAX_COMBOS` refuses more than 32 with a clear error. Map hooks
-need the same treatment.
-
-### Then
-
-- ✅ banner, boot map, map hooks and combos unioned; every mod's `main` started
-- 🔶 `mod_prolog`: still the open gap, see above
-- ✅ verified in game with two real mods (D78)
-
-</details>
-
----
-
----
+- ⚠️ **The cache flush is necessary, not decorative.** A store lands in the data
+  cache and the instruction fetcher cannot see it. Two identical patches
+  differing only in `dcbst`/`sync`/`icbi`/`isync` read back the same word and
+  behaved differently — the unflushed one did nothing while looking applied.
+- ⛔ **A branch written on its own destroys the original body.** Keeping the
+  original means restoring the instruction around the call (D96), which
+  `mode: "before"`/`"after"` generates for you (D97). ⛔ **A trampoline is still
+  not built**, and upstream's `hookFunction` is not a drop-in — it blindly
+  copies instruction[0] (D37).
+- ⚠️ **Intercept wrappers are generated PowerPC assembly**, not C
+  (`emit/runtime_intercept.py`). A hook is resolved from a symbol *name* and
+  nothing carries a signature; a C wrapper would have to guess one, and an
+  integer guess silently drops float arguments, which the EABI passes in
+  `f1-f8` separately from `r3-r10`. **A handler's prototype must match the
+  target exactly and nothing can check it.**
+- ⚠️ **Merging happens at compile time** (D78), because the Gecko loader opens
+  exactly one `/mod/mod.rel`. Runtime chaining is unsolved and not on this path.
 
 ## The JSON API — how a GUI will talk to this
 
@@ -835,268 +844,42 @@ stopped being true. If a third is ever added, check that page.
 
 ---
 
-## Also open
+## Known gaps
 
-- 🟢 **Licensing is deliberately deferred.** It blocks sharing and nothing else,
-  and nothing is shared until the base app exists. It *does* have to be settled
-  before the first release.
-- 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each. `a`,
-  `b`, `1`, `2` are confirmed (D68).
-- 🔶 **A save state.** Driving into a map leaves **Mario invisible** — no save,
-  no profile (D63). `--state` is implemented on both `bleck launch` and
-  `ingame.py`; making one needs a human to play far enough and press F1 once.
-- 🔶 **The docs site has never been looked at in a browser.**
-  `mkdocs build --strict` passes and every construct renders to the expected
-  HTML, which is not the same thing — and this session was a long lesson in
-  exactly that distinction.
-- 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
-  REL-relative addresses, 33 have no known address anywhere.
-- ⛔ **Hardware.** Riivolution output is built for a Wii and has only ever run in
-  Dolphin (D86), as has every cache-flush result (D94, D96).
-- ✅ ~~**No C++ code mod has run in-game**~~ — *closed by D105.* Constructors,
-  a virtual call through a relocated vtable, and sequence hooks installed from
-  C++ all measured in a running game.
-- ✅ ~~**No `switch` has run in-game**~~ — *closed by D105*, with each arm
-  writing a distinct value so a first-arm-always lowering could not pass. 🔶 The
-  absence of `SWITCH_BREAK` is still read off header declarations rather than
-  off the VM's code.
-- 🔶 **`npcdrv:` is research, not a feature** (D107). NPC behaviour scripts are
-  real evt bytecode in DOL static data and are readable from a live `NPCEntry`,
-  but nothing carries them at `mod_prolog`, so no selector exists.
 - 🔴 **US (`us0`) support is blocked on a US disc image.** `work/extracted/`
   holds `eu0` only.
+- ⛔ **Hardware.** Riivolution output is built for a Wii and has only ever run
+  in Dolphin (D86), as has every cache-flush result (D94, D96).
+- 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
+  REL-relative addresses, 33 have no known address anywhere.
+- 🔶 **`npcdrv:` is research, not a feature** (D107). NPC behaviour scripts are
+  real evt bytecode readable from a live `NPCEntry`, but nothing carries them at
+  `mod_prolog`, so no selector exists. ⚠️ Superseded in part by D176:
+  `onSpawnScript` **is** a plain template field at `+0x30`, so the spawn path is
+  reachable even though the live-entry path is not.
+- 🟢 **Licensing is deferred.** It blocks sharing and nothing else, and must be
+  settled before the first release.
 
-## ✅ Done: patching the game's own scripts (D89, D90)
+## Reaching the game's own scripts
 
-A **vanilla** Super Paper Mario script can now call into `mod.rel`, declared in
-the manifest rather than written by hand:
+`code.patches` replaces one instruction of a vanilla `evt` script with a call
+into the mod, **same size only** — the replacement carries the same argument
+count, so no label moves and `jumptable[]` stays valid. Selectors:
+`map:<name>`, `item:<id|name>`,
+`door:<map>:<index>[:interact|init|move]`. `code.replace` swaps a whole script
+by pointer instead.
 
-```json
-"code": {
-  "sources": ["src"],
-  "patches": [
-    { "script": "map:he1_01", "at": 0, "expect": "DEBUG_PUT_MSG", "call": "on_map_init" }
-  ]
-}
-```
+Full reference: [`code-mods.md`](./code-mods.md) and
+[the manifest reference](../docs-site/reference/manifest.md).
 
-`bleck` generates prolog code that checks the word at `at` against what `expect`
-decodes to and **writes nothing on a mismatch**. Measured both ways in D90: the
-guard applied and the hook ran once, and — same build, wrong `expect` — refused,
-left the script byte-for-byte intact, and the map ran anyway.
-
-What to know before extending it:
-
-- **Same-size replacement, but *any* size from two words up** (D92, superseding
-  D90's fixed two-word rule). The replacement is a `USER_FUNC` declaring the
-  **same argc** as the instruction it overwrites — argc is masked out of the
-  header the guard just matched — so the size cannot diverge by construction and
-  the original's remaining arguments are carried through untouched. Only a
-  one-word instruction is refused, because the function pointer would not fit.
-- ⛔ Pointer swapping is still ruled out (D51 froze the map loader). This
-  mutates the bytecode the pointer already refers to.
-- ⚠️ A patch lasts the **whole session** — applied once at load, never
-  re-applied per arrival.
-- ✅ **Three selectors: `map:<name>`, `item:<id>` and
-  `door:<map>:<index>[:interact|init|move]`** (D92, D103, D104). ⛔ Every earlier
-  claim that `door:` is refused is superseded, and `DEFERRED_PATCH_KINDS` is now
-  **empty** — it stays as the shape for the next kind that is explained and
-  refused. ⚠️ A door index is a *position* in the array the map registers, not an
-  id, and cannot be bounds-checked at build time; the runtime compares it against
-  the setter's own `count` and reports NO_SCRIPT. ⚠️ A door interact script opens
-  with `MULF`, so `expect` has no useful default.
-- ⚠️ **Item scripts are shared.** 33 table entries, 22 distinct scripts, so
-  patching one id can change others. The generated code counts them into
-  `bleck_patch_shared[]` rather than pretending an id is a unique target.
-- 🔶 **An item hook has been applied and never *entered*.** Using an item needs
-  menu navigation and input cannot be injected (D48). `hook entries` reading `0`
-  is the expected value for a working hook and a broken one alike.
-- `example-mods/item-patch` is the worked example. The bytecode *walk* that found
-  the door registrations (D101) and the run that measured their argc (D102) were
-  separate probes, since removed (D148); `bleck doors` now answers the first
-  directly and the argc is recorded in `function-behaviour.md`.
-
----
-
-## ✅ Done: patching the game's own *code* (D94)
-
-Evt patching reaches scripts; this reaches C functions. Every generated module
-now carries helpers a mod's own sources can declare and call:
-
-```c
-extern s32 bleck_code_hook(void *at, const void *to);   /* encode, write, flush */
-extern void bleck_code_write(void *at, u32 word);
-extern s32 bleck_code_branch(const void *from, const void *to, u32 *out);
-```
-
-What to know before extending it:
-
-- ⚠️ **The flush is load-bearing, and now measured.** A store lands in the data
-  cache; the instruction fetcher cannot see it. Two identical patches in one run,
-  differing only in `dcbst`/`sync`/`icbi`/`isync`, read back the same word and
-  behaved differently — the unflushed one did nothing while looking applied.
-  D38 said the flush "behaves"; it had never been shown to be *necessary*.
-- ⛔ **The branch itself replaces.** Written on its own, it destroys the
-  original body. Keeping the original means restoring the instruction around the
-  call — D96's self-healing detour, which `mode: "before"`/`"after"` now
-  generates for you (D97). ⛔ **A trampoline is still not built**, and upstream's
-  `hookFunction` is not a drop-in for one — it blindly copies instruction[0]
-  (D37).
-- ✅ **`code.hooks` is the manifest surface** (D95). D94 shipped none on purpose;
-  this is it, with the guard *derived* from the base disc's `main.dol` so a user
-  never types an instruction word:
-
-  ```json
-  "hooks": [{ "function": "npcDispMain", "call": "count_npcs", "mode": "replace" }]
-  ```
-
-  Positive and negative both measured: 63,644 entries in `mac_01`, and a second
-  hook on the same function refused by the guard with `0` entries and the
-  instruction still pointing at the first.
-- ✅ **All three modes work** (D97). `before` runs your function then the
-  original; `after` runs the original then yours. Both return the **original's**
-  value, so a handler cannot change what the caller receives.
-
-  ```json
-  "hooks": [{ "function": "GetBasicPlayer", "call": "afterGBP", "mode": "after" }]
-  ```
-
-  What to know before extending it:
-
-  - The wrapper is **generated PowerPC assembly**, one per intercepting hook, in
-    `bleck/script/emit/runtime_intercept.py`. Assembly because a hook is
-    resolved from a symbol *name* and nothing carries a signature — a generated
-    C wrapper would have to guess one, and an integer guess silently drops float
-    arguments, which the EABI passes in `f1-f8` separately from `r3-r10`. The
-    wrapper saves and restores both sets and interprets nothing.
-  - Interception needs a derived guard word, so a hook whose address the DOL does
-    not map (a REL address) is a build **error** under `before`/`after`, where
-    `replace` merely warns and installs unguarded.
-  - ⛔ **More than eight integer arguments cannot be intercepted** — they live in
-    the caller's frame and the wrapper builds its own. Not checked, and cannot be
-    without signatures.
-  - ⚠️ **The handler's prototype must still match the target.** The wrapper
-    protects the *original* from a wrong one; the handler still reads whatever it
-    declared.
-  - ✅ Verified in one 120 s run, `example-mods/intercept-probe`: `beforeSaw = 0` (with
-    the field shown non-zero at rest, so the zero means something) against
-    `afterSaw = 0x901D6248`, and `result − arg = 0xD8`, independently
-    reproducing D96's `GetBasicPlayer` finding. 26,996 SEQ_GAME frames, map names
-    readable as text. 🔶 Dolphin only, as ever.
-- ⛔ **"Doors are still not reachable" — superseded by D101/D102/D103.** The
-  zero-entry hook on `evt_door_set_door_descs` is real, but the run loaded
-  `mac_01`, `aa4_01` and `ls4_12`, and the registration is in `he1_01`. ✅ Doors
-  are reached from map init scripts without any hook at all — the descriptor
-  address is a `USER_FUNC` argument, and `door:` is now a `code.patches`
-  selector on exactly that route. ⚠️ The lesson to keep: a passing control shows
-  the instrument works, not that it is aimed at the right thing.
-- ⛔ **Do not stub `effMain`** — it hangs the map-change sequence. Use
-  `npcDispMain` as a hot-function control; it is a draw pass. ⚠️ *Tracing*
-  `effMain` is fine — see below.
-- ✅ **A function can be traced rather than replaced** (D96). Restore the
-  original instruction, call the function through its symbol, re-install the
-  branch — so arguments **and the return value** are recorded and the function
-  keeps working. Deliberately **not** a manifest feature: it is an instrument,
-  and a `code.trace` key would have to know the target's signature, which the
-  build cannot.
-
-  ```c
-  extern u32  bleck_trace_open(u32 index);   /* 0 = do NOT call the original */
-  extern void bleck_trace_close(u32 index);
-  extern void bleck_trace_args(u32 index, u32 a0, u32 a1, u32 a2, u32 a3);
-  extern void bleck_trace_result(u32 index, u32 value);
-  ```
-
-  ⚠️ Floats are invisible to it — arguments in f1–f8, returns in f1 — and the
-  handler's prototype must match the target exactly or it corrupts the call.
-  ⚠️ Two cache flushes per call, 7–10 time-base ticks; that is ~1% on `effMain`
-  and larger than the whole function on a leaf.
-- ✅ Existing mods are byte-identical: `--gc-sections` drops the helpers unless
-  a module calls one. Re-verified when the trace landed.
-- `example-mods/fn-hook-probe` (the declaration) and `example-mods/fn-trace-probe`
-  (the trace, on `mapDataPtr`) are the worked examples. The raw-mechanism probe,
-  the by-hand version, both negative controls and the three-target investigation
-  were separate mods, since removed (D148). What the last one found is in
-  [`function-behaviour.md`](./function-behaviour.md).
-
----
-
-## Next, toward the base app
-
-1. **More editing surfaces through the API.** Placement is done because its
-   format is fully decoded. The map archive is the prize and is *not* decoded —
-   that is a research problem before it is an editing one.
-2. **A GUI over the API.** It can be any language; the contract is JSON and the
-   schema is published.
-3. 🔶 **Speed, if profiling names it.** The LZ77 compressor is ~12 s/MB (D16),
-   the only place language choice shows as a user-visible problem. The recorded
-   answer is a PyO3 port of *just the compressor* — not a rewrite. 80 decision
-   entries of hard-won behaviour do not live in the language, and a rewrite
-   re-discovers every bug.
-
----
-
-# Session state — 2026-07-28 (end)
-
-Written to survive a context compaction. Everything below is committed and
-pushed; `main` is at **827 tests, pylint 10.00/10, mkdocs --strict clean**.
-
-## What shipped today
-
-| | entry |
-|---|---|
-| `code.hooks` `mode: "before"` / `"after"` — interception via a generated PowerPC **assembly** wrapper | D97 |
-| `HookMode`, `ToolKey`, `PatchKind`, `Sequence`, `DoorScript`, `NpcScript` as enums | D98, D100 |
-| Python pinned to **3.13** (`.python-version`), ruff `py313`; `uv.lock` lost 254 lines of backports | D99 |
-| ⛔ **A script that fell off its end hung the game** — `END_EVT` was missing. Fixed | D105, D106 |
-| ✅ C++ runs in-game; ✅ `switch` takes the right arm in-game | D105 |
-| `door:<map>:<index>[:interact\|init\|move]` | D103, D104 |
-| `npcdrv:<template>:<init\|move\|onhit\|death>` | D110–D112 |
-| `bleck/cli/types.py` — `AddCommand` protocol | — |
-
-⛔ **Superseded today**: D91, D93, D94 (doors *are* reachable), D107 (npcdrv
-*is* a build-time patch), D111 (its offsets were 4 bytes wrong).
-
-## What needs a human, with exact commands
-
-✅ **1 and 2 are done** (D115). A probe merging them into one boot saw both
-hooks *entering*: an item (Fire Burst) and an npcdrv death script.
-`pouchAddItem` also works from a mod, which was not what anyone was looking
-for. The probe was removed in D148 -- rebuild it from
-`example-mods/intercept-probe` if it is needed again.
-
-✅ **The door hook too** (D116, D117). A probe since removed (D148), one walk through
-`he1_01`'s single door: `interact` entered **62** times, `init` once, and the
-door still worked afterwards — so replacing an instruction did not break the
-script it sat in.
-
-**Every selector is now proven applying *and* running in a live game**:
-`map:` (D88), `item:` and `npcdrv:` (D115), `door:` (D116). That was the whole
-outstanding 🔶 set, closed in three runs of a human's time.
-
-⚠️ One open instrument question came out of it: the rig reported `map=he1_01`
-for a run in which the player demonstrably changed maps. ⛔ Not the old
-`seqWork.p0` bug — D75 fixed that. 🔶 Probably 3-second sampling against a
-~458 fps emulator. The fix, when something depends on it, is in D117: **count
-sequences in the probe, do not sample them.**
-
-**1. The release tag** — the only never-run CI path.
-
-```powershell
-git tag v0.1.0-rc1; git push origin v0.1.0-rc1
-```
-
-## Next unsupervised task
-
-**The findings write-up.** `roadmap.md` has the item and an inventory of eight
-things this repo knows that the ecosystem does not. It is synthesis across
-~112 entries, so it wants a fresh context rather than an incremental push. The
-`evt_door.h` argc bug is a genuine upstream correction and should go back as a
-PR regardless of what shape the rest takes.
-
-⛔ **The trampoline is on the backburner by decision** — an optimisation on a
-path that already works, whose failure mode is a silently wrong branch. Do not
-start it without asking.
+- 🔶 **A patched *item* hook has never been entered.** Using an item needs menu
+  input, which cannot be injected (D48, D92).
+- ⚠️ **`spm-headers` is not ground truth.** `evt_door.h`'s macro declares the
+  wrong argc; its own comment was right (D102).
+- ⛔ **`npcdrv:` selectors do not exist.** Script pointers are fields on a live
+  `NPCEntry` copied in at spawn, so nothing carries them at `mod_prolog` (D107).
+  ✅ But `onSpawnScript` is a plain template field at `+0x30` (D176), so spawn
+  behaviour *is* reachable — that is how Count Bleck builds his platforms.
 
 ## ⚠️ Methodology, earned the hard way
 
@@ -1129,15 +912,21 @@ D110 cheap and D111 wrong.
 **not ground truth** (`evt_door.h`'s argc is simply wrong, D102), and a
 pydantic field's docstring is **published** into `bleck mod schema`.
 
-## Traps that cost time today
+## Standing traps
 
-- Heredocs mangle `\n` inside Python f-strings — **use the Edit tool** for code
-  containing escapes. This corrupted `codespec.py` twice.
+- ⚠️ **Editing code by string replace or regex fails silently.** Use the `Edit`
+  tool, which errors instead. This has corrupted `codespec.py` twice and
+  `tests/test_tags.py` once.
+- ⚠️ **Capture output to a file; never filter raw stdout.** `tail` has hidden
+  the one line naming a failure more than once. Redirect to
+  `$CLAUDE_JOB_DIR/tmp/`, then read slices — re-reading is free, re-running is
+  not.
 - Generated C must be **pure ASCII**; an emoji in a comment fails the build.
-- `runtime_c.py` keeps hitting pylint's 1000-line limit. `runtime_patch.py` and
-  `runtime_trace.py` were split out along real seams.
+- Console output must be ASCII too — Windows is cp1252 and an emoji raises
+  `UnicodeEncodeError`.
+- `runtime_c.py` keeps approaching pylint's 1000-line limit.
 - Script comments are `--`, the default arm is `else`, and `gw` is
   `GW(0)..GW(31)`.
 - An idle Dolphin window breaks `ingame.py`; the memory reader may attach to it.
-  `example-mods/nop` exists so a stock-behaviour disc can boot on this host, which runs
-  the REL loader as a Gecko cheat.
+  `example-mods/nop` exists so a stock-behaviour disc can boot on this host,
+  which runs the REL loader as a Gecko cheat.
