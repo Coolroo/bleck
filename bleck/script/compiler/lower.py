@@ -127,6 +127,13 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
             return Value(Literal(self.encode_float(node)), ValueType.FLOAT)
         if isinstance(node, tree.StringLiteral):
             return Value(StringWord(self.owner.intern(node.value)), ValueType.STRING)
+        if isinstance(node, tree.ScriptRef):
+            # ⚠️ Typed INT, not a fourth ValueType. It IS an address as far as
+            # the VM is concerned, and giving it its own type would make every
+            # arithmetic check reject it for no reason -- the point is to hand
+            # it to a builtin, and builtins take words.
+            self.owner.require_script(node.name, node.position)
+            return Value(ScriptWord(node.name), ValueType.INT)
         if isinstance(node, tree.Name):
             return self.name_value(node)
         if isinstance(node, tree.SlotRef):

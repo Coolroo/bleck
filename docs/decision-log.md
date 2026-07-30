@@ -10216,3 +10216,67 @@ code, nothing unsupported.
 needs the language to name a compiled script as a **value**, which it cannot
 today — the one small gap between here and `"zones": {"doa2_l": "on_enter"}`
 in a manifest.
+
+---
+
+## D144 — ✅ `script <name>` as a value (2026-07-29)
+
+D143 established that `evt_door_set_event(door, which, script)` attaches a
+script to a loading zone — the only way to give one behaviour, since a
+`MapDoorDesc` has no script field. It was in the builtin catalog and
+**uncallable from a script**, because the language had no way to name a compiled
+script as a *value*.
+
+```
+script main {
+    evt_door_set_event("doa2_l", 0, script on_enter)
+}
+
+script on_enter {
+    evt_msg_print(0, "you came through the star door", 0, 0)
+}
+```
+
+Emits exactly what the hand-written C probe built:
+
+```c
+const s32 bleck_script_main[] = {
+    262236, (s32) &evt_door_set_event, (s32) bleck_string_0, 0,
+    (s32) bleck_script_on_enter, 2, 1,
+};
+```
+
+`262236` is `0x0004005C` — `USER_FUNC`, argc 4 counting the function pointer.
+
+### The four decisions inside it
+
+**Typed `INT`, not a fourth `ValueType`.** It *is* an address as far as the VM
+is concerned; a separate type would make every arithmetic check reject it for no
+reason, and the point is to hand it to a builtin, which takes words.
+
+**`ScriptWord`, which already existed.** `spawn` resolves script names to
+addresses at emit time, so nothing new was needed in the emitter — only a route
+from an expression to that operand.
+
+⚠️ **`script` is now context-sensitive**: a declaration at the top level, a value
+inside an expression. Both parsers must keep working, so a test pins the
+declaration form specifically.
+
+⛔ **Not a `spawn`.** `spawn on_enter` runs it now; `script on_enter` only names
+it. Emitting `RUN_CHILD_EVT` would start the script at attach time instead of
+when the zone is used — a test asserts that opcode is absent.
+
+### A test that passed for the wrong reason
+
+The unknown-name test first used `f(script nope)` and failed with *"'f' is not a
+known game function"* — the callee is checked before its arguments, so an
+invented function name never reaches the script lookup. It uses a real builtin
+now. ⚠️ A `pytest.raises` that passes on the wrong error is the same failure as
+D129's assertion that held while testing something else.
+
+### What is now possible, and what is not
+
+✅ A script can attach a script to any of the **691** loading zones.
+🔶 Nothing has watched one fire — that still needs a player (D143).
+🟢 A manifest declaration (`"zones": {"doa2_l": "on_enter"}`) is now only
+plumbing; the mechanism and the syntax both exist.

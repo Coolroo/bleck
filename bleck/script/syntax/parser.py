@@ -388,6 +388,11 @@ class _Parser:  # pylint: disable=too-many-public-methods
             return tree.StringLiteral(position=token.position, value=token.text)
         if token.is_keyword("true", "false"):
             return tree.BoolLiteral(position=token.position, value=token.text == "true")
+        if token.is_keyword("script"):
+            # `script <name>` as a value, not a declaration. The declaration
+            # form is handled by the top-level parser, which never reaches here.
+            name = self.expect_ident("a script name after 'script'")
+            return tree.ScriptRef(position=token.position, name=name.text)
         if token.is_op("("):
             inner = self.parse_expression()
             self.expect_op(")")

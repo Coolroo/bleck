@@ -581,3 +581,60 @@ class TestErrorRendering:
         )
         # The echoed line and the caret must agree about width.
         assert "\t" not in error.render("f")
+
+
+class TestScriptReferences:
+    """`script <name>` as a **value**, not a call or a spawn (D144).
+
+    Some game builtins take an `EvtScriptCode *` and keep it: `evt_door_set_event`
+    attaches one to a loading zone, which is the only way to give a zone
+    behaviour since its descriptor has no script field (D143). Without this
+    there was no way to name a compiled script as a word, so those builtins were
+    unreachable from a script even though the catalog lists them.
+    """
+
+    SOURCE = (
+        'script main {\n evt_door_set_event("doa2_l", 0, script on_enter)\n}\n'
+        "script on_enter {\n wait(1)\n}"
+    )
+
+    def test_it_lowers_to_the_script_address(self):
+        found = words(self.SOURCE)
+        refs = [word for word in found if isinstance(word, ScriptWord)]
+        assert [ref.name for ref in refs] == ["on_enter"]
+
+    def test_it_is_an_ordinary_call_argument(self):
+        """⚠️ The header must count it like any other operand -- argc 4 for a
+        pointer plus three arguments, matching what the game's own scripts
+        carry (D102)."""
+        found = words(self.SOURCE)
+        assert found[0].value == header(evt.Opcode.USER_FUNC, 4)
+
+    def test_a_forward_reference_works(self):
+        """`on_enter` is declared *after* `main`, which is the natural order."""
+        assert [
+            word.name for word in words(self.SOURCE) if isinstance(word, ScriptWord)
+        ] == ["on_enter"]
+
+    def test_an_unknown_script_is_refused(self):
+        """⚠️ A real builtin, because the callee is checked before its
+        arguments -- an invented name fails on the function first and would
+        make this test pass for the wrong reason."""
+        with pytest.raises(Exception, match="no script named 'nope'"):
+            compile_source(
+                'script main {\n evt_door_set_event("z", 0, script nope)\n}', "x.evt"
+            )
+
+    def test_it_is_not_a_spawn(self):
+        """⚠️ `spawn on_enter` RUNS it; `script on_enter` only names it. Emitting
+        RUN_CHILD_EVT here would start the script at attach time instead of
+        when the zone is used."""
+        found = words(self.SOURCE)
+        opcodes = [word.value & 0xFFFF for word in found if isinstance(word, Literal)]
+        assert evt.Opcode.RUN_CHILD_EVT.value not in opcodes
+
+    def test_script_is_still_a_declaration_keyword(self):
+        """The word is context-sensitive: a declaration at the top level, a
+        value inside an expression. Neither may break the other."""
+        program = parse("script main {\n wait(1)\n}")
+        assert [s.name for s in program.scripts] == ["main"]

@@ -181,6 +181,20 @@ class ExpressionStatement(Statement):
 
 
 @dataclass(frozen=True)
+class ScriptRef(Expression):
+    """`script <name>` -- the ADDRESS of another script in this source.
+
+    ⚠️ Not a call and not a spawn. Some game builtins take an `EvtScriptCode *`
+    and store it for later: `evt_door_set_event(door, which, script)` attaches
+    one to a loading zone (D143). Without this there was no way to name a
+    compiled script as a *value*, so those builtins were unreachable from a
+    script even though the catalog lists them.
+    """
+
+    name: str = ""
+
+
+@dataclass(frozen=True)
 class Spawn(Statement):
     """Start another script as a child of this one."""
 

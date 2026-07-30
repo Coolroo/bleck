@@ -18,6 +18,32 @@ loaded into memory.
     existing function *behaves* still needs a native hook — see
     [Code mods](../guides/code-mods.md).
 
+## Naming a script without running it
+
+Some of the game's builtins take a script and keep it for later rather than
+running it. `script <name>` is how you pass one:
+
+```
+script main {
+    evt_door_set_event("doa2_l", 0, script on_enter)
+}
+
+script on_enter {
+    evt_msg_print(0, "you came through the star door", 0, 0)
+}
+```
+
+!!! warning "`script name` is not `spawn name`"
+
+    `spawn on_enter` starts it **now**. `script on_enter` only names it, so
+    whatever you hand it to can start it later — here, when the player uses
+    that loading zone.
+
+This is what makes loading zones scriptable at all: unlike a door, a zone has
+no script of its own, and `evt_door_set_event` is how the game itself attaches
+one — it does so on 13 maps. See [`bleck doors`](../reference/cli.md#bleck-doors)
+for which zones a map has.
+
 ## Your first script
 
 Create a mod and give it a script:

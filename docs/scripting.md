@@ -95,6 +95,41 @@ script cleanup {
 `main` is the script that runs. Named, not positional, so reordering a file
 cannot silently change which script starts.
 
+### `script <name>` as a value (D144)
+
+Some builtins take an `EvtScriptCode *` and **keep** it rather than running it:
+
+```
+script main {
+    evt_door_set_event("doa2_l", 0, script on_enter)
+}
+
+script on_enter {
+    evt_msg_print(0, "you came through the star door", 0, 0)
+}
+```
+
+⚠️ **Not a call and not a `spawn`.** `spawn on_enter` runs it now; `script
+on_enter` only names it, so the builtin can run it later. Emitting
+`RUN_CHILD_EVT` here would start the script at attach time instead of when the
+zone is used.
+
+It lowers to a `ScriptWord` — the same operand `spawn` already resolves — typed
+`INT`, because it *is* an address as far as the VM is concerned. Giving it a
+fourth `ValueType` would make every arithmetic check reject it for no reason,
+and the point is to hand it to a builtin, which takes words.
+
+The name is resolved against the scripts in the same file, so a forward
+reference works and an unknown one is refused at compile time.
+
+⚠️ `script` is now **context-sensitive**: a declaration at the top level, a value
+inside an expression. Both parsers must keep working, which is what the last
+test in `TestScriptReferences` pins.
+
+**This is what makes loading zones reachable.** A `MapDoorDesc` has no script
+field, so `evt_door_set_event` is the only way to give one behaviour (D143) —
+and it was uncallable from a script until the language could name a script.
+
 ### How constructs lower
 
 | Source | Bytecode |
