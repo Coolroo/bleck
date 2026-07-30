@@ -18,9 +18,10 @@ and the **self-healing detour** (D96) restores that instruction, calls the
 original, and re-installs the branch — so a mod can record a function's
 arguments and its return value without disabling it.
 
-    uv run python scripts/ingame.py fn-trace-somewhere --words 62 --seconds 110
+    uv run python scripts/ingame.py fn-trace-probe --words 28 --seconds 120
 
-`example-mods/fn-trace-probe` and `example-mods/fn-trace-somewhere` are the worked examples;
+`example-mods/fn-trace-probe` is the worked example. The three-target run below
+used a separate probe, removed in D148; its measurements stand.
 [`code-mods.md`](code-mods.md#tracing-a-function-instead-of-replacing-it) has
 the pattern.
 
@@ -156,7 +157,8 @@ with what*, not what the functions do internally.
 
 `evt_door_set_door_descs` is `0x800E2610` (eu0), declared in `evt_door.h`.
 
-✅ **They are called from map init scripts.** One 90 s `example-mods/door-scan` run:
+✅ **They are called from map init scripts.** One 90 s bytecode-walk run
+(a probe since removed in D148; the measurement stands):
 
 | | |
 |---|---|
@@ -178,7 +180,7 @@ spell one.
 
 ### ✅ All three setters take argc 3 (D102)
 
-`example-mods/door-argc`, one 75 s run:
+One 75 s run (a probe since removed in D148; the measurement stands):
 
 | | header | map | arg0 | arg1 |
 |---|---|---|---|---|
@@ -250,7 +252,7 @@ of the bytecode needs no hook at all (D89, D101), and `code.patches`'
 
 ⚠️ **Research, not a feature.** `npcdrv:` is not a `code.patches` selector and
 nothing here is declarable from a manifest. What follows is what three
-`example-mods/npc-probe` runs measured (D107).
+runs measured (D107) with a probe since removed (D148).
 
 Declared in `spm/npcdrv.h`. Established by reading the structure it returns
 during gameplay, not by tracing the function.

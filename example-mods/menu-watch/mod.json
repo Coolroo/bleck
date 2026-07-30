@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "name": "menu-watch",
-  "version": "0.1.0",
-  "description": "Native C that runs per sequence and reports what the game actually does",
-  "base": "eu0",
-  "code": { "sources": ["src"], "target": "eu0", "module_id": 2 }
-}

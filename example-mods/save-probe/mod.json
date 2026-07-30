@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "name": "save-probe",
-  "version": "0.1.0",
-  "description": "Can a mod load a NAND save slot, and when is it safe to call?",
-  "base": "eu0",
-  "code": { "sources": ["src"], "target": "eu0", "module_id": 2, "banner": false }
-}

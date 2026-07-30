@@ -235,7 +235,7 @@ one.
 ⛔ **Still not a selector**, and D107 is why it is not a mechanical follow-on
 from `door:`. What that research settled, and what it did not:
 
-✅ **Known** (`example-mods/npc-probe`, booted into `he1_01`):
+✅ **Known** (measured in `he1_01`; D107):
 
 - `npcGetWorkPtr()` (`0x801c9adc`) is usable every gameplay frame; it returned
   `0x805283E0`, entries at `0x807BB960`.

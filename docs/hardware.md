@@ -141,7 +141,7 @@ better-trodden route if you have one, given the 🔶 below.
 unattended memory-reading rig as an image:
 
 ```bash
-uv run python scripts/ingame.py scripttest --riivolution --watch-gw 30
+uv run python scripts/ingame.py speedrun --riivolution --watch-gw 30
 ```
 
 The descriptor also restates the choice explicitly, alongside the XML's

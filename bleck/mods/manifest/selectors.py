@@ -111,8 +111,7 @@ def _parse_door(raw: str, where: str) -> str:
             f"script -- 'door:he1_01:0' is that map's first door, and "
             f"'door:he1_01:0:init' is the same door's init script.\n"
             f"  A map registers its doors in order, so the index is a position "
-            f"in that list, not an id. `mods/door-scan` reports how many a map "
-            f"has."
+            f"in that list, not an id. `bleck doors <map>` lists them."
         )
     _check_map_name(parts[0], where)
     try:
@@ -258,5 +257,5 @@ def _resolve_item(raw: str, where: str) -> int:
         f"name: its internal name ('HONOO_SAKURETU'), its constant "
         f"('ITEM_ID_USE_HONOO_SAKURETU'), or its English name ('fire_burst').\n"
         f"  All {len(known)} names are in {items.ITEM_CATALOG.name}; "
-        f"`mods/item-probe` reports which ids itemEventDataTable holds."
+        f"`bleck items` lists them."
     )

@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "name": "door-hook-probe",
-  "version": "0.1.0",
-  "description": "Stage 2: branch-replace evt_door_set_door_descs, with a hot function as the positive control (D94)",
-  "base": "eu0",
-  "code": { "sources": ["src"], "target": "eu0", "module_id": 2 }
-}

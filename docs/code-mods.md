@@ -391,7 +391,7 @@ ignored, and a near miss is suggested (`innit` → "Did you mean 'init'?").
 
 ⛔ **The index is a position, not an id.** `DoorDesc` has no lookup by name
 (D91): the index is a place in the array the map registers, in registration
-order. `example-mods/door-scan` reports how many a map registers.
+order. `bleck doors <map>` lists them.
 
 ⛔ **It is not bounds-checked at build time, and cannot be.** How many doors a
 map registers is game data. The generated code compares the index against the
@@ -792,8 +792,9 @@ void *traceMapDataPtr(const char *mapName)
 }
 ```
 
-`example-mods/fn-trace-probe` is the worked example, `example-mods/fn-trace-guard` the negative,
-`example-mods/fn-trace-somewhere` a three-target investigation. What they found is in
+`example-mods/fn-trace-probe` is the worked example. Its negative control and a
+three-target investigation were separate probes, since removed (D148); what
+they found is in
 [`function-behaviour.md`](function-behaviour.md).
 
 #### ⚠️ What a trace cannot see

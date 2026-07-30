@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "name": "scripttest",
-  "version": "0.1.0",
-  "description": "End-to-end check: a script built by the normal pipeline, observable from outside",
-  "base": "eu0",
-  "code": { "script": "scripts/main.evt", "target": "eu0", "module_id": 2 }
-}

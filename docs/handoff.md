@@ -595,7 +595,7 @@ does every frame and so can a mod (D66).
 | Bit 31 is **not** a button — test `(held & mask) == mask`, never equality | D67 |
 | `plus`, `minus`, `home`, d-pad still 🔶 unverified | D68 |
 
-`example-mods/button-probe` + `scripts/decode_buttons.py` settle the rest in one run.
+Both were settled by a probe since removed (D148); D66 records the masks.
 
 ---
 
@@ -891,13 +891,10 @@ What to know before extending it:
 - 🔶 **An item hook has been applied and never *entered*.** Using an item needs
   menu navigation and input cannot be injected (D48). `hook entries` reading `0`
   is the expected value for a working hook and a broken one alike.
-- `example-mods/evt-patch`, `example-mods/item-patch` and `example-mods/door-patch` are the worked
-  examples; `example-mods/door-scan` is the bytecode *walk* that found the door
-  registrations (D101) and `example-mods/door-argc` is what measured their argc (D102),
-  neither patching anything.
-  ⚠️ **Fix `door-patch`'s report layout before reusing it** (D104): `STATUS(i)`
-  was `probe[2 + i]`, so `STATUS(3)` collided with `GAME_FRAMES` at `probe[5]`
-  and one row's status was overwritten every frame.
+- `example-mods/item-patch` is the worked example. The bytecode *walk* that found
+  the door registrations (D101) and the run that measured their argc (D102) were
+  separate probes, since removed (D148); `bleck doors` now answers the first
+  directly and the argc is recorded in `function-behaviour.md`.
 
 ---
 
@@ -996,12 +993,10 @@ What to know before extending it:
   and larger than the whole function on a leaf.
 - ✅ Existing mods are byte-identical: `--gc-sections` drops the helpers unless
   a module calls one. Re-verified when the trace landed.
-- `example-mods/code-patch-probe` (the mechanism, with the no-flush control),
-  `example-mods/door-hook-probe` (live game code, by hand), `example-mods/fn-hook-probe` (the
-  declaration), `example-mods/fn-hook-guard` (its negative control),
-  `example-mods/fn-trace-probe` (the trace, on `mapDataPtr`), `example-mods/fn-trace-guard` (its
-  negative) and `example-mods/fn-trace-somewhere` (three undocumented functions) are the
-  worked examples. What the last one found is in
+- `example-mods/fn-hook-probe` (the declaration) and `example-mods/fn-trace-probe`
+  (the trace, on `mapDataPtr`) are the worked examples. The raw-mechanism probe,
+  the by-hand version, both negative controls and the three-target investigation
+  were separate mods, since removed (D148). What the last one found is in
   [`function-behaviour.md`](./function-behaviour.md).
 
 ---
@@ -1044,16 +1039,13 @@ pushed; `main` is at **827 tests, pylint 10.00/10, mkdocs --strict clean**.
 
 ## What needs a human, with exact commands
 
-✅ **1 and 2 are done** (D115). `example-mods/attended` merged them into one boot and
-both hooks were observed *entering*: an item (Fire Burst) and an npcdrv death
-script. `pouchAddItem` also works from a mod, which was not what anyone was
-looking for. Re-run it with:
+✅ **1 and 2 are done** (D115). A probe merging them into one boot saw both
+hooks *entering*: an item (Fire Burst) and an npcdrv death script.
+`pouchAddItem` also works from a mod, which was not what anyone was looking
+for. The probe was removed in D148 -- rebuild it from
+`example-mods/intercept-probe` if it is needed again.
 
-```powershell
-uv run python scripts/ingame.py attended --words 161 --seconds 420
-```
-
-✅ **The door hook too** (D116, D117). `example-mods/door-attended`, one walk through
+✅ **The door hook too** (D116, D117). A probe since removed (D148), one walk through
 `he1_01`'s single door: `interact` entered **62** times, `init` once, and the
 door still worked afterwards — so replacing an instruction did not break the
 script it sat in.

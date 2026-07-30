@@ -10484,3 +10484,63 @@ justifying: no claim changed, only the location of a file that moved, and
 leaving them would make each one read as "that mod was deleted". Entries naming
 mods that genuinely no longer exist (`boot-observe`, `title-invert`,
 `tex-koopa`) were left exactly as they were.
+
+---
+
+## D148 — 32 of 56 example mods removed; the finding is the artifact (2026-07-29)
+
+D147 moved the mods and deliberately deleted none, on the grounds that nearly
+every one is cited somewhere in `docs/`. That was the wrong reading of what a
+citation is for, and it left 56 directories where a newcomer has to guess which
+three matter.
+
+**The rule applied instead: a probe whose answer is already recorded here is
+disposable.** The finding is the artifact; the probe was the instrument that
+produced it. What survives is (a) something a user would copy to learn a live
+feature, (b) a working research tool, or (c) something `docs-site/` promises a
+reader they can reproduce.
+
+⚠️ **Not one pair was byte-identical.** The redundancy was *staged*: probes
+built to answer one question in sequence, where a later stage subsumes the
+earlier. `code-patch-probe` (raw branch) → `door-hook-probe` (by hand on live
+code) → `fn-hook-probe` (declared) is one mechanism at three levels of
+finish, and only the last is worth keeping.
+
+### What went, by cluster
+
+| Cluster | 56 → 24 | Kept |
+|---|---|---|
+| Doors | 10 → 3 | `door-swap`, `zone-event`, `door-trigger` |
+| Function hooks | 7 → 3 | `fn-trace-probe`, `intercept-probe`, `fn-hook-probe` |
+| NPCs / enemies | 8 → 4 | `mr-l`, `spawn-extra`, `hard-lineland`, `npc-patch` |
+| Items | 3 → 1 | `item-patch` |
+| evt patches | 2 → 0 | superseded by `item-patch` and `door-swap` |
+| Coins | 3 → 2 | `coin-nobudget`, `coin-tick` |
+| Settled one-shots | 13 → 0 | — |
+
+Negative controls (`fn-hook-guard`, `fn-trace-guard`) went with their probes:
+each proved a *refusal* that is now enforced by `bleck` and covered by unit
+tests, so the mod re-proves something already guarded.
+
+### Two user-facing error messages pointed at deleted mods
+
+Worth recording because it is the second-order cost that nearly went unnoticed:
+`selectors.py` told a user with a bad selector to consult `mods/door-scan` or
+`mods/item-probe`. Both now say `bleck doors <map>` and `bleck items` — a
+command that answers immediately, rather than a probe the user would have had to
+build and boot. ⚠️ **That was better guidance even before the mods were
+deleted**, and D147's path sweep had missed it entirely: it rewrote `docs/` and
+the project instructions but not `bleck/`, `scripts/` or `tests/`, so those strings still
+said `mods/` after the move.
+
+`scripts/decode_buttons.py` was deleted outright — it existed only to decode
+`button-probe`'s report block. `scripts/dump_doors.py --mod` now defaults to
+`nop`, since it needs any built image and never needed that specific one.
+
+### On the decision log's own references
+
+⛔ **Historical entries were left naming the mods that produced them.** D101
+saying `door-scan` walked the bytecode is a true statement about what happened,
+and rewriting it would falsify the record. Only *instructional* references
+elsewhere — "X is the worked example", and two runnable commands — were
+repointed, since those address a reader in the present tense.

@@ -4,7 +4,7 @@ The default way to test anything in-game (D38, D40): a mod writes progress into
 a fixed block of RAM and `dolphin-memory-engine` reads it back from the running
 process. Stock Dolphin, no configuration. Mod side: `docs/diagnostics/probe.h`.
 
-    uv run python scripts/ingame.py menu-watch --words 12
+    uv run python scripts/ingame.py coin-tick --words 12
     uv run python scripts/ingame.py coin-tick --watch-gw 30
 
 Dolphin is always stopped at the end, including on failure or Ctrl-C. A run

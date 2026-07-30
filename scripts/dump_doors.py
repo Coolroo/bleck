@@ -3,7 +3,7 @@
 A `door:` selector's index is a **position in the array a map registers**, not
 an id and nothing visible in game (D103). Until now the only way to learn a
 map's count was to guess and read a status word at run time — which is how
-`mods/door-attended` came to carry a `door:he1_01:9` patch that addressed
+a since-deleted probe came to carry a `door:he1_01:9` patch that addressed
 nothing (D137).
 
 ⚠️ **A map has TWO door tables and they are not interchangeable** (D138):
@@ -194,7 +194,7 @@ def dump(dme) -> list[dict]:  # pylint: disable=container-return
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--mod", default="door-dump", help="a built image to boot")
+    parser.add_argument("--mod", default="nop", help="a built image to boot")
     parser.add_argument("--out", help="write JSON here instead of stdout")
     parser.add_argument("--seconds", type=int, default=90)
     args = parser.parse_args()

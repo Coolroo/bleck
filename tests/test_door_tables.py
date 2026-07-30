@@ -218,7 +218,7 @@ class TestTheDoorCatalog:
 
 class TestBoundsCheckingDoorSelectors:
     """⛔ Before D141 a `door:` index could name a door that does not exist and
-    fail silently at run time. `mods/door-attended` carried `door:he1_01:9` for
+    fail silently at run time. A since-deleted probe carried `door:he1_01:9` for
     weeks that way, and `he1_01` has exactly one door."""
 
     def patch(self, selector):
