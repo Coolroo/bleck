@@ -13,8 +13,15 @@ from pathlib import Path
 from bleck import platforms
 from bleck.common import env
 from bleck.common.errors import BleckError
+from bleck.mods import levels
 
-from .manifest import MANIFEST_NAME, OVERLAY_DIR, Manifest, read
+from .manifest import (
+    MANIFEST_NAME,
+    OVERLAY_DIR,
+    PLACEMENT_KINDS,
+    Manifest,
+    read,
+)
 
 
 class RegistryError(BleckError):
@@ -29,6 +36,30 @@ class Mod:
     @property
     def name(self) -> str:
         return self.manifest.name
+
+    def tables_of(self, kind):
+        """Every table of one kind, from `tables` **and** `levels` (D145).
+
+        ⚠️ **Call this, not `manifest.tables_of`.** The manifest holds only what
+        was written literally; a level directory's tables exist on disk and are
+        discovered here, where the root is known. A caller that asks the
+        manifest sees a level-organised mod as empty.
+        """
+        return levels.tables_for(self, kind)
+
+    @property
+    def has_placements(self) -> bool:
+        """Whether this mod changes any map's setup file, **levels included**.
+
+        ⚠️ `manifest.has_placements` cannot answer this: a level's tables are on
+        disk, not in the manifest, so a level-organised mod looks empty to it.
+        `mods_with_placements` gates the entire placement build on this, and a
+        mod it skips still reports "chain OK" -- D126's shape, hit for a third
+        time when `levels` landed (D145).
+        """
+        return bool(self.manifest.setup) or any(
+            self.tables_of(kind) for kind in PLACEMENT_KINDS
+        )
 
     @property
     def overlay(self) -> Path:

@@ -98,7 +98,7 @@ class SourcedEdit:
 
 
 def mods_with_placements(chain: Chain) -> list[Mod]:
-    return [mod for mod in chain.mods if mod.manifest.has_placements]
+    return [mod for mod in chain.mods if mod.has_placements]
 
 
 def apply_chain(chain: Chain, base: Path) -> list[PlacementBuild]:
@@ -217,7 +217,7 @@ def _table_path(mod: Mod, ref) -> Path:
 def _coin_rows(mod: Mod) -> list[SourcedCoinRow]:
     """Every coin-table row this mod declares."""
     out: list[SourcedCoinRow] = []
-    for ref in mod.manifest.tables_of(TableKind.COINS):
+    for ref in mod.tables_of(TableKind.COINS):
         table = tables.coins.read(
             _table_path(mod, ref), source=ref.path, map_name=ref.map_name
         )
@@ -244,7 +244,7 @@ def _table_rows(mod: Mod) -> list[SourcedRow]:
     to come describe other things entirely (D125).
     """
     out: list[SourcedRow] = []
-    for ref in mod.manifest.tables_of(TableKind.ENEMIES):
+    for ref in mod.tables_of(TableKind.ENEMIES):
         table = tables.enemies.read(
             _table_path(mod, ref), source=ref.path, map_name=ref.map_name
         )

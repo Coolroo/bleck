@@ -34,10 +34,12 @@ from bleck.mods.manifest.placements import (  # noqa: F401
     PLANNED_KINDS,
     SPAWN_FLAGS,
     CoinEdit,
+    LevelRef,
     MapPlacements,
     PlacementEdit,
     TableKind,
     TableRef,
+    _parse_levels,
     _parse_setup,
     _parse_tables,
     tables_to_json,
@@ -106,8 +108,11 @@ class Requirement:
         return cls(name, match[1] or "==", Version.parse(match[2]))
 
 
+# A manifest is a record of independent declarations -- identity, dependencies,
+# overlay claims, placements, levels, tables, code. Grouping them to satisfy a
+# count would invent structure the file format does not have.
 @dataclass(frozen=True)
-class Manifest:
+class Manifest:  # pylint: disable=too-many-instance-attributes
     """A mod's declared identity and relationships."""
 
     name: str
@@ -122,6 +127,13 @@ class Manifest:
     code: CodeSpec | None = None
     setup: list[MapPlacements] = field(default_factory=list)
     """Declared changes to enemy placement, applied at build time."""
+
+    levels: list[LevelRef] = field(default_factory=list)
+    """Directories holding one map's tables each -- sugar over `tables` (D145).
+
+    ⚠️ The *paths* only. What a level contains is on disk, so expanding it needs
+    the mod's directory: `bleck/mods/levels.py`, reached through
+    `Mod.tables_of`."""
 
     tables: list[TableRef] = field(default_factory=list)
     """CSV files declaring the same thing as `setup`, for when there are enough
@@ -196,6 +208,8 @@ class Manifest:
             }
         # Omitted rather than written as an empty object, like `setup` and
         # `code`: most mods declare no tables.
+        if self.levels:
+            body["levels"] = [level.to_json() for level in self.levels]
         if self.tables:
             body["tables"] = tables_to_json(self.tables)
         # Omitted rather than written as null: most mods ship no code.
@@ -236,6 +250,7 @@ class Manifest:
             code=_parse_code(raw.get("code"), source),
             setup=_parse_setup(raw.get("setup"), source),
             tables=_parse_tables(raw.get("tables"), source),
+            levels=_parse_levels(raw.get("levels"), source),
         )
 
 

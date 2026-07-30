@@ -548,3 +548,37 @@ D126's exact shape.
 ⛔ **`bleck mod new` does not scaffold one.** Enemies and coins are data any mod
 can hold; a door row's `call` must exist in the mod's sources, and a new mod has
 no `code` block.
+
+### Organising by level (D145)
+
+A mod touching one map is fine flat. One reworking ten is not — ten enemy
+tables, ten coin tables and ten door tables in one `tables` block, each needing
+an explicit `map`, with nothing grouping the three that belong together. A
+level directory says it once:
+
+```json
+"levels": ["levels/he1_01", "levels/mac_02"]
+```
+
+```
+levels/he1_01/enemies.csv     bound to he1_01
+levels/he1_01/coins.csv       bound to he1_01
+levels/he1_01/doors.csv       bound to he1_01
+```
+
+**The directory name is the map name**, so the binding lives in the path rather
+than being repeated in JSON. A directory wanting a friendlier name says the map:
+`{"path": "levels/lineland", "map": "he1_01"}`.
+
+⚠️ **Sugar over `tables`, not a second mechanism.** A level expands into exactly
+the `TableRef`s the long form would have declared, read by the same readers
+(`bleck/mods/levels.py`).
+
+⚠️ **Read tables through `Mod.tables_of(kind)`, never `Manifest.tables_of`.** The
+manifest holds only what was written literally; a level's tables are on disk. A
+caller asking the manifest sees a level-organised mod as **empty** — which is
+how `has_placements` had to move onto `Mod` too.
+
+⛔ Four things a level refuses rather than skipping, all D126's shape: a missing
+directory, an empty one, a misspelled `enemys.csv`, and a `doors.csv` in a mod
+with no `code` block.

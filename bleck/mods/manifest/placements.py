@@ -6,6 +6,7 @@ build time so the change stays reviewable and undoable (`docs/vision.md`).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import PurePosixPath
@@ -58,6 +59,10 @@ class PlacementEdit:
             body["position"] = list(self.position.as_tuple())
         return body
 
+
+#: What a map name looks like on this disc. Used by the `levels` shorthand,
+#: which reads a map name out of a directory name.
+_MAP_NAME = re.compile(r"^[a-z]{2,4}\d?_\d{2}$")
 
 # Re-exported from the format layer, which owns what the bytes mean.
 COIN = setup.Item.COIN
@@ -197,6 +202,90 @@ class TableRef:
         if not self.is_bound:
             return self.path
         return {"path": self.path, "map": self.map_name}
+
+
+@dataclass(frozen=True)
+class LevelRef:
+    """A directory holding one map's tables, declared under `levels`.
+
+    ⚠️ **Sugar over `tables`, not a second mechanism** (D145). A level expands
+    into exactly the `TableRef`s the long form would have declared, bound to the
+    same map -- see `bleck/mods/levels.py`. The manifest holds the path and the
+    map, and nothing about what is inside: that is on disk, and reading it needs
+    the mod's directory.
+    """
+
+    path: str
+    """Relative to the mod root, posix-style."""
+
+    map_name: str
+    """The map every table inside is bound to. Defaults to the directory's own
+    name, so `levels/he1_01` needs saying only once."""
+
+    @property
+    def named_for_its_map(self) -> bool:
+        return self.path.rsplit("/", 1)[-1] == self.map_name
+
+    def to_json(self) -> str | dict[str, str]:  # pylint: disable=container-return
+        """A bare path when the directory is named after its map, which is the
+        point of the shorthand; the object form otherwise."""
+        if self.named_for_its_map:
+            return self.path
+        return {"path": self.path, "map": self.map_name}
+
+
+def _parse_levels(raw: object, source: str) -> list[LevelRef]:
+    """Read the `levels` block: a list of directories, or {path, map} objects."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ManifestError(
+            f"{source}: 'levels' must be a list of directories, e.g. [\"levels/he1_01\"]"
+        )
+    return [
+        _parse_level(item, f"{source}: levels[{index}]") for index, item in enumerate(raw)
+    ]
+
+
+def _parse_level(raw: object, where: str) -> LevelRef:
+    if isinstance(raw, str):
+        path = _table_path(raw, where)
+        name = path.rsplit("/", 1)[-1]
+        _check_level_map(name, path, where)
+        return LevelRef(path=path, map_name=name)
+    if not isinstance(raw, dict):
+        raise ManifestError(
+            f"{where}: must be a directory, or an object like "
+            f'{{"path": "levels/lineland", "map": "he1_01"}}'
+        )
+    unknown = sorted(set(raw) - _TABLE_KEYS)
+    if unknown:
+        raise ManifestError(
+            f"{where}: unknown key(s) {', '.join(unknown)}; "
+            f"a level takes {', '.join(sorted(_TABLE_KEYS))}"
+        )
+    path = raw.get("path")
+    if not isinstance(path, str) or not path.strip():
+        raise ManifestError(f"{where}: needs a 'path' to a directory")
+    map_name = raw.get("map", "")
+    if not isinstance(map_name, str) or not map_name.strip():
+        raise ManifestError(
+            f"{where}: needs a 'map'. Only a directory named after its map can "
+            f"leave it out."
+        )
+    return LevelRef(path=_table_path(path, where), map_name=map_name.strip())
+
+
+def _check_level_map(name: str, path: str, where: str) -> None:
+    """⚠️ The shorthand reads the map name out of the path, so a directory
+    called `lineland` would bind every table to a map that does not exist and
+    the tables would then be refused one by one with a confusing message."""
+    if not _MAP_NAME.match(name):
+        raise ManifestError(
+            f"{where}: {path!r} takes its map name from the directory, and "
+            f"{name!r} is not one -- they look like 'he1_01'.\n"
+            f'  Say it explicitly: {{"path": "{path}", "map": "he1_01"}}.'
+        )
 
 
 #: What the object form of a table declaration may say. Anything else is a typo

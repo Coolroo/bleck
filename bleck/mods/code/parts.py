@@ -284,7 +284,7 @@ def door_patches(mod: Mod) -> list[SourcedPatch]:
     exactly the same code and refuse exactly the same things.
     """
     out: list[SourcedPatch] = []
-    for ref in mod.manifest.tables_of(TableKind.DOORS):
+    for ref in mod.tables_of(TableKind.DOORS):
         path = mod.root / ref.path
         if not path.is_file():
             raise CodeError(

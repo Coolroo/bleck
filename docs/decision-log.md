@@ -10280,3 +10280,70 @@ D129's assertion that held while testing something else.
 🔶 Nothing has watched one fire — that still needs a player (D143).
 🟢 A manifest declaration (`"zones": {"doa2_l": "on_enter"}`) is now only
 plumbing; the mechanism and the syntax both exist.
+
+---
+
+## D145 — ✅ `levels`: one directory per map (2026-07-29)
+
+Three table kinds now exist, and a mod reworking several maps had to say so
+three times per map:
+
+```json
+"tables": {
+  "enemies": [{"path": "tables/he1_01-enemies.csv", "map": "he1_01"}, ...],
+  "coins":   [{"path": "tables/he1_01-coins.csv",   "map": "he1_01"}, ...],
+  "doors":   [{"path": "tables/he1_01-doors.csv",   "map": "he1_01"}, ...]
+}
+```
+
+Nothing groups the three that belong together, and `he1_01` appears six times.
+
+```json
+"levels": ["levels/he1_01", "levels/mac_02"]
+```
+
+**The directory name is the map name**, so the binding lives in the path. A
+directory wanting a friendlier name says the map: `{"path": "levels/lineland",
+"map": "he1_01"}`.
+
+### ✅ Sugar, deliberately
+
+A level expands into exactly the `TableRef`s the long form would have declared,
+bound the same way, read by the same readers. No new file format, no second code
+path, and anything a table can do a level table can do.
+
+⛔ **Rejected: scanning a `levels/` directory** for subdirectories rather than
+listing them. It reads well and it makes "why is this map not being built"
+answerable only by `ls`. Declaring each one keeps the manifest the record of
+what a mod does.
+
+### ⛔ D126's shape, for the third time
+
+A level-only mod built cleanly, printed `chain OK`, and generated **nothing** —
+because `mods_with_placements` asks `manifest.has_placements`, and the manifest
+cannot see a level's tables. They are on disk; only `Mod` knows the root.
+
+So `has_placements` moved onto `Mod`, alongside a new `Mod.tables_of(kind)` that
+merges declared and level tables. ⚠️ **Every reader must use `Mod.tables_of`, not
+`Manifest.tables_of`** — the latter now silently under-reports.
+
+The same gap existed for the doors-needs-code rule: `Manifest.__post_init__`
+enforces it for a declared table and cannot see a level's, so `levels.py`
+applies it again where it can.
+
+**Three occurrences of one bug shape** (D126, D134, here). The pattern is always
+the same: a new way to declare something, and a gate that only knows the old
+way.
+
+### ✅ Four refusals rather than four silences
+
+A missing directory, an empty one, a stray `enemys.csv`, and `doors.csv` without
+a `code` block. Each would otherwise be read by nothing while the build reported
+success. ⚠️ Non-CSV files are left alone — a `README.md` beside the tables is not
+a typo.
+
+### ⛔ The `\n`-in-a-heredoc bug, fifth time
+
+Two more f-strings broken by writing Python through `str.replace` in a shell
+heredoc, where `\n` collapses into a real newline mid-literal. D131 recorded the
+rule and D141 recorded breaking it again. **Use the editor for structural edits.**

@@ -506,6 +506,39 @@ Every mod has a `mod.json` at its root.
         `files/setup/<map>.dat` the game reads, and the byte-identical one
         inside the map archive, so nothing stale is left on the disc.
 
+`levels` <span class="pf-type">array</span>
+
+:   One directory per map, holding that map's tables. Shorthand for a `tables`
+    block where every entry is bound to the same map.
+
+    ```json
+    "levels": ["levels/he1_01", "levels/mac_02"]
+    ```
+
+    ```
+    levels/he1_01/enemies.csv
+    levels/he1_01/coins.csv
+    levels/he1_01/doors.csv
+    ```
+
+    **The directory name is the map name**, so you write it once instead of
+    repeating `"map": "he1_01"` on every table. A directory you would rather
+    call something else says the map explicitly:
+
+    ```json
+    "levels": [{ "path": "levels/lineland", "map": "he1_01" }]
+    ```
+
+    Each file is optional — a level with only `enemies.csv` is fine. The tables
+    inside are the same format as [`tables`](#tables), bound to that map, so
+    they drop the `map` column.
+
+    !!! warning "A level that does nothing is an error"
+
+        A missing directory, an empty one, a misspelled `enemys.csv`, or a
+        `doors.csv` in a mod with no `code` block all fail the build. Each would
+        otherwise be read by nothing while the build reported success.
+
 `tables` <span class="pf-type">object</span>
 
 :   The same placements as `setup`, in CSV files instead. Past a handful of
