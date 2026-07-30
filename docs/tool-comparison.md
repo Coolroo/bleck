@@ -167,10 +167,10 @@ the obligation is real and lands on them.
 
 **2. Whole-script replacement by pointer swap. — ✅ WORKS, MIT-clean.**
 
-`bleck` currently patches *the bytecode a pointer refers to*. It has never
-swapped **the pointer** for a script compiled from a mod — which would give
+`code.patches` mutates *the bytecode a pointer refers to*, which is why it is
+limited to same-size replacement. Swapping **the pointer** instead gives
 arbitrary logic with no jump-table problem at all, because the replacement is
-built whole.
+built whole rather than edited in place.
 
 ⛔ **Known not to work for `MapData.initScript`**: D51 swapped it, every
 mechanical check passed, and the map froze mid-load. 🔶 The untested explanation
