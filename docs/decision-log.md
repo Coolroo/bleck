@@ -11622,3 +11622,39 @@ dropped, being build output.
 ⚠️ **A mod named in `docs/` must live in `example-mods/`**, or the reference
 rots as soon as the scratch copy is deleted. The D171-D174 entries were rewritten
 from `mods/` to `example-mods/` for exactly that reason.
+
+## D176 — Entities do have an onSpawn hook, and it builds Count Bleck's arena (2026-07-30)
+
+✅ **`NPCEnemyTemplate+0x30` is `onSpawnScript`** -- documented in
+`spm-headers/npcdrv.h`, alongside `canSpawnFunction` at `+0x0C`, and
+`NPCEntry+0x390` tracks the running `onSpawnEvtId` with a helper
+`npcAreOnSpawnEvtsDone()`. Earlier notes in this repo recorded the template's
+scripts as `+0x34/38/3C/48` and **missed `+0x30` entirely**, which is why
+"what runs when an entity appears" looked unanswerable.
+
+✅ **The platforms are created at runtime, not placed by the map.** No file on
+the extracted disc contains the string `LBB_0`; the name is built by `sprintf`
+from the format string `LBB_%d` at `0x8033DF7D`. The model is
+**`MOBJ_frame_block`** (`0x8033DF19`) and the objects join group `Z_2`.
+
+The chain, followed from Count Bleck's template (196):
+
+| address | what |
+|---|---|
+| `0x8046AA58` | his `onSpawnScript`; its **first** instruction is `USER_FUNC 0x801EF744` |
+| `0x801EF744` | allocates the 780-byte LBBLOCK work struct and zeroes it |
+| `0x801EF600` | the creation loop -- formats `LBB_%d`, creates the object if absent, positions it |
+| `0x8045ED78` | the position table, **stride 0x34**, position at `+4/+8/+12` |
+
+✅ **14+ platforms in a designed grid**: x from -600 to 600 in steps of 300, at
+y = 80, 160, 240 and 320, with z jittered between -100 and 100.
+
+⚠️ **The stride was wrong at first and the data said so.** `addi r30,r30,32`
+increments the *work* array; `addi r29,r29,52` increments the *source* table, and
+0x20 was read off the wrong one. At stride 0x20 the positions were noise; at 0x34
+they form an obvious grid. **A layout that looks designed is the check** -- no
+separate verification run was needed, because wrong strides do not produce
+regular structure.
+
+🟢 This is the hook for adding spawn behaviour to any entity: `onSpawnScript` is
+a plain template field, and `bleck` already rewrites template fields.
