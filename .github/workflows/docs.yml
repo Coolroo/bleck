@@ -18,6 +18,9 @@ on:
       - "mkdocs.yml"
       - "pyproject.toml"
       - ".github/workflows/docs.yml"
+      - "bleck/script/catalog.json"
+      - "bleck/script/evt.py"
+      - "scripts/dump_builtins.py"
   pull_request:
     paths:
       - "docs-site/**"
@@ -46,6 +49,13 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           enable-cache: true
+
+      - name: Check the generated reference is current
+        # language/builtins.md and language/storage.md are generated from
+        # catalog.json and bleck/script/evt.py. A stale reference is worse than
+        # none, because it is believed -- so a catalog change that was not
+        # followed by a regeneration fails here.
+        run: uv run python scripts/dump_builtins.py --check
 
       - name: Build the site
         # --strict fails on broken internal links, so a bad cross-reference is

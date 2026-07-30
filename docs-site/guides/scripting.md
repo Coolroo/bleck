@@ -102,6 +102,15 @@ chain OK: speedrun
 
 ## The language
 
+!!! tip "Reference pages"
+
+    This is the tour. The full reference lives under
+    [The scripting language](../language/index.md) —
+    [syntax](../language/syntax.md), [storage classes](../language/storage.md),
+    [attributes](../language/attributes.md) and all
+    [443 built-in functions](../language/builtins.md).
+
+
 ### Scripts
 
 `main` is the script that runs. Others are started with `spawn`.

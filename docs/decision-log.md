@@ -11736,3 +11736,43 @@ with the feature.
 ⚠️ The lexer skips `#[...]` like a comment (six lines). The attribute addresses
 the *manifest*, not the compiler, so tokenising it would have meant threading a
 node through the parser, the tree and the lowerer to be ignored at the end.
+
+## D179 — The scripting language gets its own docs section, half of it generated (2026-07-30)
+
+The language had **one** tutorial page while `mod.json` had a full reference.
+Nothing listed what a script can actually call, so the answer to "what functions
+exist" was `bleck script builtins` or reading `catalog.json`.
+
+✅ **`docs-site/language/`**: an index, `syntax.md`, `storage.md`,
+`attributes.md` and `builtins.md`.
+
+✅ **`builtins.md` and `storage.md` are generated** by
+`scripts/dump_builtins.py`, from `catalog.json` and `bleck/script/evt.py`. A
+443-row table maintained by hand is wrong the first time the catalog is
+regenerated, and **a stale reference is worse than none because it is believed**.
+
+⚠️ **The staleness check is the load-bearing part**, not the generator.
+`dump_builtins.py --check` regenerates into memory and compares, and `docs.yml`
+runs it -- with `catalog.json`, `evt.py` and the generator itself added to the
+workflow's path filters, or a catalog change would not trigger the job that
+notices. Without that, generation is a one-off that rots exactly like the
+hand-written version would have.
+
+Facts the generation surfaced, none of which were written down before:
+
+- **443 builtins across 35 modules**, but only **163 carry a full signature**.
+- ⚠️ **146 have no recorded argument count at all** and are shown as `?`. Those
+  cannot be argument-checked at compile time, which had never been stated.
+- The eight storage classes with their real limits -- `lw` 16, `gw` 32, `lf` 96,
+  `gf` 96, and the four saved classes unbounded -- read out of
+  `STORAGE_CLASSES` rather than transcribed.
+
+⛔ **Rejected: hand-writing the function reference.** It would have been accurate
+for about a day, and the failure is silent: a reader trusts a table that no
+longer matches the compiler.
+
+⚠️ Two string-replace passes over the generator silently matched nothing and
+were only caught by reading the output. Editing code by string substitution
+fails quietly; the `Edit` tool errors instead, which is why the remaining fixes
+used it. Same lesson as the regex that mangled `tests/test_tags.py` an hour
+earlier.

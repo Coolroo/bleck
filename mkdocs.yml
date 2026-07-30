@@ -88,6 +88,12 @@ nav:
       - Mods: concepts/mods.md
       - Dependencies: concepts/dependencies.md
       - Disc formats: concepts/disc-formats.md
+  - Language:
+      - language/index.md
+      - Syntax: language/syntax.md
+      - Storage: language/storage.md
+      - Attributes: language/attributes.md
+      - Built-in functions: language/builtins.md
   - Guides:
       - Your first mod: guides/first-mod.md
       - Scripting: guides/scripting.md
