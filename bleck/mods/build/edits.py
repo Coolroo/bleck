@@ -467,10 +467,9 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
     )
     before = len(data.used)
 
-    # ⚠️ `copy_from` reads the **base** file, not the partly-edited one, so the
-    # order rows appear in cannot change what a table means. Chained copies
-    # would otherwise depend on line order, which is not a thing an author
-    # should have to reason about.
+    # ⚠️ `copy_from` reads the **base** file, not the partly-edited one, so row
+    # order cannot change what a table means. Chained copies would otherwise
+    # depend on line order, which no author should have to reason about.
     original = list(data.enemies)
     slots = list(data.enemies)
     for edit in placement.edits:
@@ -486,11 +485,9 @@ def _apply_map(mod: Mod, placement, base: Path) -> PlacementBuild:
         enemies=slots,
         items=items,
         item_version=data.item_version,
-        # ⚠️ Adding an item to a map that ships none has to *create* the
-        # section. The game reads `itemCount` at 0x2BC4 either way -- for the
-        # 213 maps without one that is past the end of the file, where upstream
-        # notes it reads zeroed padding -- so writing a real count there is
-        # read normally. 🔶 Not yet watched happen in game.
+        # ⚠️ Adding an item to a map that ships none must *create* the section.
+        # `itemCount` at 0x2BC4 is read either way -- past the end for the 213
+        # maps without one, reading zeroed padding. 🔶 Not seen in game.
         has_item_section=data.has_item_section or bool(items),
     )
     _refuse_orphans(mod, placement, updated)

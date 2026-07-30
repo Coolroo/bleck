@@ -10649,3 +10649,71 @@ introduce. The tag was moved to a commit that lints instead.
 🟢 **Open, and a decision for the maintainer:** whether to delete the
 `v0.1.0-rc1` release so the workflow republishes assets that match the tag. It is
 a published pre-release, so it is not a change to make silently.
+
+---
+
+## D150 — `code.replace`: a vanilla script swapped whole, by pointer (2026-07-29)
+
+D146 measured the mechanism; this makes it declarable. `code.patches` rewrites
+one instruction in place and is therefore same-size only — the single mutation
+that moves no jump-table label, since `jumptable[]` is cached per `EvtEntry`
+(D87/D91). Writing a *different pointer* into the field lifts the size limit
+entirely, because the replacement is built whole and nothing moves.
+
+```json
+"code": {
+  "script": "scripts/main.bs",
+  "replace": [ { "script": "door:he1_01:0:interact", "with": "my_door" } ]
+}
+```
+
+`example-mods/door-replace` is the worked example. ✅ It builds: a 2,076-byte
+module whose generated C carries the table, the guard and the store.
+
+### Doors only, by evidence rather than convenience
+
+⛔ `map:` is **refused** — D51 swapped `MapData.initScript`, passed every
+mechanical check, and froze the map mid-load. 🔶 `item:` and `npcdrv:` are
+refused as *unproven*, and for a second reason worth stating: their scripts are
+**shared** between ids and templates (D91, D112), so a swap would silently change
+every sharer. Each refusal names the alternative (`code.patches`, `code.maps`).
+
+⚠️ **The guard defaults to off**, unlike a patch. A door's interact script opens
+with `MULF` (D103), so any default `expect` would be a guess; `expect` is
+accepted and checked when given, and its absence is honest rather than
+convenient.
+
+### Three bugs the build caught that the tests did not
+
+⚠️ **All 1,132 unit tests passed while the feature generated nothing.** The
+manifest parsed, validated and refused correctly; nothing carried
+`spec.replacements` into `Scaffolding`. That is D126's shape for the **fourth**
+time, and only `bleck mod check` on a real mod exposed it.
+
+Then, with it wired:
+
+1. ⛔ **The symbol was bound with the wrong namespace.** `replacements_for` used
+   `prefix_for(mod.name)`, but a single-mod build uses `bleck_`; only a *merged*
+   build uses per-mod slugs. Fixed by binding in the emitter — `_bind_replacements`,
+   exactly as `_bind_maps` already did, and per `ModPart` for a merge.
+2. ⛔ **An `extern` declaration made the mod's own script look like a game
+   symbol**, so `elf2rel` demanded it from `spm.eu0.lst`. The script arrays are
+   already defined earlier in the same translation unit; the declaration was
+   both wrong and unnecessary.
+3. ⛔ **`bleck_apply_replacements` was defined and never called** in the
+   full (script-bearing) path — the call had only been added to the bare path.
+   `-Wunused-function` caught it, which is worth noting: the generated C's own
+   warnings are a check on the generator.
+
+### The two-type seam is deliberate
+
+`ScriptReplacement` exists twice: the manifest form (what the author wrote) and
+the emitter form (map, index, field offset, resolved symbol). `codespec` cannot
+import the emitter's layer without a cycle, which is the same reason `ScriptPatch`
+is duplicated. `replacements_for` is the explicit conversion, and writing it is
+what surfaced bug 1 — passing the manifest object straight through would have
+duck-typed cleanly right up until a merged build produced a symbol that does not
+exist.
+
+🔶 **Not yet run in game.** The mechanism is measured (D146) but this generated
+form has only been built, not booted.

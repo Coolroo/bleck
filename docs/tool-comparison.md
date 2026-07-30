@@ -165,7 +165,7 @@ evtpatch code enters this repo.
 ⚠️ This should be documented for mod authors rather than left implicit, since
 the obligation is real and lands on them.
 
-**2. Whole-script replacement by pointer swap. — ✅ WORKS, MIT-clean.**
+**2. Whole-script replacement by pointer swap. — ✅ WORKS, and is now declarable.**
 
 `code.patches` mutates *the bytecode a pointer refers to*, which is why it is
 limited to same-size replacement. Swapping **the pointer** instead gives
@@ -192,6 +192,11 @@ dependency was wanted for.
 🔶 Only a four-instruction replacement has been run. Nothing has tested one
 longer than the original, though the mechanism makes size irrelevant in
 principle.
+
+✅ **Declared as `code.replace` since D150**, so a mod writes a script and
+names the door it replaces rather than hand-writing the swap. Doors only:
+`map:` is refused because D51 measured it freezing, and `item:`/`npcdrv:`
+because their scripts are shared between ids and templates.
 
 **3. Independent implementation of jump-table rebuilding and new opcodes. — expensive.**
 

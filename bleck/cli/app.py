@@ -46,9 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
         # ⚠️ Applied before anything reads the registry. `--mods-dir` is a
-        # property of *this invocation*, so it is set as the environment
-        # override the rest of `bleck` already understands rather than threaded
-        # through every call that might want it.
+        # property of *this invocation*, so it becomes the environment override
+        # bleck already understands rather than a new threaded parameter.
         if getattr(args, "mods_dir", None):
             env.override(env.MODS_DIR, args.mods_dir)
         return args.func(args)

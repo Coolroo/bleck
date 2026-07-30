@@ -54,10 +54,9 @@ CXX = Language(
     name="C++",
     suffixes=(".cpp", ".cc", ".cxx"),
     driver_name="g++",
-    # A REL links `-nostdlib`, so there is no unwinder and no type-info support
-    # to call into. `gnu++17` rather than `c++17` because spm-headers'
-    # `mod/evt_cmd.h` uses `##__VA_ARGS__`; these are the three flags that
-    # repository's own `configure.py` compiles with.
+    # A REL links `-nostdlib`, so there is no unwinder or type-info to call
+    # into. `gnu++17` not `c++17`: spm-headers' `mod/evt_cmd.h` uses
+    # `##__VA_ARGS__`. These three are what its own `configure.py` uses.
     extra_flags=("-fno-exceptions", "-fno-rtti", "-std=gnu++17"),
     link_priority=1,
     needs_ctor_walk=True,

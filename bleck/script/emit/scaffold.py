@@ -13,17 +13,9 @@ from enum import IntEnum, StrEnum
 from bleck.script.errors import Position, ScriptError
 
 
-# Defined here rather than in `bleck.mods.manifest` because both layers need it
-# and this is the lower one -- `codespec` already imports `bleck.script.emit`, so
-# it costs no new import edge.
-#
-# ⚠️ The docstring below is PUBLISHED: pydantic copies it into `bleck mod
-# schema` output as the enum's description. Keep it about what the values mean
-# to someone writing a mod.json, not about where the class lives.
-#
-# `StrEnum` rather than `str, Enum`: the latter still inherits `Enum.__str__`,
-# so every error message and every generated C comment would read
-# `HookMode.REPLACE`. `StrEnum.__str__` is `str.__str__` (D99).
+# ⚠️ The docstring below is PUBLISHED into `bleck mod schema` output, so keep
+# it about what the values mean in a mod.json. Lives here because it is the
+# lower layer of the two that need it; `StrEnum` is required (D99).
 class HookMode(StrEnum):
     """Which side of the original a hooked mod function runs on.
 
@@ -74,10 +66,9 @@ _HOOK_MODE_MEANS = {
 }
 
 
-# ⚠️ Unlike `HookMode`, a value here is only *part* of a wire string: it is
-# what precedes the colon in `code.patches[].script`, as in `map:he1_01`. The
-# whole selector is reassembled by `ScriptPatch.selector`, so that property and
-# `_parse_selector` are the only two places the wire is written or read.
+# ⚠️ Unlike `HookMode`, a value here is only *part* of a wire string: what
+# precedes the colon in `code.patches[].script`, as in `map:he1_01`. Only
+# `ScriptPatch.selector` and `parse_selector` write or read the whole thing.
 class PatchKind(StrEnum):
     """Which family of the game's own `evt` scripts a patch selector names.
 
@@ -166,16 +157,9 @@ SUPPORTED_SELECTORS = ", ".join(kind.example for kind in PatchKind)
 ENTRY_SCRIPT = "main"
 
 
-# ⚠️ THE ODD ONE OUT: an `IntEnum`, and the only enum here whose value is *not*
-# the wire format. Two representations of one thing, and both are load-bearing:
-#
-#   the VALUE   is game truth -- what the game puts in `seqWork.seq`, and the
-#               row it reads from `seq_data[]`. Generated C uses it.
-#   the NAME    lowercased, is what `code.banner.sequences` holds in mod.json.
-#
-# So `json.dumps` on a member emits a NUMBER, which is not what a manifest
-# wants. Serialization must go through `manifest_name`; never hand a member to
-# a JSON encoder. `BannerSpec.to_json` is the one place that matters.
+# ⚠️ THE ODD ONE OUT: an `IntEnum` whose value is NOT the wire format. The
+# value is game truth (`seqWork.seq`, the `seq_data[]` row); the lowercased NAME
+# is what mod.json holds. Never hand a member to a JSON encoder -- see D99.
 class Sequence(IntEnum):
     """A top-level game sequence (`spm/seqdrv.h`).
 
@@ -398,11 +382,9 @@ class ScriptPatch:
             named = _DOOR_BY_OFFSET.get(self.field_offset, "?")
             return f"{self.kind}:{self.target}:{self.index}:{named}"
         if self.kind is PatchKind.ITEM:
-            # `target` is whatever the author wrote -- a name like `fire_burst`,
-            # or `0x41`. Naming it *and* the id it resolved to is the point of
-            # the comment: a reader of the generated C should not have to look
-            # 65 up, and an author checking a name resolved as intended should
-            # not have to convert hex. Only the bare decimal id is redundant.
+            # `target` is whatever the author wrote -- `fire_burst` or `0x41`.
+            # Naming it *and* the resolved id saves a reader looking up 65 and
+            # an author converting hex. Only a bare decimal id is redundant.
             if self.target and self.target != str(self.index):
                 return f"{self.kind}:{self.target} ({self.index})"
             return f"{self.kind}:{self.index}"
@@ -471,6 +453,43 @@ class FunctionHook:
 
 
 @dataclass(frozen=True)
+class ScriptReplacement:
+    """One vanilla script field repointed at a script the module compiled.
+
+    Everything is resolved: the selector has become a map name, a door index and
+    a field offset, and `expect` a header word (0 when unguarded).
+    """
+
+    map_name: str
+    """The map whose init script registers the door."""
+
+    index: int
+    """Which door, as a position in the map's registration order."""
+
+    field_offset: int
+    """Byte offset of the chosen script field within the `DoorDesc`."""
+
+    script: str
+    """The module's own script, by name. For the generated C comment only."""
+
+    symbol: str = ""
+    """That script's C identifier, resolved in its mod's namespace.
+
+    ⚠️ Resolved here rather than built in the emitter: a merged module gives each
+    mod its own prefix, so `bleck_script_x` is only correct for a single-mod
+    build. `BoundHook` carries a symbol for the same reason.
+    """
+
+    expect_word: int = 0
+    """Header word the original must open with. 0 means swap unguarded."""
+
+    @property
+    def selector(self) -> str:
+        """How the manifest spelled it, for the generated C comment."""
+        return f"door:{self.map_name}:{self.index}"
+
+
+@dataclass(frozen=True)
 class Scaffolding:
     """Everything the generated module does besides run its entry script.
 
@@ -491,6 +510,9 @@ class Scaffolding:
 
     patches: list[ScriptPatch] = field(default_factory=list)
     """Instructions replaced in the game's own scripts, applied at `_prolog`."""
+
+    replacements: list[ScriptReplacement] = field(default_factory=list)
+    """Vanilla scripts repointed at the module's own, whole."""
 
     function_hooks: list[FunctionHook] = field(default_factory=list)
     """Game functions branch-replaced by the mod's own, installed at `_prolog`."""

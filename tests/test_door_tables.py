@@ -159,9 +159,8 @@ class TestBecomingPatches:
             tmp_path / "d",
             WITH_CODE,
             # ⚠️ Row 3 names a REAL door, so the failure is the bad opcode --
-            # what this test is about. `he1_01,1` would also fail, but on the
-            # door index, and the assertion below would still pass while
-            # testing something else entirely.
+            # what this test is about. `he1_01,1` would fail on the door index,
+            # and the assertion below would pass while testing something else.
             HEADER + "he1_01,0,interact,0,MULF,ok\nmac_02,1,interact,0,BAD_OP,f\n",
         )
         with pytest.raises(ManifestError) as caught:

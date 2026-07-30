@@ -91,7 +91,8 @@ jobs:
           enable-cache: true
       - run: uv sync --extra dev
       - run: uv run pytest -q
-      - run: uv run python scripts/lint.py
+      # --full: CI must check the whole tree, not just a branch's diff.
+      - run: uv run python scripts/lint.py --full
 
   release:
     # Tags only. `checks` is a dependency rather than a parallel job so that a

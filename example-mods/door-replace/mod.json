@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "name": "door-replace",
+  "version": "0.1.0",
+  "description": "Replace a door's interact script whole, by pointer, with a compiled bleck script",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.bs",
+    "target": "eu0",
+    "module_id": 2,
+    "boot": "he1_01",
+    "replace": [
+      {
+        "script": "door:he1_01:0:interact",
+        "with": "my_door"
+      }
+    ]
+  }
+}

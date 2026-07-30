@@ -301,7 +301,7 @@ extern void evt_door_set_door_descs(void);
 #define BLECK_EVT_MAX_OPCODE 0x0077u
 #define BLECK_EVT_MAX_ARGC 16u
 
-static u32 *bleck_door_script(const char *map, s32 index, s32 offset)
+static u32 **bleck_door_field(const char *map, s32 index, s32 offset)
 {
     u32 *script = bleck_map_init_script(map);
     u32 at = 0;
@@ -331,11 +331,22 @@ static u32 *bleck_door_script(const char *map, s32 index, s32 offset)
 
             if (descs == 0 || index >= count)
                 return 0;
-            return *(u32 **) (descs + index * BLECK_DOORDESC_SIZE + offset);
+            return (u32 **) (descs + index * BLECK_DOORDESC_SIZE + offset);
         }
         at += 1 + argc;
     }
     return 0;
+}
+"""
+
+#: The value at that field. Split from the walk above so `code.replace` can reuse
+#: the *address* to store a new pointer, without a second copy of the walk.
+PATCH_DOOR_VALUE = """
+static u32 *bleck_door_script(const char *map, s32 index, s32 offset)
+{
+    u32 **field = bleck_door_field(map, index, offset);
+
+    return field == 0 ? 0 : *field;
 }
 """
 

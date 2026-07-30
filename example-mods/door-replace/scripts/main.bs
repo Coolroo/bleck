@@ -1,0 +1,5 @@
+-- Replaces he1_01's door interact script entirely. Not a same-size patch:
+-- the pointer is swapped, so this may be any length.
+script my_door {
+    evt_sub_set_game_speed(2.0)
+}

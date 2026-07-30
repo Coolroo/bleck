@@ -11,19 +11,9 @@ from pathlib import Path
 from bleck.common import env
 
 
-# An enum rather than five bare strings so the set is enumerable: `list(ToolKey)`
-# is what `ALL_TOOLS` used to be, and cannot drift out of step with the members.
-# Nothing here is serialised -- no manifest, no `bleck/api/` payload, nothing on
-# disk names a tool -- so the members are free to be renamed.
-#
-# ⚠️ The *values* are not. `PlatformProfile.tool` falls back to
-# `ToolLocation(names=[key])`, so a value is the executable name searched for
-# when a profile does not describe the tool. Changing one changes what gets run.
-#
-# `StrEnum` rather than `str, Enum`: the latter still inherits `Enum.__str__`,
-# which would turn "wit not found" into "ToolKey.WIT not found" in the one
-# message users actually read. `StrEnum.__str__` is `str.__str__`, so the
-# requirement is met by the base class instead of by an override (D99).
+# ⚠️ Member names are free; the *values* are not. `PlatformProfile.tool` falls
+# back to `ToolLocation(names=[key])`, so a value is the executable name
+# searched for. `StrEnum` is required, not stylistic -- see D99.
 class ToolKey(StrEnum):
     """An external program `bleck` shells out to, and looks up per platform.
 

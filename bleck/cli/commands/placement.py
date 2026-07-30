@@ -69,13 +69,9 @@ def cmd_show(args: argparse.Namespace) -> int:
     for item in data.items:
         print(f"  item: {item.describe()}")
 
-    # ⛔ This said the reverse until now, citing D13/D53: "the game reads the
-    # copy inside files/map/<map>.bin, not this one". D62 measured the opposite
-    # and the project instructions call it the single most-copied wrong fact
-    # in this repo -- which it proved by surviving here, in user-facing output,
-    # long after every doc was corrected.
-    #
-    # ASCII only: the Windows console is cp1252 by default.
+    # ⛔ This said the reverse until now, citing D13/D53; D62 measured the
+    # opposite, and it survived here in user-facing output long after every doc
+    # was corrected. ASCII only: the Windows console is cp1252 by default.
     print(
         f"\nNote: this is the copy the game reads. A second, byte-identical copy "
         f"is embedded in files/map/{args.map}.bin and is ignored; `bleck` writes "

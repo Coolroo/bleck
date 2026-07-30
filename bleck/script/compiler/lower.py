@@ -128,10 +128,9 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
         if isinstance(node, tree.StringLiteral):
             return Value(StringWord(self.owner.intern(node.value)), ValueType.STRING)
         if isinstance(node, tree.ScriptRef):
-            # ⚠️ Typed INT, not a fourth ValueType. It IS an address as far as
-            # the VM is concerned, and giving it its own type would make every
-            # arithmetic check reject it for no reason -- the point is to hand
-            # it to a builtin, and builtins take words.
+            # ⚠️ Typed INT, not a fourth ValueType. It IS an address to the VM,
+            # and its own type would make every arithmetic check reject it --
+            # the point is handing it to a builtin, and builtins take words.
             self.owner.require_script(node.name, node.position)
             return Value(ScriptWord(node.name), ValueType.INT)
         if isinstance(node, tree.Name):
@@ -574,18 +573,9 @@ class _ScriptCompiler:  # pylint: disable=too-many-public-methods
 
     def compile(self) -> CompiledScript:
         self.compile_body(self.script.body)
-        # TWO terminators, and they are not alternatives.
-        #
-        # END_EVT ends the running *entry*; END_SCRIPT ends the instruction
-        # *list*. ⛔ Emitting only the second was D105: a script that fell off
-        # its end left its entry alive, and the game hung a few frames later
-        # with every value the script had written still correct. An explicit
-        # `return` already emitted END_EVT, which is why every mod that ended
-        # one way worked and every mod that ended the other did not.
-        #
-        # Emitted unconditionally. After a `return` this is unreachable, which
-        # costs one word and removes the need to reason about whether the last
-        # statement on every path happened to be one.
+        # ⛔ TWO terminators, not alternatives: END_EVT ends the *entry*,
+        # END_SCRIPT the instruction *list*. Emitting only the second hung the
+        # game (D105). Unconditional, so no path analysis is needed.
         self.emit(evt.Opcode.END_EVT)
         # Without this the VM runs off into adjacent memory.
         self.emit(evt.Opcode.END_SCRIPT)

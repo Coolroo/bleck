@@ -51,8 +51,12 @@ class _Selector:
     """The id an `item:` target names, once a name has been resolved."""
 
 
-def _parse_selector(raw: str, where: str) -> _Selector:
-    """Split `map:he1_01`, `item:0x41` or `item:fire_burst` into kind and target."""
+def parse_selector(raw: str, where: str) -> _Selector:
+    """Split `map:he1_01`, `item:0x41` or `item:fire_burst` into kind and target.
+
+    Public because `replacements` parses the same selector strings and must
+    reject exactly what a patch rejects.
+    """
     name, _, target = raw.partition(":")
     if name in DEFERRED_PATCH_KINDS:
         raise ManifestError(
@@ -96,7 +100,7 @@ def _parse_door(raw: str, where: str) -> str:
     (D141). It used to be a run-time question -- "how many doors a map
     registers is in the game's data" -- and the generated code still reports
     NO_SCRIPT rather than reading past the end. But a selector that can never
-    match is a mistake, not a run-time condition, and `mods/door-attended`
+    match is a mistake, not a run-time condition, and a since-deleted probe
     carried `door:he1_01:9` for weeks while `he1_01` has exactly one door.
 
     ⚠️ **An absent catalog means "unknown", not "no doors".** Refusing every
@@ -259,3 +263,8 @@ def _resolve_item(raw: str, where: str) -> int:
         f"  All {len(known)} names are in {items.ITEM_CATALOG.name}; "
         f"`bleck items` lists them."
     )
+
+
+#: The original private name, kept so existing callers in `codespec` are
+#: unaffected by the rename.
+_parse_selector = parse_selector

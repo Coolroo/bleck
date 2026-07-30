@@ -4,11 +4,16 @@ and banner.
 
 from __future__ import annotations
 
-import difflib
 import re
 from dataclasses import dataclass, field
 
 from bleck.mods.errors import ManifestError
+from bleck.mods.manifest.opcodes import parse_expect
+from bleck.mods.manifest.replacements import (  # noqa: F401  # pylint: disable=unused-import
+    ScriptReplacement,
+    build_replacement,
+    parse_replacements,
+)
 
 # Re-exported: `manifest/__init__` and the CLI reach `DEFERRED_PATCH_KINDS`
 # through here, and moving selector parsing out (D141) should not change where
@@ -19,7 +24,7 @@ from bleck.mods.manifest.selectors import (  # noqa: F401
     DEFERRED_PATCH_KINDS,
     _parse_selector,
 )
-from bleck.script import emit, evt
+from bleck.script import emit
 
 #: Where a compiled code mod lands. Fixed: the Gecko loader opens this exact
 #: path. One path, not one mod — several mods merge into it at compile time
@@ -282,6 +287,14 @@ class CodeSpec:
     hooks: list[FunctionHook] = field(default_factory=list)
     """Game functions branch-replaced by functions in this mod."""
 
+    replacements: list[ScriptReplacement] = field(default_factory=list)
+    """Vanilla scripts repointed at this mod's own, whole (D146).
+
+    ⚠️ Distinct from `patches`, which rewrites one instruction in place. A
+    swap is unbounded in size because nothing moves; a patch is same-size
+    because a moved label would invalidate a cached jump table.
+    """
+
     banner: BannerSpec = field(default_factory=BannerSpec)
     """The on-screen label naming this mod."""
 
@@ -372,6 +385,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     combos = _parse_combos(raw.get("combos"), source)
     patches = _parse_patches(raw.get("patches"), source)
     hooks = _parse_hooks(raw.get("hooks"), source)
+    replacements = parse_replacements(raw.get("replace"), source)
 
     if not script and not sources and not boot:
         raise ManifestError(
@@ -398,6 +412,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         combos=combos,
         patches=patches,
         hooks=hooks,
+        replacements=replacements,
         banner=_parse_banner(raw.get("banner"), source),
         boot_map=boot,
     )
@@ -519,19 +534,6 @@ def _parse_combos(raw: object, source: str) -> list[ComboBinding]:
 #: A C identifier, since `call` is emitted into generated C verbatim.
 _C_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-#: The replacement is `USER_FUNC` with the replaced instruction's own argument
-#: count: `EVT_HELPER_CMD(n, 92)`, the pointer to `call`, then the original's
-#: words 2..n unchanged. So `n` must leave room for the pointer.
-MIN_ARGUMENT_COUNT = 1
-
-#: Why the size is fixed, said once and quoted by the errors.
-_SAME_SIZE_ONLY = (
-    "  bleck replaces an instruction with a USER_FUNC declaring the same "
-    "number of arguments, so the patch is exactly the same size: a shorter or "
-    "longer instruction moves every label after it, and each running script "
-    "caches its jump table when it starts (D87)."
-)
-
 
 def _parse_patches(raw: object, source: str) -> list[ScriptPatch]:
     """Read `code.patches`, a list of in-place bytecode replacements."""
@@ -592,86 +594,9 @@ def build_patch(script: str, at: int, expect: str, call: str, where: str) -> Scr
         target=selector.target,
         at=at,
         expect=expect,
-        expect_word=_parse_expect(expect, where),
+        expect_word=parse_expect(expect, where),
         call=call,
         item_id=selector.item_id,
-    )
-
-
-def _parse_expect(raw: str, where: str) -> int:
-    """Resolve `expect` -- a header word, or an opcode name and argument count.
-
-    `DEBUG_PUT_MSG` takes its count from the arity table. A variadic opcode has
-    no entry there, so `USER_FUNC 4` says the count outright.
-    """
-    text = raw.strip()
-    if text.lower().startswith("0x"):
-        return _parse_expect_word(text, raw, where)
-
-    parts = text.split()
-    opcode = evt.opcode_named(parts[0]) if parts else None
-    if opcode is None or len(parts) > 2:
-        raise ManifestError(_unknown_opcode(text, raw, where))
-    declared = _parse_declared_count(parts[1], raw, where) if len(parts) == 2 else None
-
-    argc = evt.argument_count(opcode)
-    if argc is None:
-        if declared is None:
-            raise ManifestError(
-                f"{where}: 'expect' is {opcode.name}, which is variadic -- it "
-                f"declares its own argument count, so bleck cannot infer the "
-                f"instruction's size.\n"
-                f'  Say how many: "expect": "{opcode.name} 4".\n'
-                f"  Counting: USER_FUNC's first argument is the function "
-                f"pointer, so `USER_FUNC f, a, b, c` declares 4."
-            )
-        argc = declared
-    elif declared is not None and declared != argc:
-        raise ManifestError(
-            f"{where}: 'expect' is {raw!r}, but {opcode.name} always takes "
-            f"{argc} argument(s), not {declared}.\n"
-            f"  Drop the count, or give the header word directly."
-        )
-    _check_room_for_pointer(argc, raw, where)
-    return evt.instruction_header(opcode, argc)
-
-
-def _parse_expect_word(text: str, raw: str, where: str) -> int:
-    try:
-        word = int(text, 16)
-    except ValueError:
-        raise ManifestError(
-            f"{where}: 'expect' is {raw!r}, which is neither an opcode name "
-            f"nor a hexadecimal header word like '0x00010072'"
-        ) from None
-    if not 0 <= word <= 0xFFFFFFFF:
-        raise ManifestError(f"{where}: 'expect' {raw!r} is not a 32-bit word")
-    _check_room_for_pointer(word >> 16, raw, where)
-    return word
-
-
-def _parse_declared_count(text: str, raw: str, where: str) -> int:
-    try:
-        return int(text, 0)
-    except ValueError:
-        raise ManifestError(
-            f"{where}: 'expect' is {raw!r}; the part after the opcode name is "
-            f'its argument count, e.g. "USER_FUNC 4"'
-        ) from None
-
-
-def _unknown_opcode(name: str, raw: str, where: str) -> str:
-    names = [op.name for op in evt.Opcode]
-    close = difflib.get_close_matches(name.upper(), names, n=1, cutoff=0.6)
-    hint = (
-        f"\n  Did you mean {close[0]!r}?"
-        if close
-        else "\n  Names come from spm/evtmgr_cmd.h, such as 'DEBUG_PUT_MSG'."
-    )
-    return (
-        f"{where}: 'expect' is {raw!r}, which names no evt opcode.{hint}\n"
-        f'  Write an opcode name, optionally with its argument count ("USER_FUNC '
-        f'4"), or the header word directly ("0x00010072").'
     )
 
 
@@ -768,16 +693,3 @@ def _check_hook_address(text: str, where: str) -> None:
             f"{where}: 'function' is {text!r}, which is not 4-byte aligned, so "
             f"no instruction begins there."
         )
-
-
-def _check_room_for_pointer(argc: int, raw: str, where: str) -> None:
-    """Refuse a one-word instruction: the pointer to `call` has nowhere to go."""
-    if argc >= MIN_ARGUMENT_COUNT:
-        return
-    raise ManifestError(
-        f"{where}: 'expect' is {raw!r}, which declares no arguments and so is "
-        f"one word. The replacement is a USER_FUNC header plus the pointer to "
-        f"'call', which needs two words at least -- there is no room for the "
-        f"pointer.\n{_SAME_SIZE_ONLY}\n"
-        f"  Pick an instruction of two words or more."
-    )

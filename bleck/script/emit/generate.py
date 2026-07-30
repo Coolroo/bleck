@@ -18,7 +18,13 @@ from bleck.script.compiler.ir import (
     SymbolWord,
     Word,
 )
-from bleck.script.emit import runtime_c, runtime_intercept, runtime_patch, runtime_trace
+from bleck.script.emit import (
+    runtime_c,
+    runtime_intercept,
+    runtime_patch,
+    runtime_replace,
+    runtime_trace,
+)
 
 # Re-exported as `emit.MapHook` and friends.
 # pylint: disable=unused-import
@@ -38,6 +44,7 @@ from bleck.script.emit.scaffold import (  # noqa: F401
     PatchKind,
     Scaffolding,
     ScriptPatch,
+    ScriptReplacement,
     mod_slug,
     prefix_for,
 )
@@ -155,6 +162,23 @@ def _bind_combos(combos: list[ComboHook], namespace: str) -> list[BoundCombo]:
     ]
 
 
+def _bind_replacements(
+    replacements: list[ScriptReplacement], namespace: str
+) -> list[ScriptReplacement]:
+    """Resolve each swapped-in script to a C identifier in its own namespace."""
+    return [
+        ScriptReplacement(
+            map_name=r.map_name,
+            index=r.index,
+            field_offset=r.field_offset,
+            script=r.script,
+            symbol=f"{namespace}script_{r.script}",
+            expect_word=r.expect_word,
+        )
+        for r in replacements
+    ]
+
+
 def _map_block(hooks: list[BoundHook], namespace: str = _PREFIX) -> str:
     """Map names, the scripts they start, and the sequence watcher."""
     if len(hooks) > MAX_MAP_HOOKS:
@@ -214,7 +238,7 @@ _PATCH_KINDS = {
     ),
     PatchKind.DOOR: _PatchKind(
         constant="BLECK_PATCH_DOOR",
-        resolver=runtime_patch.PATCH_DOOR_RESOLVER,
+        resolver=runtime_patch.PATCH_DOOR_RESOLVER + runtime_patch.PATCH_DOOR_VALUE,
         resolve=runtime_patch.PATCH_DOOR_RESOLVE,
         needs=(PatchKind.MAP,),
     ),
@@ -260,6 +284,45 @@ def _patch_block(patches: list[ScriptPatch]) -> str:
         uncounted="".join("    BLECK_PATCH_UNCOUNTED,\n" for _ in patches),
         resolvers="".join(_PATCH_KINDS[name].resolver for name in used),
         resolve="".join(_PATCH_KINDS[name].resolve for name in used),
+    )
+
+
+def _replace_block(
+    replacements: list[ScriptReplacement], patch_kinds: set[PatchKind]
+) -> str:
+    """The replacement table, its guard, and the pointer store.
+
+    ⚠️ Emits `bleck_door_field` itself when no door *patch* already pulled it in.
+    A module may replace a script without patching one, and the walk is shared:
+    defining it twice would not compile.
+    """
+    decls = [
+        runtime_replace.REPLACE_TARGET.format(index=index, name=_c_string(entry.map_name))
+        for index, entry in enumerate(replacements)
+    ]
+    # ⚠️ No `extern` for the swapped-in scripts. `_program_section` has already
+    # defined them earlier in this same file, and re-declaring one makes elf2rel
+    # treat the mod's own script as a *game* symbol it must resolve.
+
+    resolvers = ""
+    if PatchKind.DOOR not in patch_kinds:
+        if PatchKind.MAP not in patch_kinds:
+            resolvers += runtime_patch.PATCH_MAP_RESOLVER
+        resolvers += runtime_patch.PATCH_DOOR_RESOLVER
+
+    rows = "".join(
+        f"    {{bleck_replace_map_{index}, {entry.index}, {entry.field_offset}, "
+        f"0x{entry.expect_word:08X}u, "
+        f"(const void *) &{entry.symbol}}},"
+        f"  /* {entry.selector} -> {entry.script} */\n"
+        for index, entry in enumerate(replacements)
+    )
+    return resolvers + runtime_replace.REPLACE_BLOCK.format(
+        count=len(replacements),
+        decls="\n" + "\n".join(decls) + "\n",
+        rows=rows,
+        pending="".join("    BLECK_REPLACE_PENDING,\n" for _ in replacements),
+        zeros="".join("    0,\n" for _ in replacements),
     )
 
 
@@ -392,6 +455,9 @@ class Runtime:
     function_hooks: list[FunctionHook] = field(default_factory=list)
     """Game functions branch-replaced by the mod's own, from `_prolog`."""
 
+    replacements: list[ScriptReplacement] = field(default_factory=list)
+    """Vanilla scripts repointed at the mod's own, whole, from `_prolog`."""
+
 
 def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
     """Assemble the shared runtime, from the pieces the module needs.
@@ -403,20 +469,30 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     banner, boot, combos = runtime.banner, runtime.boot, list(runtime.combos)
     patches = list(runtime.patches)
     functions = list(runtime.function_hooks)
+    replacements = list(runtime.replacements)
+    patch_kinds = {patch.kind for patch in patches}
+    apply_replacements = runtime_replace.REPLACE_APPLY if replacements else ""
     # Before `mod_prolog`, so a mod's own C can read `bleck_patch_status[]`.
     apply_patches = "    bleck_apply_patches();\n" if patches else ""
     install_hooks = "    bleck_install_hooks();\n" if functions else ""
     run_ctors = "    bleck_run_ctors();\n" if runtime.run_cxx_ctors else ""
 
     if not entries and not hooks and banner is None and not boot and not combos:
-        if not runtime.run_cxx_ctors and not patches and not functions:
+        if (
+            not runtime.run_cxx_ctors
+            and not patches
+            and not functions
+            and not replacements
+        ):
             return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
         head = runtime_c.CTOR_BLOCK if runtime.run_cxx_ctors else ""
         head += _patch_block(patches) if patches else ""
+        head += _replace_block(replacements, patch_kinds) if replacements else ""
         head += _hook_block(functions) if functions else ""
         return (
             head + f"\nvoid _prolog(void)\n{{\n{run_ctors}{apply_patches}"
-            f"{install_hooks}    mod_prolog();\n}}\n" + runtime_c.ENTRY_POINTS
+            f"{apply_replacements}{install_hooks}    mod_prolog();\n}}\n"
+            + runtime_c.ENTRY_POINTS
         )
 
     parts = [runtime_c.SEQ_TABLE]
@@ -425,6 +501,8 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
         parts.append(runtime_c.CTOR_BLOCK)
     if patches:
         parts.append(_patch_block(patches))
+    if replacements:
+        parts.append(_replace_block(replacements, patch_kinds))
     if functions:
         parts.append(_hook_block(functions))
 
@@ -467,7 +545,8 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     # Constructors run before `mod_prolog`, as statics do before `main`.
     parts.append(
         f"\nvoid _prolog(void)\n{{\n{runtime_c.SEQ_INSTALL}"
-        f"{run_ctors}{apply_patches}{install_hooks}    mod_prolog();\n}}\n"
+        f"{run_ctors}{apply_patches}{apply_replacements}{install_hooks}"
+        f"    mod_prolog();\n}}\n"
     )
     parts.append(runtime_c.ENTRY_POINTS)
     return "".join(parts)
@@ -501,9 +580,11 @@ def _program_section(program: CompiledProgram, prefix: str) -> list[str]:
 
 def generate_bare(
     origin: str = "native sources",
+    *,
     banner: Banner | None = None,
     run_cxx_ctors: bool = False,
     patches: list[ScriptPatch] | None = None,
+    replacements: list[ScriptReplacement] | None = None,
     function_hooks: list[FunctionHook] | None = None,
 ) -> GeneratedSource:
     """Scaffolding for a mod that ships only native sources.
@@ -524,6 +605,7 @@ def generate_bare(
                 banner=banner,
                 run_cxx_ctors=run_cxx_ctors,
                 patches=list(patches or []),
+                replacements=_bind_replacements(list(replacements or []), _PREFIX),
                 function_hooks=list(function_hooks or []),
             ),
         )
@@ -542,6 +624,7 @@ def generate(
     hooks = list(plan.map_hooks)
     _check_map_hooks(program, hooks)
     _check_combo_hooks(program, plan.combos)
+    _check_replacements(program, plan.replacements)
     _check_boot_script(program, plan.boot_script)
     entry = _entry_script(program, required=plan.needs_entry_script)
 
@@ -574,6 +657,7 @@ def generate(
                 namespace=plan.prefix,
                 run_cxx_ctors=plan.run_cxx_ctors,
                 patches=list(plan.patches),
+                replacements=_bind_replacements(plan.replacements, plan.prefix),
                 function_hooks=list(plan.function_hooks),
             ),
         )
@@ -597,6 +681,7 @@ class ModPart:
     map_hooks: list[MapHook] = field(default_factory=list)
     combos: list[ComboHook] = field(default_factory=list)
     boot_script: str = ""
+    replacements: list[ScriptReplacement] = field(default_factory=list)
 
     @property
     def prefix(self) -> str:
@@ -627,6 +712,24 @@ def _check_slugs(parts: list[ModPart]) -> None:
                 Position(),
             )
         seen[slug] = part.name
+
+
+def _merged_head(origin: str, externals: list[str]) -> list[str]:
+    """The shared preamble a merged module opens with."""
+    # pylint: disable=container-return  # ordered sections, joined by the caller
+    head = [runtime_c.HEADER.format(origin=origin)]
+    if externals:
+        head.append(
+            "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
+            + "\n".join(f"extern void {name}(void);" for name in externals)
+        )
+    head.append(
+        "/* Started by the game's script scheduler. */\n"
+        "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
+    )
+    head.append(runtime_c.MOD_HOOK)
+    head.append(runtime_c.CODE_PATCH)
+    return head
 
 
 def generate_merged(
@@ -666,6 +769,7 @@ def generate_merged(
     entries: list[str] = []
     hooks: list[BoundHook] = []
     combos: list[BoundCombo] = []
+    swaps: list[ScriptReplacement] = []
     externals: list[str] = []
     boot = ""
 
@@ -680,6 +784,7 @@ def generate_merged(
         if part.entry:
             entries.append(f"{part.prefix}script_{part.entry}")
         hooks += _bind_maps(part.map_hooks, part.prefix)
+        swaps += _bind_replacements(part.replacements, part.prefix)
         combos += _bind_combos(part.combos, part.prefix)
         if part.boot_script:
             boot = f"{part.prefix}script_{part.boot_script}"
@@ -687,28 +792,18 @@ def generate_merged(
             if name not in externals:
                 externals.append(name)
 
-    head = [runtime_c.HEADER.format(origin=origin)]
-    if externals:
-        head.append(
-            "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
-            + "\n".join(f"extern void {name}(void);" for name in externals)
-        )
-    head.append(
-        "/* Started by the game's script scheduler. */\n"
-        "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
-    )
-    head.append(runtime_c.MOD_HOOK)
-    head.append(runtime_c.CODE_PATCH)
-
     runtime = Runtime(
         banner=banner,
         boot=boot,
         combos=combos,
         run_cxx_ctors=run_cxx_ctors,
         patches=list(patches or []),
+        replacements=swaps,
         function_hooks=list(function_hooks or []),
     )
-    text = "\n\n".join(head + sections + [_footer(entries, hooks, runtime)])
+    text = "\n\n".join(
+        _merged_head(origin, externals) + sections + [_footer(entries, hooks, runtime)]
+    )
     _require_ascii(text)
     return GeneratedSource(
         text=text,
@@ -772,6 +867,31 @@ def _check_map_hooks(program: CompiledProgram, hooks: list[MapHook]) -> None:
             f"mod.json attaches {hook.script!r} to map {hook.map_name!r}, "
             f"but this file declares no such script "
             f"(it declares: {listed}).{hint}",
+            Position(),
+        )
+
+
+def _check_replacements(
+    program: CompiledProgram, replacements: list[ScriptReplacement]
+) -> None:
+    """Every swapped-in script has to exist in the program that was compiled.
+
+    Same reason as `_check_map_hooks`: nothing links the manifest to the source
+    until here, so a typo would otherwise reach the C compiler as an undefined
+    symbol naming an identifier the author never wrote.
+    """
+    names = [script.name for script in program.scripts]
+    for entry in replacements:
+        if entry.script in names:
+            continue
+        listed = ", ".join(names) or "none"
+        close = difflib.get_close_matches(entry.script, names, n=1, cutoff=0.6)
+        hint = f"\n  Did you mean {close[0]!r}?" if close else ""
+        raise ScriptError(
+            f"mod.json replaces {entry.selector} with {entry.script!r}, but "
+            f"this file declares no such script (it declares: {listed}).{hint}\n"
+            f"  A replacement names a script, not a C function: its whole "
+            f"bytecode becomes the door's.",
             Position(),
         )
 

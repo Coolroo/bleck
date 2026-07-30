@@ -86,6 +86,7 @@ ignore = [
 
 [tool.pylint.main]
 load-plugins = [
+    "lint_plugins.comment_length",
     "lint_plugins.container_returns",
     "lint_plugins.env_access",
     "pylint_pydantic",

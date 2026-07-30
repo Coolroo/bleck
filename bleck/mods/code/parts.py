@@ -348,6 +348,31 @@ def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.Scri
     ]
 
 
+def replacements_for(_mod: Mod, spec: CodeSpec) -> list[emit.ScriptReplacement]:
+    """Resolve `code.replace` for the emitter, checking each script exists.
+
+    ⚠️ **This conversion is the whole point of the two types.** The manifest form
+    holds what the author wrote; the emitter form holds a map name, an index and
+    a field offset. The C symbol is left blank on purpose -- only the emitter
+    knows the namespace, which is `bleck_` for one mod and a per-mod slug for a
+    merged build. `_bind_replacements` fills it, as `_bind_maps` does for hooks.
+    """
+    if not spec.replacements:
+        return []
+    resolved = []
+    for entry in spec.replacements:
+        resolved.append(
+            emit.ScriptReplacement(
+                map_name=entry.map_name,
+                index=entry.index,
+                field_offset=entry.field_offset,
+                script=entry.script,
+                expect_word=entry.expect_word,
+            )
+        )
+    return resolved
+
+
 #: Where the pristine DOL lives inside an extracted build.
 DOL_PATH = "sys/main.dol"
 
@@ -609,6 +634,7 @@ class Part:
     boot_map: str
     combos: list[emit.ComboHook]
     patches: list[emit.ScriptPatch] = field(default_factory=list)
+    replacements: list[emit.ScriptReplacement] = field(default_factory=list)
     function_hooks: ResolvedHooks = field(default_factory=ResolvedHooks)
 
     @property
@@ -661,6 +687,7 @@ def prepare(mod: Mod, override: CodeOverride | None) -> Part:
         boot_map=boot_map,
         combos=combo_hooks_for(mod, spec, project_config.load()),
         patches=patches_for(mod, spec, sources),
+        replacements=replacements_for(mod, spec),
         function_hooks=function_hooks_for(mod, spec, sources, table),
     )
 

@@ -158,10 +158,9 @@ def _merge_archive(
 
 def _merge_members(items, file_plan, context, report) -> bytes | None:
     """Apply every member edit and repack. None when the merge conflicted."""
-    # ⚠️ Matched on a normalised key, not the stored path: `lyt/*.bin.uk`
-    # stores `arc/anim/...` while `map/*.bin` stores `./dvd/...`, and an overlay
-    # path cannot express `./`. Matching literally adds a duplicate member
-    # instead of replacing the original.
+    # ⚠️ Matched on a normalised key, not the stored path: `lyt/*.bin.uk` holds
+    # `arc/anim/...` while `map/*.bin` holds `./dvd/...`. Matching literally
+    # adds a duplicate member instead of replacing the original.
     known = {u8.member_key(item.path): item.path for item in items}
 
     replacements: dict[str, bytes] = {}

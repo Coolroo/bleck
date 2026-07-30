@@ -139,10 +139,9 @@ def cmd_items(args) -> int:
         return 1
 
     for entry in found:
-        # Hex, not decimal: `item:0x41` is how every id in this repo's
-        # manifests and decision log is written, and the point of the listing
-        # is that a value can be copied straight into a selector. Decimal shows
-        # up only inside generated C comments, which nobody types.
+        # Hex, not decimal: `item:0x41` is how every id in this repo is
+        # written, so a value can be copied straight into a selector. Decimal
+        # appears only in generated C comments, which nobody types.
         name = entry.english or entry.name
         print(f"  0x{entry.id:03x}  {name:<26} {entry.constant}")
     print(f"\n{len(found)} of {total} items")

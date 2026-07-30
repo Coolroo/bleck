@@ -35,6 +35,7 @@ from bleck.mods.code.parts import (  # noqa: F401
     needs_ctor_walk,
     patches_for,
     prepare,
+    replacements_for,
     script_text,
 )
 from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
@@ -112,6 +113,7 @@ def build_merged(
             map_hooks=map_hooks_for(part.mod),
             combos=part.combos,
             boot_script=emit.BOOT_SCRIPT if part.boot_map else "",
+            replacements=part.replacements,
         )
         for part in parts
         if part.program is not None
@@ -187,6 +189,7 @@ def build_mod(
                     boot_script=emit.BOOT_SCRIPT if boot_map else "",
                     run_cxx_ctors=needs_ctor_walk(sources),
                     patches=patches,
+                    replacements=replacements_for(mod, spec),
                     function_hooks=hooks.hooks,
                 ),
                 symbol_table=table,
@@ -201,6 +204,7 @@ def build_mod(
             banner=banner,
             run_cxx_ctors=needs_ctor_walk(sources),
             patches=patches,
+            replacements=replacements_for(mod, spec),
             function_hooks=hooks.hooks,
         ).text
 
