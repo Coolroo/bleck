@@ -12092,3 +12092,46 @@ the remaining 433 need live handles, valid names, or a loaded save, and calling
 one blind either crashes or silently no-ops. **Verifying all 443 is not a
 project; verifying the next twenty is.** The page says how many are measured, so
 the gap stays visible instead of being papered over.
+
+---
+
+## D185 — The generated pages needed a validity check, not just a staleness check (2026-07-30)
+
+Two bugs shipped in D184's `builtins.md`, and `--check` could not have caught
+either. It compares the file to what the generator produces, so it catches
+*drift* — a page and a generator that disagree. When the generator itself is
+wrong they agree perfectly, and the check passes on malformed output.
+
+⛔ **`<small>` inside a code span.** The "not documented" marker was appended to
+the signature *before* the signature was wrapped in backticks, so 280 rows
+rendered a literal `<small>(not documented)</small>`. Fixed by dropping HTML
+from the generated pages entirely: `*not documented*` in the column instead, and
+the placeholder argument list (`(?, ?)`) went with it, since the Args column
+already carries the count.
+
+⛔ **A four-column header over five-column rows.** Adding the *Measured* column
+took two edits; the one adding the header cell was a `str.replace` that matched
+nothing and said nothing. The rows gained a cell and the header did not.
+
+⚠️ **That is the third silent `str.replace` this week**, after the two in D179.
+The `Edit` tool errors on a miss and was used for the fixes.
+
+### The first version of the test did not work
+
+`tests/test_generated_docs.py` checks the *rendered shape*: no HTML tags
+survive, nothing is tagged inside a code span, and every row matches its
+header.
+
+⛔ **Its first table parser passed the broken page.** It treated "the column
+count changed" as "a new table starts", which is exactly what a header one
+column narrower than its rows looks like. Rewritten to find tables by
+structure — a header line, a separator line, then rows.
+
+✅ **Both versions were checked against the real bugs**, by reintroducing each
+into the *generator*, regenerating so the page matched it, and confirming the
+tests fail. The first version passed all 8 that way; the second fails 2 with
+line numbers. A test asserted to work is not the same as a test shown to work
+(D148's lesson: *the test suite asserted the broken behaviour*).
+
+A `test_the_pages_contain_tables_at_all` guards the guard, since a parser that
+finds nothing passes everything.

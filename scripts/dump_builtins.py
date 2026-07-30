@@ -152,11 +152,11 @@ class Builtin:
         rather than printing a confident 0.
         """
         count = "?" if self.arity is None else str(self.arity)
-        shown = self.signature or f"{self.name}({', '.join(['?'] * (self.arity or 0))})"
-        if not self.documented:
-            shown = f"{shown} <small>(not documented)</small>"
+        # ⛔ No HTML. A `<small>` here landed *inside* the backticks, and a code
+        # span renders its contents literally -- 280 rows of visible tag.
+        shown = f"`{self.signature}`" if self.documented else "*not documented*"
         note = self.measured.render() if self.measured else ""
-        return f"| `{self.name}` | {count} | `{shown}` | {self.returns} | {note} |"
+        return f"| `{self.name}` | {count} | {shown} | {self.returns} | {note} |"
 
 
 def split_arguments(signature: str) -> list[Argument]:  # pylint: disable=container-return
@@ -351,10 +351,13 @@ def builtins_page(entries: list[Builtin]) -> str:
             if note is not None:
                 out.append(f"{note.render()}\n\n")
             out.append(
-                f"<small>{len(found)} function(s), {documented} with a known "
-                f"signature.</small>\n\n"
+                f"*{len(found)} function(s), {documented} with a known "
+                f"signature.*\n\n"
             )
-            out.append("| Function | Args | Signature | Returns |\n|---|---|---|---|\n")
+            out.append(
+                "| Function | Args | Signature | Returns | Measured |\n"
+                "|---|---|---|---|---|\n"
+            )
             out.append("\n".join(entry.row() for entry in found) + "\n")
     return "".join(out)
 
