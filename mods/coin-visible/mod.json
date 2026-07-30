@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "name": "coin-visible",
+  "version": "0.1.0",
+  "description": "Two extra coins on he1_03, to see whether an added coin is visible and collectible",
+  "base": "eu0",
+  "tables": { "coins": "tables/coins.csv" },
+  "code": { "boot": "he1_03", "target": "eu0", "module_id": 2, "banner": false }
+}

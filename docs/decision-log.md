@@ -10347,3 +10347,80 @@ a typo.
 Two more f-strings broken by writing Python through `str.replace` in a shell
 heredoc, where `\n` collapses into a real newline mid-literal. D131 recorded the
 rule and D141 recorded breaking it again. **Use the editor for structural edits.**
+
+---
+
+## D146 — ✅ All three open questions closed, in game (2026-07-29)
+
+Three 🔶 entries had been waiting on a person. All three resolved in one sitting,
+and all three the way the mechanism predicted.
+
+### ✅ An added coin is really there
+
+`he1_03` ships 5 coins in a row; two more were added continuing the row to the
+left, so a difference in appearance would show by comparison rather than needing
+to be hunted for. **They were there.** D129's "the section built and the map
+loaded" is now "there are coins on screen".
+
+🔶 Still not stated: that one *stays* collected across a save. Seeing and
+collecting are different claims, and the exploit shape (D133's `-1` flag) turns
+on the second.
+
+### ✅ `evt_door_set_event` fires — a loading zone runs an attached script
+
+| | slot 0 | RAN |
+|---|---|---:|
+| t+33, on `he1_01` | ours | **0** |
+| t+36, on `he1_01` | ours | **1** |
+| t+39, on `he1_02` | **cleared** | 1 |
+
+The counter moved to 1 **before** the transition, then the map changed and the
+slot went to zero — the event slots live in per-map work, so `he1_02`'s own
+registration replaces them.
+
+⚠️ That last part matters for anything built on this: **an attachment does not
+survive a map change.** It has to be made each time the map is entered.
+
+**So the 691 loading zones are genuinely scriptable**, not just writable. Two
+independent supports now: the game itself does this on 13 maps, and a
+mod-supplied script has been watched running.
+
+### ✅ The door pointer swap works
+
+D135 swapped `he1_01` door 0's `interactScript` for a mod-supplied script and
+could only show the map still loaded. The run settles it:
+
+```
+frame  113   RAN  0   self-test not yet fired
+frame  293   RAN 25   self-test not yet fired
+frame  473   RAN 31   self-test not yet fired
+frame  653   RAN 63   self-test fired at frame 601
+```
+
+⚠️ **The self-test only fires past frame 600 and adds exactly one**, so the 31
+calls at frame 473 are all the game's. That separation is the whole reason it
+was built (D135) — without it "the script ran" could have meant "we ran it".
+
+**63 calls** for one door use fits D140 exactly: the interact script is a
+per-call animation step, so a door opening over about a second at 60fps runs it
+about sixty times. D117 observed "many times" and could not say why; this is why.
+
+✅ **And the map still reached `he1_06`**, as D140 predicted — the transition
+lives in `MapDoorDesc`, not in the script that was replaced. A swap that broke
+the door would have shown up as never arriving.
+
+### What this changes
+
+⛔ **`bleck` now has a working alternative to `evtpatch` for whole-script
+replacement**, and it needs no GPL-3 code: swap the pointer, build the
+replacement whole, no jump-table problem because nothing moves. `evtpatch`
+remains ahead on *insertion and deletion*; this covers replacement.
+
+🟢 Both mechanisms are now proven end to end, so declaring them is plumbing:
+
+- `"zones": {"doa2_l": "on_enter"}` — attach a script to a loading zone
+- a manifest form for whole-script replacement of a `DoorDesc` script
+
+⚠️ The zone form must re-attach on every map entry, per the slot-clearing above.
+A declaration that attaches once at `_prolog` would work exactly once and then
+look broken.

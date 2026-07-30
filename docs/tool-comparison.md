@@ -165,7 +165,7 @@ evtpatch code enters this repo.
 ⚠️ This should be documented for mod authors rather than left implicit, since
 the obligation is real and lands on them.
 
-**2. Whole-script replacement by pointer swap. — cheap, untested, MIT-clean.**
+**2. Whole-script replacement by pointer swap. — ✅ WORKS, MIT-clean.**
 
 `bleck` currently patches *the bytecode a pointer refers to*. It has never
 swapped **the pointer** for a script compiled from a mod — which would give
@@ -176,15 +176,22 @@ built whole.
 mechanical check passed, and the map froze mid-load. 🔶 The untested explanation
 is that the loader waits on the specific `EvtEntry` created from `initScript`.
 
-🔶 **But that reasoning does not obviously extend to doors and items.** A door's
-interact script and an item's use script are triggered by player action, not by
-the map-load sequence, so there may be no loader waiting on a particular entry.
-`bleck` already resolves `DoorDesc` field offsets and `itemEventDataTable`
-entries — it reads the pointer and patches through it. Writing the pointer
-instead is a small change to the generated prolog.
+✅ **And that reasoning does not extend to a door** (D146). A door's interact
+script is started by the player, not by the map-load sequence, so nothing waits
+on a particular entry. Measured: the swapped-in script ran **63 times** for one
+door use — the game's own calls, separated from the harness by a self-test that
+fires only past frame 600 — and the map still reached its destination.
 
-**This is the highest-value experiment available**, it is settleable in one
-unattended rig run, and it needs no GPL code.
+So the replacement route works, and it needs no GPL code: build the replacement
+whole and write the pointer, with no jump-table problem because nothing moves.
+
+⚠️ **`evtpatch` is still ahead on insertion and deletion**, which this does not
+attempt. What it covers is *replacement*, which is most of what the GPL
+dependency was wanted for.
+
+🔶 Only a four-instruction replacement has been run. Nothing has tested one
+longer than the original, though the mechanism makes size irrelevant in
+principle.
 
 **3. Independent implementation of jump-table rebuilding and new opcodes. — expensive.**
 

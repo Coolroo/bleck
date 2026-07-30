@@ -168,25 +168,54 @@ the functions that use them (`evt_door_wp` = `0x805AE020` on eu0):
 `evt_door_set_event(char *door, int which, EvtScriptCode *script)` finds a zone
 by its `name_l` and stores a script pointer in the slot array above.
 
-Measured: both slots read `0` beforehand, and after calling it through
-`evtEntry` slot 0 held the supplied script. **And the game uses this itself** —
-scanning every map's init script finds **13** that call it, `mac_02` six times.
+✅ **Watched working.** Both slots read `0` beforehand; after calling it slot 0
+held the supplied script; and when the player walked into that zone **the
+attached script ran**, one call, immediately before the map changed. The game
+uses the same mechanism itself on **13** maps.
 
-That matters more than the read-back. A function whose slots are always empty
-might be vestigial; one the game exercises on 13 maps is a supported path.
+⚠️ **An attachment does not survive a map change.** The slots live in per-map
+work, so arriving somewhere new replaces them — anything built on this has to
+re-attach each time the map is entered.
 
 ⚠️ It is an **evt user func**, so it cannot be called from C — it reads its
 arguments from an `EvtEntry`. And argc counts the function pointer, so three
 arguments is argc **4**.
 
+## ✅ The script pointer can be replaced outright
+
+`interactScript` is an ordinary pointer in a descriptor that lives in map data,
+and the address can be read at load time — so it can be **written**, pointing at
+a script supplied by a mod. That gives arbitrary logic with no jump-table
+problem, because the replacement is built whole rather than patched in place.
+
+Measured on `he1_01` door 0, with a replacement of one `USER_FUNC`:
+
+| | |
+|---|---|
+| the field, re-resolved every frame during play | still the replacement |
+| calls when the player used the door | **63** |
+| calls attributable to the test harness | **1** |
+| the map still reached | ✅ `he1_06` |
+
+The 63 calls match what this script *is* — a per-call animation step, so a door
+opening over about a second at 60fps runs it about sixty times.
+
+⚠️ **The transition still happened**, because it was never in this script.
+Replacing a door's interact script changes how it animates, not where it goes.
+
+⛔ **This does not work for a map's init script.** Swapping `MapData.initScript`
+passes every mechanical check and freezes the map mid-load — the untested
+explanation being that the loader waits on the specific `EvtEntry` it created.
+A door's script is started by the player instead, with nothing waiting on it.
+
 ## Not established
 
 - 🔶 What the `0x1A` opcode at the head of `initScript` does. It was matched and
   patched, not decoded.
-- 🔶 Whether a script attached with `evt_door_set_event` **fires** on zone entry.
-  The attachment lands and the game uses the same mechanism; nothing has watched
-  one run, because that needs a player.
 - 🔶 What the second event slot (`which` = 1) means. Only slot 0 was exercised.
+- 🔶 Whether the interact script can be replaced with something *longer* than
+  the original. The pointer swap makes size irrelevant in principle, and only a
+  four-instruction replacement has been run.
 - ⛔ There is **no lookup by name** for a `DoorDesc`, unlike NPCs
   (`npcNameToPtr`). `evtDoorGetActiveDoorDesc()` returns the door currently in
   use, which is null before gameplay. A door is identified by its position in

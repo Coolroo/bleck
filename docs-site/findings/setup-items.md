@@ -274,8 +274,14 @@ Two paths, and they fail very differently:
 Non-coin items degrade gracefully; coins assert. The spawner branches on
 `itemTemplateId == 1` at `0x80078C34`, taking a wholly different path.
 
+## ✅ An added coin really appears
+
+Two coins added to `he1_03`, continuing the row of five it ships. Both were
+visible in game, indistinguishable from the originals.
+
 ## Still open
 
-Whether a coin on a map with no budget entry stays collected across a save, and
-what the second door-event slot means. Both need a player rather than a memory
-reader.
+🔶 Whether a coin **stays collected** across a save — and in particular one on a
+map with no `assign_tbl` entry, whose flag id is `-1` and therefore has nowhere
+to record the pickup. That is the shape of an infinite-coin exploit, and it
+needs a save-and-reload rather than a memory reader.
