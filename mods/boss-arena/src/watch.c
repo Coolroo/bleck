@@ -29,6 +29,20 @@ extern SeqDef seq_data[];
 /* NPCWork holds the live list. `npcGetWorkPtr` is in spm.eu0.lst; there is no
    `npcEntries` or `npcGetCount` symbol, which a first draft assumed. */
 extern void *npcGetWorkPtr(void);
+extern u8 npcEnemyTemplates[];
+
+/* ⚠️ THE CONTROL FOR THE HANG. His attack loop is
+   `do { <attack>; evt_npc_wait_for("me", 1000) } while`, and word 28 of the
+   move script is that 1000 (D151, and boss-harder already rewrites it in
+   game). Setting it enormous means he attacks once and then waits out the
+   run. If the freeze survives that, the attack is not the cause. */
+#define TEMPLATE_STRIDE 0x68
+#define TEMPLATE_MOVE_SCRIPT 0x38
+#define SUPER_DIMENTIO_TEMPLATE 255
+#define COOLDOWN_HEADER_AT 25
+#define COOLDOWN_HEADER 0x0003005Cu
+#define COOLDOWN_AT 28
+#define COOLDOWN_QUIET 600000
 
 #define WORK_NUM 0x004
 #define WORK_ENTRIES 0x008
@@ -76,6 +90,8 @@ static volatile u32 *const probe = (volatile u32 *) PROBE;
 #define ASSERT_FIRED (probe[13])
 #define ASSERT_FILE 14 /* .. 21 */
 #define ASSERT_EXPR 22 /* .. 45 */
+#define PEAK_ACTIVE (probe[46])
+#define LAST_SCAN_FRAME (probe[47])
 
 static SeqFunc *realMain[SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
@@ -153,6 +169,11 @@ static void scan(void)
             BOSS_ALIVE_FRAMES += 1;
     }
     ACTIVE_NPCS = active;
+    /* ⚠️ Peak, not current: if the pool fills and the game dies, the last
+       sample before the freeze is the number that matters. */
+    if (active > PEAK_ACTIVE)
+        PEAK_ACTIVE = active;
+    LAST_SCAN_FRAME = GAME_FRAMES;
 }
 
 static void onSequenceFrame(u32 seq, void *work)
@@ -162,7 +183,7 @@ static void onSequenceFrame(u32 seq, void *work)
         GAME_FRAMES += 1;
         /* Every 30 frames: the list is walked, not sampled once, so a boss
            that appears late or vanishes early is still visible. */
-        if ((GAME_FRAMES % 30) == 0)
+        if ((GAME_FRAMES % 10) == 0)
             scan();
     }
 
@@ -186,6 +207,18 @@ void mod_prolog(void)
     for (i = 0; i < REPORT_WORDS; i++)
         probe[i] = 0;
     probe[0] = MAGIC;
+
+    {
+        u8 *tpl = npcEnemyTemplates
+                  + SUPER_DIMENTIO_TEMPLATE * TEMPLATE_STRIDE;
+        u32 *script = *(u32 **) (tpl + TEMPLATE_MOVE_SCRIPT);
+
+        if (script != 0 && script[COOLDOWN_HEADER_AT] == COOLDOWN_HEADER)
+        {
+            script[COOLDOWN_AT] = COOLDOWN_QUIET;
+            probe[45] = COOLDOWN_QUIET;
+        }
+    }
 
     for (i = 0; i < SEQ_COUNT; i++)
     {

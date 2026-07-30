@@ -10989,3 +10989,42 @@ them.
 ⚠️ This is the second control in two days to be measured with a broken ruler
 (D155's Goomba was the first, and it worked). The difference is that this one
 *passed* while being wrong, which is the dangerous direction.
+
+---
+
+## D157 — The boss hang is at a fixed *time*, not a fixed cause yet (2026-07-29)
+
+Four measurements narrowing the D156 hang. Each ruled something out; none has
+found it.
+
+| hypothesis | test | result |
+|---|---|---|
+| an assert | `__assert2` hooked, `mode: "before"` | ⛔ never fired |
+| entity pool exhaustion | peak active tracked every 10 frames | ⛔ **peaks at 38**, capacity is 80 |
+| his attack loop | move-script cooldown set to 600000 | ⛔ freezes identically |
+| the boss at all | boss row removed, overlay cleared | ✅ **25,445 frames, no freeze** |
+
+⚠️ **The quieting control was verified before being believed**: the probe echoes
+the written word as `0x000927C0`, so the attack loop really was silenced. The
+previous invalid control (D156) is why that check now happens every time.
+
+### The shape of the failure
+
+Freeze frames across four runs: **2177, 2184, 2177, 2177**. At 60fps that is
+~36.3 s, and it does **not** move when his behaviour changes. A fault that
+depends on what he does would vary; one that arrives at a constant time is
+something accumulating at a constant *rate*, or a fixed timer.
+
+🔶 **Best remaining hypothesis: a per-frame resource filling at a steady rate.**
+He carries 28 orbiting `e_Dmenl_r` parts (D153) on top of his own model, in a
+Chapter 1 room never built for him. An effect, particle or display-list pool
+filling at a constant rate would freeze at a constant frame regardless of
+attacks, which is exactly the signature.
+
+🔶 Untested and cheaper than it sounds: place him in a **large** map instead of
+`an1_02`, and place a *different* multi-part enemy in `an1_02` as a second
+control. The first says whether the room is the constraint; the second says
+whether it is bosses or just part-heavy NPCs.
+
+⛔ **Not yet worth more runs without a new instrument.** Four eliminations came
+from four runs; the next one should measure something, not eliminate something.
