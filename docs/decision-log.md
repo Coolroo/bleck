@@ -10785,3 +10785,44 @@ it.
 🔶 **"More attacks" here means more often, not new ones.** A genuinely new attack
 means spawning `Dimentio Stg8 Magic` (template 404, its own tribe) via
 `npcEntryFromTemplate` (`0x801be198`), whose signature is unmeasured.
+
+---
+
+## D152 — An invincible hero, and why the self-test is the point (2026-07-29)
+
+`mods/invincible` exists so the final boss can be studied without dying to it —
+step 1 of the boss-research arc. Offsets and numbers are in
+[`function-behaviour.md`](function-behaviour.md).
+
+### Restoring beats intercepting
+
+Rejected: hooking the damage function with `code.hooks`. It is the more precise
+tool and the more dangerous one — a handler's prototype must match the target
+exactly and **nothing can check it** (D97). Restoring HP from a per-frame
+sequence hook has a failure mode of "a hit got through for one frame", which is
+survivable; a corrupted call is not.
+
+Rejected: `pouchSetMaxHp` to a huge number. It changes what the HUD shows and
+writes to a field the save file copies in full, which is a bigger blast radius
+than the problem needs.
+
+### The self-test is not optional
+
+⚠️ **A mod that does nothing reports the same thing as a working one**: HP at
+max, every frame. The only way the rig can tell them apart is if something
+lowers HP and the report shows it being put back. So the mod hurts the player
+deliberately and counts both halves.
+
+That turned the run into arithmetic that either closes or does not: 107
+self-test hits, 107 restores, 535 HP absorbed = 107 × 5, lowest HP seen 5,
+final HP 10. Three independent quantities agreeing is much stronger than
+"invincible: yes".
+
+This is the same shape as `door-swap`'s frame-600 self-test (D146), and it is
+becoming the house pattern: **a probe should be able to fail.**
+
+✅ Incidental confirmation: `maxHp` read as **10**, which is what a new file
+starts with — so `mario_pouch.h`'s +0x010 is right on this build.
+
+⛔ **Not death-proof**, and the mod says so: pits, crushes and scripted deaths
+never touch `hp`.

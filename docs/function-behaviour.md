@@ -518,3 +518,43 @@ match, no VM return semantics, and no jump-table concern because nothing moves.
 ⚠️ **The edits are verifiable without reaching the boss**, because they happen at
 `mod_prolog` against static data. The *fight* still needs a human; the *edit*
 does not.
+
+---
+
+## ✅ The hero's HP, and pinning it (D152)
+
+`MarioPouchWork` (`mario_pouch.h`, MIT) carries `hp` at **+0x00C** and `maxHp`
+at **+0x010**. `pouchGetPtr` (`0x8014C088`) returns the struct;
+`pouchGetHp` / `pouchSetHp` / `pouchAddHp` / `pouchSetMaxHp` are all in
+`spm.eu0.lst`. ⛔ There is **no `pouchGetMaxHp`** — max has to come from the
+struct.
+
+✅ **Measured `maxHp` = 10**, which is exactly what Mario starts a new file
+with. That is the positive control on the offset: a wrong one would not land on
+the one value everybody can check.
+
+### Restoring HP per frame works, and was proved rather than assumed
+
+`mods/invincible` restores HP to max every GAME frame from a `seq_data` hook.
+Chosen over hooking the damage function because it **fails safe**: a missed
+frame means a hit landed, never that the game hung.
+
+⚠️ **"HP stayed at max" is what a mod that does nothing also reports.** So the
+mod damages the player on purpose — `pouchAddHp(-5)` every 300 frames past
+frame 600 — and checks the damage was undone. One 150-second boot:
+
+| | |
+|---|---|
+| self-test hits | **107** |
+| restores | **107** — every one |
+| damage absorbed | **535** = 107 × 5 |
+| lowest hp seen | **5** = 10 − 5 |
+| hp at the end | **10** = max |
+
+The arithmetic closing exactly is what makes this a measurement rather than an
+impression: an inert mod gives 0 restores, and a mod that restored *without*
+damage ever landing would show `lowest hp = 10`.
+
+⛔ **Not death-proof.** Pits, crushes and scripted deaths do not go through
+`hp`. 🔶 Only self-inflicted damage has been observed being absorbed; a real
+enemy hit takes the same path in principle, but has not been watched.
