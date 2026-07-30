@@ -12185,3 +12185,50 @@ ever half the reason. The other half is in `vision.md` and is unaffected:
 baked bytes**, because a blob cannot be undone, reviewed, or opened in an
 editor. A `tables/textures.csv` is still what makes a texture edit *editable* —
 it is just no longer the only route to sharing one.
+
+---
+
+## D187 — CMPR colour ops land, and the real disc caught what fixtures missed (2026-07-30)
+
+✅ **`bleck/formats/tpl.py`**: TPL container parsing, and colour operations
+applied **in the CMPR endpoint domain** — Tier 1 of `plan-textures.md`.
+
+A CMPR block is two RGB565 endpoints plus 2-bit indices among the four colours
+they imply. A per-pixel colour map changes only the endpoints, so a recolour
+rewrites four bytes per block and copies the rest. ⛔ No decode, no
+re-compression, and therefore no generational loss on rebuild.
+
+### ⛔ The bug the constructed tests could not see
+
+The plan named one hazard — DXT1's `c0 > c1` flag choosing between a 4-colour
+and a 3-colour-plus-transparent block — and it was handled from the start. The
+bug was somewhere nobody was looking.
+
+**5-bit to 8-bit expansion by `v * 255 // 31` does not round trip.** 1 expands to
+8, and 8 contracts back to **0**. Every channel drifts down one step per pass, so
+an *identity* map was not identity, and a texture would have degraded a little
+on every rebuild — the exact failure the endpoint approach exists to avoid.
+
+⚠️ **Twenty constructed tests passed while this was broken.** They used `0xF800`,
+`0x001F`, `0x07E0`, `0xFFFF` — values that happen to survive the lossy scaling.
+The test that failed was the one reading real disc textures, at byte 9,664 of
+`effect.tpl`.
+
+✅ Fixed with bit replication (`(v << 3) | (v >> 2)`) and rounding on the way
+back. Now pinned **exhaustively**: all 65,536 RGB565 values round trip, which
+takes 0.2 s and admits no luck.
+
+⚠️ Same lesson as D70/D73/D74 in a new place: *a control measured with the same
+broken ruler agrees with itself*. Fixtures written from the same understanding
+as the code share its blind spots. The real-data test is not a nicety.
+
+### What is deliberately absent
+
+⛔ **No encoder, so no `replace with new artwork`.** That is Tier 2 and needs
+both a PNG decoder and a DXT1 encoder, where quality is an acceptance criterion
+rather than a footnote. Everything here is exact precisely because it never
+re-compresses.
+
+⚠️ `I4`/`I8`/`IA4`/`IA8` cannot represent a hue, so a colour map on one has to
+project back through luma. `Format.has_colour` says which, and that projection
+is the one operation here that is **not** reversible.
