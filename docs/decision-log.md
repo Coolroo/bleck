@@ -10606,13 +10606,46 @@ The substitution lengthened a comment in `bleck/cli/commands/placement.py` past
 the 90-column limit in **41 commits**. `main` was rewrapped, but the tag pointed
 at one of the 41 — so the release workflow, which lints, failed.
 
-✅ **And that is how the tag-triggered release job was observed running for the
-first time.** `roadmap.md` had recorded it as never having run, gated on
-`refs/tags/v*`; a green push to `main` never exercised it. It fires, it runs lint
-and build, and it correctly rejected a commit that did not lint. The 🔶 is closed
-by a failure, which is a better result than never finding out.
+⛔ **What this paragraph first claimed was wrong, and the mistake is instructive.**
+It said the tag-triggered release job had "now run for the first time", because
+`roadmap.md` recorded it as never having run and the force-push made it fail
+visibly. Checking the actual run history instead of the doc:
+
+```
+2026-07-30T03:22:17Z  failure  v0.1.0-rc1  #30511001178   <- the force-push
+2026-07-30T02:57:48Z  failure  v0.1.0-rc1  #30509870100   <- the force-push
+2026-07-29T06:26:53Z  success  v0.1.0-rc1  #30428190534   <- 21 hours earlier
+```
+
+✅ **It had already run and fully succeeded** — `checks`, all three platform
+builds *and* `release` green, publishing four assets from sha `747973e`. So the
+🔶 was stale before this session started, and closed on a **pass**, not a
+failure.
+
+⚠️ **This is the "before trusting a negative result, produce a positive one" rule,
+failed on the cheapest possible instrument.** A doc's negative claim was taken as
+current and written up as a finding; one `gh run list` filtered to tag refs
+refuted it in seconds. A stale ✅/🔶 in `roadmap.md` is exactly as dangerous as a
+broken probe, and harder to notice because it reads as settled.
+
+### The genuine finding underneath it
+
+⚠️ **`gh release create` is not idempotent.** Re-pointing an existing tag fails
+with *"a release with the same tag name already exists"*, which is the only
+reason either 2026-07-30 run failed at the release step. Nothing was wrong with
+the workflow's build path.
+
+⛔ **And the published assets now describe a commit that no longer exists.**
+`v0.1.0-rc1`'s four binaries were built from `747973e`, which the rewrite
+replaced. The tag points at new history; the downloadable artifacts do not
+correspond to it. Anyone fetching that pre-release gets binaries built from a
+tree not reachable in the repository.
 
 Rejected: a third rewrite to shorten the phrase everywhere. The only practical
 symptom is a tag build, nothing lints an old checkout, and each rewrite cycle is
 itself a chance to introduce what the two defects above show is easy to
-introduce.
+introduce. The tag was moved to a commit that lints instead.
+
+🟢 **Open, and a decision for the maintainer:** whether to delete the
+`v0.1.0-rc1` release so the workflow republishes assets that match the tag. It is
+a published pre-release, so it is not a change to make silently.
