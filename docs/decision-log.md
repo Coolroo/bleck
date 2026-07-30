@@ -11236,3 +11236,38 @@ not searched, only `files/a/`. A cutscene-only model would live there.
 The 169 `MOBJ_` names are mostly blocks, doors and scenery. `MOBJ_broken_heart`
 remains the closest thing to an ominous floating object, and it *is* a heart —
 just the wrong one.
+
+---
+
+## D163 — The hearts are effects, not models (2026-07-30)
+
+D162 concluded there was no Chaos Heart because it searched **models**. That was
+the wrong place to look — hearts live in the *effect* system:
+
+```
+0x8032773C  pure_heart
+0x80327A54  pure_heart_use
+0x80327A64  pure_heart_get
+0x80327A7C  pure_heart_dance
+0x80327408  %s/eff/%s/effdata_sub_pure_heart_get.tpl
+```
+
+⛔ **No `eff*Heart*Entry` symbol**, and only 10 `eff*Entry` functions are named
+at all, so there is no C entry point to call. But there does not need to be:
+
+✅ **`evt_eff` is already a bleck builtin, arity 14** — matching the call decoded
+in Super Dimentio's own attack, which spawns `"kemuri_test"` the same way
+(D153). `evt_eff_delete` and `evt_eff_softdelete` exist too, so an effect can be
+removed as well as created, which is what makes a *persistent* one possible.
+
+🟢 So the orb's visual is reachable from the scripting language: a script calls
+`evt_eff("pure_heart", …)`, and the C driver keeps moving things. `hook-demo`
+already shows a script and native C in one mod.
+
+🔶 Two unknowns before believing it: whether `pure_heart` renders standalone
+rather than only as part of a pickup sequence, and whether it persists or is a
+one-shot burst. `pure_heart_dance` sounds like the looping one.
+
+⚠️ **The lesson is about where I searched.** 1,687 assets and 169 model names
+were checked exhaustively and the answer was in a different subsystem entirely.
+An exhaustive search of the wrong space reads exactly like a definitive negative.
