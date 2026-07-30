@@ -10942,3 +10942,50 @@ that turns a hang into a filename and a line (D130).
    which reads exactly like "he did not spawn".
 2. The first probe used `0x80003000`; the rig reads `0x80005000` (D151 already
    recorded this and it happened again in a new mod).
+
+---
+
+## D156 — The boss is what hangs the room, and one control nearly lied about it (2026-07-29)
+
+✅ **Measured, not inferred.** Same mod, same map, same boot, boss row present
+or absent:
+
+| | active NPCs | frames reached | outcome |
+|---|---|---|---|
+| with Super Dimentio | **38** | **2,184** | hangs |
+| without him | 16 | **25,445** | ran the whole 110 s |
+
+11.6× longer and still counting. The boss causes it.
+
+⛔ **Not an assert.** `__assert2` was hooked (`mode: "before"`, the D130
+pattern) and never fired, so the technique that named `swdrv.c:505` has nothing
+to say here. That is a result about the *kind* of failure, and it rules out the
+cheapest explanation.
+
+🔶 **The likely mechanism is entity pressure.** Placing *one* boss took the
+active count from 16 to 38 — he brings **22 extra entries** with him, which fits
+his 40 `NPCPartDef`s (28 of them the orbiting `e_Dmenl_r` pieces). `NPCWork.num`
+is **80**, so the pool is not exhausted at rest; whether it fills as he attacks
+is the next thing to measure, and the probe already counts actives every 30
+frames.
+
+### ⛔ The first control was invalid, and it looked completely convincing
+
+Removing the boss row and rebuilding produced a run that *still showed him* —
+same entry pointer, same 200 HP. The obvious readings were "the placement is not
+what spawned him" or "something else places him", both wrong and both
+interesting-sounding.
+
+⚠️ **`bleck` left a stale generated overlay behind.** The CSV row was removed at
+22:53:49; `mods/boss-arena/overlay/files/setup/an1_02.dat` had been generated at
+22:51:20 and the rebuild **did not remove it**, so the disc shipped the previous
+placement. Deleting the overlay and rebuilding gave the real control.
+
+🟢 That is a genuine trap in the tool, not just an operator error: a build whose
+declaration shrank leaves the larger previous output in place, and nothing warns.
+Worth fixing — generated overlay files should be owned by the build that wrote
+them.
+
+⚠️ This is the second control in two days to be measured with a broken ruler
+(D155's Goomba was the first, and it worked). The difference is that this one
+*passed* while being wrong, which is the dangerous direction.

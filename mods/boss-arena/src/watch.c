@@ -57,7 +57,7 @@ extern void *npcGetWorkPtr(void);
 */
 #define PROBE 0x80005000
 #define MAGIC 0xB055A5EAu
-#define REPORT_WORDS 12
+#define REPORT_WORDS 48
 
 static volatile u32 *const probe = (volatile u32 *) PROBE;
 
@@ -72,11 +72,46 @@ static volatile u32 *const probe = (volatile u32 *) PROBE;
 #define BOSS_Y (probe[9])
 #define BOSS_ALIVE_FRAMES (probe[10])
 #define LAST_TRIBE (probe[11])
+#define ASSERT_LINE (probe[12])
+#define ASSERT_FIRED (probe[13])
+#define ASSERT_FILE 14 /* .. 21 */
+#define ASSERT_EXPR 22 /* .. 45 */
 
 static SeqFunc *realMain[SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
 };
+
+/* Shift-JIS stays raw; it is decoded on the host (D130). */
+static void copyText(u32 at, const char *text, u32 words)
+{
+    u32 i;
+    u32 j;
+    u32 word;
+
+    for (i = 0; i < words; i++)
+    {
+        word = 0;
+        for (j = 0; j < 4; j++)
+            word = (word << 8) | (text ? (unsigned char) text[i * 4 + j] : 0);
+        probe[at + i] = word;
+    }
+}
+
+/* ⚠️ The reason this mod exists in its second form. A hang that is really an
+   assert names its own file and line (D130); one that is not says nothing, and
+   that distinction is itself the result. */
+void on_assert(const char *file, s32 line, const char *func, const char *expr)
+{
+    (void) func;
+    if (ASSERT_FIRED == 0)
+    {
+        ASSERT_LINE = (u32) line;
+        copyText(ASSERT_FILE, file, 8);
+        copyText(ASSERT_EXPR, expr, 24);
+    }
+    ASSERT_FIRED += 1;
+}
 
 static void scan(void)
 {
