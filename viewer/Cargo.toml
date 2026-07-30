@@ -1,0 +1,22 @@
+[package]
+name = "bleck-viewer"
+version = "0.1.0"
+edition = "2021"
+description = "Look at Super Paper Mario's assets without building a disc"
+license = "MIT"
+
+# ⛔ No game-format crates here, and there must never be any. `bleck` owns
+# every format on the disc and is tested against real data; a second
+# implementation in Rust would drift from it silently. This program reads PNG
+# and JSON that `bleck` exports (docs/plan-viewer.md).
+[dependencies]
+# egui plus winit plus wgpu, wired together. One dependency instead of four
+# that have to agree on versions.
+eframe = "0.29"
+# `image` arrives through this, so PNG decoding is not a direct dependency.
+egui_extras = { version = "0.29", features = ["image"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+strip = true

@@ -12232,3 +12232,75 @@ re-compresses.
 ⚠️ `I4`/`I8`/`IA4`/`IA8` cannot represent a hue, so a colour map on one has to
 project back through luma. `Format.has_colour` says which, and that projection
 is the one operation here that is **not** reversible.
+
+---
+
+## D188 — An asset viewer, and the one thing that decides its shape (2026-07-30)
+
+🟢 **Planned and scaffolded**: `docs/plan-viewer.md`, and a Rust crate in
+`viewer/` that builds clean on this machine.
+
+### ⛔ The three things it shows are in completely different states
+
+Treating "textures, models, animations, effects" as one project would mean
+building a 3D viewport with nothing to put in it.
+
+| | State |
+|---|---|
+| Textures | ✅ decodable today (D187) |
+| Effect textures | ✅ same — `effdata.tpl` is 219 images |
+| Effect definitions | 🔶 `effdata.dat` undecoded, but **one file** |
+| Effect behaviour | ⛔ compiled PowerPC; only the game can run it |
+| Models | 🔶 container unidentified |
+| Animations | 🔶 only a table *name* is known |
+
+`a/p_wii_mario` announces a great deal and decodes to nothing: `00 01 5F 5C`,
+its own name, `Mon Jan 29 10:30:46 2007`, then `R_Arm_skinShape`,
+`zentaiShape`, `big_hammerShape` — Maya shape names, skinned. `map.dat` names
+its sections (D167): `mesh`, `material_name_table`, `animation_table`,
+`vcd_table`. ⚠️ **A string table is not a mesh.** No vertex, index, weight or
+keyframe has been located, and `vcd_table` being a GX term suggests display-list
+form.
+
+⛔ **So the 3D viewport is explicitly *not* first.** Camera controls around an
+empty scene cannot be validated and prove nothing. Stage 1 is a texture browser,
+which is buildable now and is useful on its own: nothing in this project can
+currently look at a texture, and `plan-textures.md` has no preview at all — you
+declare an `invert` and find out after a disc build.
+
+### The decision that matters: `bleck` exports, the viewer renders
+
+⛔ **The viewer parses no game format.** A Rust re-implementation of TPL, U8 or
+LZ77 would drift from the Python one silently, and the failure is a texture that
+builds correctly and displays wrongly — or the reverse, which is worse because
+the disc is then wrong and the preview says fine.
+
+✅ `bleck` exports PNG and JSON; the viewer consumes standard formats. This is
+not new architecture — it is what `bleck/api/` was published for, and
+`pyproject.toml` already says so: *"A GUI cannot shell out to `bleck mod build`
+per keystroke, so this boundary has to be a real API rather than CLI output."*
+
+### Rust, with conditions
+
+✅ `eframe` (egui + winit + wgpu): Vulkan, Metal and DX12 from one codebase, one
+static binary per platform, no runtime to install. Builds and passes
+`clippy -D warnings` here.
+
+⚠️ The conditions are the load-bearing part:
+
+1. No game-format parsing in Rust — above.
+2. **A separate CI job.** `bleck`'s build, test and lint must never need a Rust
+   toolchain; verified — 1,239 tests and a clean lint with the crate present.
+3. The viewer is a lens on the CLI, never the only way to do something.
+
+⛔ **Rejected: Python + Qt or moderngl.** One language is a real advantage and
+was weighed. But `bleck` ships as a frozen PyInstaller binary with *two* runtime
+dependencies, and a GUI toolkit plus a GL binding is weight on every user who
+never opens the viewer, CI included.
+
+⛔ **Rejected: simulating effects.** A hand-written emitter approximation would
+look plausible and be wrong, with no way to tell which. If a preview cannot be
+driven by the game's own data, it should say what it knows and stop.
+
+⚠️ `image` is pinned to 0.25.5: 0.25.10 requires rustc 1.88 and this host has
+1.87. Recorded so the pin is raised deliberately rather than puzzled over.

@@ -48,3 +48,4 @@ example-mods/*/overlay/
 
 # Agent instructions -- kept on disk, deliberately untracked
 CLAUDE.md
+viewer/target
