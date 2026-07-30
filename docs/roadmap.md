@@ -38,7 +38,7 @@ this file is forward-looking only.
 | **Several code mods on one disc** | ✅ Merged at compile time; both run (D78). The loader's one-REL limit is untouched |
 | **Enemy placement editing** | ✅ Declared in `mod.json`, verified in game (D80) |
 | **A JSON API** | ✅ `bleck mod export/import`, `setup show/apply`, versioned, schema-published |
-| **A single-file binary** | ✅ `pyinstaller bleck.spec`; CI builds and smoke-tests three platforms, green on all (D83). ✅ Green again on the **pinned** interpreter (D99), which is what proves `setup-uv` fetches `.python-version`'s 3.13 on Linux and macOS and not just where it was developed. 🔶 The tag-triggered release job **has still never run** — it is gated on `refs/tags/v*`, so a push to `main` does not exercise it however green that build is |
+| **A single-file binary** | ✅ `pyinstaller bleck.spec`; CI builds and smoke-tests three platforms, green on all (D83). ✅ Green again on the **pinned** interpreter (D99), which is what proves `setup-uv` fetches `.python-version`'s 3.13 on Linux and macOS and not just where it was developed. ✅ **The tag-triggered job has now run** (D149) — gated on `refs/tags/v*`, so no push to `main` ever exercised it however green that build was. Force-updating `v0.1.0-rc1` fired it, it ran lint and build, and it **failed**, correctly rejecting a commit whose comment ran past 90 columns. It works; the 🔶 closed on a failure rather than a pass |
 | **Published docs** | ✅ MkDocs → GitHub Pages, live at `coolroo.github.io/bleck` |
 | Map geometry / archive contents | ⛔ **Not decoded.** The prize, and a research problem before an editing one |
 | **Reaching any map unattended** | ✅ `evt_seq_mapchange` from a map hook — no controller needed (D52) |

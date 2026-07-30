@@ -10544,3 +10544,75 @@ saying `door-scan` walked the bytecode is a true statement about what happened,
 and rewriting it would falsify the record. Only *instructional* references
 elsewhere — "X is the worked example", and two runnable commands — were
 repointed, since those address a reader in the present tense.
+
+---
+
+## D149 — History rewritten to drop agent attribution; the instruction file is untracked (2026-07-29)
+
+All 195 commits across `main`, `pointer-swap` and `docs/github-pages` were
+rewritten with `git-filter-repo`: 33 `Claude-Session:` trailers removed, 13 prose
+sentences naming the agent instruction file reworded to "the project
+instructions", and `CLAUDE.md` purged from history entirely. The file stays on
+disk, ignored via `.gitignore`, because it is machine-specific working guidance
+rather than project source.
+
+The living record is unaffected — `docs/` is the committed reasoning and always
+was. What follows is what the operation itself taught.
+
+### ✅ Rewriting on a throwaway clone first caught two real defects
+
+Both would have shipped, and both were invisible to "does it still mention the
+word".
+
+⛔ **Shortening a replacement to preserve the 72-column wrap truncates
+sentences.** The first table rewrote whole lines to keep them short, which
+silently dropped the words that continued onto the *next* line:
+
+```
+  reached the project instructions, so the stale version was still the first
+  reader sees.                                   <- "thing any" is gone
+```
+
+Five messages were mangled that way. The fix is to swap only the filename token
+and adjust verb agreement, keeping every other word; long lines are cosmetic,
+missing words are not.
+
+⛔ **The replacement table was incomplete, so a catch-all regex ran instead.**
+Nine variants were enumerated from a sample of eight commits; there were **13**.
+The four unenumerated ones fell through to a generic `CLAUDE\.md` → phrase
+substitution, which produced lowercase sentence starts and `instructions gains`.
+Enumerating from *every* matching line, not a sample, is what fixed it.
+
+🔶 This is the same family as the instrument errors in `handoff.md`: internal
+consistency proved nothing, and only reading the output against its own
+continuation lines exposed it.
+
+### ⚠️ `filter-repo` rewrites the backup tags too
+
+Three `backup/*` tags were created at the branch tips before the rewrite. The
+rewrite moved them along with everything else, so they pointed at the **new**
+commits and were worthless. The real safety net was a `git bundle` written
+outside the repository, and it was verified by actually restoring the original
+`main` from it and confirming the trailer was present — not by assuming.
+
+⛔ **A tag anchors history the branches no longer reach.** `refs/tags/v0.1.0-rc1`
+on the remote still pointed at the pre-rewrite `747973e`, so pushing only the
+three branches would have left the entire old history reachable behind the tag.
+Force-updating the tag was required, and this is the step easiest to miss.
+
+### ⚠️ Replacing text across history can break historical commits
+
+The substitution lengthened a comment in `bleck/cli/commands/placement.py` past
+the 90-column limit in **41 commits**. `main` was rewrapped, but the tag pointed
+at one of the 41 — so the release workflow, which lints, failed.
+
+✅ **And that is how the tag-triggered release job was observed running for the
+first time.** `roadmap.md` had recorded it as never having run, gated on
+`refs/tags/v*`; a green push to `main` never exercised it. It fires, it runs lint
+and build, and it correctly rejected a commit that did not lint. The 🔶 is closed
+by a failure, which is a better result than never finding out.
+
+Rejected: a third rewrite to shorten the phrase everywhere. The only practical
+symptom is a tag build, nothing lints an old checkout, and each rewrite cycle is
+itself a chance to introduce what the two defects above show is easy to
+introduce.

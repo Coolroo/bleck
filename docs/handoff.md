@@ -30,7 +30,27 @@ For anything else:
 
 ## Start here
 
-**Four things a mod can do, in rough order of how recently they stopped being
+### ⚠️ Every mod this doc names lives in `example-mods/`, not `mods/`
+
+`bleck` reads `mods/` by default (`BLECK_MODS_DIR`), and that directory ships
+**empty** — it is where *your* mods go. The ~24 worked examples and probes this
+document cites are in `example-mods/`, so pass `--mods-dir`, which every command
+accepts:
+
+```bash
+uv run bleck mod check mr-l --mods-dir example-mods
+uv run python scripts/ingame.py coin-tick --words 12   # the rig reads BLECK_MODS_DIR
+```
+
+Without it a bare `bleck mod check mr-l` reports **"no mod named 'mr-l'"**, which
+reads as a broken repo rather than a wrong path (D147). Build a *new* probe under
+`mods/`; that is what it is for. ⛔ 32 older probes were deleted in D148 once
+their findings were recorded here — a decision-log entry naming one is history,
+not a directory you can still `cd` into.
+
+### Four things a mod can do
+
+**In rough order of how recently they stopped being
 impossible.** Every one was verified by reading the running game's memory, and
 every one has a *negative* run on record where the guard refused and the game
 was left untouched.
