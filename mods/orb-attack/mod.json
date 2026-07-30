@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "name": "orb-attack",
+  "version": "0.1.0",
+  "description": "An orb that drifts and bounces, with five beams spinning around it",
+  "base": "eu0",
+  "tables": { "enemies": "tables/enemies.csv" },
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "boot": "he1_04"
+  }
+}

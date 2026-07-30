@@ -11119,3 +11119,58 @@ them varied the one thing that mattered. ⚠️ **A list of things ruled out is 
 progress toward a cause** — it narrows the space only if the real cause was in
 the space being searched. Moving the boss to a different map took one run and
 would have been a better second experiment than any of the four.
+
+---
+
+## D160 — An orbiting-beam attack, driven per frame from C (2026-07-29)
+
+`mods/orb-attack`: an orb drifts around `he1_04` bouncing off bounds like a DVD
+logo, with five satellites held at 72° intervals rotating around it. ✅ Ran
+**30,273 frames** with all five present every frame, 774 bounces, no hang.
+
+| frames | orb | beams | bounces | moved |
+|---|---|---|---|---|
+| 2,388 | 1 | 5 | 58 | 2,267 |
+| 30,273 | 1 | 5 | 774 | 30,152 |
+
+`moved` tracking `frames` is the check that matters: the positions are rewritten
+*every* frame, not occasionally.
+
+### ⛔ The thematic entities delete themselves
+
+The first build used template 198 (`Bleck Large Portal`) as the orb and five of
+template 103 (`MOBJ_frame_beam`, Super Dimentio's own beam). They spawned, moved
+correctly for **314 frames**, and then vanished — `orbFound` and `beamsFound`
+both dropped to 0 while `movedFrames` froze at 314.
+
+⚠️ **The movement was never the problem, and the probe is what showed that.**
+A bare "it stopped working" would have sent the next hour into the maths.
+`bounces` had already reached 8 and `movedFrames` stopped at exactly the frame
+the entities disappeared, which points at lifetime rather than logic.
+
+🔶 Both are **projectiles** — built to be spawned by a parent and expire. A
+setup-file placement gives them no parent, so they run their course and delete.
+Persistent enemies (Mr. L as the orb, Goombas as the satellites) hold
+indefinitely.
+
+### Two things that had to be right
+
+⚠️ **Write positions AFTER the game's own update.** The hook calls the original
+`seq_data[].main` first and writes afterwards, so an NPC's own move script
+cannot undo the write in the same frame. Writing first is the obvious order and
+loses.
+
+⛔ **No `sinf`** — a REL links `-nostdlib`. The circle comes from a 64-entry
+table built at `_prolog` by walking the unit circle with a rotation recurrence
+from one hard-coded step sine and cosine. No trig calls, no libm.
+
+⚠️ Entities are found **by tribe**, so the stand-ins had to be tribes `he1_04`
+does not already place (it uses templates 144/148/250/73). Picking Goombas for a
+map that shipped Goombas would have flung the map's own enemies around the room.
+
+### What is still missing
+
+🔶 The visual. The mechanic is proved with Mr. L and five Goombas, which is not
+what anyone wants to fight. A persistent entity that *looks* like an orb needs
+either a tribe whose model can be repointed (task #15) or a way to keep a
+projectile alive past its script.
