@@ -10,6 +10,7 @@ import re
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 
+from bleck import __version__ as bleck_version
 from bleck.script.errors import Position, ScriptError
 
 
@@ -286,11 +287,21 @@ def prefix_for(name: str) -> str:
 
 @dataclass(frozen=True)
 class Banner:
-    """An on-screen label naming the mod that is loaded."""
+    """The on-screen labels saying what this disc is.
+
+    Two of them: the mod, bottom right, and the toolkit that built it, top
+    left in purple. They travel together because one `code.banner` switch
+    governs both -- a disc that has asked to look stock must look stock.
+    """
 
     text: str
     sequences: tuple[Sequence, ...] = (Sequence.TITLE,)
     """Which sequences draw it. Already resolved from the manifest's names."""
+
+    @property
+    def loader_text(self) -> str:
+        """The toolkit line. Reads `bleck`'s own version, never a mod's."""
+        return f"Bleck Mod Loader Version {bleck_version}"
 
     @property
     def flags(self) -> str:

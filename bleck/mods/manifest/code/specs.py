@@ -29,15 +29,24 @@ class BannerSpec:
     enabled: bool = True
 
     text: str = ""
-    """Overrides the label. Empty means `mod_loaded: <mod name>`."""
+    """Overrides the label. Empty means `<mod name>-<version>`."""
 
     sequences: list[str] = field(
         default_factory=lambda: list(emit.DEFAULT_BANNER_SEQUENCES)
     )
     """Which game sequences draw it, by name from `SEQUENCE_NAMES`."""
 
-    def label(self, mod_name: str) -> str:
-        return self.text or f"mod_loaded: {mod_name}"
+    def label(self, mod_name: str, version: str = "") -> str:
+        """`tex-koopa-0.1.0`, or whatever `text` overrides it with.
+
+        ⚠️ The version is what tells two builds of one mod apart, which is the
+        whole point of a label on discs that are otherwise identical. Taken as
+        a string rather than a `Version` because that type lives a layer up,
+        and importing it here would be a cycle.
+        """
+        if self.text:
+            return self.text
+        return f"{mod_name}-{version}" if version else mod_name
 
     @property
     def is_default(self) -> bool:

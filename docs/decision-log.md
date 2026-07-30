@@ -11852,3 +11852,61 @@ switched on.
 confirmed in the module at a known offset and the drawing code is unchanged from
 D60's, but no one has booted one. D60's title-screen placement was confirmed by
 eye once (`mod_loaded: copy-race`); nothing since.
+
+---
+
+## D181 — The banner carries versions, and says which toolkit built the disc (2026-07-30)
+
+✅ **Two labels now, not one.** Measured in `tex-koopa`'s module: the strings
+`tex-koopa-0.1.0` at offset 844 and `Bleck Mod Loader Version 0.1.0` at 812.
+
+| Where | Text | Colour |
+|---|---|---|
+| Bottom right | `<mod>-<version>` | white |
+| Top left | `Bleck Mod Loader Version <bleck version>` | purple, `(170, 90, 230)` |
+
+The mod label was `mod_loaded: <name>`, which identifies *which* mod but not
+*which build of it*. Two discs built from the same mod a week apart were
+indistinguishable — the exact problem D60 set out to fix, one level down. The
+version is the part that does the work; `mod_loaded:` was prose and is gone.
+
+⚠️ **Two versions are in play and they are not interchangeable.** The loader
+line reads `bleck.__version__`; the mod label reads the manifest's. A test pins
+this, because a label that confidently reports the wrong version is worse than
+no label.
+
+### One draw sequence per label, deliberately
+
+⛔ **Rejected: two `FontDrawColor` calls inside one `FontDrawStart` batch.**
+D60's call sequence -- `FontDrawStart` -> style -> measure -> `FontDrawString`
+-- was copied from `spm-rel-loader`'s title-screen example because it is the
+only known-working use of `fontmgr`. Whether the font manager honours a colour
+change mid-batch is untested, and getting it wrong draws both labels in one
+colour, which looks like a styling choice rather than a bug.
+
+So `bleck_draw_label()` performs the whole proven sequence per label, and
+`bleck_draw_banner()` calls it twice. Costs one extra `FontDrawStart` per frame
+against a sequence D60 measured at 6,198 draws with no frame-rate change.
+
+✅ **Only the right-aligned label is measured.** `FontGetMessageWidth` is called
+for the mod label alone; the loader line is left-aligned at a fixed x and needs
+no width. Screen insets: `LEFT -296`, `RIGHT 296`, `TOP 200`, `BOTTOM -200`,
+against D60's measured extent of roughly x -320..320, y -240..240.
+
+### Both ride one switch
+
+`"banner": false` silences both. ⛔ The loader line is deliberately **not**
+separately configurable: a disc that has asked to look stock has to look stock,
+and a second switch would let one be forgotten.
+
+⚠️ **The generated C must be ASCII**, and an emoji in a comment I wrote broke
+17 tests at once. The guard that caught it (`generate.py` refuses non-ASCII
+output) exists because mod *names* come from manifests someone else wrote; it
+turns out to defend against the generator's own source too.
+
+🔶 **Still unverified on screen.** Both strings are confirmed in the module at
+known offsets, and the drawing code is D60's with one indirection added. Nobody
+has seen the purple, the top-left placement, or the two labels together. The
+title screen is unreachable unattended (D47, D48) and the rig reads memory, not
+pixels — `scripts/ingame.py` has no screenshot path and Dolphin on this host has
+no `Hotkeys.ini`, so there is currently no way to close this without a human.

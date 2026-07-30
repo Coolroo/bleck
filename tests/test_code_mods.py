@@ -168,7 +168,7 @@ class TestSeveralCodeMods:
         """⚠️ The banner names the mod that was asked for, and only that one.
 
         A chain is one mod plus what it needs, so a disc built from `x` is
-        `mod_loaded: x` whether `x` pulled in three dependencies or none --
+        `x-<version>` whether `x` pulled in three dependencies or none --
         those are `x`'s implementation, not co-authors of the disc (D180).
         """
         target = self._mod("x", True)
@@ -181,7 +181,7 @@ class TestSeveralCodeMods:
         )
         banner = code.banner_for(chain.target, chain.target.code)
         assert banner is not None
-        assert banner.text == "mod_loaded: x"
+        assert banner.text == "x-0.0.0"
 
 
 class TestNativeSources:
@@ -399,7 +399,7 @@ class TestBannerFromManifest:
         """The point of the feature: no mod declares anything."""
         spec = mod_manifest.CodeSpec(sources=["src"])
         assert spec.banner.enabled
-        assert spec.banner.label("coin-tick") == "mod_loaded: coin-tick"
+        assert spec.banner.label("coin-tick", "1.2.3") == "coin-tick-1.2.3"
 
     def test_a_mod_with_no_code_at_all_still_gets_one(self):
         """⚠️ D176. A texture disc is the one nobody can identify by looking."""
@@ -437,7 +437,7 @@ class TestBannerFromManifest:
         )
         banner = code.banner_for(mod)
         assert banner is not None
-        assert banner.text == "mod_loaded: speedrun"
+        assert banner.text == "speedrun-0.0.0"
 
     def test_it_can_be_turned_off(self, tmp_path):
         mod = self._mod(

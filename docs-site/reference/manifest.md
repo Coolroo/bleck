@@ -102,21 +102,29 @@ Every mod has a `mod.json` at its root.
 
         `code.banner` <span class="pf-type">object or `false`</span> <span class="pf-default">default: on</span>
 
-        :   The `mod_loaded: <name>` label drawn in the bottom right of the
-            title screen. **On by default — you do not need to declare it**,
-            and **every disc gets one**, including mods that are nothing but
-            textures or placements. Otherwise a modded disc is impossible to
-            tell from a stock one without playing it.
+        :   Two labels drawn on the title screen:
+
+            - **bottom right** — `<mod name>-<version>`, e.g.
+              `tex-koopa-0.1.0`. The version is what tells two builds of one
+              mod apart.
+            - **top left, in purple** — `Bleck Mod Loader Version <version>`,
+              naming the toolkit that built the disc. That is `bleck`'s own
+              version, not the mod's.
+
+            **On by default — you do not need to declare it**, and **every
+            disc gets them**, including mods that are nothing but textures or
+            placements. Otherwise a modded disc is impossible to tell from a
+            stock one without playing it.
 
             The name is the mod you built, never its dependencies: a disc
-            built from `my-hack` says `mod_loaded: my-hack` whether or not it
+            built from `my-hack` says `my-hack-1.0.0` whether or not it
             pulled in three other mods.
 
-            Set it to `false` to suppress the label, or pass an object to
-            change it:
+            Set it to `false` to suppress **both** labels, or pass an object
+            to change the mod's:
 
-            - `text` — replaces the whole label. Defaults to
-              `mod_loaded: <mod name>`.
+            - `text` — replaces the mod label. Defaults to
+              `<mod name>-<version>`. The loader line is not configurable.
             - `sequences` — which parts of the game draw it. One or more of
               `logo`, `title`, `game`, `mapchange`, `gameover`, `load`.
               Defaults to `["title"]`.

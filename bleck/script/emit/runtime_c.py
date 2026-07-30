@@ -318,32 +318,57 @@ extern void FontDrawRainbowColorOff(void);
 extern void FontDrawString(float x, float y, const char *text);
 extern unsigned short FontGetMessageWidth(const char *text);
 
+/*
+    Screen space is centred with y increasing upward, so the visible area is
+    roughly x -320..320 and y -240..240 (D60). These are the insets from that.
+*/
 #define BLECK_BANNER_RIGHT 296.0f
+#define BLECK_BANNER_LEFT (-296.0f)
 #define BLECK_BANNER_BOTTOM (-200.0f)
+#define BLECK_BANNER_TOP 200.0f
 #define BLECK_BANNER_SCALE 0.6f
 
+/* Bottom right: which mod this disc is, and which build of it. */
 static const char bleck_banner_text[] = {text};
+
+/* Top left: which toolkit built it. */
+static const char bleck_loader_text[] = {loader};
 
 /* wii/gx.h GXColor, four bytes. Not const: FontDrawColor overwrites alpha. */
 static u8 bleck_banner_color[4] = {{255, 255, 255, 255}};
+static u8 bleck_loader_color[4] = {{170, 90, 230, 255}};
 
 /* Which sequences draw it. .rodata, so the loader's bss handling is moot. */
 static const u8 bleck_banner_on[BLECK_SEQ_COUNT] = {{{flags}}};
+
+/*
+    One full FontDrawStart..FontDrawString per label, rather than setting the
+    colour twice inside one batch. This exact sequence is the only one known to
+    work (D60); whether the font manager honours a second FontDrawColor
+    mid-batch is untested, and two labels in one colour would fail silently.
+*/
+static void bleck_draw_label(const char *text, u8 *color, float x, float y)
+{{
+    FontDrawStart();
+    FontDrawEdge();
+    FontDrawColor(color);
+    FontDrawScale(BLECK_BANNER_SCALE);
+    FontDrawNoiseOff();
+    FontDrawRainbowColorOff();
+    FontDrawString(x, y, text);
+}}
 
 static void bleck_draw_banner(void)
 {{
     float width;
 
-    FontDrawStart();
-    FontDrawEdge();
-    FontDrawColor(bleck_banner_color);
-    FontDrawScale(BLECK_BANNER_SCALE);
-    FontDrawNoiseOff();
-    FontDrawRainbowColorOff();
-
+    /* Right-aligned, so the mod's name ends at the same place whatever its
+       length. The loader line is left-aligned and needs no measurement. */
     width = (float) FontGetMessageWidth(bleck_banner_text) * BLECK_BANNER_SCALE;
-    FontDrawString(BLECK_BANNER_RIGHT - width, BLECK_BANNER_BOTTOM,
-                   bleck_banner_text);
+    bleck_draw_label(bleck_banner_text, bleck_banner_color,
+                     BLECK_BANNER_RIGHT - width, BLECK_BANNER_BOTTOM);
+    bleck_draw_label(bleck_loader_text, bleck_loader_color,
+                     BLECK_BANNER_LEFT, BLECK_BANNER_TOP);
 }}
 """
 

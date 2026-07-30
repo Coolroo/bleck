@@ -393,7 +393,11 @@ def _hook_address(hook: FunctionHook) -> str:
 
 
 def _banner_block(banner: Banner) -> str:
-    return runtime_c.BANNER_BLOCK.format(text=_c_string(banner.text), flags=banner.flags)
+    return runtime_c.BANNER_BLOCK.format(
+        text=_c_string(banner.text),
+        loader=_c_string(banner.loader_text),
+        flags=banner.flags,
+    )
 
 
 def _combo_block(hooks: list[BoundCombo]) -> str:

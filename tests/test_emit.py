@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from bleck import __version__
 from bleck.mods import manifest as mod_manifest
 from bleck.script import compile_source, emit, evt
 from bleck.script.compiler import (
@@ -310,6 +311,72 @@ class TestBanner:
         # Names come from a manifest someone else wrote.
         out = emit.generate_bare(banner=emit.Banner(text="mod_loaded: café")).text
         out.encode("ascii")
+
+
+class TestLoaderLabel:
+    """The second label: which toolkit built the disc, top left in purple.
+
+    It rides on the same `code.banner` switch as the mod's own label. A disc
+    that asked to look stock has to look stock, so one `false` silences both.
+    """
+
+    def test_it_names_bleck_and_its_version(self):
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert f'bleck_loader_text[] = "Bleck Mod Loader Version {__version__}"' in out
+
+    def test_it_reports_blecks_version_not_the_mods(self):
+        """⚠️ Two versions are in play and they are not interchangeable."""
+        banner = emit.Banner(text="some-mod-9.9.9")
+        assert __version__ in banner.loader_text
+        assert "9.9.9" not in banner.loader_text
+
+    def test_turning_the_banner_off_takes_the_loader_line_with_it(self):
+        out = emit.generate_bare().text
+        assert "bleck_loader_text" not in out
+        assert "Bleck Mod Loader" not in out
+
+    def test_both_labels_are_drawn(self):
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        body = out.split("static void bleck_draw_banner")[1]
+        assert "bleck_banner_text" in body
+        assert "bleck_loader_text" in body
+
+    def test_each_label_gets_its_own_draw_sequence(self):
+        """⛔ Not two FontDrawColor calls in one batch.
+
+        D60's call sequence is the only one known to work, and whether the font
+        manager honours a colour change mid-batch is untested -- getting it
+        wrong would silently draw both labels in one colour.
+        """
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        helper = out.split("static void bleck_draw_label")[1].split("}")[0]
+        assert helper.count("FontDrawStart()") == 1
+        assert helper.count("FontDrawColor") == 1
+        assert helper.count("FontDrawString") == 1
+
+    def test_the_purple_is_not_the_mod_label_s_white(self):
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert "bleck_loader_color[4] = {170, 90, 230, 255}" in out
+        assert "bleck_banner_color[4] = {255, 255, 255, 255}" in out
+
+    def test_the_loader_colour_is_writable_too(self):
+        """`FontDrawColor` overwrites alpha, so const would write .rodata."""
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert "static u8 bleck_loader_color[4]" in out
+        assert "const u8 bleck_loader_color" not in out
+
+    def test_the_two_labels_sit_in_opposite_corners(self):
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert "#define BLECK_BANNER_LEFT (-296.0f)" in out
+        assert "#define BLECK_BANNER_TOP 200.0f" in out
+        assert "#define BLECK_BANNER_RIGHT 296.0f" in out
+        assert "#define BLECK_BANNER_BOTTOM (-200.0f)" in out
+
+    def test_only_the_right_aligned_label_is_measured(self):
+        """A left-aligned string needs no width, so it costs no font call."""
+        out = emit.generate_bare(banner=emit.Banner(text="x")).text
+        assert out.count("FontGetMessageWidth(bleck_banner_text)") == 1
+        assert "FontGetMessageWidth(bleck_loader_text)" not in out
 
 
 class TestGeneratedHandoff:

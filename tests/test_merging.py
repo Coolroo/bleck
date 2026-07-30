@@ -135,10 +135,10 @@ class TestDiscLevelChoices:
         out = merged(
             part("alpha", LOOPER),
             part("beta", GREETER),
-            banner=emit.Banner(text="mod_loaded: beta +1"),
+            banner=emit.Banner(text="beta-0.1.0"),
         )
         assert out.count("bleck_draw_banner(void)") == 1
-        assert "mod_loaded: beta +1" in out
+        assert "beta-0.1.0" in out
 
 
 class TestLimits:

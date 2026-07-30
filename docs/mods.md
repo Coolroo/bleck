@@ -105,7 +105,7 @@ A mod that ships **behaviour** rather than only assets adds a `code` block:
 | `hooks` | intercepts a *game C function*, named from the symbol list, with one of this mod's. The guard word is derived from the base disc's `main.dol` (D95). `mode` is `replace` (the original never runs), `before` or `after` (it does, and its return value is what the caller gets) — all three verified (D97). ⚠️ Under `before`/`after` an address the DOL does not map is a build **error**, not a warning |
 | `combos` | button-combination name → script name; combinations are named in `bleck.yml` (D77) |
 | `boot` | a map to start the game at instead of the attract demo (D64) |
-| `banner` | on-screen confirmation that the module loaded (D49). ⚠️ **Every disc draws one, including mods with no `code` block at all** (D180) — a texture or placement disc otherwise looks stock. It names the mod that was built, never its dependencies. `"banner": false` alone is a valid `code` block and means no module is emitted |
+| `banner` | on-screen confirmation that the module loaded (D49). Two labels (D181): `<mod>-<version>` bottom right, and `Bleck Mod Loader Version <bleck version>` top left in purple. ⚠️ **Every disc draws them, including mods with no `code` block at all** (D180) — a texture or placement disc otherwise looks stock. The name is the mod that was built, never its dependencies. `"banner": false` silences both, and alone is a valid `code` block meaning no module is emitted |
 | `target` | which version's symbol list resolves game functions. Default `eu0` |
 | `module_id` | REL module id. The game's own REL is 1, so mods start at 2 |
 

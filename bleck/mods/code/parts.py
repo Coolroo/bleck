@@ -599,16 +599,16 @@ def _no_guard_warning(
 
 
 def banner_for(mod: Mod, spec: CodeSpec | None = None) -> emit.Banner | None:
-    """The on-screen label this mod should draw, if any.
+    """The on-screen labels this disc should draw, if any.
 
-    The text defaults to the mod's own name. Pass `spec` when the build works
-    from a synthesized `code` block rather than the manifest's own.
+    The text defaults to the mod's name and version. Pass `spec` when the
+    build works from a synthesized `code` block rather than the manifest's own.
     """
     spec = spec if spec is not None else mod.code
     if spec is None or not spec.banner.enabled:
         return None
     return emit.Banner(
-        text=spec.banner.label(mod.name),
+        text=spec.banner.label(mod.name, str(mod.manifest.version)),
         # Names to members. `_parse_banner` has already rejected anything
         # unknown, so this cannot be None -- but `.index()` would have raised
         # ValueError rather than said so.
