@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "name": "heart-probe",
+  "version": "0.1.0",
+  "description": "Ask mac_12 what the Pure Heart object is actually called",
+  "base": "eu0",
+  "code": {
+    "sources": ["src"],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "boot": "mac_12"
+  }
+}

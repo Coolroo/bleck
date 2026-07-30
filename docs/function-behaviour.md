@@ -676,3 +676,56 @@ proceeds unconditionally; otherwise it is called and a zero return makes
 
 ⛔ There is **no Chaos Heart entity** in the 435 templates or 535 tribes. The
 portal is the closest thing the game already has to the void it represents.
+
+---
+
+## ✅ Map objects: the API, and where its work pointer lives (D165)
+
+Scenery, blocks, doors and pillars are **map objects**, not NPCs, and they have
+their own driver:
+
+```c
+s32          mobjEntry(const char *instanceName, const char *animPoseName);  // 0x8002B390
+void         mobjSetPosition(const char *instanceName, f32 x, f32 y, f32 z);  // 0x8002B72C
+MobjEntry *  mobjNameToPtr(const char *instanceName);                         // 0x8002C834
+MobjEntry *  mobjNameToPtrNoAssert(const char *instanceName);                 // 0x8002C8E8
+const char * mobjGetModelName(MobjEntry *mobj);                               // 0x8002EB38
+void         mobjDelete(const char *instanceName);                            // 0x8002B664
+```
+
+🟢 **`mobjEntry` creates one from a model name** — the same kind of string as a
+tribe's `animPoseName`. That is a second route to putting an arbitrary object in
+the world, alongside the NPC model swap (D162).
+
+### ✅ `mobjdrv_wp` = `0x805ADF10`, measured
+
+Not in `spm.eu0.lst`. Read out of `mobjNameToPtrNoAssert`:
+
+```
+8002c90c  lwz r4,-32752(r13)   <- r13 is 0x805B5F00, so the work is at 0x805ADF10
+8002c910  lwz r30,0(r4)        <- MobjWork.entryCountMax
+8002c914  lwz r29,4(r4)        <- MobjWork.entries
+8002c91c  lwz r0,0(r29)        <- MobjEntry.flag0
+8002c920  clrlwi. r0,r0,31     <- bit 0 is "active"
+8002c92c  addi r3,r29,8        <- MobjEntry.instanceName
+```
+
+✅ The offsets it uses match `mobjdrv.h` exactly — `instanceName` at +0x008,
+`flag0` bit 0 active — which is a check on the read rather than a coincidence.
+`MobjEntry` is `0x2a8`; `MobjWork` is `0x18`.
+
+### 🔶 Where a Pure Heart actually is
+
+⛔ **Not an NPC, not a global model, not an effect that renders.** It is geometry
+inside `mac_12`'s (Flipside's) `map.dat`, which is undecoded. The REL bundles
+carry `heart_01`, `A2_heart_01`, `A3_heart_iwa` and `pure_heart` immediately
+beside `mac_12_init_evt`, with `A2_`/`A3_` being SPM's 2D and 3D layer pair.
+
+⛔ Looking those five names up at `mac_12` with `mobjNameToPtrNoAssert` found
+**none of them** — 5 tried, 0 found. 🔶 The likeliest reason is game state: a
+fresh save has no Pure Hearts on Flipside's pillars, because they are placed
+there as they are collected.
+
+🟢 Next: enumerate `MobjWork.entries` and dump every live instance name and
+model. That replaces guessing names with reading them, and gives `mobjEntry` a
+model string that is known to exist.

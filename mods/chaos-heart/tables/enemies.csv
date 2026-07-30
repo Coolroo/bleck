@@ -1,0 +1,9 @@
+# The Chaos Heart, floating beside the player.
+#
+# Mr. L is the carrier: src/heart.c repoints tribe 295's model to
+# MOBJ_broken_heart and keeps him at the player's shoulder. Only template 137
+# uses tribe 295, so nothing else in the game is restyled (D162).
+#
+# he1_04 ships 30 enemies in slots 0-29, so 30 is the first empty one (D79).
+map,slot,template,x,y,z,copy_from
+he1_04,30,137,-900,160,0,0
