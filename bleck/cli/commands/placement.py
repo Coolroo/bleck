@@ -71,9 +71,9 @@ def cmd_show(args: argparse.Namespace) -> int:
 
     # ⛔ This said the reverse until now, citing D13/D53: "the game reads the
     # copy inside files/map/<map>.bin, not this one". D62 measured the opposite
-    # and the project instructions call it the single most-copied wrong fact in this repo --
-    # which it proved by surviving here, in user-facing output, long after every
-    # doc was corrected.
+    # and the project instructions call it the single most-copied wrong fact
+    # in this repo -- which it proved by surviving here, in user-facing output,
+    # long after every doc was corrected.
     #
     # ASCII only: the Windows console is cp1252 by default.
     print(
