@@ -11174,3 +11174,23 @@ map that shipped Goombas would have flung the map's own enemies around the room.
 what anyone wants to fight. A persistent entity that *looks* like an orb needs
 either a tribe whose model can be repointed (task #15) or a way to keep a
 projectile alive past its script.
+
+---
+
+## D161 — ✅ Seen on screen, and a moved NPC keeps its hitbox (2026-07-30)
+
+Watched by a human, which is the half the rig cannot do: the orb and its five
+satellites drift across `he1_04`, reverse at the bounds, and turn around the orb
+as intended. D160's counters were describing something real.
+
+✅ **And they damage the player on contact.** That was not designed in — the
+satellites are ordinary enemies, and moving an NPC by writing `NPCEntry.position`
+(+0x2A0) every frame leaves its collision and contact damage intact.
+
+🟢 **Which means an attack needs no damage code.** Whatever entity is chosen for
+the beams brings its own hitbox, so the mod only has to decide *where* things
+are. That removes the largest unknown from the attack design.
+
+⚠️ The corollary is a hazard: any entity driven this way is dangerous by
+default. A decorative orb would need its damage explicitly disabled, not
+explicitly enabled — the opposite of what the code currently assumes.
