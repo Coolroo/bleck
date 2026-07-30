@@ -95,7 +95,7 @@ swdrv.c:505
   コインのフラグが溢れました
 ```
 
-`mods/coin-nobudget` is the worked example. ⚠️ Assert messages are **Shift-JIS**;
+`example-mods/coin-nobudget` is the worked example. ⚠️ Assert messages are **Shift-JIS**;
 decoding as ASCII discards the sentence that explains the failure.
 
 ### The item loader and its 512 ceiling
@@ -144,7 +144,7 @@ agree on door name, group, and all three zone destinations.
 
 Booting, walking a probe block and shutting down is
 [the rig](method.md). Each behavioural claim names the mod that produced it:
-`mods/door-swap`, `mods/zone-event`, `mods/coin-nobudget`, `mods/mr-l`.
+`example-mods/door-swap`, `example-mods/zone-event`, `example-mods/coin-nobudget`, `example-mods/mr-l`.
 
 ---
 

@@ -224,7 +224,7 @@ the compiler, because the bytecode tests asserted **what the compiler emits**
 rather than what the VM requires — an assertion of a compiler against itself
 passes on any self-consistent compiler. `tests/test_script.py::TestTermination`
 now asserts the property the VM imposes: every compiled script ends with both
-terminators, whatever its last statement was. `mods/end-scope` is the worked
+terminators, whatever its last statement was. `example-mods/end-scope` is the worked
 example.
 
 ### Two things the encoding forces

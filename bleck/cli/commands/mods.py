@@ -15,6 +15,7 @@ from pydantic import ValidationError
 
 from bleck import api
 from bleck.backends import emulator, gecko, maps
+from bleck.cli import shared as shared_flags
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import guard_overwrite
@@ -365,7 +366,9 @@ def register(add: AddCommand) -> None:
 
     def action(name: str, func, help_text: str) -> argparse.ArgumentParser:
         child = sub.add_parser(name, help=help_text)
-        child.add_argument("--force", action="store_true", help="overwrite output")
+        # ⚠️ A nested subparser inherits nothing from the top-level parent, so
+        # the shared flags are attached again here (bleck/cli/shared.py).
+        shared_flags.add_shared_flags(child)
         child.set_defaults(func=func)
         return child
 

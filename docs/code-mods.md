@@ -391,7 +391,7 @@ ignored, and a near miss is suggested (`innit` → "Did you mean 'init'?").
 
 ⛔ **The index is a position, not an id.** `DoorDesc` has no lookup by name
 (D91): the index is a place in the array the map registers, in registration
-order. `mods/door-scan` reports how many a map registers.
+order. `example-mods/door-scan` reports how many a map registers.
 
 ⛔ **It is not bounds-checked at build time, and cannot be.** How many doors a
 map registers is game data. The generated code compares the index against the
@@ -679,7 +679,7 @@ What is still not true:
 - 🔶 **Dolphin only.** As with every cache-flush result here (D94, D96), this is
   Dolphin's cache model and not a real 750's.
 
-✅ **Measured once, 120 s, `mods/intercept-probe`.** The probe was built to tell
+✅ **Measured once, 120 s, `example-mods/intercept-probe`.** The probe was built to tell
 the two modes *apart*, not merely to show a hook installing: the wrapper calls
 `bleck_trace_result` when the original returns, so at handler time `lastResult`
 holds the previous call's value under `before` and this call's under `after`.
@@ -792,8 +792,8 @@ void *traceMapDataPtr(const char *mapName)
 }
 ```
 
-`mods/fn-trace-probe` is the worked example, `mods/fn-trace-guard` the negative,
-`mods/fn-trace-somewhere` a three-target investigation. What they found is in
+`example-mods/fn-trace-probe` is the worked example, `example-mods/fn-trace-guard` the negative,
+`example-mods/fn-trace-somewhere` a three-target investigation. What they found is in
 [`function-behaviour.md`](function-behaviour.md).
 
 #### ⚠️ What a trace cannot see

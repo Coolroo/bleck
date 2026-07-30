@@ -390,7 +390,7 @@ instruction is still the branch back into your handler.
     every frame; and on a one-instruction leaf the overhead is larger than the
     function. Measure rather than assume.
 
-`mods/fn-trace-probe` in the repository is the worked example.
+`example-mods/fn-trace-probe` in the repository is the worked example.
 
 ## Writing the branch yourself
 

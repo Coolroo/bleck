@@ -217,6 +217,21 @@ def path(variable: EnvVar) -> Path | None:
     return Path(value) if value else None
 
 
+def override(variable: EnvVar, value: str) -> None:
+    """Set a variable for this process, as a command-line flag would.
+
+    ⚠️ **The only sanctioned write.** Everything else here reads, and the
+    project rule is that `os.environ` is untouchable outside this module -- so a
+    flag like `--mods-dir` that means "for this invocation" is applied here
+    rather than by threading a path through every call that might want it.
+
+    The real environment is *replaced*, not merged: a flag the user typed is
+    more specific than a value in `.env`, and silently losing to one would be
+    the wrong way round.
+    """
+    os.environ[variable.name] = value
+
+
 def is_set(variable: EnvVar) -> bool:
     return variable.name in os.environ
 

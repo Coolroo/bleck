@@ -2424,7 +2424,7 @@ Verified compiling and linking against the real symbol list:
 - `pouchGetCoin` / `pouchSetCoin` and every other plain function in the lst
 - game structures read and written directly
 
-`mods/hook-demo` demonstrates both halves in one mod: a script that adds a coin
+`example-mods/hook-demo` demonstrates both halves in one mod: a script that adds a coin
 every ten seconds, and C that calls two ordinary functions a script cannot.
 1,628 bytes with both; a sources-only variant came to 612.
 
@@ -2469,7 +2469,7 @@ Test suite 291 → 300. pylint 10.00/10.
 path but nothing had been booted; this closes that 🔶. Verified unattended, by
 reading the game's memory from outside — no human watched a screen.
 
-`mods/menu-watch` is native-only: no script, so `bleck` emits just the REL
+`example-mods/menu-watch` is native-only: no script, so `bleck` emits just the REL
 entry points and the `mod_prolog` hand-off, and the sequence table is entirely
 the mod's. It hooks all six `seq_data[].main`, counts frames per sequence, and
 records where each map change is going.
@@ -2868,7 +2868,7 @@ Both halves were already proven, which is the point: `evtEntry` from
 change. evt state is torn down and rebuilt across a map change (D43), so a
 script started mid-change would be destroyed on the way out.
 
-Measured with `mods/map-hook`:
+Measured with `example-mods/map-hook`:
 
 | Observation | Value |
 |---|---|
@@ -2886,7 +2886,7 @@ distinction this project keeps having to buy the hard way.
 ### Consequences for the language
 
 `main` is no longer required. It is what the sequence hook free-runs; a mod whose
-scripts all start some other way should not have to invent one. `mods/map-hook`
+scripts all start some other way should not have to invent one. `example-mods/map-hook`
 has no `main` at all.
 
 ### The general lesson
@@ -3554,7 +3554,7 @@ by comparing things that had only ever been used separately.
 
 **Supersedes D53 (wrong) and closes D59 (unresolved).**
 
-`mods/copy-race` put a **different enemy in each copy** and cleared the other
+`example-mods/copy-race` put a **different enemy in each copy** and cleared the other
 slots, so exactly one enemy could appear and it would name the winner:
 
 | Copy | Enemy placed |
@@ -3591,7 +3591,7 @@ that matters instead of saying "unresolved".
 
 ### ✅ Placement editing is confirmed working end to end
 
-Both discs showed the declared enemy. `mods/hard-lineland`'s Squig appears where
+Both discs showed the declared enemy. `example-mods/hard-lineland`'s Squig appears where
 Lineland Road's first Goomba was, from six lines of JSON.
 
 ### Two things the test discs also showed
@@ -3915,7 +3915,7 @@ Re-read the entry before letting it rule something out.
                            ^magic   ^hooks   ^frames  ^held    ^seen
 ```
 
-`mods/button-probe` reads `wpadGetWork()->statuses[0][0].buttonsHeld` from the
+`example-mods/button-probe` reads `wpadGetWork()->statuses[0][0].buttonsHeld` from the
 per-frame sequence hook. With A+B+1+2 held it reports `0x00000F00`.
 
 ### ✅ The four face-button bits are confirmed
@@ -4000,7 +4000,7 @@ D67 confirmed the four bits as a *set* — holding all four gave `0x0F00` — bu
 that is the same total under any permutation. This settles the assignment.
 
 🔶 `plus`, `minus`, `home` and the d-pad remain unverified, and the method for
-settling them is now routine: `mods/button-probe` plus `scripts/decode_buttons.py`.
+settling them is now routine: `example-mods/button-probe` plus `scripts/decode_buttons.py`.
 
 ### ✅ Keystrokes can be injected after all — D48 was scoped, twice over
 
@@ -4057,7 +4057,7 @@ with 1+2 pressed          without
                           [t+99s] GAME  gw[31]=0
 ```
 
-`gw[31] = 1` is the first statement of `warp_home` in `mods/warp-combo`. It
+`gw[31] = 1` is the first statement of `warp_home` in `example-mods/warp-combo`. It
 goes high within four seconds of the press and stays 0 for a whole run without
 one. The control is what makes this a finding rather than a coincidence: gw
 slots are shared with the game (a contended slot produced a nearly-false
@@ -4214,7 +4214,7 @@ changes maps perfectly well.
 [t+105s] MAPCHANGE map=he1_01        <- again, because `main` re-arms (D43)
 ```
 
-`mods/mapchange-probe` has `code.combos` compiled in and calls
+`example-mods/mapchange-probe` has `code.combos` compiled in and calls
 `evt_seq_mapchange` from `main`. It works.
 
 ### The variable D70 missed: the settle
@@ -4479,7 +4479,7 @@ positive one.** Nothing in this project's rules said that yet. It does now.
 
 ✅ **The whole chain works, verified by a human playing the game.**
 
-`mods/warp-combo`: the disc boots itself into Lineland, and pressing **1+2**
+`example-mods/warp-combo`: the disc boots itself into Lineland, and pressing **1+2**
 warps to Flipside. Observed on screen, not inferred.
 
 ```
@@ -4519,7 +4519,7 @@ property of arriving without loading a save, not of combinations.
 [t+45s] seq=GAME  map=aa4_01  gw[28]=2  gw[29]=2
 ```
 
-`mods/merge-a` writes `gw[28]`, `mods/merge-b` writes `gw[29]`, and **both
+`example-mods/merge-a` writes `gw[28]`, `example-mods/merge-b` writes `gw[29]`, and **both
 declare `script main`** -- the collision the whole feature exists to allow. Each
 script is `slot = 1; wait(60); slot = 2`, so reaching **2** means it ran to
 completion rather than merely being scheduled.
@@ -4582,7 +4582,7 @@ positions. With the gap, slot 2 never spawns.
 
 ### This closes the question open since 2026-07-27 morning
 
-`mods/hard-lineland` declared slots 0, 1 (cleared) and 2, and only the first
+`example-mods/hard-lineland` declared slots 0, 1 (cleared) and 2, and only the first
 enemy appeared. Both recorded hypotheses were wrong:
 
 - ⛔ "template 144 is refused in this map" — the same template spawns fine in
@@ -4627,7 +4627,7 @@ cannot distinguish "did not spawn" from "spawned somewhere I did not look".
 
 ## D80 — The fix verified, including the template that was blamed (2026-07-27)
 
-✅ **`mods/hard-lineland` spawns all three declared enemies.**
+✅ **`example-mods/hard-lineland` spawns all three declared enemies.**
 
 ```
 [t+51s] map=he1_01  npcs[3] slot0:npc_00000001 slot1:npc_00000002 slot2:npc_00000003
@@ -5324,7 +5324,7 @@ D83 and D76 both cost a session for skipping.
 
 ## D88 — ✅ `initScript` is linked at `mod_prolog`, and my own D87 guess was wrong (2026-07-28)
 
-One run of `mods/evt-probe`, unattended. Full transcript
+One run of `example-mods/evt-probe`, unattended. Full transcript
 `work/build/evt-probe-run.log`.
 
 ### ✅ Step 1: the pointer is stable, and available early
@@ -5513,7 +5513,7 @@ a mismatch**. Status lands in `bleck_patch_status[]`, which a mod's own C reads:
 1 pending, 2 applied, 3 refused, 4 no script. Patches are applied from `_prolog`
 *before* `mod_prolog`, so that read is final.
 
-### ✅ Both runs, `mods/evt-patch`, 60 s each
+### ✅ Both runs, `example-mods/evt-patch`, 60 s each
 
 `uv run python scripts/ingame.py evt-patch --map he1_01 --words 12 --seconds 60`
 
@@ -5562,7 +5562,7 @@ clean at 10.00/10.
 
 ## D91 — Item scripts are reachable; doors are not, and the 2-word rule is too narrow (2026-07-28)
 
-Read-only probe (`mods/item-probe`), asking of items the three questions D88
+Read-only probe (`example-mods/item-probe`), asking of items the three questions D88
 asked of maps. Full transcript `work/build/item-probe.log`.
 
 ### ✅ Item use scripts are reachable, static, and stable
@@ -5796,7 +5796,7 @@ init script should call it through `USER_FUNC`, putting the descriptor array's
 address in the bytecode as an argument. Reading it would need nothing new —
 only what D89 proved.
 
-**It is wrong.** `mods/door-probe` walked five maps' init scripts and found no
+**It is wrong.** `example-mods/door-probe` walked five maps' init scripts and found no
 such call.
 
 ### The walk, and why the negative is trustworthy
@@ -5883,7 +5883,7 @@ else entirely.
 
 ### ✅ Stage 1 — the flush is what makes the patch real
 
-`mods/code-patch-probe`. Two pairs of trivial functions in the module's own
+`example-mods/code-patch-probe`. Two pairs of trivial functions in the module's own
 `.text`, patched identically, differing **only** in whether the line was
 flushed. Each pair is called once *before* the write, so the old body is already
 in the instruction cache when the store lands — otherwise the no-flush case is
@@ -5925,7 +5925,7 @@ Game healthy throughout: attract demo `aa4_01` → `ls4_12`, counter climbing.
 
 ### ✅ Stage 2 — the mechanism works on live game code
 
-`mods/door-hook-probe`, booted straight to Flipside (`--map mac_01`). Branch
+`example-mods/door-hook-probe`, booted straight to Flipside (`--map mac_01`). Branch
 *replacement*, not a trampoline: the original never runs.
 
 ⚠️ **The first attempt hung, and saying so is the point.** Its positive control
@@ -6072,7 +6072,7 @@ searched. A second warning covers a subtler case: eu0's *data* reaches
 `805B7720`, so `0x804a0000` looks like code, resolves cleanly and lands in
 `data12` — guarded, but almost certainly a mistake, so it is said out loud.
 
-### ✅ Positive — `mods/fn-hook-probe`, 90 s in `mac_01`
+### ✅ Positive — `example-mods/fn-hook-probe`, 90 s in `mac_01`
 
 `uv run python scripts/ingame.py fn-hook-probe --map mac_01 --words 16 --seconds 90`
 
@@ -6093,7 +6093,7 @@ gameplay in `mac_01` was reached, which is exactly the truncation-versus-absence
 distinction D94's first stage-2 run got wrong. ⛔ Not `effMain`: D94 recorded
 that stubbing it wedges `SEQ_MAPCHANGE`.
 
-### ✅ Negative — `mods/fn-hook-guard`, the guard refusing on demand
+### ✅ Negative — `example-mods/fn-hook-guard`, the guard refusing on demand
 
 **Two hooks on the same function**, so the guard fails without editing anything
 `bleck` generated. Both carry the same derived `9421FE40`; hook 0 installs and
@@ -6548,7 +6548,7 @@ recurse into itself at run time until the stack ran out.
 zero rather than calling the original. That path is unreachable by construction;
 it is there because "unreachable" and "safe" are different claims.
 
-### Measured: `mods/intercept-probe`, one run, 120 s
+### Measured: `example-mods/intercept-probe`, one run, 120 s
 
 The probe was built around one question — **can it tell the two modes apart?** A
 hook that installs and a handler that counts prove neither half of the claim:
@@ -6866,7 +6866,7 @@ leave a table of behaviour as a table.**
 
 ## D101 — ⛔ D93 and D94 were both wrong: door descriptors ARE registered from map init scripts (2026-07-28)
 
-**`mods/door-scan`, one 90 s run.** Map init scripts call door descriptor
+**`example-mods/door-scan`, one 90 s run.** Map init scripts call door descriptor
 setters. `door:` is not unreachable, and the two entries saying so are
 superseded.
 
@@ -6950,7 +6950,7 @@ size corrupts the script rather than failing.
 
 ## D102 — ✅ The door setters take argc 3, and the header's macro is wrong (2026-07-28)
 
-`mods/door-argc`, one 75 s run. The measurement D101 left open, and it also
+`example-mods/door-argc`, one 75 s run. The measurement D101 left open, and it also
 fixes D101's own gap — which map each call came from.
 
 | | header | map | arg0 | arg1 |
@@ -7339,14 +7339,14 @@ shape of fix.
 - 4 tests asserted exact word sequences and now include `END_EVT`. They are the
   only tests that could have caught this and did not, because they assert what
   the compiler emits rather than what the VM requires.
-- `mods/end-scope` is the worked example: the script that froze, the same script
+- `example-mods/end-scope` is the worked example: the script that froze, the same script
   with `return`, and the same script again after the fix.
 
 ---
 
 ## D107 — ✅ NPC behaviour scripts exist, are static, and decode (2026-07-28)
 
-`mods/npc-probe`, three runs. The research question D106's follow-up posed —
+`example-mods/npc-probe`, three runs. The research question D106's follow-up posed —
 *where do an NPC's behaviour scripts come from, and are they reachable* — with a
 clear answer and a clear next obstacle.
 
@@ -7426,7 +7426,7 @@ a useful time.
 
 ## D108 — ✅ A mod can load a NAND save slot itself (2026-07-28)
 
-`mods/save-probe`. Groundwork for `--save-slot`, which would turn most of the
+`example-mods/save-probe`. Groundwork for `--save-slot`, which would turn most of the
 remaining attended tests unattended.
 
 | | |
@@ -7545,7 +7545,7 @@ somewhere is static.
 
 ### ✅ Measured, at `mod_prolog`, before anything spawned
 
-`mods/npc-template` scanned 16,384 words from `npcEnemyTemplates`
+`example-mods/npc-template` scanned 16,384 words from `npcEnemyTemplates`
 (`0x80449888`) for the four addresses D107 had already measured off a live
 entry in `he1_01`:
 
@@ -7734,7 +7734,7 @@ most of the game's enemies believing they changed a Goomba.
 
 ## D113 — ✅ The item table decoded, and two D109 statements are wrong (2026-07-28)
 
-An **unattended verification boot** of a new `mods/attended`, run purely to
+An **unattended verification boot** of a new `example-mods/attended`, run purely to
 check the instrument before spending a human's time on it. It produced four
 findings before anybody touched a controller, which is the argument for the
 practice.
@@ -7805,7 +7805,7 @@ D112 left this as REFUSED with the opening word unrecorded. It is `0004005C`.
 Changing `expect` to `USER_FUNC 4` makes it **APPLIED**, so both npc patches now
 apply and `npcdrv:999` still reports NO_SCRIPT as the control.
 
-### ✅ `mods/attended` — both attended questions in one boot
+### ✅ `example-mods/attended` — both attended questions in one boot
 
 `item:` (🔶 since D92) and `npcdrv:` (🔶 since D112) both need a person: one
 needs a menu, the other needs an enemy hit. They share a save, a map (`he1_01`
@@ -7843,7 +7843,7 @@ otherwise have been discovered by burning an attended run.**
 
 ## D115 — ✅ BOTH attended hooks ENTER: item and npcdrv, one boot (2026-07-28)
 
-The attended run D113 built the instrument for. `mods/attended`, `he1_01`, save
+The attended run D113 built the instrument for. `example-mods/attended`, `he1_01`, save
 slot 1. Two 🔶 closed and a third finding nobody was looking for.
 
 ⚠️ Numbered D115 because D114 was being written concurrently. Nothing was
@@ -7918,7 +7918,7 @@ through a door, which is a smaller ask than either of these were.
 
 ## D116 — ✅ `door:` ENTERS too — every selector is now proven end to end (2026-07-28)
 
-Attended run, `mods/door-attended`, `he1_01`, save slot 1. The player used the
+Attended run, `example-mods/door-attended`, `he1_01`, save slot 1. The player used the
 map's one door.
 
 | | status | enters |
@@ -8214,7 +8214,7 @@ same one, and it passed.
 
 ### ✅ 33 names resolved to the 33 ids D113 measured
 
-`mods/attended` patched all 33 entries of `itemEventDataTable` **by hex id**,
+`example-mods/attended` patched all 33 entries of `itemEventDataTable` **by hex id**,
 taken from a live table read (D113). Rewriting the same manifest **by name** and
 regenerating produced the identical id column, in the identical order:
 
@@ -8237,7 +8237,7 @@ the catalog.
 ### ✅ The ambiguity guard earned its place immediately
 
 `0xB0` is `Mistake`, and `Mistake` is the English name of more than one id, so
-the parser refuses it. `mods/attended` keeps that one row as `item:0xB0` beside
+the parser refuses it. `example-mods/attended` keeps that one row as `item:0xB0` beside
 32 names, which is the intended outcome: a name that cannot be resolved
 unambiguously is an error, not a coin toss, and hex remains available.
 
@@ -8436,7 +8436,7 @@ selector parsers out of `codespec.py` is the work this defers.
 ## D122 — ✅ Extra enemies already worked; nothing had ever checked (2026-07-29)
 
 The ask was to *add* enemies to a map rather than replace the ones it ships
-with. ⛔ **No feature was needed.** `bleck` could already do it, `mods/hard-lineland`
+with. ⛔ **No feature was needed.** `bleck` could already do it, `example-mods/hard-lineland`
 has been declaring it since it was written, and nobody had ever verified it
 spawns.
 
@@ -8612,7 +8612,7 @@ Near-misses go through `ItemNames.suggest`, the same `difflib` pass
 
 The id column is **hex** (`0x041`). Both spellings are useful, and hex wins
 because the listing exists to be copied into a selector: every id in this repo's
-manifests, in `mods/attended`, and in D113/D114/D118 is written `item:0x41`.
+manifests, in `example-mods/attended`, and in D113/D114/D118 is written `item:0x41`.
 Decimal appears only inside generated C comments, which nobody types.
 
 ⛔ **No `--json`.** `bleck maps`, the command this mirrors, has none, and the
@@ -8826,7 +8826,7 @@ This builds that, and the table format it wanted anyway.
 ### ✅ CSV, and what it cost
 
 ```csv
-# mods/spawn-extra/tables/enemies.csv
+# example-mods/spawn-extra/tables/enemies.csv
 map,slot,template,x,y,z
 he1_01,3,2,-300,0,0
 ```
@@ -8884,7 +8884,7 @@ write the number. Model names (`e_kuribo`) are a second tier below English ones,
 exactly as `ItemNames.resolve` tiers its own aliases; `items.normalize` is reused
 rather than reimplemented.
 
-⚠️ **`mods/spawn-extra` therefore writes `2`, not `Goomba`** — its own worked
+⚠️ **`example-mods/spawn-extra` therefore writes `2`, not `Goomba`** — its own worked
 example cannot use the name it is a Goomba by.
 
 ### ✅ Two shapes of table, because two shapes of mod
@@ -8912,7 +8912,7 @@ past it — verified by test rather than assumed, since the guard sits in
 
 ### ✅ Proof the conversion changed nothing
 
-`mods/spawn-extra` was converted from inline `setup` to a table and rebuilt:
+`example-mods/spawn-extra` was converted from inline `setup` to a table and rebuilt:
 
 ```
 work/build/spawn-extra/files/setup/he1_01.dat
@@ -8994,7 +8994,7 @@ Schema.
 ### Verified
 
 - 987 tests, pylint 10.00/10, `mkdocs build --strict` clean.
-- `mods/spawn-extra` rebuilt through the new parser produces
+- `example-mods/spawn-extra` rebuilt through the new parser produces
   `he1_01.dat` **byte-identical** (sha256 `f4d5c506…4135b`) to the build D122
   verified in-game. The refactor changed the declaration, not the bytes.
 
@@ -9174,7 +9174,7 @@ size is not new. Recorded so the ruling-out is on the record either way.
 He jumped to attack, used the spring attack, damaged the player and took damage.
 So the template's behaviour scripts run, not just its model: **placing a foreign
 enemy gives you a working enemy**, which is the version of this finding that
-matters. `mods/mr-l` is the worked example.
+matters. `example-mods/mr-l` is the worked example.
 
 ### ✅ The guard, since the crash is confirmed and the cause is not
 
@@ -9708,7 +9708,7 @@ particular entry.
 
 ### ✅ What three unattended runs establish
 
-`mods/door-swap` writes `&replacement` into `he1_01` door 0's `interactScript`
+`example-mods/door-swap` writes `&replacement` into `he1_01` door 0's `interactScript`
 field (`DoorDesc + 0x40`) at `_prolog`, where `code.patches` already reaches.
 
 | | |
@@ -9851,7 +9851,7 @@ patched door "took me to the guy who gives mario the flipping powers house".
 original before swapping it, so the swapped door and the used door are the same
 one. No ambiguity is left in the human test.
 
-### ⛔ `door:he1_01:9` in `mods/door-attended` addressed nothing
+### ⛔ `door:he1_01:9` in `example-mods/door-attended` addressed nothing
 
 With `count` 1, index 9 is out of range. D103 predicted the behaviour — "one past
 the end resolves to nothing and reports status 4 at run time rather than writing
@@ -10050,7 +10050,7 @@ shape, not a rule.
 
 ## D141 — ✅ `bleck doors`, and `door:` indices are bounds-checked (2026-07-29)
 
-D137 found a `door:he1_01:9` patch sitting in `mods/door-attended`, committed
+D137 found a `door:he1_01:9` patch sitting in `example-mods/door-attended`, committed
 and addressing nothing, because `he1_01` has exactly one door. Nothing could
 have caught it: the count lives in the game's data, so it was a run-time
 question and the generated code reported `NO_SCRIPT` silently.
@@ -10130,7 +10130,7 @@ bleck: mods\door-patch\mod.json: 'code.patches[3]': he1_01 has no door 9.
 
 ### ✅ The check was right; two committed mods were wrong
 
-`mods/door-attended` and `mods/door-patch` both carried a `door:he1_01:9`
+`example-mods/door-attended` and `example-mods/door-patch` both carried a `door:he1_01:9`
 patch as an **out-of-range control**. `he1_01` has exactly one door (D137), so
 each addressed nothing and reported `NO_SCRIPT` — indistinguishable from a
 control that had simply not fired. Both are removed, with a comment saying why
@@ -10424,3 +10424,63 @@ remains ahead on *insertion and deletion*; this covers replacement.
 ⚠️ The zone form must re-attach on every map entry, per the slot-clearing above.
 A declaration that attaches once at `_prolog` would work exactly once and then
 look broken.
+
+---
+
+## D147 — `mods/` is the user's; the examples move to `example-mods/` (2026-07-29)
+
+`mods/` had accumulated **56 directories**, and they were two different kinds of
+thing wearing one name: probes built to answer a single question and never
+touched again (`fn-trace-probe`, `door-scan`, `zone-event`), worked examples the
+docs cite as *the* demonstration of a feature (`hook-demo`, `mr-l`,
+`coin-nobudget`), and nothing at all belonging to whoever clones this.
+
+The default value of `BLECK_MODS_DIR` is `mods`, so a new user's first mod
+lands in a directory already holding 56 of ours. That is the actual problem —
+not tidiness.
+
+### What was done
+
+`git mv mods example-mods`, then a fresh `mods/` holding only a `README.md`.
+
+⛔ **Nothing was deleted.** The intent was to prune, and a reference sweep
+killed it: nearly every mod is cited somewhere in `docs/` or `docs-site/` as the
+evidence for a finding — `fn-trace-probe` ×5, `intercept-probe` ×4, `door-scan`
+×4, `mr-l` ×3, `coin-nobudget` ×3, and about thirty-five more. Ten were uncited,
+and several of those were days old. Deleting a mod that a published finding
+names as its worked example removes the ability to reproduce it, which is the
+one thing `docs-site/findings/reproducing.md` promises.
+
+### `--mods-dir`, and the parser trap it exposed
+
+```bash
+uv run bleck mod list --mods-dir example-mods
+```
+
+The flag sets `BLECK_MODS_DIR` for the process via a new `env.override` — the
+only sanctioned write to `os.environ` in the codebase, added rather than
+threading a path through every call that might want one. Rejected alternative:
+a `root:` parameter on `registry.load` plumbed through each command. It is
+already there and unused; the problem was never that the registry could not be
+pointed elsewhere, it was that no command let you say so.
+
+⚠️ **`parents=[shared]` does not reach a nested subcommand.** `cli.app` applies
+it to `mod`, and `mod list` is a subparser of *that* — so a flag defined only in
+the shared parent parses at `bleck --mods-dir mod list` and fails where anyone
+would type it. This was already visible and misread: `--force` had been written
+out by hand in `commands/mods.py` and `commands/symbols.py`, which looked like
+duplication and was actually the workaround. `bleck/cli/shared.py` now holds
+both flags and every nested parser calls `add_shared_flags`.
+
+`tests/test_mods_dir.py` pins the nested case specifically, because the failure
+mode of getting it wrong is not an error — the command reads the *wrong*
+directory and reports success.
+
+### On rewriting paths in this log
+
+Roughly 46 lines in earlier entries cite `mods/<name>`. Those were rewritten to
+`example-mods/<name>`, which is a rewrite of an append-only document and worth
+justifying: no claim changed, only the location of a file that moved, and
+leaving them would make each one read as "that mod was deleted". Entries naming
+mods that genuinely no longer exist (`boot-observe`, `title-invert`,
+`tex-koopa`) were left exactly as they were.

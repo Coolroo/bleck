@@ -168,7 +168,7 @@ perfectly by every mechanical check and still froze.
 5. ✅ **The 32-hook cap.** Done -- `MAX_MAP_HOOKS` refuses the 33rd with an
    error saying *why*, so nobody just raises the number.
 6. ✅ **Verified in game with two real mods** (D78) — the step that mattered.
-   `mods/merge-a` writes `gw[28]`, `mods/merge-b` writes `gw[29]`, both declare
+   `example-mods/merge-a` writes `gw[28]`, `example-mods/merge-b` writes `gw[29]`, both declare
    `script main`, and a single run read `gw[28]=2 gw[29]=2` at `aa4_01`. Each
    slot is the other's positive control. No unit test could have shown that, and
    D51 installed perfectly by every mechanical check and still froze.

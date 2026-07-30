@@ -10,11 +10,13 @@ import argparse
 import sys
 
 from bleck.backends.disc import DiscError
+from bleck.common import env
 from bleck.common.errors import BleckError
 from bleck.formats.lz77 import Lz77Error
 from bleck.formats.u8 import U8Error
 
 from . import commands
+from . import shared as shared_flags
 
 PROG = "bleck"
 DESCRIPTION = "Super Paper Mario modding toolkit."
@@ -29,8 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # Shared flags go on each subcommand rather than the top level, so
     # `bleck pack dir out --force` works — the order people actually type.
-    shared = argparse.ArgumentParser(add_help=False)
-    shared.add_argument("--force", action="store_true", help="overwrite existing output")
+    shared = shared_flags.shared_parent()
 
     def add(name: str, **kwargs) -> argparse.ArgumentParser:
         return sub.add_parser(name, parents=[shared], **kwargs)
@@ -44,6 +45,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     try:
+        # ⚠️ Applied before anything reads the registry. `--mods-dir` is a
+        # property of *this invocation*, so it is set as the environment
+        # override the rest of `bleck` already understands rather than threaded
+        # through every call that might want it.
+        if getattr(args, "mods_dir", None):
+            env.override(env.MODS_DIR, args.mods_dir)
         return args.func(args)
     except HANDLED as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)

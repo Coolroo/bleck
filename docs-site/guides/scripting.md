@@ -80,7 +80,7 @@ Point `mod.json` at it:
 Check it compiles. This needs no compiler and no symbol list:
 
 ```bash
-bleck script check mods/speedrun/scripts/main.evt
+bleck script check example-mods/speedrun/scripts/main.evt
 ```
 
 ```

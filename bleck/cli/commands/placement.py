@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from bleck import api
 from bleck.backends import maps
+from bleck.cli import shared as shared_flags
 from bleck.cli.types import AddCommand
 from bleck.common.errors import BleckError
 from bleck.formats import setup
@@ -235,12 +236,17 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 def register_editing(sub) -> None:
     """The JSON half: read a mod's edits, write them back, publish the schema."""
+    # ⚠️ These two take a mod NAME, so they read the registry and need the
+    # shared `--mods-dir`. `show`/`list`/`schema` read the base disc or nothing
+    # and are left alone.
     edits = sub.add_parser("edits", help="what a mod declares, as JSON")
+    shared_flags.add_shared_flags(edits)
     edits.add_argument("name", help="mod name")
     edits.add_argument("--json", action="store_true", help="machine-readable output")
     edits.set_defaults(func=cmd_edits)
 
     apply_ = sub.add_parser("apply", help="write declared edits into a mod.json")
+    shared_flags.add_shared_flags(apply_)
     apply_.add_argument("name", help="mod name")
     apply_.add_argument(
         "--json", required=True, metavar="FILE", help="JSON document, or - for stdin"

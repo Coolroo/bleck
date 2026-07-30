@@ -20,7 +20,7 @@ arguments and its return value without disabling it.
 
     uv run python scripts/ingame.py fn-trace-somewhere --words 62 --seconds 110
 
-`mods/fn-trace-probe` and `mods/fn-trace-somewhere` are the worked examples;
+`example-mods/fn-trace-probe` and `example-mods/fn-trace-somewhere` are the worked examples;
 [`code-mods.md`](code-mods.md#tracing-a-function-instead-of-replacing-it) has
 the pattern.
 
@@ -156,7 +156,7 @@ with what*, not what the functions do internally.
 
 `evt_door_set_door_descs` is `0x800E2610` (eu0), declared in `evt_door.h`.
 
-✅ **They are called from map init scripts.** One 90 s `mods/door-scan` run:
+✅ **They are called from map init scripts.** One 90 s `example-mods/door-scan` run:
 
 | | |
 |---|---|
@@ -178,7 +178,7 @@ spell one.
 
 ### ✅ All three setters take argc 3 (D102)
 
-`mods/door-argc`, one 75 s run:
+`example-mods/door-argc`, one 75 s run:
 
 | | header | map | arg0 | arg1 |
 |---|---|---|---|---|
@@ -250,7 +250,7 @@ of the bytecode needs no hook at all (D89, D101), and `code.patches`'
 
 ⚠️ **Research, not a feature.** `npcdrv:` is not a `code.patches` selector and
 nothing here is declarable from a manifest. What follows is what three
-`mods/npc-probe` runs measured (D107).
+`example-mods/npc-probe` runs measured (D107).
 
 Declared in `spm/npcdrv.h`. Established by reading the structure it returns
 during gameplay, not by tracing the function.

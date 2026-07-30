@@ -36,3 +36,6 @@ dist/
 
 # Machine-local tool paths
 .env
+
+# Example mods build into their own overlays too.
+example-mods/*/overlay/

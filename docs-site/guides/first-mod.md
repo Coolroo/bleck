@@ -51,8 +51,8 @@ uv run bleck mod new title-invert --description "Invert the title screen"
 ```
 
 ```
-created mods/title-invert/
-  edit mods/title-invert/mod.json
+created example-mods/title-invert/
+  edit example-mods/title-invert/mod.json
   then `bleck mod vendor title-invert <disc-path>`
 ```
 
@@ -63,7 +63,7 @@ uv run bleck mod vendor title-invert lyt/title.bin.uk/arc/timg/mario.tpl
 ```
 
 ```
-vendored -> mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl  (18,880 bytes)
+vendored -> example-mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl  (18,880 bytes)
 ```
 
 !!! tip
@@ -81,7 +81,7 @@ values.
 import struct
 from pathlib import Path
 
-path = Path("mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl")
+path = Path("example-mods/title-invert/overlay/files/lyt/title.bin.uk/arc/timg/mario.tpl")
 data = bytearray(path.read_bytes())
 
 # TPL header: magic, image count, then a table pointing at each image header.
