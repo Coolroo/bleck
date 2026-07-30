@@ -291,6 +291,28 @@ class CodeSpec:
     """
 
     @property
+    def is_inert(self) -> bool:
+        """Nothing here would put anything into a module.
+
+        ⚠️ Reached by `"banner": false` on a mod that declares no code, which
+        since D176 is how a disc asks to carry no `mod.rel` at all. It has to be
+        answered before the toolchain runs: an empty module has no sections, and
+        `elf2rel` fails on one with `max() iterable argument is empty` rather
+        than anything a reader could act on.
+        """
+        return not (
+            self.script
+            or self.sources
+            or self.boot_map
+            or self.patches
+            or self.hooks
+            or self.replacements
+            or self.maps
+            or self.combos
+            or self.banner.enabled
+        )
+
+    @property
     def has_boot_map(self) -> bool:
         return bool(self.boot_map)
 

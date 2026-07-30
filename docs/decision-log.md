@@ -11776,3 +11776,79 @@ were only caught by reading the output. Editing code by string substitution
 fails quietly; the `Edit` tool errors instead, which is why the remaining fixes
 used it. Same lesson as the regex that mangled `tests/test_tags.py` an hour
 earlier.
+
+---
+
+## D180 — Every disc names itself, including the ones with no code (2026-07-30)
+
+✅ **A chain that declares no code now compiles a module anyway, holding the
+banner and nothing else.** `bleck mod check tex-koopa` prints
+`compiled the banner only -> 1444 byte module`, and `mod_loaded: tex-koopa`
+is in that module's `.rodata` at offset 716.
+
+D60 built the banner and said it was "a property of the toolkit, not of a mod".
+It was not, quite: `build_chain` returned early when nothing in the chain had a
+`code` block, so no `mod.rel` was produced and no banner drew. **A texture or
+placement disc — precisely the one nobody can identify by looking at it — was
+the one kind that stayed silent.** `tex-koopa` appeared to work because D65 gave
+it a synthesized `CodeSpec` when `--map` was passed; without `--map` it drew
+nothing, and nothing said so.
+
+### What it costs, and why it is best-effort anyway
+
+Compiling needs three things an asset-only mod never needed: a PowerPC
+toolchain, a symbol list from `spm-headers`, and the Gecko codelist (GPLv3, so
+not shipped). Requiring them would mean a texture mod that built on a bare
+machine yesterday fails on it today, to gain a caption.
+
+⛔ **So the scaffolding build can never fail a disc.** `_scaffolding_only`
+catches `CodeError` and `ToolchainError` and reports a note naming the cause and
+the cost. The distinction is who asked: `--map` still fails loudly, because the
+user asked for that module.
+
+The loader warning is proportional for the same reason. Telling someone their
+"mod will only run if the loader is in Dolphin's cheat configuration" is false
+for a texture disc that plays fine, and a warning that fires when nothing is
+wrong teaches people to skip the one that matters (same lesson as D122).
+
+⚠️ **`_embed_loader` now gates on a module having been built, not on a mod
+declaring code.** It would otherwise ship every asset disc a `mod.rel` no loader
+opens — and **this host would not notice**, because the loader is in its Dolphin
+cheat configuration (D86). The rig would have shown a working banner that worked
+nowhere else.
+
+### `"banner": false` was unreachable, and then crashed
+
+The escape hatch needs a `code` block, and a block containing only
+`{"banner": false}` was refused as having "nothing to compile" — so an
+asset-only mod had no way to opt out. The check now counts the banner as
+something to compile.
+
+⛔ **Then it built an empty module and `elf2rel` died** with `max() iterable
+argument is empty` — a module with no sections. `CodeSpec.is_inert` answers this
+before the toolchain runs: banner off and nothing else means **no module at
+all**, which is the old behaviour and the right one.
+
+### The banner names the top of the tree, and only that
+
+⛔ **Rejected: listing every mod on the disc.** It was built and then removed.
+A chain is one mod plus what it needs, so a disc built from `x` is
+`mod_loaded: x` whether `x` pulled in three dependencies or none -- those are
+`x`'s implementation, not co-authors of the disc. Naming them would put
+`title-invert + tex-koopa` on screen for what the author thinks of as one mod.
+
+That also disposes of D60's `+N` suffix, which was the same idea in weaker form:
+`mod_loaded: <target> +3` reported a dependency count as though it were
+provenance. ✅ Both merged and asset chains now draw the target's name alone,
+measured on `title-invert` (asset, depends on `tex-koopa`) and `merge-b` (code,
+depends on `merge-a`).
+
+⚠️ The machinery for the rejected version -- a `merged_label` fitting names to a
+60-character budget derived from D60's `FontGetMessageWidth` measurement -- is
+gone rather than left unused. It would have read as a feature waiting to be
+switched on.
+
+🔶 **Unverified: what a banner-only disc looks like on screen.** The text is
+confirmed in the module at a known offset and the drawing code is unchanged from
+D60's, but no one has booted one. D60's title-screen placement was confirmed by
+eye once (`mod_loaded: copy-race`); nothing since.

@@ -164,6 +164,25 @@ class TestSeveralCodeMods:
         )
         assert [m.name for m in code.mods_with_code(chain)] == ["behaviour"]
 
+    def test_the_disc_is_named_after_the_top_of_the_tree(self):
+        """⚠️ The banner names the mod that was asked for, and only that one.
+
+        A chain is one mod plus what it needs, so a disc built from `x` is
+        `mod_loaded: x` whether `x` pulled in three dependencies or none --
+        those are `x`'s implementation, not co-authors of the disc (D180).
+        """
+        target = self._mod("x", True)
+        chain = resolver.Chain(
+            entries=[
+                resolver.ChainEntry(self._mod("a", True), "x"),
+                resolver.ChainEntry(self._mod("b", False), "x"),
+                resolver.ChainEntry(target, ""),
+            ]
+        )
+        banner = code.banner_for(chain.target, chain.target.code)
+        assert banner is not None
+        assert banner.text == "mod_loaded: x"
+
 
 class TestNativeSources:
     """`code.sources`: native C compiled into the same module as the script.
@@ -381,6 +400,35 @@ class TestBannerFromManifest:
         spec = mod_manifest.CodeSpec(sources=["src"])
         assert spec.banner.enabled
         assert spec.banner.label("coin-tick") == "mod_loaded: coin-tick"
+
+    def test_a_mod_with_no_code_at_all_still_gets_one(self):
+        """⚠️ D176. A texture disc is the one nobody can identify by looking."""
+        assert mod_manifest.CodeSpec().banner.enabled
+        assert not mod_manifest.CodeSpec().is_inert
+
+    def test_suppressing_it_needs_no_other_code(self):
+        """⛔ Was refused as 'nothing to compile' until the banner became the
+        thing being compiled -- leaving an asset-only mod no way to opt out."""
+        raw = json.dumps({"name": "m", "code": {"banner": False}})
+        spec = mod_manifest.Manifest.from_json(raw).code
+        assert spec is not None
+        assert not spec.banner.enabled
+
+    def test_a_code_block_with_nothing_in_it_is_still_refused(self):
+        """The escape hatch must not become a way to declare an empty block."""
+        with pytest.raises(mod_manifest.ManifestError, match="nothing to compile"):
+            mod_manifest.Manifest.from_json('{"name": "m", "code": {}}')
+
+    def test_banner_off_and_nothing_else_builds_no_module(self):
+        """⛔ An empty module has no sections and `elf2rel` dies on it."""
+        raw = json.dumps({"name": "m", "code": {"banner": False}})
+        assert mod_manifest.Manifest.from_json(raw).code.is_inert
+
+    def test_banner_off_with_real_code_is_not_inert(self):
+        spec = mod_manifest.CodeSpec(
+            sources=["src"], banner=mod_manifest.BannerSpec(enabled=False)
+        )
+        assert not spec.is_inert
 
     def test_the_label_names_the_mod(self, tmp_path):
         mod = self._mod(

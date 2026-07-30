@@ -35,11 +35,17 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
     patches = _parse_patches(raw.get("patches"), source)
     hooks = _parse_hooks(raw.get("hooks"), source)
     replacements = parse_replacements(raw.get("replace"), source)
+    banner = _parse_banner(raw.get("banner"), source)
 
-    if not script and not sources and not boot:
+    # ⚠️ `banner` counts (D176). Every disc compiles a module now, so
+    # `{"banner": false}` is the only way an asset-only mod can decline to
+    # announce itself -- and it was refused here as having nothing to compile.
+    if not script and not sources and not boot and banner.is_default:
         raise ManifestError(
             f"{source}: 'code' needs a 'script', 'sources', 'boot', or a "
-            f"combination -- otherwise there is nothing to compile"
+            f"combination -- otherwise there is nothing to compile.\n"
+            f"  A mod that only wants to suppress its banner writes "
+            f'"code": {{"banner": false}}.'
         )
 
     module_id = raw.get("module_id", 2)
@@ -62,7 +68,7 @@ def _parse_code(raw: object, source: str) -> CodeSpec | None:
         patches=patches,
         hooks=hooks,
         replacements=replacements,
-        banner=_parse_banner(raw.get("banner"), source),
+        banner=banner,
         boot_map=boot,
     )
 

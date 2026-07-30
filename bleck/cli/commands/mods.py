@@ -294,7 +294,7 @@ def cmd_build(args: argparse.Namespace) -> int:
         return 0
 
     if kind.embeds_loader:
-        _embed_loader(chain, staged, args)
+        _embed_loader(chain, staged, args, report)
 
     out = (
         Path(args.out) if args.out else kind.default_out(registry.build_root(), args.name)
@@ -323,25 +323,41 @@ def cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
-def _embed_loader(chain: resolver.Chain, staged: Path, args: argparse.Namespace) -> None:
+def _embed_loader(
+    chain: resolver.Chain,
+    staged: Path,
+    args: argparse.Namespace,
+    report: builder.BuildReport,
+) -> None:
     """Put the Gecko loader inside the disc, so a code mod runs without setup.
 
-    A missing codelist warns loudly rather than failing — the loader may already
-    be in Dolphin's cheat configuration.
+    A missing codelist warns rather than failing — the loader may already be in
+    Dolphin's cheat configuration.
+
+    ⚠️ Gated on a module having been *built*, not on a mod declaring code. Every
+    disc now carries one for the banner (D176), and a disc whose `mod.rel` no
+    loader opens is one this host would still appear to load correctly, because
+    the loader is in its Dolphin cheat configuration (D86).
     """
-    coded = [mod for mod in chain.mods if mod.manifest.has_code]
-    if not coded or args.no_embed_loader:
+    if not report.code_builds or args.no_embed_loader:
         return
 
-    target = coded[-1].code.target
+    target = report.code_builds[-1].target
     try:
         result = gecko.embed_loader(staged, target, registry.build_root() / ".gecko")
     except gecko.GeckoError as exc:
-        print(f"warning: the Gecko loader was NOT embedded:\n  {exc}")
-        print(
-            "  The mod will only run if the loader is in Dolphin's cheat "
-            "configuration.\n  Pass --no-embed-loader to silence this."
+        # Proportional: a chain with no code mods loses only the banner, and
+        # saying "the mod will not run" of a texture disc that runs fine is the
+        # kind of warning that teaches people to skip warnings.
+        declared = any(mod.manifest.has_code for mod in chain.mods)
+        cost = (
+            "The mod will only run if the loader is in Dolphin's cheat configuration."
+            if declared
+            else "No mod here declares code, so the cost is the banner: the "
+            "disc is built and plays correctly, but cannot say what it is."
         )
+        print(f"warning: the Gecko loader was NOT embedded:\n  {exc}")
+        print(f"  {cost}\n  Pass --no-embed-loader to silence this.")
         return
     print(result.describe())
 

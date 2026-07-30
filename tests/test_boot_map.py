@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from bleck.backends import toolchain
 from bleck.mods import code, registry, resolver
 from bleck.mods import manifest as mod_manifest
 from bleck.script import ScriptError, compile_source, emit
@@ -153,10 +154,72 @@ class TestBootMapOverride:
         )
         assert built == ["target"]
 
-    def test_without_an_override_a_mod_with_no_code_builds_nothing(self, built):
-        assert not code.build_chain(self._chain(has_code=False), Path("unused"))
-        assert built == []
+    def test_a_mod_with_no_code_still_builds_the_banner(self, built):
+        """⚠️ Was 'builds nothing' until D176.
 
-    def test_an_empty_override_changes_nothing(self, built):
+        A texture or placement disc looks exactly like a stock one, so it is the
+        one that most needs to name itself. The module it gets holds the banner
+        and nothing else.
+        """
+        code.build_chain(self._chain(has_code=False), Path("unused"))
+        assert built == ["target"]
+
+    def test_an_empty_override_still_builds_the_banner(self, built):
         code.build_chain(self._chain(has_code=False), Path("unused"), code.CodeOverride())
-        assert built == []
+        assert built == ["target"]
+
+
+class TestScaffoldingIsBestEffort:
+    """⛔ The banner must never be able to fail a disc that would otherwise build.
+
+    Compiling needs a PowerPC toolchain and a symbol list. An asset-only mod
+    needed neither until D176, and a texture mod that built on a bare machine
+    has to keep building on one -- so a missing toolchain costs the banner and
+    is reported, not raised.
+    """
+
+    def _chain(self):
+        mod = registry.Mod(
+            manifest=mod_manifest.Manifest(name="target", code=None), root=Path("target")
+        )
+        return resolver.Chain(entries=[resolver.ChainEntry(mod, "")])
+
+    def _failing(self, monkeypatch, error):
+        def explode(*_args, **_kwargs):
+            raise error
+
+        monkeypatch.setattr(code, "build_mod", explode)
+
+    @pytest.mark.parametrize(
+        "error",
+        [
+            toolchain.ToolchainError("no PowerPC compiler found\n  install one"),
+            code.CodeError("no symbol list for 'eu0'"),
+        ],
+    )
+    def test_a_missing_toolchain_costs_the_banner_not_the_build(self, monkeypatch, error):
+        self._failing(monkeypatch, error)
+        result = code.build_chain(self._chain(), Path("unused"))
+        assert not result.builds
+        assert len(result.notes) == 1
+
+    def test_the_note_says_what_was_lost_and_what_was_not(self, monkeypatch):
+        """A note nobody can act on is noise; name the cause and the cost."""
+        self._failing(monkeypatch, toolchain.ToolchainError("no PowerPC compiler"))
+        note = code.build_chain(self._chain(), Path("unused")).notes[0]
+        assert "no PowerPC compiler" in note
+        assert "banner" in note
+        assert "Nothing else is affected" in note
+
+    def test_a_declared_code_mod_still_fails_loudly(self, monkeypatch):
+        """⚠️ Best-effort applies only to the module nobody asked for."""
+        self._failing(monkeypatch, code.CodeError("your script is wrong"))
+        mod = registry.Mod(
+            manifest=mod_manifest.Manifest(
+                name="target", code=mod_manifest.CodeSpec(script="s.evt")
+            ),
+            root=Path("target"),
+        )
+        chain = resolver.Chain(entries=[resolver.ChainEntry(mod, "")])
+        with pytest.raises(code.CodeError, match="your script is wrong"):
+            code.build_chain(chain, Path("unused"))

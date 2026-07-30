@@ -24,6 +24,7 @@ from bleck.mods.code.parts import (  # noqa: F401
     CodeBuild,
     CodeError,
     CodeOverride,
+    CodeResult,
     Part,
     ScriptSource,
     banner_for,
@@ -53,25 +54,61 @@ def build_chain(
     chain: Chain,
     workroot: Path | None = None,
     override: CodeOverride | None = None,
-) -> list[CodeBuild]:
+) -> CodeResult:
     """Compile the chain's code mods into one `mod.rel`.
 
     The Gecko loader opens exactly one `/mod/mod.rel`, so mods are merged at
     compile time rather than chained at runtime (D39, `docs/plan-merging.md`).
+
+    ⚠️ A chain where *nothing* declares code still builds a module, holding the
+    banner and nothing else. A texture or placement disc is precisely the one
+    nobody can identify by looking at it, so it is the one that most needs to
+    say what it is.
     """
-    coded = mods_with_code(chain)
+    # An inert block is `"banner": false` and nothing else, which is how a mod
+    # declines the module every disc otherwise carries.
+    coded = [mod for mod in mods_with_code(chain) if not mod.code.is_inert]
 
     # An override can give code to a chain that has none, so `--map` works on a
     # pure asset or placement mod.
     if not coded and override is not None and not override.is_empty:
         coded = [chain.target]
+
     if not coded:
-        return []
+        return _scaffolding_only(chain, workroot, override)
 
     root = workroot or mod_registry.build_root()
     if len(coded) == 1:
-        return [build_mod(coded[0], root, override)]
-    return [build_merged(coded, chain.target, root, override)]
+        return CodeResult(builds=[build_mod(coded[0], root, override)])
+    return CodeResult(builds=[build_merged(coded, chain.target, root, override)])
+
+
+def _scaffolding_only(
+    chain: Chain, workroot: Path | None, override: CodeOverride | None
+) -> CodeResult:
+    """Build the module a chain gets when no mod asked for one.
+
+    ⛔ **Never fails the build.** Compiling needs a PowerPC toolchain and a
+    symbol list, neither of which an asset-only mod needed until now, and a
+    texture mod that used to build on any machine must keep doing so. A missing
+    one costs the banner and nothing else, so it is reported as a note.
+    """
+    spec = chain.target.code
+    if spec is not None and spec.is_inert:
+        return CodeResult()
+
+    root = workroot or mod_registry.build_root()
+    try:
+        return CodeResult(builds=[build_mod(chain.target, root, override)])
+    except (CodeError, toolchain.ToolchainError) as exc:
+        first = str(exc).splitlines()[0]
+        return CodeResult(
+            notes=[
+                f"this disc draws no 'mod_loaded' banner: {first}\n"
+                f"  Nothing else is affected -- no mod in this chain declares "
+                f"code, so the banner was the only thing that module carried."
+            ]
+        )
 
 
 def build_merged(
@@ -125,13 +162,9 @@ def build_merged(
             "native sources, which cannot yet be combined."
         )
 
-    # One banner for the disc, named for the mod that was asked for rather than
-    # a dependency it pulled in.
+    # One banner for the disc, named for the mod that was asked for rather
+    # than a dependency it pulled in (D180).
     banner = banner_for(target, target.code or parts[-1].spec)
-    if banner is not None and len(mods) > 1:
-        banner = emit.Banner(
-            text=f"{banner.text} +{len(mods) - 1}", sequences=banner.sequences
-        )
 
     try:
         generated = emit.generate_merged(
@@ -158,11 +191,10 @@ def build_mod(
     spec = mod.code
     boot_map = override.boot_map if override else ""
     if spec is None:
-        if not boot_map:
-            raise CodeError(f"{mod.name} declares no code to build")
-        # Nothing declared, but a boot map was asked for; defaults (eu0,
-        # module 2) are all the generated script needs.
-        spec = CodeSpec()
+        # Nothing declared, so the defaults (module 2, and a script the
+        # scaffolding generates) are all this needs -- except the version, which
+        # must follow the mod's own base or a us0 disc gets an eu0 module.
+        spec = CodeSpec(target=mod.manifest.base) if mod.manifest.base else CodeSpec()
     boot_map = boot_map or spec.boot_map
 
     # The same table the link will use, so "that will not link" is said before
@@ -234,6 +266,7 @@ def build_mod(
         output=output,
         size=result.size,
         toolchain=result.toolchain,
+        target=spec.target,
         scripts=compiled.script_names if compiled else [],
         called_symbols=list(compiled.program.called_symbols) if compiled else [],
         sources=sources,

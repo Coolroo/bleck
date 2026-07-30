@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "name": "quiet-disc",
+  "version": "0.1.0",
+  "description": "An asset-only mod that does not want to announce itself",
+  "base": "eu0",
+  "code": { "banner": false }
+}

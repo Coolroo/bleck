@@ -19,7 +19,7 @@ from bleck.formats import lz77, u8
 from bleck.mods.build.conflicts import Conflict, detect, effective_edits, merge_three_way
 from bleck.mods.build.edits import PlacementBuild, apply_chain
 from bleck.mods.build.overlay import Plan, build_plan
-from bleck.mods.code import CodeBuild, CodeOverride, build_chain
+from bleck.mods.code import CodeBuild, CodeOverride, CodeResult, build_chain
 from bleck.mods.resolver import Chain, check_bases
 
 
@@ -213,7 +213,7 @@ def prepare(chain: Chain, base: Path) -> Plan:
     return build_plan(base, chain.mods)
 
 
-def compile_code(chain: Chain, override: CodeOverride | None = None) -> list[CodeBuild]:
+def compile_code(chain: Chain, override: CodeOverride | None = None) -> CodeResult:
     """Compile the chain's code mods into their overlays.
 
     ⚠️ Must run before `prepare`: the plan comes from walking `overlay/`, so a
@@ -233,7 +233,9 @@ def check(
     Scripts are still compiled: a mod whose code does not build fails checking.
     """
     report = BuildReport(staged=Path())
-    report.code_builds = compile_code(chain, override)
+    compiled = compile_code(chain, override)
+    report.code_builds = compiled.builds
+    report.warnings += compiled.notes
     report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
     report.warnings += [note for b in report.placement_builds for note in b.warnings]
@@ -252,7 +254,9 @@ def build(
 ) -> BuildReport:
     """Stage the base, apply the chain, and report what happened."""
     report = BuildReport(staged=staged)
-    report.code_builds = compile_code(chain, override)
+    compiled = compile_code(chain, override)
+    report.code_builds = compiled.builds
+    report.warnings += compiled.notes
     report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
     report.warnings += [note for b in report.placement_builds for note in b.warnings]

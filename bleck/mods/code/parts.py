@@ -45,6 +45,9 @@ class CodeOverride:
 
     @property
     def is_empty(self) -> bool:
+        """⚠️ Gates whether a chain that declares no code is compiled as though
+        the user had asked for it -- which must fail loudly when the toolchain
+        is missing, unlike the banner-only build (D180)."""
         return not self.boot_map
 
 
@@ -57,6 +60,9 @@ class CodeBuild:
     output: Path
     size: int
     toolchain: str
+    target: str
+    """The game version this module binds against. Addresses differ per version."""
+
     scripts: list[str]
     called_symbols: list[str]
     sources: list[Path]
@@ -75,13 +81,28 @@ class CodeBuild:
         if self.sources:
             names = ", ".join(path.name for path in self.sources)
             parts.append(f"{len(self.sources)} source(s) [{names}]")
-        what = " + ".join(parts) or "nothing"
+        what = " + ".join(parts) or "the banner only"
         # Named in build output because a boot map changes where the disc goes.
         where = f", boots at {self.boot_map}" if self.boot_map else ""
         return (
             f"{self.mod}: compiled {what} -> "
             f"{self.size} byte module ({self.toolchain}){where}"
         )
+
+
+@dataclass(frozen=True)
+class CodeResult:
+    """What compiling a chain produced, and anything it declined to produce.
+
+    `notes` carries the scaffolding build that was skipped rather than failed.
+    A disc with no code mods still compiles a module so it can draw its banner,
+    and that module is the one thing here nobody asked for -- so when the
+    toolchain to build it is missing, the build says so and carries on rather
+    than failing a disc that would otherwise be fine.
+    """
+
+    builds: list[CodeBuild] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -732,6 +753,7 @@ def link_module(
         output=output,
         size=result.size,
         toolchain=result.toolchain,
+        target=parts[-1].spec.target,
         scripts=scripts,
         called_symbols=[],
         sources=sources,
