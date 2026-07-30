@@ -1,0 +1,69 @@
+-- What do the getters actually return?
+--
+-- The upstream headers give argument lists and nothing else, so "evt_pouch_get_coins
+-- takes one argument" is recorded but "that argument is where the coin count comes
+-- back" is an inference. This calls each one into a gw slot and reads it.
+--
+-- gw[31] is a progress marker set *before* each call, so a hang names the call that
+-- caused it rather than leaving silence.
+--
+-- Two things the first run could not settle, both fixed here:
+--
+--  * Slots are pre-seeded with 12345. A getter that returns 0 and a getter that
+--    never writes were previously indistinguishable, and evt_mario_get_pos read
+--    0,0,0 -- which could have meant either.
+--  * evt_pouch_check_have_item never returned, and is now spawned as a child, so
+--    whether it *blocks* or *kills its script* is visible in gw[29] and gw[31].
+
+script main {
+    -- Sentinel, not zero: zero is a plausible answer from every one of these.
+    gw[0] = 12345
+    gw[1] = 12345
+    gw[2] = 12345
+    gw[3] = 12345
+    gw[4] = 12345
+    gw[5] = 12345
+    gw[6] = 12345
+    gw[7] = 12345
+    gw[8] = 12345
+    gw[9] = 12345
+    gw[10] = 12345
+    gw[11] = 12345
+    gw[29] = 0
+
+    wait(60)
+
+    gw[31] = 1
+    evt_pouch_get_coins(gw[0])
+    gw[31] = 2
+    evt_pouch_get_hp(gw[1])
+    gw[31] = 3
+    evt_pouch_get_max_hp(gw[2])
+    gw[31] = 4
+    evt_pouch_get_level(gw[3])
+    gw[31] = 5
+    evt_pouch_get_attack(gw[4])
+    gw[31] = 6
+    evt_pouch_get_next_level_xp(gw[5])
+
+    gw[31] = 7
+    evt_mario_get_character(gw[6])
+    gw[31] = 8
+    evt_mario_get_height(gw[7])
+    gw[31] = 9
+    evt_mario_get_pos(gw[8], gw[9], gw[10])
+
+    -- As a child, so a call that never returns cannot take this script with it.
+    gw[31] = 10
+    spawn checker
+    gw[31] = 11
+
+    wait(120)
+    gw[31] = 99
+}
+
+script checker {
+    gw[29] = 1
+    evt_pouch_check_have_item(1, gw[11])
+    gw[29] = 2
+}

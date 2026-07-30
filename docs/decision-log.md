@@ -12018,3 +12018,77 @@ Pure Hearts. ✅ Verified in game after the change: `ATTEMPTS 6`, `MADE 5`,
 22,350 frames, no freeze. `summon()` gained an entry-point argument, since every
 effect entry found so far takes `(variant, x, y, z)` and only the address
 differs.
+
+---
+
+## D184 — Builtins get descriptions by being called, not by being named (2026-07-30)
+
+The published `builtins.md` listed 443 functions with argument counts and no
+word about what any of them does. The obvious fix — a sentence each — would
+have meant **443 inferences from names, published as fact**, which is D179's
+lesson at scale: a reference is believed.
+
+So descriptions are *earned*. `example-mods/builtin-probe` calls a builtin in a
+running game and reads the result back; `bleck/script/measured.json` records
+what came out; the generator merges it into a **Measured** column. ✅ 10
+functions so far, in two runs.
+
+### What was measured
+
+| Builtin | Result |
+|---|---|
+| `evt_pouch_get_hp` / `_max_hp` | 10 / 10 |
+| `evt_pouch_get_level` / `_attack` | 1 / 1 |
+| `evt_pouch_get_next_level_xp` | 10000 |
+| `evt_pouch_get_coins` | 0 (no save loaded) |
+| `evt_mario_get_character` | 0 = Mario |
+| `evt_mario_get_height` | **39.0** |
+| `evt_mario_get_pos` | 0.0, 0.0, 0.0 |
+| `evt_pouch_check_have_item` | ⛔ **never returns** |
+
+⚠️ **Six of those had no upstream signature at all** — `get_hp`, `get_max_hp`,
+`get_level`, `get_attack`, `get_coins`, `get_next_level_xp` are recorded with an
+arity and nothing else. They are now the best-documented entries on the page,
+which is the point: measurement beats transcription.
+
+✅ `evt_mario_get_height` returning exactly **39.0** is the positive control for
+the whole chain — call, out-parameter, evt's biased fixed-point float encoding,
+and the decode. A plausible round number could not survive all four being wrong.
+
+### The instrument, and the two traps it was built around
+
+⛔ **Zero is a plausible answer from every one of these**, so an unset slot and
+a real zero are indistinguishable. Slots are pre-seeded with `12345`.
+`evt_mario_get_pos` read `0, 0, 0` — and it was the *missing sentinel*, not the
+zeros, that established the call worked. Without it this would have gone down as
+"get_pos does nothing", which is false.
+
+⛔ **A progress marker is set before each call, never after.** A builtin that
+never returns then names itself. `evt_pouch_check_have_item` stopped `gw[31]` at
+its own number and held it for 60 seconds across two runs, with its
+out-parameter still holding the sentinel. Neither run could have found it from
+the values alone.
+
+### ⚠️ `spawn` does not detach, and the run proved it
+
+The second probe spawned the broken call as a child, to see whether it *blocks*
+or *kills its script*. It answered a different question: `gw[31]` stopped at the
+`spawn` itself, so **the parent waited for the child**. Consistent with `RUN_EVT`
+being emitted nowhere — detached `spawn` is a known gap, and it is now a measured
+one rather than a to-do item.
+
+### Where the data lives
+
+⚠️ `measured.json` is **separate from `catalog.json` on purpose**. That file is
+derived from the MIT-licensed spm-headers and ships their attribution; this one
+is this project's own observation. Mixing them would blur which is which, and
+the licence rule at the top of `CLAUDE.md` depends on that line staying visible.
+
+### 🔶 What this does not scale to
+
+Two runs, ~6 minutes, produced 10 results. All ten were *safe getters* — no
+arguments beyond an id, no state changed, results readable from `gw`. Most of
+the remaining 433 need live handles, valid names, or a loaded save, and calling
+one blind either crashes or silently no-ops. **Verifying all 443 is not a
+project; verifying the next twenty is.** The page says how many are measured, so
+the gap stays visible instead of being papered over.

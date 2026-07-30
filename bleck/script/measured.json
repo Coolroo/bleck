@@ -1,0 +1,68 @@
+{
+  "note": "What builtins were observed to do, measured by this project in a running game. Kept apart from catalog.json on purpose: that file is derived from the MIT-licensed spm-headers and carries its attribution, whereas everything here is bleck's own observation. Grow it with example-mods/builtin-probe; never by inference from a name.",
+  "method": "scripts/ingame.py builtin-probe --watch-gw ... . Each slot is pre-seeded with a sentinel so 'returned 0' and 'never wrote' are distinguishable, and a progress marker is set before each call so a hang names the call that caused it.",
+  "schema": 1,
+  "measured": [
+    {
+      "name": "evt_pouch_get_coins",
+      "summary": "Writes the player's coin count into its argument.",
+      "observed": "0 with no save file loaded; the sentinel was overwritten, so the call did write.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_get_hp",
+      "summary": "Writes the player's current HP into its argument.",
+      "observed": "10 at the start of the attract demo.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_get_max_hp",
+      "summary": "Writes the player's maximum HP into its argument.",
+      "observed": "10, matching current HP on a fresh game.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_get_level",
+      "summary": "Writes the player's level into its argument.",
+      "observed": "1 on a fresh game.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_get_attack",
+      "summary": "Writes the player's attack power into its argument.",
+      "observed": "1 on a fresh game.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_get_next_level_xp",
+      "summary": "Writes the score needed for the next level into its argument.",
+      "observed": "10000 at level 1.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_mario_get_character",
+      "summary": "Writes which character is active into its argument.",
+      "observed": "0 while playing as Mario. The other values are unestablished.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_mario_get_height",
+      "summary": "Writes the player's height into its argument, as a float.",
+      "observed": "exactly 39.0, decoded through evt's fixed-point float encoding.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_mario_get_pos",
+      "summary": "Writes the player's x, y and z into its three arguments, as floats.",
+      "observed": "0.0, 0.0, 0.0 in the attract demo, where no profile is loaded and the player is never placed (D63). The sentinels were overwritten, so the call did write.",
+      "decision": "D184"
+    },
+    {
+      "name": "evt_pouch_check_have_item",
+      "summary": "Does not return. Reproduced twice; avoid it until someone establishes why.",
+      "observed": "the script stops at this call and never reaches the next statement, and the out-parameter keeps its sentinel, so nothing is written. Both runs used item id 1.",
+      "broken": true,
+      "decision": "D184"
+    }
+  ]
+}

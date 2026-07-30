@@ -17,23 +17,30 @@ generated-header saying so.
 `--check` is what keeps them honest: it regenerates into memory and compares,
 so a catalog change that was not followed by a docs regeneration fails the
 build rather than shipping a quietly-wrong page.
+
+The one thing here that is *not* derived is the per-module prose, which lives
+in `module_notes.py` so a reviewer has a single file to check.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from bleck.script import evt  # noqa: E402
+from module_notes import NOTES  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "bleck" / "script" / "catalog.json"
+MEASURED = ROOT / "bleck" / "script" / "measured.json"
 BUILTINS_PAGE = ROOT / "docs-site" / "scripting" / "builtins.md"
 STORAGE_PAGE = ROOT / "docs-site" / "scripting" / "storage.md"
 
@@ -47,9 +54,67 @@ BANNER = (
 GROUPS = {
     "The player": ("evt_mario", "evt_pouch", "evt_party", "evt_fairy"),
     "The world": ("evt_map", "evt_mapobj", "evt_mobj", "evt_npc", "evt_item"),
-    "Presentation": ("evt_cam", "evt_snd", "evt_msg", "evt_eff", "evt_window", "evt_lyt"),
-    "Flow and sequencing": ("evt_seq", "evt_frame", "evt_sub", "evt_case", "evt_shop"),
+    "Presentation": (
+        "evt_cam",
+        "evt_snd",
+        "evt_msg",
+        "evt_eff",
+        "evt_window",
+        "evt_lyt",
+        "evt_frame",
+        "evt_fade",
+        "evt_img",
+        "evt_env",
+    ),
+    "Flow and sequencing": (
+        "evt_seq",
+        "evt_frame_",
+        "evt_sub",
+        "evt_case",
+        "evt_shop",
+        "evt_door",
+        "evt_hit",
+    ),
+    "One area or one enemy": (
+        "an",
+        "an2_08",
+        "bos_01",
+        "dan",
+        "machi",
+        "sp4_13",
+        "npc_dimeen_l",
+        "npc_ninja",
+        "npc_shadoo",
+        "item_event_data",
+    ),
 }
+
+#: An out-parameter, which is how an evt builtin returns anything. The headers
+#: write it either way round: `f32& x` and `&f32 x` both appear.
+OUT_PARAM = re.compile(r"(?:&\s*(\w[\w\s*]*?)\s+(\w+)|(\w[\w\s*]*?)\s*&\s*(\w+))\s*$")
+
+
+@dataclass(frozen=True)
+class Argument:
+    """One parameter, and whether the function writes back through it."""
+
+    text: str
+    name: str = ""
+    is_out: bool = False
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """What this project observed a builtin do, in a running game."""
+
+    summary: str
+    observed: str
+    broken: bool = False
+    decision: str = ""
+
+    def render(self) -> str:
+        mark = "⛔" if self.broken else "✅"
+        return f"{mark} {self.summary}"
 
 
 @dataclass(frozen=True)
@@ -60,6 +125,25 @@ class Builtin:
     module: str
     arity: int | None
     signature: str
+    arguments: list[Argument] = field(default_factory=list)
+    measured: Measurement | None = None
+
+    @property
+    def documented(self) -> bool:
+        return bool(self.signature)
+
+    @property
+    def returns(self) -> str:
+        """What the caller gets back, in the only way evt has of giving it.
+
+        ⚠️ Not a C return type. Every builtin returns a status to the
+        interpreter; a *result* comes back through an out-parameter, which the
+        headers mark with `&`.
+        """
+        outs = [a.name or a.text for a in self.arguments if a.is_out]
+        if outs:
+            return ", ".join(f"`{name}`" for name in outs)
+        return "--" if self.documented else "?"
 
     def row(self) -> str:
         """⚠️ `arity` is None for a function whose argument count is unrecorded.
@@ -69,17 +153,86 @@ class Builtin:
         """
         count = "?" if self.arity is None else str(self.arity)
         shown = self.signature or f"{self.name}({', '.join(['?'] * (self.arity or 0))})"
-        return f"| `{self.name}` | {count} | `{shown}` |"
+        if not self.documented:
+            shown = f"{shown} <small>(not documented)</small>"
+        note = self.measured.render() if self.measured else ""
+        return f"| `{self.name}` | {count} | `{shown}` | {self.returns} | {note} |"
+
+
+def split_arguments(signature: str) -> list[Argument]:  # pylint: disable=container-return
+    """Break a signature's parameter list into arguments.
+
+    ⚠️ Depth-aware on purpose: a few signatures carry a nested `(` -- and one
+    is truncated mid-list upstream, which a naive split turns into a phantom
+    argument.
+    """
+    opened = signature.find("(")
+    if opened < 0:
+        return []
+    inner = signature[opened + 1 :].rstrip()
+    inner = inner[:-1] if inner.endswith(")") else inner
+
+    parts: list[str] = []
+    depth = 0
+    current = ""
+    for char in inner:
+        if char in "([":
+            depth += 1
+        elif char in ")]":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append(current)
+            current = ""
+            continue
+        current += char
+    parts.append(current)
+
+    found: list[Argument] = []
+    for raw in parts:
+        text = raw.strip()
+        if not text:
+            continue
+        match = OUT_PARAM.match(text)
+        if match:
+            name = match.group(2) or match.group(4) or ""
+            found.append(Argument(text=text, name=name, is_out=True))
+            continue
+        found.append(Argument(text=text, name=text.split()[-1].lstrip("*")))
+    return found
+
+
+def load_measured() -> dict[str, Measurement]:
+    """Observations this project made, keyed by function name.
+
+    ⚠️ A separate file from `catalog.json` deliberately. That one is derived
+    from the MIT-licensed spm-headers and ships their attribution; this one is
+    `bleck`'s own, and mixing them would muddle which is which.
+    """
+    if not MEASURED.is_file():
+        return {}
+    raw = json.loads(MEASURED.read_text(encoding="utf-8"))
+    return {
+        entry["name"]: Measurement(
+            summary=entry["summary"],
+            observed=entry.get("observed", ""),
+            broken=bool(entry.get("broken")),
+            decision=entry.get("decision", ""),
+        )
+        for entry in raw.get("measured", [])
+    }
 
 
 def load() -> list[Builtin]:  # pylint: disable=container-return
     raw = json.loads(CATALOG.read_text(encoding="utf-8"))
+    measured = load_measured()
     return [
         Builtin(
             name=entry["name"],
             module=entry.get("module", ""),
             arity=None if entry.get("arity") is None else int(entry["arity"]),
             signature=entry.get("signature", ""),
+            arguments=split_arguments(entry.get("signature", "")),
+            measured=measured.get(entry["name"]),
         )
         for entry in raw["builtins"]
     ]
@@ -92,32 +245,93 @@ def _group_of(module: str) -> str:
     return "Everything else"
 
 
-def builtins_page(entries: list[Builtin]) -> str:
-    by_module: dict[str, list[Builtin]] = defaultdict(list)
-    for entry in entries:
-        by_module[entry.module].append(entry)
-
-    documented = sum(1 for entry in entries if entry.signature)
-    unknown = sum(1 for entry in entries if entry.arity is None)
-    out = [
+def _preamble(entries: list[Builtin], modules: int) -> list[str]:
+    documented = sum(1 for e in entries if e.documented)
+    unknown = sum(1 for e in entries if e.arity is None)
+    with_out = sum(1 for e in entries if any(a.is_out for a in e.arguments))
+    measured = sum(1 for e in entries if e.measured)
+    broken = sum(1 for e in entries if e.measured and e.measured.broken)
+    return [
         BANNER,
         "\n# Built-in functions\n\n",
         f"Every game function a script can call: **{len(entries)}** across "
-        f"**{len(by_module)}** modules. {documented} carry a full signature "
-        "taken from the decompilation; the rest are known by name and argument "
-        "count only.\n\n",
-        f"⚠️ **{unknown} have no recorded argument count** and are shown with "
-        "`?`. A call to one of those cannot be argument-checked.\n\n"
-        if unknown
-        else "",
+        f"**{modules}** modules.\n\n",
+        "## How a call works\n\n",
+        "A builtin is a function inside the game, called by name. `bleck` "
+        "resolves it against the symbol list for your `target` at **build "
+        "time**, so a misspelled name is a compile error rather than a crash "
+        "in game.\n\n",
+        '!!! info "How a builtin returns something"\n\n'
+        "    Not the way a normal function does. Every builtin hands the "
+        "interpreter a *status* -- keep going, stop, wait -- and that is what "
+        "its C return type is for.\n\n"
+        "    A **result** comes back through an argument instead. The headers "
+        "mark those with `&`, and the **Returns** column below lists them:\n\n"
+        "    ```\n"
+        "    evt_mario_get_pos(f32& x, f32& y, f32& z)\n"
+        "    ```\n\n"
+        "    Pass variables and read them afterwards; the function writes "
+        f"through them. **{with_out}** of the {len(entries)} builtins do "
+        "this. A `--` in the column means the function returns nothing and is "
+        "called for its effect.\n\n",
         '!!! warning "Argument counts are checked; types are not"\n\n'
         "    `bleck` rejects a call with the wrong number of arguments at "
         "compile time. It cannot check what those arguments *mean* -- passing "
         "a map name where an NPC name belongs compiles cleanly and misbehaves "
         "in game.\n\n",
+        "## What is known, and what is not\n\n",
+        "This page is generated from the MIT-licensed headers of "
+        "[spm-headers](https://github.com/SeekyCt/spm-headers), which is the "
+        "best record that exists. It is far from complete, and the page says "
+        "which is which rather than guessing:\n\n",
+        "| | Count | |\n|---|---:|---|\n"
+        f"| Builtins | {len(entries)} | callable by name |\n"
+        f"| With a full signature | {documented} | argument names and types "
+        "known |\n"
+        f"| Signature unknown | {len(entries) - documented} | marked *not "
+        "documented*; the argument list shown is a placeholder |\n"
+        f"| Argument count unknown | {unknown} | shown as `?`, **cannot be "
+        "argument-checked** |\n"
+        f"| Return a result | {with_out} | through `&` out-parameters |\n"
+        f"| **Measured in a running game** | **{measured}** | described in the "
+        f"**Measured** column, {broken} found broken |\n\n",
+        '!!! danger "There are no per-function descriptions, on purpose"\n\n'
+        "    The upstream headers carry argument lists and nothing else -- no "
+        "prose, for any of the 443. Writing a sentence about each would mean "
+        "inferring 443 behaviours from their names and publishing the "
+        "guesses as fact.\n\n"
+        "    So each **module** is described instead. A module is a claim "
+        "about a dozen functions at once, checkable against the names it "
+        "contains, and every description below was written by reading the "
+        "whole list. Ones marked 🔶 are inferred rather than established.\n\n"
+        "    If you establish what a function does, "
+        "[say so](https://github.com/Coolroo/bleck/issues) and it gets "
+        "recorded.\n\n",
+        "### The Measured column\n\n",
+        "A ✅ or ⛔ there means **this project called the function in a running "
+        "game and read the result back** -- not that someone read its name. "
+        "`example-mods/builtin-probe` is how, and it is the only route by "
+        "which a description reaches this page.\n\n",
+        "The method matters, because both things it guards against had already "
+        "happened once each:\n\n"
+        "- Every output slot is **pre-seeded with a sentinel**, so *returned "
+        "zero* and *never wrote* can be told apart. `evt_mario_get_pos` reads "
+        "`0, 0, 0` in the attract demo, and only the missing sentinel proves "
+        "it wrote them.\n"
+        "- A **progress marker is set before each call**, so a function that "
+        "never returns names itself rather than leaving silence. That is how "
+        "`evt_pouch_check_have_item` was caught.\n\n",
         "Find one from the command line, which searches the same catalog:\n\n",
         "```bash\nuv run bleck script builtins --search coin\n```\n",
     ]
+
+
+def builtins_page(entries: list[Builtin]) -> str:
+    by_module: dict[str, list[Builtin]] = defaultdict(list)
+    for entry in entries:
+        by_module[entry.module].append(entry)
+
+    out = _preamble(entries, len(by_module))
 
     ordered = list(GROUPS) + ["Everything else"]
     grouped: dict[str, list[str]] = defaultdict(list)
@@ -131,8 +345,16 @@ def builtins_page(entries: list[Builtin]) -> str:
         out.append(f"\n## {title}\n")
         for module in modules:
             found = sorted(by_module[module], key=lambda entry: entry.name)
-            out.append(f"\n### `{module}` <small>{len(found)} functions</small>\n")
-            out.append("\n| Function | Args | Signature |\n|---|---|---|\n")
+            documented = sum(1 for entry in found if entry.documented)
+            note = NOTES.get(module)
+            out.append(f"\n### `{module}`\n\n")
+            if note is not None:
+                out.append(f"{note.render()}\n\n")
+            out.append(
+                f"<small>{len(found)} function(s), {documented} with a known "
+                f"signature.</small>\n\n"
+            )
+            out.append("| Function | Args | Signature | Returns |\n|---|---|---|---|\n")
             out.append("\n".join(entry.row() for entry in found) + "\n")
     return "".join(out)
 
@@ -160,13 +382,13 @@ def storage_page() -> str:
         "lw[0] = lw[0] + 1    -- scratch, cleared when the script ends\n"
         "```\n"
         "\n"
-        "!!! danger \"The saved classes are the game's own progression\"\n\n"
+        '!!! danger "The saved classes are the game\'s own progression"\n\n'
         "    `lsw`, `gsw`, `lswf` and `gswf` persist in the save file and are "
         "the same slots the game uses to track chapter progress, doors opened "
         "and items taken. Writing one can corrupt a playthrough. Use `gw` and "
         "`lw` unless you specifically intend to change saved state.\n"
         "\n"
-        "!!! note \"Floats are fixed-point\"\n\n"
+        '!!! note "Floats are fixed-point"\n\n'
         f"    A float operand is stored as `value * {evt.FLOAT_SCALE:g}`, so it "
         "carries about three decimal places. Values outside the float window "
         "decode as pointers or plain integers instead, which is why the range "

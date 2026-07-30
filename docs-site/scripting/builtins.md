@@ -3,13 +3,57 @@
 
 # Built-in functions
 
-Every game function a script can call: **443** across **35** modules. 163 carry a full signature taken from the decompilation; the rest are known by name and argument count only.
+Every game function a script can call: **443** across **35** modules.
 
-⚠️ **146 have no recorded argument count** and are shown with `?`. A call to one of those cannot be argument-checked.
+## How a call works
+
+A builtin is a function inside the game, called by name. `bleck` resolves it against the symbol list for your `target` at **build time**, so a misspelled name is a compile error rather than a crash in game.
+
+!!! info "How a builtin returns something"
+
+    Not the way a normal function does. Every builtin hands the interpreter a *status* -- keep going, stop, wait -- and that is what its C return type is for.
+
+    A **result** comes back through an argument instead. The headers mark those with `&`, and the **Returns** column below lists them:
+
+    ```
+    evt_mario_get_pos(f32& x, f32& y, f32& z)
+    ```
+
+    Pass variables and read them afterwards; the function writes through them. **21** of the 443 builtins do this. A `--` in the column means the function returns nothing and is called for its effect.
 
 !!! warning "Argument counts are checked; types are not"
 
     `bleck` rejects a call with the wrong number of arguments at compile time. It cannot check what those arguments *mean* -- passing a map name where an NPC name belongs compiles cleanly and misbehaves in game.
+
+## What is known, and what is not
+
+This page is generated from the MIT-licensed headers of [spm-headers](https://github.com/SeekyCt/spm-headers), which is the best record that exists. It is far from complete, and the page says which is which rather than guessing:
+
+| | Count | |
+|---|---:|---|
+| Builtins | 443 | callable by name |
+| With a full signature | 163 | argument names and types known |
+| Signature unknown | 280 | marked *not documented*; the argument list shown is a placeholder |
+| Argument count unknown | 146 | shown as `?`, **cannot be argument-checked** |
+| Return a result | 21 | through `&` out-parameters |
+| **Measured in a running game** | **10** | described in the **Measured** column, 1 found broken |
+
+!!! danger "There are no per-function descriptions, on purpose"
+
+    The upstream headers carry argument lists and nothing else -- no prose, for any of the 443. Writing a sentence about each would mean inferring 443 behaviours from their names and publishing the guesses as fact.
+
+    So each **module** is described instead. A module is a claim about a dozen functions at once, checkable against the names it contains, and every description below was written by reading the whole list. Ones marked 🔶 are inferred rather than established.
+
+    If you establish what a function does, [say so](https://github.com/Coolroo/bleck/issues) and it gets recorded.
+
+### The Measured column
+
+A ✅ or ⛔ there means **this project called the function in a running game and read the result back** -- not that someone read its name. `example-mods/builtin-probe` is how, and it is the only route by which a description reaches this page.
+
+The method matters, because both things it guards against had already happened once each:
+
+- Every output slot is **pre-seeded with a sentinel**, so *returned zero* and *never wrote* can be told apart. `evt_mario_get_pos` reads `0, 0, 0` in the attract demo, and only the missing sentinel proves it wrote them.
+- A **progress marker is set before each call**, so a function that never returns names itself rather than leaving silence. That is how `evt_pouch_check_have_item` was caught.
 
 Find one from the command line, which searches the same catalog:
 
@@ -19,628 +63,770 @@ uv run bleck script builtins --search coin
 
 ## The player
 
-### `evt_fairy` <small>11 functions</small>
+### `evt_fairy`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_fairy_all_enter_run_mode1` | 0 | `evt_fairy_all_enter_run_mode1()` |
-| `evt_fairy_all_enter_run_mode2` | 0 | `evt_fairy_all_enter_run_mode2()` |
-| `evt_fairy_flag_onoff` | 2 | `evt_fairy_flag_onoff(bool onoff, u32 flags)` |
-| `evt_fairy_fly_to` | 5 | `evt_fairy_fly_to(s32 id, f32 x, f32 y, f32 z, s32 time)` |
-| `evt_fairy_get_pos` | 4 | `evt_fairy_get_pos(s32 id, f32 x, f32 y, f32 z)` |
-| `evt_fairy_reset` | 0 | `evt_fairy_reset()` |
-| `evt_fairy_set_anim` | 2 | `evt_fairy_set_anim(s32 id, char *animName)` |
-| `evt_fairy_set_pos` | 4 | `evt_fairy_set_pos(s32 id, f32 x, f32 y, f32 z)` |
-| `evt_fairy_wait_anim_end` | 1 | `evt_fairy_wait_anim_end(s32 id)` |
-| `func_800e8518` | ? | `func_800e8518()` |
-| `func_800e8824` | ? | `func_800e8824()` |
+The pixl following the player -- position, flight to a point, animation, and per-pixl flags.
 
-### `evt_mario` <small>29 functions</small>
+<small>11 function(s), 7 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_mario_check_3d` | 1 | `evt_mario_check_3d(?)` |
-| `evt_mario_direction_face` | 2 | `evt_mario_direction_face(?, ?)` |
-| `evt_mario_direction_reset` | 0 | `evt_mario_direction_reset()` |
-| `evt_mario_face_coords` | 2 | `evt_mario_face_coords(float positionX, float PositionZ)` |
-| `evt_mario_face_npc` | 1 | `evt_mario_face_npc(const char * name)` |
-| `evt_mario_fairy_reset` | 0 | `evt_mario_fairy_reset()` |
-| `evt_mario_flag8_onoff` | 2 | `evt_mario_flag8_onoff(bool onOff, u32 mask)` |
-| `evt_mario_get_character` | 1 | `evt_mario_get_character(s32& ret)` |
-| `evt_mario_get_height` | 1 | `evt_mario_get_height(f32& ret)` |
-| `evt_mario_get_pos` | 3 | `evt_mario_get_pos(f32& x, f32& y, f32& z)` |
-| `evt_mario_jump_to` | 5 | `evt_mario_jump_to(f32 x, f32 y, f32 z, f32 jumpHeight, f32 time_msec)` |
-| `evt_mario_key_off` | 1 | `evt_mario_key_off(int)` |
-| `evt_mario_key_on` | 0 | `evt_mario_key_on()` |
-| `evt_mario_pos_change` | 3 | `evt_mario_pos_change(?, ?, ?)` |
-| `evt_mario_set_anim_change_handler` | 1 | `evt_mario_set_anim_change_handler(MarioAnimChangeHandler * handler)` |
-| `evt_mario_set_character` | 1 | `evt_mario_set_character(?)` |
-| `evt_mario_set_gravity` | ? | `evt_mario_set_gravity()` |
-| `evt_mario_set_pos` | 3 | `evt_mario_set_pos(f32 x, f32 y, f32 z)` |
-| `evt_mario_set_pose` | 2 | `evt_mario_set_pose(const char * name, s16 time)` |
-| `evt_mario_take_damage` | 6 | `evt_mario_take_damage(s32 type, f32 x, f32 y, f32 z, s32 dmgFlags, s32 damage)` |
-| `evt_mario_wait_anim` | 0 | `evt_mario_wait_anim()` |
-| `evt_mario_walk_back_from_pos` | 6 | `evt_mario_walk_back_from_pos(?, ?, ?, ?, ?, ?)` |
-| `evt_mario_walk_to` | 3 | `evt_mario_walk_to(?, ?, ?)` |
-| `func_800f05b0` | ? | `func_800f05b0()` |
-| `func_800f119c` | ? | `func_800f119c()` |
-| `func_800f1684` | ? | `func_800f1684()` |
-| `func_800f1a4c` | ? | `func_800f1a4c()` |
-| `func_800f23e4` | ? | `func_800f23e4()` |
-| `func_800f240c` | ? | `func_800f240c()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_fairy_all_enter_run_mode1` | 0 | `evt_fairy_all_enter_run_mode1() <small>(not documented)</small>` | ? |  |
+| `evt_fairy_all_enter_run_mode2` | 0 | `evt_fairy_all_enter_run_mode2() <small>(not documented)</small>` | ? |  |
+| `evt_fairy_flag_onoff` | 2 | `evt_fairy_flag_onoff(bool onoff, u32 flags)` | -- |  |
+| `evt_fairy_fly_to` | 5 | `evt_fairy_fly_to(s32 id, f32 x, f32 y, f32 z, s32 time)` | -- |  |
+| `evt_fairy_get_pos` | 4 | `evt_fairy_get_pos(s32 id, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_fairy_reset` | 0 | `evt_fairy_reset()` | -- |  |
+| `evt_fairy_set_anim` | 2 | `evt_fairy_set_anim(s32 id, char *animName)` | -- |  |
+| `evt_fairy_set_pos` | 4 | `evt_fairy_set_pos(s32 id, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_fairy_wait_anim_end` | 1 | `evt_fairy_wait_anim_end(s32 id)` | -- |  |
+| `func_800e8518` | ? | `func_800e8518() <small>(not documented)</small>` | ? |  |
+| `func_800e8824` | ? | `func_800e8824() <small>(not documented)</small>` | ? |  |
 
-### `evt_pouch` <small>37 functions</small>
+### `evt_mario`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_pouch_add_attack` | 1 | `evt_pouch_add_attack(?)` |
-| `evt_pouch_add_coins` | 1 | `evt_pouch_add_coins(?)` |
-| `evt_pouch_add_hp` | 1 | `evt_pouch_add_hp(?)` |
-| `evt_pouch_add_item` | 1 | `evt_pouch_add_item(s32 id)` |
-| `evt_pouch_add_shop_item` | ? | `evt_pouch_add_shop_item()` |
-| `evt_pouch_add_xp` | 1 | `evt_pouch_add_xp(?)` |
-| `evt_pouch_change_char_selectable` | ? | `evt_pouch_change_char_selectable()` |
-| `evt_pouch_change_pixl_selectable` | ? | `evt_pouch_change_pixl_selectable()` |
-| `evt_pouch_check_free_use_item` | 1 | `evt_pouch_check_free_use_item(?)` |
-| `evt_pouch_check_have_item` | 2 | `evt_pouch_check_have_item(s32 id, bool& ret)` |
-| `evt_pouch_count_free_shop_items` | ? | `evt_pouch_count_free_shop_items()` |
-| `evt_pouch_count_shop_items` | ? | `evt_pouch_count_shop_items()` |
-| `evt_pouch_count_use_items` | ? | `evt_pouch_count_use_items()` |
-| `evt_pouch_get_arcade_tokens` | ? | `evt_pouch_get_arcade_tokens()` |
-| `evt_pouch_get_attack` | 1 | `evt_pouch_get_attack(?)` |
-| `evt_pouch_get_coins` | 1 | `evt_pouch_get_coins(?)` |
-| `evt_pouch_get_enemies_defeated` | ? | `evt_pouch_get_enemies_defeated()` |
-| `evt_pouch_get_hp` | 1 | `evt_pouch_get_hp(?)` |
-| `evt_pouch_get_level` | 1 | `evt_pouch_get_level(?)` |
-| `evt_pouch_get_max_hp` | 1 | `evt_pouch_get_max_hp(?)` |
-| `evt_pouch_get_max_jump_combo` | ? | `evt_pouch_get_max_jump_combo()` |
-| `evt_pouch_get_max_stylish_combo` | ? | `evt_pouch_get_max_stylish_combo()` |
-| `evt_pouch_get_next_level_xp` | 1 | `evt_pouch_get_next_level_xp(?)` |
-| `evt_pouch_get_total_coins_collected` | ? | `evt_pouch_get_total_coins_collected()` |
-| `evt_pouch_get_xp` | 1 | `evt_pouch_get_xp(?)` |
-| `evt_pouch_increment_enemies_defeated` | 0 | `evt_pouch_increment_enemies_defeated(void)` |
-| `evt_pouch_remove_item` | 1 | `evt_pouch_remove_item(?)` |
-| `evt_pouch_remove_item_idx` | ? | `evt_pouch_remove_item_idx()` |
-| `evt_pouch_remove_shop_item` | ? | `evt_pouch_remove_shop_item()` |
-| `evt_pouch_remove_shop_item_idx` | ? | `evt_pouch_remove_shop_item_idx()` |
-| `evt_pouch_set_arcade_tokens` | ? | `evt_pouch_set_arcade_tokens()` |
-| `evt_pouch_set_attack` | 1 | `evt_pouch_set_attack(?)` |
-| `evt_pouch_set_coins` | 1 | `evt_pouch_set_coins(?)` |
-| `evt_pouch_set_hp` | 1 | `evt_pouch_set_hp(?)` |
-| `evt_pouch_set_level` | 1 | `evt_pouch_set_level(?)` |
-| `evt_pouch_set_max_hp` | 1 | `evt_pouch_set_max_hp(?)` |
-| `evt_pouch_set_pixl_selected` | 1 | `evt_pouch_set_pixl_selected(s32 id)` |
+The player: position, height, facing (a point or an NPC), pose and animation, jumping and walking to a point, taking damage, which character is active, and locking control.
+
+<small>29 function(s), 13 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_mario_check_3d` | 1 | `evt_mario_check_3d(?) <small>(not documented)</small>` | ? |  |
+| `evt_mario_direction_face` | 2 | `evt_mario_direction_face(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_mario_direction_reset` | 0 | `evt_mario_direction_reset() <small>(not documented)</small>` | ? |  |
+| `evt_mario_face_coords` | 2 | `evt_mario_face_coords(float positionX, float PositionZ)` | -- |  |
+| `evt_mario_face_npc` | 1 | `evt_mario_face_npc(const char * name)` | -- |  |
+| `evt_mario_fairy_reset` | 0 | `evt_mario_fairy_reset() <small>(not documented)</small>` | ? |  |
+| `evt_mario_flag8_onoff` | 2 | `evt_mario_flag8_onoff(bool onOff, u32 mask)` | -- |  |
+| `evt_mario_get_character` | 1 | `evt_mario_get_character(s32& ret)` | `ret` | ✅ Writes which character is active into its argument. |
+| `evt_mario_get_height` | 1 | `evt_mario_get_height(f32& ret)` | `ret` | ✅ Writes the player's height into its argument, as a float. |
+| `evt_mario_get_pos` | 3 | `evt_mario_get_pos(f32& x, f32& y, f32& z)` | `x`, `y`, `z` | ✅ Writes the player's x, y and z into its three arguments, as floats. |
+| `evt_mario_jump_to` | 5 | `evt_mario_jump_to(f32 x, f32 y, f32 z, f32 jumpHeight, f32 time_msec)` | -- |  |
+| `evt_mario_key_off` | 1 | `evt_mario_key_off(int)` | -- |  |
+| `evt_mario_key_on` | 0 | `evt_mario_key_on()` | -- |  |
+| `evt_mario_pos_change` | 3 | `evt_mario_pos_change(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_mario_set_anim_change_handler` | 1 | `evt_mario_set_anim_change_handler(MarioAnimChangeHandler * handler)` | -- |  |
+| `evt_mario_set_character` | 1 | `evt_mario_set_character(?) <small>(not documented)</small>` | ? |  |
+| `evt_mario_set_gravity` | ? | `evt_mario_set_gravity() <small>(not documented)</small>` | ? |  |
+| `evt_mario_set_pos` | 3 | `evt_mario_set_pos(f32 x, f32 y, f32 z)` | -- |  |
+| `evt_mario_set_pose` | 2 | `evt_mario_set_pose(const char * name, s16 time)` | -- |  |
+| `evt_mario_take_damage` | 6 | `evt_mario_take_damage(s32 type, f32 x, f32 y, f32 z, s32 dmgFlags, s32 damage)` | -- |  |
+| `evt_mario_wait_anim` | 0 | `evt_mario_wait_anim() <small>(not documented)</small>` | ? |  |
+| `evt_mario_walk_back_from_pos` | 6 | `evt_mario_walk_back_from_pos(?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_mario_walk_to` | 3 | `evt_mario_walk_to(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `func_800f05b0` | ? | `func_800f05b0() <small>(not documented)</small>` | ? |  |
+| `func_800f119c` | ? | `func_800f119c() <small>(not documented)</small>` | ? |  |
+| `func_800f1684` | ? | `func_800f1684() <small>(not documented)</small>` | ? |  |
+| `func_800f1a4c` | ? | `func_800f1a4c() <small>(not documented)</small>` | ? |  |
+| `func_800f23e4` | ? | `func_800f23e4() <small>(not documented)</small>` | ? |  |
+| `func_800f240c` | ? | `func_800f240c() <small>(not documented)</small>` | ? |  |
+
+### `evt_pouch`
+
+The player's inventory and stats: coins, HP, attack, items, shop points and charms. Everything the pause menu shows.
+
+<small>37 function(s), 4 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_pouch_add_attack` | 1 | `evt_pouch_add_attack(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_add_coins` | 1 | `evt_pouch_add_coins(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_add_hp` | 1 | `evt_pouch_add_hp(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_add_item` | 1 | `evt_pouch_add_item(s32 id)` | -- |  |
+| `evt_pouch_add_shop_item` | ? | `evt_pouch_add_shop_item() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_add_xp` | 1 | `evt_pouch_add_xp(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_change_char_selectable` | ? | `evt_pouch_change_char_selectable() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_change_pixl_selectable` | ? | `evt_pouch_change_pixl_selectable() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_check_free_use_item` | 1 | `evt_pouch_check_free_use_item(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_check_have_item` | 2 | `evt_pouch_check_have_item(s32 id, bool& ret)` | `ret` | ⛔ Does not return. Reproduced twice; avoid it until someone establishes why. |
+| `evt_pouch_count_free_shop_items` | ? | `evt_pouch_count_free_shop_items() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_count_shop_items` | ? | `evt_pouch_count_shop_items() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_count_use_items` | ? | `evt_pouch_count_use_items() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_arcade_tokens` | ? | `evt_pouch_get_arcade_tokens() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_attack` | 1 | `evt_pouch_get_attack(?) <small>(not documented)</small>` | ? | ✅ Writes the player's attack power into its argument. |
+| `evt_pouch_get_coins` | 1 | `evt_pouch_get_coins(?) <small>(not documented)</small>` | ? | ✅ Writes the player's coin count into its argument. |
+| `evt_pouch_get_enemies_defeated` | ? | `evt_pouch_get_enemies_defeated() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_hp` | 1 | `evt_pouch_get_hp(?) <small>(not documented)</small>` | ? | ✅ Writes the player's current HP into its argument. |
+| `evt_pouch_get_level` | 1 | `evt_pouch_get_level(?) <small>(not documented)</small>` | ? | ✅ Writes the player's level into its argument. |
+| `evt_pouch_get_max_hp` | 1 | `evt_pouch_get_max_hp(?) <small>(not documented)</small>` | ? | ✅ Writes the player's maximum HP into its argument. |
+| `evt_pouch_get_max_jump_combo` | ? | `evt_pouch_get_max_jump_combo() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_max_stylish_combo` | ? | `evt_pouch_get_max_stylish_combo() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_next_level_xp` | 1 | `evt_pouch_get_next_level_xp(?) <small>(not documented)</small>` | ? | ✅ Writes the score needed for the next level into its argument. |
+| `evt_pouch_get_total_coins_collected` | ? | `evt_pouch_get_total_coins_collected() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_get_xp` | 1 | `evt_pouch_get_xp(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_increment_enemies_defeated` | 0 | `evt_pouch_increment_enemies_defeated(void)` | -- |  |
+| `evt_pouch_remove_item` | 1 | `evt_pouch_remove_item(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_remove_item_idx` | ? | `evt_pouch_remove_item_idx() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_remove_shop_item` | ? | `evt_pouch_remove_shop_item() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_remove_shop_item_idx` | ? | `evt_pouch_remove_shop_item_idx() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_arcade_tokens` | ? | `evt_pouch_set_arcade_tokens() <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_attack` | 1 | `evt_pouch_set_attack(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_coins` | 1 | `evt_pouch_set_coins(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_hp` | 1 | `evt_pouch_set_hp(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_level` | 1 | `evt_pouch_set_level(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_max_hp` | 1 | `evt_pouch_set_max_hp(?) <small>(not documented)</small>` | ? |  |
+| `evt_pouch_set_pixl_selected` | 1 | `evt_pouch_set_pixl_selected(s32 id)` | -- |  |
 
 ## The world
 
-### `evt_item` <small>7 functions</small>
+### `evt_item`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_item_entry` | ? | `evt_item_entry()` |
-| `evt_item_event_free_work` | 0 | `evt_item_event_free_work()` |
-| `evt_item_flag_onoff` | ? | `evt_item_flag_onoff()` |
-| `evt_item_get_position` | 4 | `evt_item_get_position(const char* name, f32 x, f32 y, f32 z)` |
-| `evt_item_set_position` | 4 | `evt_item_set_position(const char* name, f32 x, f32 y, f32 z)` |
-| `evt_item_spawn_thunder` | ? | `evt_item_spawn_thunder()` |
-| `evt_item_wait_collected` | 1 | `evt_item_wait_collected(const char *name)` |
+Item entities placed in a map: spawning, position, and waiting until the player collects one.
 
-### `evt_map` <small>11 functions</small>
+<small>7 function(s), 3 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_map_checkanim` | 3 | `evt_map_checkanim(?, ?, ?)` |
-| `evt_map_playanim` | 3 | `evt_map_playanim(?, ?, ?)` |
-| `evt_map_set_blend` | 5 | `evt_map_set_blend(?, ?, ?, ?, ?)` |
-| `evt_map_spawn_ladder` | 8 | `evt_map_spawn_ladder(?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_mapdisp_onoff` | 1 | `evt_mapdisp_onoff(?)` |
-| `evt_mapobj_color` | 6 | `evt_mapobj_color(s32 group, const char * name, u8 r, u8 g, u8 b, u8 a)` |
-| `evt_mapobj_flag4_onoff` | 4 | `evt_mapobj_flag4_onoff(s32 group, bool on, const char * name, u32 mask)` |
-| `evt_mapobj_flag_onoff` | 4 | `evt_mapobj_flag_onoff(s32 group, bool on, const char * name, u32 mask)` |
-| `evt_mapobj_get_position` | 4 | `evt_mapobj_get_position(const char * name, f32& x, f32& y, f32& z)` |
-| `evt_mapobj_scale` | 4 | `evt_mapobj_scale(?, ?, ?, ?)` |
-| `evt_mapobj_trans` | 4 | `evt_mapobj_trans(const char * name, s32 x, s32 y, s32 z)` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_item_entry` | ? | `evt_item_entry() <small>(not documented)</small>` | ? |  |
+| `evt_item_event_free_work` | 0 | `evt_item_event_free_work() <small>(not documented)</small>` | ? |  |
+| `evt_item_flag_onoff` | ? | `evt_item_flag_onoff() <small>(not documented)</small>` | ? |  |
+| `evt_item_get_position` | 4 | `evt_item_get_position(const char* name, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_item_set_position` | 4 | `evt_item_set_position(const char* name, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_item_spawn_thunder` | ? | `evt_item_spawn_thunder() <small>(not documented)</small>` | ? |  |
+| `evt_item_wait_collected` | 1 | `evt_item_wait_collected(const char *name)` | -- |  |
 
-### `evt_mobj` <small>23 functions</small>
+### `evt_map`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_mobj_arrow` | 5 | `evt_mobj_arrow(const char * name, f32 x, f32 y, f32 z, UNK arg5)` |
-| `evt_mobj_blk` | 8 | `evt_mobj_blk(s32 type, char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_delete` | 1 | `evt_mobj_delete(const char * name)` |
-| `evt_mobj_eria_block` | 6 | `evt_mobj_eria_block(const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_exec_cancel` | ? | `evt_mobj_exec_cancel()` |
-| `evt_mobj_fire_block` | 9 | `evt_mobj_fire_block(const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_flag_onoff` | 4 | `evt_mobj_flag_onoff(bool on, bool flag4, const char * name, u32 mask)` |
-| `evt_mobj_get_joint_names` | 3 | `evt_mobj_get_joint_names(const char * name, const char * a2Name, const char * a3Name)` |
-| `evt_mobj_get_position` | 4 | `evt_mobj_get_position(const char * name, f32& x, f32& y, f32& z)` |
-| `evt_mobj_hip_kui` | 8 | `evt_mobj_hip_kui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_hit_onoff` | 2 | `evt_mobj_hit_onoff(bool on, const char * name)` |
-| `evt_mobj_hunmer_blk` | 7 | `evt_mobj_hunmer_blk(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_jumpstand` | 8 | `evt_mobj_jumpstand(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_kan` | 7 | `evt_mobj_kan(bool rotation, const char * name, f32 x, f32 y, f32 z,` |
-| `evt_mobj_save_blk` | 5 | `evt_mobj_save_blk(char * instanceName, f32 x, f32 y, f32 z, EvtScriptCode * interactScript)` |
-| `evt_mobj_set_anim` | 2 | `evt_mobj_set_anim(const char * mobjName, const char * animName)` |
-| `evt_mobj_set_position` | 4 | `evt_mobj_set_position(const char * name, f32 x, f32 y, f32 z)` |
-| `evt_mobj_set_rotation` | 4 | `evt_mobj_set_rotation(const char * name, f32 xRotation, f32 yRotation, f32 zRotation)` |
-| `evt_mobj_set_scale` | 4 | `evt_mobj_set_scale(const char * name, f32 xScale, f32 yScale, f32 zScale)` |
-| `evt_mobj_sui` | 8 | `evt_mobj_sui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` |
-| `evt_mobj_thako` | 9 | `evt_mobj_thako(s32 type, const char * name, f32 x, f32 y, f32 z, EvtScriptCode * interactScript,` |
-| `evt_mobj_wait_animation_end` | 2 | `evt_mobj_wait_animation_end(const char * name, UNUSED)` |
-| `evt_mobj_zyo` | 9 | `evt_mobj_zyo(const char * name, s32 lockItemId, f32 x, f32 y, f32 z, f32 yRotation,` |
+The map itself -- playing and checking its animations, display toggles, ladders and blending -- plus colour, flags and position for map objects addressed by group.
 
-### `evt_npc` <small>71 functions</small>
+<small>11 function(s), 5 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_npc_add_flip_part` | 1 | `evt_npc_add_flip_part(?)` |
-| `evt_npc_agb_async` | 2 | `evt_npc_agb_async(const char * animPoseName, val???)` |
-| `evt_npc_animflag_onoff` | 3 | `evt_npc_animflag_onoff(const char * instanceName, bool on, u32 mask)` |
-| `evt_npc_arc_to` | 10 | `evt_npc_arc_to(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_npc_delete` | 1 | `evt_npc_delete(const char * name)` |
-| `evt_npc_entry` | 3 | `evt_npc_entry(const char * instanceName, const char * animPoseName, s32 instanceId)` |
-| `evt_npc_entry_from_template` | 7 | `evt_npc_entry_from_template(s32 instanceIdOverride, s32 templateId, s32 x, s32 y,` |
-| `evt_npc_finish_flip_instant` | ? | `evt_npc_finish_flip_instant()` |
-| `evt_npc_flag46C_onoff` | ? | `evt_npc_flag46C_onoff()` |
-| `evt_npc_flag8_onoff` | 3 | `evt_npc_flag8_onoff(const char * instanceName, bool on, u32 mask)` |
-| `evt_npc_flagC_onoff` | ? | `evt_npc_flagC_onoff()` |
-| `evt_npc_flip` | ? | `evt_npc_flip()` |
-| `evt_npc_flip_to` | ? | `evt_npc_flip_to()` |
-| `evt_npc_freeze_all` | 0 | `evt_npc_freeze_all()` |
-| `evt_npc_get_active_count` | ? | `evt_npc_get_active_count()` |
-| `evt_npc_get_axis_movement_unit` | 2 | `evt_npc_get_axis_movement_unit(const char * name, f32& ret)` |
-| `evt_npc_get_cur_anim` | 2 | `evt_npc_get_cur_anim(const char * name, s32 ret)` |
-| `evt_npc_get_damage_type` | 2 | `evt_npc_get_damage_type(?, ?)` |
-| `evt_npc_get_hp` | ? | `evt_npc_get_hp()` |
-| `evt_npc_get_max_hp` | 2 | `evt_npc_get_max_hp(?, ?)` |
-| `evt_npc_get_position` | 4 | `evt_npc_get_position(const char * name, f32& x, f32& y, f32& z)` |
-| `evt_npc_get_property` | 3 | `evt_npc_get_property(const char * instanceName, s32 propertyId, EvtVar ret)` |
-| `evt_npc_get_unitwork` | 3 | `evt_npc_get_unitwork(?, ?, ?)` |
-| `evt_npc_glide_to` | 10 | `evt_npc_glide_to(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_npc_id_to_name` | 2 | `evt_npc_id_to_name(?, ?)` |
-| `evt_npc_jump_to` | 6 | `evt_npc_jump_to(const char * name, f32 destX, f32 destY, f32 destZ, f32 height, s32 length)` |
-| `evt_npc_modify_part` | 4 | `evt_npc_modify_part(?, ?, ?, ?)` |
-| `evt_npc_restart_evt_id` | 1 | `evt_npc_restart_evt_id(const char * name)` |
-| `evt_npc_rotate` | 4 | `evt_npc_rotate(?, ?, ?, ?)` |
-| `evt_npc_sammer_display_count` | 1 | `evt_npc_sammer_display_count(s32 count)` |
-| `evt_npc_set_anim` | 3 | `evt_npc_set_anim(?, ?, ?)` |
-| `evt_npc_set_animpose_disp_callback` | 3 | `evt_npc_set_animpose_disp_callback(?, ?, ?)` |
-| `evt_npc_set_axis_movement_unit` | 2 | `evt_npc_set_axis_movement_unit(?, ?)` |
-| `evt_npc_set_camid` | 2 | `evt_npc_set_camid(const char * name, s32 camId)` |
-| `evt_npc_set_color` | 5 | `evt_npc_set_color(?, ?, ?, ?, ?)` |
-| `evt_npc_set_colorcopy` | 5 | `evt_npc_set_colorcopy(?, ?, ?, ?, ?)` |
-| `evt_npc_set_colorcopytwo` | 5 | `evt_npc_set_colorcopytwo(?, ?, ?, ?, ?)` |
-| `evt_npc_set_disp_callback` | ? | `evt_npc_set_disp_callback()` |
-| `evt_npc_set_hp` | ? | `evt_npc_set_hp()` |
-| `evt_npc_set_move_mode` | 2 | `evt_npc_set_move_mode(const char * name, NPCMoveMode moveMode )` |
-| `evt_npc_set_part_attack_power` | 3 | `evt_npc_set_part_attack_power(const char * name, npcPartIndex, attackPower)` |
-| `evt_npc_set_partswork` | ? | `evt_npc_set_partswork()` |
-| `evt_npc_set_position` | 4 | `evt_npc_set_position(const char * instanceName, f32 x, f32 y, f32 z)` |
-| `evt_npc_set_property` | 3 | `evt_npc_set_property(const char * instanceName, s32 propertyId, s32 value)` |
-| `evt_npc_set_scale` | 4 | `evt_npc_set_scale(const char * instanceName, f32 x, f32 y, f32 z)` |
-| `evt_npc_set_thoreau_override` | 2 | `evt_npc_set_thoreau_override(const char * name, void *func)` |
-| `evt_npc_set_unitwork` | 3 | `evt_npc_set_unitwork(const char * name, s32 idx, s32 val)` |
-| `evt_npc_spawn_sammer_guy` | 6 | `evt_npc_spawn_sammer_guy(s32 instanceId, s32 sammerId, f32 x, f32 y, f32 z, EvtVar ret)` |
-| `evt_npc_stats_set_up` | 2 | `evt_npc_stats_set_up(?, ?)` |
-| `evt_npc_teleport_effect` | 2 | `evt_npc_teleport_effect(bool appearDisappear, const char * instanceName)` |
-| `evt_npc_tribe_agb_async` | 1 | `evt_npc_tribe_agb_async(s32 tribeId)` |
-| `evt_npc_unfreeze_all` | 0 | `evt_npc_unfreeze_all()` |
-| `evt_npc_wait_anim_end` | 2 | `evt_npc_wait_anim_end(const char * npcName, s32 partId)` |
-| `evt_npc_wait_axis_movement_unit_end` | 1 | `evt_npc_wait_axis_movement_unit_end(?)` |
-| `evt_npc_wait_flip_finished` | ? | `evt_npc_wait_flip_finished()` |
-| `evt_npc_wait_for` | 2 | `evt_npc_wait_for(const char * name, s32 timeInMiliseconds)` |
-| `evt_npc_walk_to` | 8 | `evt_npc_walk_to(?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_read_setup_file` | ? | `evt_read_setup_file()` |
-| `func_800fe92c` | 4 | `func_800fe92c(?, ?, ?, ?)` |
-| `func_800ff8f8` | ? | `func_800ff8f8()` |
-| `func_801049ec` | ? | `func_801049ec()` |
-| `func_80104a3c` | ? | `func_80104a3c()` |
-| `func_80105b94` | ? | `func_80105b94()` |
-| `func_801072a4` | ? | `func_801072a4()` |
-| `func_80107c38` | 2 | `func_80107c38(?, ?)` |
-| `func_80108194` | 2 | `func_80108194(?, ?)` |
-| `func_801f0d30` | ? | `func_801f0d30()` |
-| `func_801f1880` | ? | `func_801f1880()` |
-| `func_801f2344` | ? | `func_801f2344()` |
-| `func_801f2664` | ? | `func_801f2664()` |
-| `func_801f2af8` | ? | `func_801f2af8()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_map_checkanim` | 3 | `evt_map_checkanim(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_map_playanim` | 3 | `evt_map_playanim(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_map_set_blend` | 5 | `evt_map_set_blend(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_map_spawn_ladder` | 8 | `evt_map_spawn_ladder(?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_mapdisp_onoff` | 1 | `evt_mapdisp_onoff(?) <small>(not documented)</small>` | ? |  |
+| `evt_mapobj_color` | 6 | `evt_mapobj_color(s32 group, const char * name, u8 r, u8 g, u8 b, u8 a)` | -- |  |
+| `evt_mapobj_flag4_onoff` | 4 | `evt_mapobj_flag4_onoff(s32 group, bool on, const char * name, u32 mask)` | -- |  |
+| `evt_mapobj_flag_onoff` | 4 | `evt_mapobj_flag_onoff(s32 group, bool on, const char * name, u32 mask)` | -- |  |
+| `evt_mapobj_get_position` | 4 | `evt_mapobj_get_position(const char * name, f32& x, f32& y, f32& z)` | `x`, `y`, `z` |  |
+| `evt_mapobj_scale` | 4 | `evt_mapobj_scale(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_mapobj_trans` | 4 | `evt_mapobj_trans(const char * name, s32 x, s32 y, s32 z)` | -- |  |
+
+### `evt_mobj`
+
+Map objects -- blocks, save blocks, arrows, pipes and their kin. Most spawn functions take a position **and the script to run on interaction**, which is what makes a block do anything. Also position, rotation, scale and animation.
+
+<small>23 function(s), 22 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_mobj_arrow` | 5 | `evt_mobj_arrow(const char * name, f32 x, f32 y, f32 z, UNK arg5)` | -- |  |
+| `evt_mobj_blk` | 8 | `evt_mobj_blk(s32 type, char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_delete` | 1 | `evt_mobj_delete(const char * name)` | -- |  |
+| `evt_mobj_eria_block` | 6 | `evt_mobj_eria_block(const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_exec_cancel` | ? | `evt_mobj_exec_cancel() <small>(not documented)</small>` | ? |  |
+| `evt_mobj_fire_block` | 9 | `evt_mobj_fire_block(const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_flag_onoff` | 4 | `evt_mobj_flag_onoff(bool on, bool flag4, const char * name, u32 mask)` | -- |  |
+| `evt_mobj_get_joint_names` | 3 | `evt_mobj_get_joint_names(const char * name, const char * a2Name, const char * a3Name)` | -- |  |
+| `evt_mobj_get_position` | 4 | `evt_mobj_get_position(const char * name, f32& x, f32& y, f32& z)` | `x`, `y`, `z` |  |
+| `evt_mobj_hip_kui` | 8 | `evt_mobj_hip_kui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_hit_onoff` | 2 | `evt_mobj_hit_onoff(bool on, const char * name)` | -- |  |
+| `evt_mobj_hunmer_blk` | 7 | `evt_mobj_hunmer_blk(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_jumpstand` | 8 | `evt_mobj_jumpstand(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_kan` | 7 | `evt_mobj_kan(bool rotation, const char * name, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_save_blk` | 5 | `evt_mobj_save_blk(char * instanceName, f32 x, f32 y, f32 z, EvtScriptCode * interactScript)` | -- |  |
+| `evt_mobj_set_anim` | 2 | `evt_mobj_set_anim(const char * mobjName, const char * animName)` | -- |  |
+| `evt_mobj_set_position` | 4 | `evt_mobj_set_position(const char * name, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_mobj_set_rotation` | 4 | `evt_mobj_set_rotation(const char * name, f32 xRotation, f32 yRotation, f32 zRotation)` | -- |  |
+| `evt_mobj_set_scale` | 4 | `evt_mobj_set_scale(const char * name, f32 xScale, f32 yScale, f32 zScale)` | -- |  |
+| `evt_mobj_sui` | 8 | `evt_mobj_sui(s32 type, const char * instanceName, f32 x, f32 y, f32 z,` | -- |  |
+| `evt_mobj_thako` | 9 | `evt_mobj_thako(s32 type, const char * name, f32 x, f32 y, f32 z, EvtScriptCode * interactScript,` | -- |  |
+| `evt_mobj_wait_animation_end` | 2 | `evt_mobj_wait_animation_end(const char * name, UNUSED)` | -- |  |
+| `evt_mobj_zyo` | 9 | `evt_mobj_zyo(const char * name, s32 lockItemId, f32 x, f32 y, f32 z, f32 yRotation,` | -- |  |
+
+### `evt_npc`
+
+**The largest module.** NPCs by instance name: spawning (including from a template id), movement, animation, HP, per-part attack power, flags, scale, colour, and the generic property get/set pair.
+
+<small>71 function(s), 26 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_npc_add_flip_part` | 1 | `evt_npc_add_flip_part(?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_agb_async` | 2 | `evt_npc_agb_async(const char * animPoseName, val???)` | -- |  |
+| `evt_npc_animflag_onoff` | 3 | `evt_npc_animflag_onoff(const char * instanceName, bool on, u32 mask)` | -- |  |
+| `evt_npc_arc_to` | 10 | `evt_npc_arc_to(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_delete` | 1 | `evt_npc_delete(const char * name)` | -- |  |
+| `evt_npc_entry` | 3 | `evt_npc_entry(const char * instanceName, const char * animPoseName, s32 instanceId)` | -- |  |
+| `evt_npc_entry_from_template` | 7 | `evt_npc_entry_from_template(s32 instanceIdOverride, s32 templateId, s32 x, s32 y,` | -- |  |
+| `evt_npc_finish_flip_instant` | ? | `evt_npc_finish_flip_instant() <small>(not documented)</small>` | ? |  |
+| `evt_npc_flag46C_onoff` | ? | `evt_npc_flag46C_onoff() <small>(not documented)</small>` | ? |  |
+| `evt_npc_flag8_onoff` | 3 | `evt_npc_flag8_onoff(const char * instanceName, bool on, u32 mask)` | -- |  |
+| `evt_npc_flagC_onoff` | ? | `evt_npc_flagC_onoff() <small>(not documented)</small>` | ? |  |
+| `evt_npc_flip` | ? | `evt_npc_flip() <small>(not documented)</small>` | ? |  |
+| `evt_npc_flip_to` | ? | `evt_npc_flip_to() <small>(not documented)</small>` | ? |  |
+| `evt_npc_freeze_all` | 0 | `evt_npc_freeze_all() <small>(not documented)</small>` | ? |  |
+| `evt_npc_get_active_count` | ? | `evt_npc_get_active_count() <small>(not documented)</small>` | ? |  |
+| `evt_npc_get_axis_movement_unit` | 2 | `evt_npc_get_axis_movement_unit(const char * name, f32& ret)` | `ret` |  |
+| `evt_npc_get_cur_anim` | 2 | `evt_npc_get_cur_anim(const char * name, s32 ret)` | -- |  |
+| `evt_npc_get_damage_type` | 2 | `evt_npc_get_damage_type(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_get_hp` | ? | `evt_npc_get_hp() <small>(not documented)</small>` | ? |  |
+| `evt_npc_get_max_hp` | 2 | `evt_npc_get_max_hp(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_get_position` | 4 | `evt_npc_get_position(const char * name, f32& x, f32& y, f32& z)` | `x`, `y`, `z` |  |
+| `evt_npc_get_property` | 3 | `evt_npc_get_property(const char * instanceName, s32 propertyId, EvtVar ret)` | -- |  |
+| `evt_npc_get_unitwork` | 3 | `evt_npc_get_unitwork(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_glide_to` | 10 | `evt_npc_glide_to(?, ?, ?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_id_to_name` | 2 | `evt_npc_id_to_name(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_jump_to` | 6 | `evt_npc_jump_to(const char * name, f32 destX, f32 destY, f32 destZ, f32 height, s32 length)` | -- |  |
+| `evt_npc_modify_part` | 4 | `evt_npc_modify_part(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_restart_evt_id` | 1 | `evt_npc_restart_evt_id(const char * name)` | -- |  |
+| `evt_npc_rotate` | 4 | `evt_npc_rotate(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_sammer_display_count` | 1 | `evt_npc_sammer_display_count(s32 count)` | -- |  |
+| `evt_npc_set_anim` | 3 | `evt_npc_set_anim(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_animpose_disp_callback` | 3 | `evt_npc_set_animpose_disp_callback(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_axis_movement_unit` | 2 | `evt_npc_set_axis_movement_unit(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_camid` | 2 | `evt_npc_set_camid(const char * name, s32 camId)` | -- |  |
+| `evt_npc_set_color` | 5 | `evt_npc_set_color(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_colorcopy` | 5 | `evt_npc_set_colorcopy(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_colorcopytwo` | 5 | `evt_npc_set_colorcopytwo(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_disp_callback` | ? | `evt_npc_set_disp_callback() <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_hp` | ? | `evt_npc_set_hp() <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_move_mode` | 2 | `evt_npc_set_move_mode(const char * name, NPCMoveMode moveMode )` | -- |  |
+| `evt_npc_set_part_attack_power` | 3 | `evt_npc_set_part_attack_power(const char * name, npcPartIndex, attackPower)` | -- |  |
+| `evt_npc_set_partswork` | ? | `evt_npc_set_partswork() <small>(not documented)</small>` | ? |  |
+| `evt_npc_set_position` | 4 | `evt_npc_set_position(const char * instanceName, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_npc_set_property` | 3 | `evt_npc_set_property(const char * instanceName, s32 propertyId, s32 value)` | -- |  |
+| `evt_npc_set_scale` | 4 | `evt_npc_set_scale(const char * instanceName, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_npc_set_thoreau_override` | 2 | `evt_npc_set_thoreau_override(const char * name, void *func)` | -- |  |
+| `evt_npc_set_unitwork` | 3 | `evt_npc_set_unitwork(const char * name, s32 idx, s32 val)` | -- |  |
+| `evt_npc_spawn_sammer_guy` | 6 | `evt_npc_spawn_sammer_guy(s32 instanceId, s32 sammerId, f32 x, f32 y, f32 z, EvtVar ret)` | -- |  |
+| `evt_npc_stats_set_up` | 2 | `evt_npc_stats_set_up(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_teleport_effect` | 2 | `evt_npc_teleport_effect(bool appearDisappear, const char * instanceName)` | -- |  |
+| `evt_npc_tribe_agb_async` | 1 | `evt_npc_tribe_agb_async(s32 tribeId)` | -- |  |
+| `evt_npc_unfreeze_all` | 0 | `evt_npc_unfreeze_all() <small>(not documented)</small>` | ? |  |
+| `evt_npc_wait_anim_end` | 2 | `evt_npc_wait_anim_end(const char * npcName, s32 partId)` | -- |  |
+| `evt_npc_wait_axis_movement_unit_end` | 1 | `evt_npc_wait_axis_movement_unit_end(?) <small>(not documented)</small>` | ? |  |
+| `evt_npc_wait_flip_finished` | ? | `evt_npc_wait_flip_finished() <small>(not documented)</small>` | ? |  |
+| `evt_npc_wait_for` | 2 | `evt_npc_wait_for(const char * name, s32 timeInMiliseconds)` | -- |  |
+| `evt_npc_walk_to` | 8 | `evt_npc_walk_to(?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_read_setup_file` | ? | `evt_read_setup_file() <small>(not documented)</small>` | ? |  |
+| `func_800fe92c` | 4 | `func_800fe92c(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `func_800ff8f8` | ? | `func_800ff8f8() <small>(not documented)</small>` | ? |  |
+| `func_801049ec` | ? | `func_801049ec() <small>(not documented)</small>` | ? |  |
+| `func_80104a3c` | ? | `func_80104a3c() <small>(not documented)</small>` | ? |  |
+| `func_80105b94` | ? | `func_80105b94() <small>(not documented)</small>` | ? |  |
+| `func_801072a4` | ? | `func_801072a4() <small>(not documented)</small>` | ? |  |
+| `func_80107c38` | 2 | `func_80107c38(?, ?) <small>(not documented)</small>` | ? |  |
+| `func_80108194` | 2 | `func_80108194(?, ?) <small>(not documented)</small>` | ? |  |
+| `func_801f0d30` | ? | `func_801f0d30() <small>(not documented)</small>` | ? |  |
+| `func_801f1880` | ? | `func_801f1880() <small>(not documented)</small>` | ? |  |
+| `func_801f2344` | ? | `func_801f2344() <small>(not documented)</small>` | ? |  |
+| `func_801f2664` | ? | `func_801f2664() <small>(not documented)</small>` | ? |  |
+| `func_801f2af8` | ? | `func_801f2af8() <small>(not documented)</small>` | ? |  |
 
 ## Presentation
 
-### `evt_cam` <small>21 functions</small>
+### `evt_cam`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_cam3d_evt_zoom_in` | 9 | `evt_cam3d_evt_zoom_in(?, ?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_cam_check_dimension` | ? | `evt_cam_check_dimension()` |
-| `evt_cam_flag_onoff` | ? | `evt_cam_flag_onoff()` |
-| `evt_cam_get_at` | ? | `evt_cam_get_at()` |
-| `evt_cam_get_pos` | ? | `evt_cam_get_pos()` |
-| `evt_cam_look_at_door` | 2 | `evt_cam_look_at_door(?, ?)` |
-| `evt_cam_shake` | 6 | `evt_cam_shake(?, ?, ?, ?, ?, ?)` |
-| `evt_cam_zoom_to_coords` | 2 | `evt_cam_zoom_to_coords(?, ?)` |
-| `func_800e01f8` | ? | `func_800e01f8()` |
-| `func_800e02bc` | ? | `func_800e02bc()` |
-| `func_800e0720` | ? | `func_800e0720()` |
-| `func_800e07bc` | ? | `func_800e07bc()` |
-| `func_800e0890` | ? | `func_800e0890()` |
-| `func_800e08f8` | ? | `func_800e08f8()` |
-| `func_800e092c` | ? | `func_800e092c()` |
-| `func_800e0a14` | ? | `func_800e0a14()` |
-| `func_800e0a84` | ? | `func_800e0a84()` |
-| `func_800e0b58` | ? | `func_800e0b58()` |
-| `func_800e0b8c` | ? | `func_800e0b8c()` |
-| `func_800e0bbc` | ? | `func_800e0bbc()` |
-| `func_800e0c40` | ? | `func_800e0c40()` |
+The camera: position and look-at target, zooming to coordinates or a door, shake, and which dimension it is rendering. ⚠️ 13 of its 21 entries are still unnamed.
 
-### `evt_eff` <small>6 functions</small>
+<small>21 function(s), 0 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_eff` | 14 | `evt_eff(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_eff_delete` | 1 | `evt_eff_delete(const * char name)` |
-| `evt_eff_exclamation_question` | 11 | `evt_eff_exclamation_question(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_eff_softdelete` | 1 | `evt_eff_softdelete(const char * name)` |
-| `evt_eff_sundale_support` | 3 | `evt_eff_sundale_support(?, ?, ?)` |
-| `func_800e6250` | ? | `func_800e6250()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_cam3d_evt_zoom_in` | 9 | `evt_cam3d_evt_zoom_in(?, ?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_cam_check_dimension` | ? | `evt_cam_check_dimension() <small>(not documented)</small>` | ? |  |
+| `evt_cam_flag_onoff` | ? | `evt_cam_flag_onoff() <small>(not documented)</small>` | ? |  |
+| `evt_cam_get_at` | ? | `evt_cam_get_at() <small>(not documented)</small>` | ? |  |
+| `evt_cam_get_pos` | ? | `evt_cam_get_pos() <small>(not documented)</small>` | ? |  |
+| `evt_cam_look_at_door` | 2 | `evt_cam_look_at_door(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_cam_shake` | 6 | `evt_cam_shake(?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_cam_zoom_to_coords` | 2 | `evt_cam_zoom_to_coords(?, ?) <small>(not documented)</small>` | ? |  |
+| `func_800e01f8` | ? | `func_800e01f8() <small>(not documented)</small>` | ? |  |
+| `func_800e02bc` | ? | `func_800e02bc() <small>(not documented)</small>` | ? |  |
+| `func_800e0720` | ? | `func_800e0720() <small>(not documented)</small>` | ? |  |
+| `func_800e07bc` | ? | `func_800e07bc() <small>(not documented)</small>` | ? |  |
+| `func_800e0890` | ? | `func_800e0890() <small>(not documented)</small>` | ? |  |
+| `func_800e08f8` | ? | `func_800e08f8() <small>(not documented)</small>` | ? |  |
+| `func_800e092c` | ? | `func_800e092c() <small>(not documented)</small>` | ? |  |
+| `func_800e0a14` | ? | `func_800e0a14() <small>(not documented)</small>` | ? |  |
+| `func_800e0a84` | ? | `func_800e0a84() <small>(not documented)</small>` | ? |  |
+| `func_800e0b58` | ? | `func_800e0b58() <small>(not documented)</small>` | ? |  |
+| `func_800e0b8c` | ? | `func_800e0b8c() <small>(not documented)</small>` | ? |  |
+| `func_800e0bbc` | ? | `func_800e0bbc() <small>(not documented)</small>` | ? |  |
+| `func_800e0c40` | ? | `func_800e0c40() <small>(not documented)</small>` | ? |  |
 
-### `evt_msg` <small>8 functions</small>
+### `evt_eff`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_msg_continue` | 0 | `evt_msg_continue()` |
-| `evt_msg_fmt_str` | ? | `evt_msg_fmt_str()` |
-| `evt_msg_print` | 4 | `evt_msg_print(u32 flags, const char * msg, s32 mainFunc, const char * speaker)` |
-| `evt_msg_print_add` | 2 | `evt_msg_print_add(u32 flags, const char * message)` |
-| `evt_msg_print_add_insert` | ? | `evt_msg_print_add_insert()` |
-| `evt_msg_print_insert` | ? | `evt_msg_print_insert(u32 flags, const char * msg, s32 mainFunc, const char * speaker, insertion)` |
-| `evt_msg_select` | 2 | `evt_msg_select(?, ?)` |
-| `evt_msg_toge` | 4 | `evt_msg_toge(?, ?, ?, ?)` |
+Named visual effects: spawning one, deleting it, and a soft delete that lets it finish. ⚠️ Not the same as the effect *entry points* `scripts/dump_effects.py` lists -- those are called from C.
 
-### `evt_snd` <small>28 functions</small>
+<small>6 function(s), 2 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_snd_bgmoff` | 1 | `evt_snd_bgmoff(s32 bgmPlayerId)` |
-| `evt_snd_bgmoff_f_d` | 2 | `evt_snd_bgmoff_f_d(?, ?)` |
-| `evt_snd_bgmon` | 2 | `evt_snd_bgmon(s32 bgmPlayerId, const char * name)` |
-| `evt_snd_bgmon_f_d` | 3 | `evt_snd_bgmon_f_d(?, ?, ?)` |
-| `evt_snd_channel_fadeout` | ? | `evt_snd_channel_fadeout()` |
-| `evt_snd_envon` | ? | `evt_snd_envon()` |
-| `evt_snd_envon_f` | 3 | `evt_snd_envon_f(?, ?, ?)` |
-| `evt_snd_get_bgm_wait_time` | 2 | `evt_snd_get_bgm_wait_time(s32 bgmPlayerId, s32& ret)` |
-| `evt_snd_get_last_sfx_id` | 1 | `evt_snd_get_last_sfx_id(s32& ret)` |
-| `evt_snd_set_sfx_reverb_mode` | 1 | `evt_snd_set_sfx_reverb_mode(s32 mode)` |
-| `evt_snd_sfx_fadeout` | 2 | `evt_snd_sfx_fadeout(?, ?)` |
-| `evt_snd_sfx_wait` | 1 | `evt_snd_sfx_wait(?)` |
-| `evt_snd_sfx_wait_name` | 1 | `evt_snd_sfx_wait_name(?)` |
-| `evt_snd_sfxoff` | 1 | `evt_snd_sfxoff(s32 id)` |
-| `evt_snd_sfxon` | 1 | `evt_snd_sfxon(const char * name)` |
-| `evt_snd_sfxon_3d` | 4 | `evt_snd_sfxon_3d(const char * name, f32 x, f32 y, f32 z)` |
-| `evt_snd_sfxon_3d_player` | 1 | `evt_snd_sfxon_3d_player(const char * name)` |
-| `evt_snd_sfxon_3d_player_character` | 4 | `evt_snd_sfxon_3d_player_character(const char * marioName, const char * peach,` |
-| `evt_snd_sfxon_character` | 4 | `evt_snd_sfxon_character(?, ?, ?, ?)` |
-| `evt_snd_sfxon_npc` | 2 | `evt_snd_sfxon_npc(const char * sfxName, const char * npcName)` |
-| `evt_snd_sfxon_npc_delay` | 3 | `evt_snd_sfxon_npc_delay(const char * sfxName, const char * npcName, s32 delayTime)` |
-| `evt_snd_string_call` | 1 | `evt_snd_string_call(?)` |
-| `func_800d2268` | ? | `func_800d2268()` |
-| `func_800d22d8` | ? | `func_800d22d8()` |
-| `func_800d3144` | ? | `func_800d3144()` |
-| `func_800d31a0` | ? | `func_800d31a0()` |
-| `func_800d35d8` | ? | `func_800d35d8()` |
-| `func_800d3644` | ? | `func_800d3644()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_eff` | 14 | `evt_eff(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_eff_delete` | 1 | `evt_eff_delete(const * char name)` | -- |  |
+| `evt_eff_exclamation_question` | 11 | `evt_eff_exclamation_question(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_eff_softdelete` | 1 | `evt_eff_softdelete(const char * name)` | -- |  |
+| `evt_eff_sundale_support` | 3 | `evt_eff_sundale_support(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `func_800e6250` | ? | `func_800e6250() <small>(not documented)</small>` | ? |  |
+
+### `evt_env`
+
+Environmental blur.
+
+<small>2 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_env_blur_on` | 2 | `evt_env_blur_on(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_env_static_blur_on` | 0 | `evt_env_static_blur_on() <small>(not documented)</small>` | ? |  |
+
+### `evt_fade`
+
+Screen transitions: starting one, waiting for it to finish, and where it centres.
+
+<small>5 function(s), 2 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_fade_callfade` | 1 | `evt_fade_callfade(?) <small>(not documented)</small>` | ? |  |
+| `evt_fade_end_wait` | 1 | `evt_fade_end_wait(s32)` | -- |  |
+| `evt_fade_entry` | 6 | `evt_fade_entry(int transitionType, everything else is unknown ints)` | -- |  |
+| `evt_fade_set_center_pos` | 3 | `evt_fade_set_center_pos(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_set_transition` | 2 | `evt_set_transition(?, ?) <small>(not documented)</small>` | ? |  |
+
+### `evt_frame`
+
+2D image frames: entry and deletion, position, colour, rotation, draw speed, image animation, and a wireframe variant. The layout system cutscenes draw with.
+
+<small>17 function(s), 16 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_frame_bind_offscreen` | 3 | `evt_frame_bind_offscreen(const char * instanceName, const char * offsInstanceName, void * callback)` | -- |  |
+| `evt_frame_check_draw_finished` | 1 | `evt_frame_check_draw_finished(const char * instanceName)` | -- |  |
+| `evt_frame_delete` | 1 | `evt_frame_delete(const char * instanceName)` | -- |  |
+| `evt_frame_evt_entry` | 6 | `evt_frame_evt_entry(const char * instanceName, f32 x, f32 y, f32 z, f32 width, f32 height)` | -- |  |
+| `evt_frame_flag_onoff` | 3 | `evt_frame_flag_onoff(bool onOff, const char * instanceName, u32 flags)` | -- |  |
+| `evt_frame_offscreen_draw_flag_onoff` | 2 | `evt_frame_offscreen_draw_flag_onoff(bool onOff, const char * instanceName)` | -- |  |
+| `evt_frame_offscreen_entry` | 7 | `evt_frame_offscreen_entry(const char * instanceName, const char * animPoseName, const char * animDef,` | -- |  |
+| `evt_frame_set_color` | 5 | `evt_frame_set_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)` | -- |  |
+| `evt_frame_set_color2` | 5 | `evt_frame_set_color2(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_frame_set_draw_speed` | 2 | `evt_frame_set_draw_speed(const char * instanceName, f32 drawSpeed)` | -- |  |
+| `evt_frame_set_img_anim` | 2 | `evt_frame_set_img_anim(const char * instanceName, const char * animDef)` | -- |  |
+| `evt_frame_set_rotation` | 4 | `evt_frame_set_rotation(const char * instanceName, f32 xRot, f32 yRot, f32 zRot)` | -- |  |
+| `evt_frame_set_wire_color` | 5 | `evt_frame_set_wire_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)` | -- |  |
+| `evt_frame_set_wire_draw_rotation` | 4 | `evt_frame_set_wire_draw_rotation(const char * instanceName, f32 rotX, f32 rotY, f32 rotZ)` | -- |  |
+| `evt_frame_set_wire_line_width` | 2 | `evt_frame_set_wire_line_width(const char * instanceName, u32 lineWidth)` | -- |  |
+| `evt_frame_spin_device_entry` | 3 | `evt_frame_spin_device_entry(s32 arg1, const char * startSegment, const char * segmentArray)` | -- |  |
+| `evt_frame_wire_entry` | 7 | `evt_frame_wire_entry(const char * instanceName, const char * animPoseName, const char * animDef,` | -- |  |
+
+### `evt_img`
+
+Screen capture and the paper effect -- allocating a capture buffer, applying it as paper, and waiting for the animation to end.
+
+<small>7 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_img_alloc_capture` | 8 | `evt_img_alloc_capture(?, ?, ?, ?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_img_entry` | 1 | `evt_img_entry(?) <small>(not documented)</small>` | ? |  |
+| `evt_img_free_capture` | 2 | `evt_img_free_capture(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_img_release` | 1 | `evt_img_release(?) <small>(not documented)</small>` | ? |  |
+| `evt_img_set_paper` | 2 | `evt_img_set_paper(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_img_set_paper_anim` | 2 | `evt_img_set_paper_anim(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_img_wait_animend` | 1 | `evt_img_wait_animend(?) <small>(not documented)</small>` | ? |  |
+
+### `evt_msg`
+
+Dialogue windows: printing a message by id, appending to an open one, inserting values, and the selection prompt.
+
+<small>8 function(s), 4 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_msg_continue` | 0 | `evt_msg_continue()` | -- |  |
+| `evt_msg_fmt_str` | ? | `evt_msg_fmt_str() <small>(not documented)</small>` | ? |  |
+| `evt_msg_print` | 4 | `evt_msg_print(u32 flags, const char * msg, s32 mainFunc, const char * speaker)` | -- |  |
+| `evt_msg_print_add` | 2 | `evt_msg_print_add(u32 flags, const char * message)` | -- |  |
+| `evt_msg_print_add_insert` | ? | `evt_msg_print_add_insert() <small>(not documented)</small>` | ? |  |
+| `evt_msg_print_insert` | ? | `evt_msg_print_insert(u32 flags, const char * msg, s32 mainFunc, const char * speaker, insertion)` | -- |  |
+| `evt_msg_select` | 2 | `evt_msg_select(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_msg_toge` | 4 | `evt_msg_toge(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+
+### `evt_snd`
+
+Music and sound: background music on and off with fades, sound effects, and per-channel control.
+
+<small>28 function(s), 12 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_snd_bgmoff` | 1 | `evt_snd_bgmoff(s32 bgmPlayerId)` | -- |  |
+| `evt_snd_bgmoff_f_d` | 2 | `evt_snd_bgmoff_f_d(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_bgmon` | 2 | `evt_snd_bgmon(s32 bgmPlayerId, const char * name)` | -- |  |
+| `evt_snd_bgmon_f_d` | 3 | `evt_snd_bgmon_f_d(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_channel_fadeout` | ? | `evt_snd_channel_fadeout() <small>(not documented)</small>` | ? |  |
+| `evt_snd_envon` | ? | `evt_snd_envon() <small>(not documented)</small>` | ? |  |
+| `evt_snd_envon_f` | 3 | `evt_snd_envon_f(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_get_bgm_wait_time` | 2 | `evt_snd_get_bgm_wait_time(s32 bgmPlayerId, s32& ret)` | `ret` |  |
+| `evt_snd_get_last_sfx_id` | 1 | `evt_snd_get_last_sfx_id(s32& ret)` | `ret` |  |
+| `evt_snd_set_sfx_reverb_mode` | 1 | `evt_snd_set_sfx_reverb_mode(s32 mode)` | -- |  |
+| `evt_snd_sfx_fadeout` | 2 | `evt_snd_sfx_fadeout(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_sfx_wait` | 1 | `evt_snd_sfx_wait(?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_sfx_wait_name` | 1 | `evt_snd_sfx_wait_name(?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_sfxoff` | 1 | `evt_snd_sfxoff(s32 id)` | -- |  |
+| `evt_snd_sfxon` | 1 | `evt_snd_sfxon(const char * name)` | -- |  |
+| `evt_snd_sfxon_3d` | 4 | `evt_snd_sfxon_3d(const char * name, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_snd_sfxon_3d_player` | 1 | `evt_snd_sfxon_3d_player(const char * name)` | -- |  |
+| `evt_snd_sfxon_3d_player_character` | 4 | `evt_snd_sfxon_3d_player_character(const char * marioName, const char * peach,` | -- |  |
+| `evt_snd_sfxon_character` | 4 | `evt_snd_sfxon_character(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_snd_sfxon_npc` | 2 | `evt_snd_sfxon_npc(const char * sfxName, const char * npcName)` | -- |  |
+| `evt_snd_sfxon_npc_delay` | 3 | `evt_snd_sfxon_npc_delay(const char * sfxName, const char * npcName, s32 delayTime)` | -- |  |
+| `evt_snd_string_call` | 1 | `evt_snd_string_call(?) <small>(not documented)</small>` | ? |  |
+| `func_800d2268` | ? | `func_800d2268() <small>(not documented)</small>` | ? |  |
+| `func_800d22d8` | ? | `func_800d22d8() <small>(not documented)</small>` | ? |  |
+| `func_800d3144` | ? | `func_800d3144() <small>(not documented)</small>` | ? |  |
+| `func_800d31a0` | ? | `func_800d31a0() <small>(not documented)</small>` | ? |  |
+| `func_800d35d8` | ? | `func_800d35d8() <small>(not documented)</small>` | ? |  |
+| `func_800d3644` | ? | `func_800d3644() <small>(not documented)</small>` | ? |  |
 
 ## Flow and sequencing
 
-### `evt_case` <small>3 functions</small>
+### `evt_case`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_del_case_evt` | 2 | `evt_del_case_evt(?, ?)` |
-| `evt_exit_case_evt` | 0 | `evt_exit_case_evt()` |
-| `evt_run_case_evt` | 6 | `evt_run_case_evt(int caseType, int unk, const char * a2Name, const char * a3Name, EvtScriptCode * script, unk)` |
+Running a script as a *case* -- started, exited and deleted independently of the script that launched it.
 
-### `evt_frame` <small>17 functions</small>
+<small>3 function(s), 1 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_frame_bind_offscreen` | 3 | `evt_frame_bind_offscreen(const char * instanceName, const char * offsInstanceName, void * callback)` |
-| `evt_frame_check_draw_finished` | 1 | `evt_frame_check_draw_finished(const char * instanceName)` |
-| `evt_frame_delete` | 1 | `evt_frame_delete(const char * instanceName)` |
-| `evt_frame_evt_entry` | 6 | `evt_frame_evt_entry(const char * instanceName, f32 x, f32 y, f32 z, f32 width, f32 height)` |
-| `evt_frame_flag_onoff` | 3 | `evt_frame_flag_onoff(bool onOff, const char * instanceName, u32 flags)` |
-| `evt_frame_offscreen_draw_flag_onoff` | 2 | `evt_frame_offscreen_draw_flag_onoff(bool onOff, const char * instanceName)` |
-| `evt_frame_offscreen_entry` | 7 | `evt_frame_offscreen_entry(const char * instanceName, const char * animPoseName, const char * animDef,` |
-| `evt_frame_set_color` | 5 | `evt_frame_set_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)` |
-| `evt_frame_set_color2` | 5 | `evt_frame_set_color2(?, ?, ?, ?, ?)` |
-| `evt_frame_set_draw_speed` | 2 | `evt_frame_set_draw_speed(const char * instanceName, f32 drawSpeed)` |
-| `evt_frame_set_img_anim` | 2 | `evt_frame_set_img_anim(const char * instanceName, const char * animDef)` |
-| `evt_frame_set_rotation` | 4 | `evt_frame_set_rotation(const char * instanceName, f32 xRot, f32 yRot, f32 zRot)` |
-| `evt_frame_set_wire_color` | 5 | `evt_frame_set_wire_color(const char * instanceName, u8 r, u8 g, u8 b, u8 a)` |
-| `evt_frame_set_wire_draw_rotation` | 4 | `evt_frame_set_wire_draw_rotation(const char * instanceName, f32 rotX, f32 rotY, f32 rotZ)` |
-| `evt_frame_set_wire_line_width` | 2 | `evt_frame_set_wire_line_width(const char * instanceName, u32 lineWidth)` |
-| `evt_frame_spin_device_entry` | 3 | `evt_frame_spin_device_entry(s32 arg1, const char * startSegment, const char * segmentArray)` |
-| `evt_frame_wire_entry` | 7 | `evt_frame_wire_entry(const char * instanceName, const char * animPoseName, const char * animDef,` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_del_case_evt` | 2 | `evt_del_case_evt(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_exit_case_evt` | 0 | `evt_exit_case_evt() <small>(not documented)</small>` | ? |  |
+| `evt_run_case_evt` | 6 | `evt_run_case_evt(int caseType, int unk, const char * a2Name, const char * a3Name, EvtScriptCode * script, unk)` | -- |  |
 
-### `evt_seq` <small>3 functions</small>
+### `evt_door`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_seq_mapchange` | 2 | `evt_seq_mapchange(?, ?)` |
-| `evt_seq_set_seq` | 3 | `evt_seq_set_seq(s32 seq, void * p0, void * p1)` |
-| `evt_seq_wait` | 1 | `evt_seq_wait(s32 seq)` |
+Doors and pipes (`dokan`). Registering the descriptor tables a map's doors come from, enabling and disabling individual ones, and attaching the script a door runs when used.
 
-### `evt_shop` <small>54 functions</small>
+<small>9 function(s), 7 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_shop_add_charm` | ? | `evt_shop_add_charm()` |
-| `evt_shop_add_shop_point` | ? | `evt_shop_add_shop_point()` |
-| `evt_shop_build_flimm_flipside_item_tables` | ? | `evt_shop_build_flimm_flipside_item_tables()` |
-| `evt_shop_build_flimm_pit_item_tables` | ? | `evt_shop_build_flimm_pit_item_tables()` |
-| `evt_shop_build_howzit_item_table` | ? | `evt_shop_build_howzit_item_table()` |
-| `evt_shop_build_map_table` | ? | `evt_shop_build_map_table()` |
-| `evt_shop_check_all_maps_owned` | ? | `evt_shop_check_all_maps_owned()` |
-| `evt_shop_clear_shop_points` | ? | `evt_shop_clear_shop_points()` |
-| `evt_shop_count_cards` | ? | `evt_shop_count_cards()` |
-| `evt_shop_filter_flimm_flipside_items` | ? | `evt_shop_filter_flimm_flipside_items()` |
-| `evt_shop_filter_flimm_pit_items` | ? | `evt_shop_filter_flimm_pit_items()` |
-| `evt_shop_flimm_select_item` | ? | `evt_shop_flimm_select_item()` |
-| `evt_shop_get_buy_price` | ? | `evt_shop_get_buy_price()` |
-| `evt_shop_get_card_bag` | ? | `evt_shop_get_card_bag()` |
-| `evt_shop_get_card_give_info` | ? | `evt_shop_get_card_give_info()` |
-| `evt_shop_get_fortune_message` | ? | `evt_shop_get_fortune_message()` |
-| `evt_shop_get_map_info` | ? | `evt_shop_get_map_info()` |
-| `evt_shop_get_name_items` | ? | `evt_shop_get_name_items()` |
-| `evt_shop_get_otoya_bgm` | ? | `evt_shop_get_otoya_bgm()` |
-| `evt_shop_get_point_reward` | ? | `evt_shop_get_point_reward()` |
-| `evt_shop_get_shop_points` | ? | `evt_shop_get_shop_points()` |
-| `evt_shop_handle_roten_item_flag` | ? | `evt_shop_handle_roten_item_flag()` |
-| `evt_shop_howzit_select_item` | ? | `evt_shop_howzit_select_item()` |
-| `evt_shop_init_card_item_flags` | ? | `evt_shop_init_card_item_flags()` |
-| `evt_shop_init_flopside_cards` | ? | `evt_shop_init_flopside_cards()` |
-| `evt_shop_remove_card` | ? | `evt_shop_remove_card()` |
-| `evt_shop_remove_item` | ? | `evt_shop_remove_item()` |
-| `evt_shop_restore_itemdata_prices` | ? | `evt_shop_restore_itemdata_prices()` |
-| `evt_shop_select_card` | ? | `evt_shop_select_card()` |
-| `evt_shop_select_item` | ? | `evt_shop_select_item()` |
-| `evt_shop_set_defs` | 2 | `evt_shop_set_defs(EvtShopDef * defs, s32 count)` |
-| `evt_shop_set_point_reward_collected` | ? | `evt_shop_set_point_reward_collected()` |
-| `evt_shop_wait_coin_sfx` | ? | `evt_shop_wait_coin_sfx()` |
-| `func_8010d2b8` | ? | `func_8010d2b8()` |
-| `func_8010d3d4` | ? | `func_8010d3d4()` |
-| `func_8010d5b8` | ? | `func_8010d5b8()` |
-| `func_8010d674` | ? | `func_8010d674()` |
-| `func_8010da90` | ? | `func_8010da90()` |
-| `func_8010db80` | ? | `func_8010db80()` |
-| `func_8010dc04` | ? | `func_8010dc04()` |
-| `func_8010e020` | ? | `func_8010e020()` |
-| `func_8010e110` | ? | `func_8010e110()` |
-| `func_8010e700` | ? | `func_8010e700()` |
-| `func_8010e8bc` | ? | `func_8010e8bc()` |
-| `func_8010ea10` | ? | `func_8010ea10()` |
-| `func_8010ea78` | ? | `func_8010ea78()` |
-| `func_8010eb1c` | ? | `func_8010eb1c()` |
-| `func_8010eb60` | ? | `func_8010eb60()` |
-| `func_8010ed70` | ? | `func_8010ed70()` |
-| `func_801103b8` | ? | `func_801103b8()` |
-| `func_801108f4` | ? | `func_801108f4()` |
-| `func_80110ac4` | ? | `func_80110ac4()` |
-| `func_80111074` | ? | `func_80111074()` |
-| `func_80111334` | ? | `func_80111334()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_door_enable_disable_dokan_desc` | 2 | `evt_door_enable_disable_dokan_desc(bool enabled, const char * name)` | -- |  |
+| `evt_door_enable_disable_door_desc` | 2 | `evt_door_enable_disable_door_desc(bool enableDisable, const char * doorName)` | -- |  |
+| `evt_door_enable_disable_map_door_desc` | 2 | `evt_door_enable_disable_map_door_desc(bool enabled, const char * name)` | -- |  |
+| `evt_door_openable_onoff` | 1 | `evt_door_openable_onoff(?) <small>(not documented)</small>` | ? |  |
+| `evt_door_set_dokan_descs` | 2 | `evt_door_set_dokan_descs(DokanDesc * descs, s32 count)` | -- |  |
+| `evt_door_set_door_descs` | 1 | `evt_door_set_door_descs(DoorDesc * descs, s32 count)` | -- |  |
+| `evt_door_set_event` | 3 | `evt_door_set_event(char *door, int unknown, EvtScriptCode * script)` | -- |  |
+| `evt_door_set_map_door_descs` | 2 | `evt_door_set_map_door_descs(MapDoorDesc * descs, s32 count)` | -- |  |
+| `evt_door_wait_flag` | 1 | `evt_door_wait_flag(?) <small>(not documented)</small>` | ? |  |
 
-### `evt_sub` <small>15 functions</small>
+### `evt_hit`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_key_get_button` | 2 | `evt_key_get_button(?, ?)` |
-| `evt_sub_animgroup_async` | 1 | `evt_sub_animgroup_async(const char * name)` |
-| `evt_sub_display_room_name` | 2 | `evt_sub_display_room_name(?, ?)` |
-| `evt_sub_get_dist` | 5 | `evt_sub_get_dist(?, ?, ?, ?, ?)` |
-| `evt_sub_get_entername` | 1 | `evt_sub_get_entername(&char* ret)` |
-| `evt_sub_get_language` | 1 | `evt_sub_get_language(?)` |
-| `evt_sub_get_mapname` | ? | `evt_sub_get_mapname()` |
-| `evt_sub_hud_configure` | 1 | `evt_sub_hud_configure(?)` |
-| `evt_sub_intpl_msec_get_value` | 0 | `evt_sub_intpl_msec_get_value()` |
-| `evt_sub_intpl_msec_init` | 4 | `evt_sub_intpl_msec_init(?, ?, ?, ?)` |
-| `evt_sub_item_select_menu` | 4 | `evt_sub_item_select_menu(?, ?, ?, ?)` |
-| `evt_sub_random` | 2 | `evt_sub_random(s32 max, s32& ret)` |
-| `evt_sub_set_game_speed` | 1 | `evt_sub_set_game_speed(float newSpeed)` |
-| `func_800d4de4` | 2 | `func_800d4de4(?, ?)` |
-| `func_800d8700` | 1 | `func_800d8700(?)` |
+Collision objects: binding one to a map object, toggling it and its attributes, and reading its position.
+
+<small>5 function(s), 5 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_hit_bind_mapobj` | 2 | `evt_hit_bind_mapobj(const char * hit_name, const char * map_name)` | -- |  |
+| `evt_hit_bind_update` | 1 | `evt_hit_bind_update(const char * hit_name)` | -- |  |
+| `evt_hitobj_attr_onoff` | 4 | `evt_hitobj_attr_onoff(s32 group, bool on, const char * name, u32 mask)` | -- |  |
+| `evt_hitobj_get_pos` | 4 | `evt_hitobj_get_pos(const char * hit_name, f32 x, f32 y, f32 z)` | -- |  |
+| `evt_hitobj_onoff` | 3 | `evt_hitobj_onoff(const char * name, s32 group, bool on)` | -- |  |
+
+### `evt_seq`
+
+The game sequence. **`evt_seq_mapchange` is how a script sends the game to another map**, and is what makes any map reachable without playing there -- see [Testing a mod](../guides/testing.md).
+
+<small>3 function(s), 2 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_seq_mapchange` | 2 | `evt_seq_mapchange(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_seq_set_seq` | 3 | `evt_seq_set_seq(s32 seq, void * p0, void * p1)` | -- |  |
+| `evt_seq_wait` | 1 | `evt_seq_wait(s32 seq)` | -- |  |
+
+### `evt_shop`
+
+Shops: building each shopkeeper's item table, buying and selling, charms, and shop points. ⚠️ 53 of its 54 entries have no recorded signature, the worst coverage of any module.
+
+<small>54 function(s), 1 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_shop_add_charm` | ? | `evt_shop_add_charm() <small>(not documented)</small>` | ? |  |
+| `evt_shop_add_shop_point` | ? | `evt_shop_add_shop_point() <small>(not documented)</small>` | ? |  |
+| `evt_shop_build_flimm_flipside_item_tables` | ? | `evt_shop_build_flimm_flipside_item_tables() <small>(not documented)</small>` | ? |  |
+| `evt_shop_build_flimm_pit_item_tables` | ? | `evt_shop_build_flimm_pit_item_tables() <small>(not documented)</small>` | ? |  |
+| `evt_shop_build_howzit_item_table` | ? | `evt_shop_build_howzit_item_table() <small>(not documented)</small>` | ? |  |
+| `evt_shop_build_map_table` | ? | `evt_shop_build_map_table() <small>(not documented)</small>` | ? |  |
+| `evt_shop_check_all_maps_owned` | ? | `evt_shop_check_all_maps_owned() <small>(not documented)</small>` | ? |  |
+| `evt_shop_clear_shop_points` | ? | `evt_shop_clear_shop_points() <small>(not documented)</small>` | ? |  |
+| `evt_shop_count_cards` | ? | `evt_shop_count_cards() <small>(not documented)</small>` | ? |  |
+| `evt_shop_filter_flimm_flipside_items` | ? | `evt_shop_filter_flimm_flipside_items() <small>(not documented)</small>` | ? |  |
+| `evt_shop_filter_flimm_pit_items` | ? | `evt_shop_filter_flimm_pit_items() <small>(not documented)</small>` | ? |  |
+| `evt_shop_flimm_select_item` | ? | `evt_shop_flimm_select_item() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_buy_price` | ? | `evt_shop_get_buy_price() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_card_bag` | ? | `evt_shop_get_card_bag() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_card_give_info` | ? | `evt_shop_get_card_give_info() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_fortune_message` | ? | `evt_shop_get_fortune_message() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_map_info` | ? | `evt_shop_get_map_info() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_name_items` | ? | `evt_shop_get_name_items() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_otoya_bgm` | ? | `evt_shop_get_otoya_bgm() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_point_reward` | ? | `evt_shop_get_point_reward() <small>(not documented)</small>` | ? |  |
+| `evt_shop_get_shop_points` | ? | `evt_shop_get_shop_points() <small>(not documented)</small>` | ? |  |
+| `evt_shop_handle_roten_item_flag` | ? | `evt_shop_handle_roten_item_flag() <small>(not documented)</small>` | ? |  |
+| `evt_shop_howzit_select_item` | ? | `evt_shop_howzit_select_item() <small>(not documented)</small>` | ? |  |
+| `evt_shop_init_card_item_flags` | ? | `evt_shop_init_card_item_flags() <small>(not documented)</small>` | ? |  |
+| `evt_shop_init_flopside_cards` | ? | `evt_shop_init_flopside_cards() <small>(not documented)</small>` | ? |  |
+| `evt_shop_remove_card` | ? | `evt_shop_remove_card() <small>(not documented)</small>` | ? |  |
+| `evt_shop_remove_item` | ? | `evt_shop_remove_item() <small>(not documented)</small>` | ? |  |
+| `evt_shop_restore_itemdata_prices` | ? | `evt_shop_restore_itemdata_prices() <small>(not documented)</small>` | ? |  |
+| `evt_shop_select_card` | ? | `evt_shop_select_card() <small>(not documented)</small>` | ? |  |
+| `evt_shop_select_item` | ? | `evt_shop_select_item() <small>(not documented)</small>` | ? |  |
+| `evt_shop_set_defs` | 2 | `evt_shop_set_defs(EvtShopDef * defs, s32 count)` | -- |  |
+| `evt_shop_set_point_reward_collected` | ? | `evt_shop_set_point_reward_collected() <small>(not documented)</small>` | ? |  |
+| `evt_shop_wait_coin_sfx` | ? | `evt_shop_wait_coin_sfx() <small>(not documented)</small>` | ? |  |
+| `func_8010d2b8` | ? | `func_8010d2b8() <small>(not documented)</small>` | ? |  |
+| `func_8010d3d4` | ? | `func_8010d3d4() <small>(not documented)</small>` | ? |  |
+| `func_8010d5b8` | ? | `func_8010d5b8() <small>(not documented)</small>` | ? |  |
+| `func_8010d674` | ? | `func_8010d674() <small>(not documented)</small>` | ? |  |
+| `func_8010da90` | ? | `func_8010da90() <small>(not documented)</small>` | ? |  |
+| `func_8010db80` | ? | `func_8010db80() <small>(not documented)</small>` | ? |  |
+| `func_8010dc04` | ? | `func_8010dc04() <small>(not documented)</small>` | ? |  |
+| `func_8010e020` | ? | `func_8010e020() <small>(not documented)</small>` | ? |  |
+| `func_8010e110` | ? | `func_8010e110() <small>(not documented)</small>` | ? |  |
+| `func_8010e700` | ? | `func_8010e700() <small>(not documented)</small>` | ? |  |
+| `func_8010e8bc` | ? | `func_8010e8bc() <small>(not documented)</small>` | ? |  |
+| `func_8010ea10` | ? | `func_8010ea10() <small>(not documented)</small>` | ? |  |
+| `func_8010ea78` | ? | `func_8010ea78() <small>(not documented)</small>` | ? |  |
+| `func_8010eb1c` | ? | `func_8010eb1c() <small>(not documented)</small>` | ? |  |
+| `func_8010eb60` | ? | `func_8010eb60() <small>(not documented)</small>` | ? |  |
+| `func_8010ed70` | ? | `func_8010ed70() <small>(not documented)</small>` | ? |  |
+| `func_801103b8` | ? | `func_801103b8() <small>(not documented)</small>` | ? |  |
+| `func_801108f4` | ? | `func_801108f4() <small>(not documented)</small>` | ? |  |
+| `func_80110ac4` | ? | `func_80110ac4() <small>(not documented)</small>` | ? |  |
+| `func_80111074` | ? | `func_80111074() <small>(not documented)</small>` | ? |  |
+| `func_80111334` | ? | `func_80111334() <small>(not documented)</small>` | ? |  |
+
+### `evt_sub`
+
+Odds and ends that fit nowhere else -- **reading the controller**, distance between two points, displaying the room name, and animation groups.
+
+<small>15 function(s), 4 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_key_get_button` | 2 | `evt_key_get_button(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_animgroup_async` | 1 | `evt_sub_animgroup_async(const char * name)` | -- |  |
+| `evt_sub_display_room_name` | 2 | `evt_sub_display_room_name(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_get_dist` | 5 | `evt_sub_get_dist(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_get_entername` | 1 | `evt_sub_get_entername(&char* ret)` | `ret` |  |
+| `evt_sub_get_language` | 1 | `evt_sub_get_language(?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_get_mapname` | ? | `evt_sub_get_mapname() <small>(not documented)</small>` | ? |  |
+| `evt_sub_hud_configure` | 1 | `evt_sub_hud_configure(?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_intpl_msec_get_value` | 0 | `evt_sub_intpl_msec_get_value() <small>(not documented)</small>` | ? |  |
+| `evt_sub_intpl_msec_init` | 4 | `evt_sub_intpl_msec_init(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_item_select_menu` | 4 | `evt_sub_item_select_menu(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_sub_random` | 2 | `evt_sub_random(s32 max, s32& ret)` | `ret` |  |
+| `evt_sub_set_game_speed` | 1 | `evt_sub_set_game_speed(float newSpeed)` | -- |  |
+| `func_800d4de4` | 2 | `func_800d4de4(?, ?) <small>(not documented)</small>` | ? |  |
+| `func_800d8700` | 1 | `func_800d8700(?) <small>(not documented)</small>` | ? |  |
+
+## One area or one enemy
+
+### `an`
+
+Helpers for the `an*` maps: area darkness, texture-palette setup, and clearing a map's NPCs.
+
+<small>3 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_an_darkness_onoff` | 1 | `evt_an_darkness_onoff(?) <small>(not documented)</small>` | ? |  |
+| `evt_an_init_tpl` | 0 | `evt_an_init_tpl() <small>(not documented)</small>` | ? |  |
+| `evt_an_remove_npcs` | 1 | `evt_an_remove_npcs(?) <small>(not documented)</small>` | ? |  |
+
+### `an2_08`
+
+**The Underchomp battle** -- SPM's one turn-based, traditional Paper Mario fight. Damage calculation for both sides, XP, status effects, and the battle menu. Named for the map it happens in.
+
+<small>21 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_an2_08_draw_face` | 2 | `evt_an2_08_draw_face(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_add_xp` | 1 | `evt_rpg_add_xp(?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_calc_damage_to_enemy` | 3 | `evt_rpg_calc_damage_to_enemy(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_calc_item_stats` | 4 | `evt_rpg_calc_item_stats(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_calc_mario_damage` | 2 | `evt_rpg_calc_mario_damage(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_change_menu_flag` | 0 | `evt_rpg_change_menu_flag() <small>(not documented)</small>` | ? |  |
+| `evt_rpg_char_get` | 1 | `evt_rpg_char_get(?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_choice_handler` | 5 | `evt_rpg_choice_handler(?, ?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_effect_check` | 1 | `evt_rpg_effect_check(?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_effects_handle` | 2 | `evt_rpg_effects_handle(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_enemy_death_check` | 2 | `evt_rpg_enemy_death_check(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_enemy_take_damage` | 4 | `evt_rpg_enemy_take_damage(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_get_item_msg` | 2 | `evt_rpg_get_item_msg(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_mario_take_damage` | 3 | `evt_rpg_mario_take_damage(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_menu_effects_handler` | 2 | `evt_rpg_menu_effects_handler(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_npctribe_handle` | 0 | `evt_rpg_npctribe_handle() <small>(not documented)</small>` | ? |  |
+| `evt_rpg_point_calculation` | 2 | `evt_rpg_point_calculation(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_point_handling` | 1 | `evt_rpg_point_handling(?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_status_remove` | 3 | `evt_rpg_status_remove(?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_underchomp_name_grab` | 2 | `evt_rpg_underchomp_name_grab(?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_rpg_wakeup_check` | 2 | `evt_rpg_wakeup_check(?, ?) <small>(not documented)</small>` | ? |  |
+
+### `bos_01`
+
+Moving the Pure Heart around during a boss map's cutscenes.
+
+<small>2 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_bos_01_pure_heart_get_pos` | 4 | `evt_bos_01_pure_heart_get_pos(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+| `evt_bos_01_pure_heart_set_pos` | 4 | `evt_bos_01_pure_heart_set_pos(?, ?, ?, ?) <small>(not documented)</small>` | ? |  |
+
+### `dan`
+
+**The Pit of 100 Trials.** Per-floor enemy spawn tables, which room holds the chest and what is in it, door naming between floors, and the Wracktail countdown.
+
+<small>18 function(s), 18 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_dan_boss_room_set_door_name` | 0 | `evt_dan_boss_room_set_door_name()` | -- |  |
+| `evt_dan_decide_key_enemy` | 1 | `evt_dan_decide_key_enemy(s32 itemId)` | -- |  |
+| `evt_dan_get_chest_room_item` | 2 | `evt_dan_get_chest_room_item(s32 no, &s32 itemId)` | `itemId` |  |
+| `evt_dan_get_door_names` | 2 | `evt_dan_get_door_names(&char * enterName, &char * exitName)` | `enterName`, `exitName` |  |
+| `evt_dan_get_enemy_info` | 4 | `evt_dan_get_enemy_info(s32 no, s32 enemyIdx, &s32 templateId, &s32 num)` | `templateId`, `num` |  |
+| `evt_dan_get_enemy_spawn_pos` | 6 | `evt_dan_get_enemy_spawn_pos(s32 num, s32 no, s32 enemyIdx, &f32 x, &f32 y, &f32 z)` | `x`, `y`, `z` |  |
+| `evt_dan_get_exit_door_name_l` | 1 | `evt_dan_get_exit_door_name_l(&char * name)` | `name` |  |
+| `evt_dan_handle_chest_room_dokans_and_doors` | 1 | `evt_dan_handle_chest_room_dokans_and_doors(s32 no)` | -- |  |
+| `evt_dan_handle_dokans` | 1 | `evt_dan_handle_dokans(s32 no)` | -- |  |
+| `evt_dan_handle_doors` | 7 | `evt_dan_handle_doors(s32 no, s32 room, &char * enterDoor, &char * exitDoor, &f32 lockX,` | `enterDoor`, `exitDoor`, `lockX` |  |
+| `evt_dan_handle_key_failsafe` | 0 | `evt_dan_handle_key_failsafe()` | -- |  |
+| `evt_dan_handle_map_parts` | 1 | `evt_dan_handle_map_parts(s32 no)` | -- |  |
+| `evt_dan_make_spawn_table` | 1 | `evt_dan_make_spawn_table(s32 no)` | -- |  |
+| `evt_dan_read_data` | 0 | `evt_dan_read_data()` | -- |  |
+| `evt_dan_screen_blink` | 0 | `evt_dan_screen_blink()` | -- |  |
+| `evt_dan_set_wracktail_disp_cb` | 0 | `evt_dan_set_wracktail_disp_cb()` | -- |  |
+| `evt_dan_start_countdown` | 0 | `evt_dan_start_countdown()` | -- |  |
+| `func_80c83c48` | 0 | `func_80c83c48()` | -- |  |
+
+### `item_event_data`
+
+Where a pipe returns the player to, for one item event.
+
+<small>1 function(s), 1 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_itemdata_get_return_pipe_info` | 2 | `evt_itemdata_get_return_pipe_info(char * &mapNameOut, char * &doorNameOut)` | `mapNameOut`, `doorNameOut` |  |
+
+### `machi`
+
+Elevator descriptors for the town map.
+
+<small>2 function(s), 1 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_machi_set_elv_descs` | 2 | `evt_machi_set_elv_descs(ElvDesc * descs, s32 count)` | -- |  |
+| `func_80c4d444` | ? | `func_80c4d444() <small>(not documented)</small>` | ? |  |
+
+### `npc_dimeen_l`
+
+🔶 Behaviour for a Dimentio-family NPC: damage from its box attack, and choosing where to move next.
+
+<small>3 function(s), 1 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `func_801e5fd0` | ? | `func_801e5fd0() <small>(not documented)</small>` | ? |  |
+| `npc_dimeen_l_box_deal_damage` | 6 | `npc_dimeen_l_box_deal_damage(s32 unused, s32 flags, s32 damage, f32 posX, f32 posY, f32 posZ)` | -- |  |
+| `npc_dimeen_l_determine_move_pos` | ? | `npc_dimeen_l_determine_move_pos() <small>(not documented)</small>` | ? |  |
+
+### `npc_ninja`
+
+A bomb that damages the player.
+
+<small>1 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `bomb_damage_mario` | 0 | `bomb_damage_mario() <small>(not documented)</small>` | ? |  |
+
+### `npc_shadoo`
+
+🔶 **Shadoo**, the Flopside Pit of 100 Trials boss. 5 of its 7 entries are unnamed, so the module is placed by name alone.
+
+<small>7 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `func_802154fc` | ? | `func_802154fc() <small>(not documented)</small>` | ? |  |
+| `func_80215514` | ? | `func_80215514() <small>(not documented)</small>` | ? |  |
+| `func_80215540` | ? | `func_80215540() <small>(not documented)</small>` | ? |  |
+| `func_80215f44` | ? | `func_80215f44() <small>(not documented)</small>` | ? |  |
+| `func_80224804` | ? | `func_80224804() <small>(not documented)</small>` | ? |  |
+| `func_80224874` | ? | `func_80224874() <small>(not documented)</small>` | ? |  |
+| `func_80225380` | ? | `func_80225380() <small>(not documented)</small>` | ? |  |
+
+### `sp4_13`
+
+🔶 One unnamed function belonging to map `sp4_13`.
+
+<small>1 function(s), 0 with a known signature.</small>
+
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `func_80c5c36c` | 0 | `func_80c5c36c() <small>(not documented)</small>` | ? |  |
 
 ## Everything else
 
-### `an` <small>3 functions</small>
+### `evt_ac`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_an_darkness_onoff` | 1 | `evt_an_darkness_onoff(?)` |
-| `evt_an_init_tpl` | 0 | `evt_an_init_tpl()` |
-| `evt_an_remove_npcs` | 1 | `evt_an_remove_npcs(?)` |
+🔶 Something that is started, waited on, and yields a result -- `entry`, `return_results`, `delete`. The shape of a prompt, but what kind is unestablished.
 
-### `an2_08` <small>21 functions</small>
+<small>3 function(s), 3 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_an2_08_draw_face` | 2 | `evt_an2_08_draw_face(?, ?)` |
-| `evt_rpg_add_xp` | 1 | `evt_rpg_add_xp(?)` |
-| `evt_rpg_calc_damage_to_enemy` | 3 | `evt_rpg_calc_damage_to_enemy(?, ?, ?)` |
-| `evt_rpg_calc_item_stats` | 4 | `evt_rpg_calc_item_stats(?, ?, ?, ?)` |
-| `evt_rpg_calc_mario_damage` | 2 | `evt_rpg_calc_mario_damage(?, ?)` |
-| `evt_rpg_change_menu_flag` | 0 | `evt_rpg_change_menu_flag()` |
-| `evt_rpg_char_get` | 1 | `evt_rpg_char_get(?)` |
-| `evt_rpg_choice_handler` | 5 | `evt_rpg_choice_handler(?, ?, ?, ?, ?)` |
-| `evt_rpg_effect_check` | 1 | `evt_rpg_effect_check(?)` |
-| `evt_rpg_effects_handle` | 2 | `evt_rpg_effects_handle(?, ?)` |
-| `evt_rpg_enemy_death_check` | 2 | `evt_rpg_enemy_death_check(?, ?)` |
-| `evt_rpg_enemy_take_damage` | 4 | `evt_rpg_enemy_take_damage(?, ?, ?, ?)` |
-| `evt_rpg_get_item_msg` | 2 | `evt_rpg_get_item_msg(?, ?)` |
-| `evt_rpg_mario_take_damage` | 3 | `evt_rpg_mario_take_damage(?, ?, ?)` |
-| `evt_rpg_menu_effects_handler` | 2 | `evt_rpg_menu_effects_handler(?, ?)` |
-| `evt_rpg_npctribe_handle` | 0 | `evt_rpg_npctribe_handle()` |
-| `evt_rpg_point_calculation` | 2 | `evt_rpg_point_calculation(?, ?)` |
-| `evt_rpg_point_handling` | 1 | `evt_rpg_point_handling(?)` |
-| `evt_rpg_status_remove` | 3 | `evt_rpg_status_remove(?, ?, ?)` |
-| `evt_rpg_underchomp_name_grab` | 2 | `evt_rpg_underchomp_name_grab(?, ?)` |
-| `evt_rpg_wakeup_check` | 2 | `evt_rpg_wakeup_check(?, ?)` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_ac_delete` | 1 | `evt_ac_delete(const char * name)` | -- |  |
+| `evt_ac_entry` | 2 | `evt_ac_entry(const char * name, s32 type)` | -- |  |
+| `evt_ac_return_results` | 2 | `evt_ac_return_results(const char * name, s32& ret)` | `ret` |  |
 
-### `bos_01` <small>2 functions</small>
+### `evt_guide`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_bos_01_pure_heart_get_pos` | 4 | `evt_bos_01_pure_heart_get_pos(?, ?, ?, ?)` |
-| `evt_bos_01_pure_heart_set_pos` | 4 | `evt_bos_01_pure_heart_set_pos(?, ?, ?, ?)` |
+Flags controlling the in-game guidance and hint system.
 
-### `dan` <small>18 functions</small>
+<small>4 function(s), 3 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_dan_boss_room_set_door_name` | 0 | `evt_dan_boss_room_set_door_name()` |
-| `evt_dan_decide_key_enemy` | 1 | `evt_dan_decide_key_enemy(s32 itemId)` |
-| `evt_dan_get_chest_room_item` | 2 | `evt_dan_get_chest_room_item(s32 no, &s32 itemId)` |
-| `evt_dan_get_door_names` | 2 | `evt_dan_get_door_names(&char * enterName, &char * exitName)` |
-| `evt_dan_get_enemy_info` | 4 | `evt_dan_get_enemy_info(s32 no, s32 enemyIdx, &s32 templateId, &s32 num)` |
-| `evt_dan_get_enemy_spawn_pos` | 6 | `evt_dan_get_enemy_spawn_pos(s32 num, s32 no, s32 enemyIdx, &f32 x, &f32 y, &f32 z)` |
-| `evt_dan_get_exit_door_name_l` | 1 | `evt_dan_get_exit_door_name_l(&char * name)` |
-| `evt_dan_handle_chest_room_dokans_and_doors` | 1 | `evt_dan_handle_chest_room_dokans_and_doors(s32 no)` |
-| `evt_dan_handle_dokans` | 1 | `evt_dan_handle_dokans(s32 no)` |
-| `evt_dan_handle_doors` | 7 | `evt_dan_handle_doors(s32 no, s32 room, &char * enterDoor, &char * exitDoor, &f32 lockX,` |
-| `evt_dan_handle_key_failsafe` | 0 | `evt_dan_handle_key_failsafe()` |
-| `evt_dan_handle_map_parts` | 1 | `evt_dan_handle_map_parts(s32 no)` |
-| `evt_dan_make_spawn_table` | 1 | `evt_dan_make_spawn_table(s32 no)` |
-| `evt_dan_read_data` | 0 | `evt_dan_read_data()` |
-| `evt_dan_screen_blink` | 0 | `evt_dan_screen_blink()` |
-| `evt_dan_set_wracktail_disp_cb` | 0 | `evt_dan_set_wracktail_disp_cb()` |
-| `evt_dan_start_countdown` | 0 | `evt_dan_start_countdown()` |
-| `func_80c83c48` | 0 | `func_80c83c48()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_guide_check_flag0` | 2 | `evt_guide_check_flag0(u32 flags, bool &ret)` | `ret` |  |
+| `evt_guide_flag0_onoff` | 2 | `evt_guide_flag0_onoff(bool onoff, u32 flags)` | -- |  |
+| `evt_guide_flag2_onoff` | 2 | `evt_guide_flag2_onoff(bool onoff, u32 flags)` | -- |  |
+| `evt_guide_get_can_search` | 1 | `evt_guide_get_can_search(?) <small>(not documented)</small>` | ? |  |
 
-### `evt_ac` <small>3 functions</small>
+### `evt_offscreen`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_ac_delete` | 1 | `evt_ac_delete(const char * name)` |
-| `evt_ac_entry` | 2 | `evt_ac_entry(const char * name, s32 type)` |
-| `evt_ac_return_results` | 2 | `evt_ac_return_results(const char * name, s32& ret)` |
+Offscreen render targets and their bounding boxes.
 
-### `evt_door` <small>9 functions</small>
+<small>3 function(s), 0 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_door_enable_disable_dokan_desc` | 2 | `evt_door_enable_disable_dokan_desc(bool enabled, const char * name)` |
-| `evt_door_enable_disable_door_desc` | 2 | `evt_door_enable_disable_door_desc(bool enableDisable, const char * doorName)` |
-| `evt_door_enable_disable_map_door_desc` | 2 | `evt_door_enable_disable_map_door_desc(bool enabled, const char * name)` |
-| `evt_door_openable_onoff` | 1 | `evt_door_openable_onoff(?)` |
-| `evt_door_set_dokan_descs` | 2 | `evt_door_set_dokan_descs(DokanDesc * descs, s32 count)` |
-| `evt_door_set_door_descs` | 1 | `evt_door_set_door_descs(DoorDesc * descs, s32 count)` |
-| `evt_door_set_event` | 3 | `evt_door_set_event(char *door, int unknown, EvtScriptCode * script)` |
-| `evt_door_set_map_door_descs` | 2 | `evt_door_set_map_door_descs(MapDoorDesc * descs, s32 count)` |
-| `evt_door_wait_flag` | 1 | `evt_door_wait_flag(?)` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_offscreen_delete` | ? | `evt_offscreen_delete() <small>(not documented)</small>` | ? |  |
+| `evt_offscreen_entry` | ? | `evt_offscreen_entry() <small>(not documented)</small>` | ? |  |
+| `evt_offscreen_get_boundingbox2` | ? | `evt_offscreen_get_boundingbox2() <small>(not documented)</small>` | ? |  |
 
-### `evt_env` <small>2 functions</small>
+### `evt_paper`
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_env_blur_on` | 2 | `evt_env_blur_on(?, ?)` |
-| `evt_env_static_blur_on` | 0 | `evt_env_static_blur_on()` |
+Paper-mode entities: entry and deletion.
 
-### `evt_fade` <small>5 functions</small>
+<small>2 function(s), 0 with a known signature.</small>
 
-| Function | Args | Signature |
-|---|---|---|
-| `evt_fade_callfade` | 1 | `evt_fade_callfade(?)` |
-| `evt_fade_end_wait` | 1 | `evt_fade_end_wait(s32)` |
-| `evt_fade_entry` | 6 | `evt_fade_entry(int transitionType, everything else is unknown ints)` |
-| `evt_fade_set_center_pos` | 3 | `evt_fade_set_center_pos(?, ?, ?)` |
-| `evt_set_transition` | 2 | `evt_set_transition(?, ?)` |
-
-### `evt_guide` <small>4 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_guide_check_flag0` | 2 | `evt_guide_check_flag0(u32 flags, bool &ret)` |
-| `evt_guide_flag0_onoff` | 2 | `evt_guide_flag0_onoff(bool onoff, u32 flags)` |
-| `evt_guide_flag2_onoff` | 2 | `evt_guide_flag2_onoff(bool onoff, u32 flags)` |
-| `evt_guide_get_can_search` | 1 | `evt_guide_get_can_search(?)` |
-
-### `evt_hit` <small>5 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_hit_bind_mapobj` | 2 | `evt_hit_bind_mapobj(const char * hit_name, const char * map_name)` |
-| `evt_hit_bind_update` | 1 | `evt_hit_bind_update(const char * hit_name)` |
-| `evt_hitobj_attr_onoff` | 4 | `evt_hitobj_attr_onoff(s32 group, bool on, const char * name, u32 mask)` |
-| `evt_hitobj_get_pos` | 4 | `evt_hitobj_get_pos(const char * hit_name, f32 x, f32 y, f32 z)` |
-| `evt_hitobj_onoff` | 3 | `evt_hitobj_onoff(const char * name, s32 group, bool on)` |
-
-### `evt_img` <small>7 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_img_alloc_capture` | 8 | `evt_img_alloc_capture(?, ?, ?, ?, ?, ?, ?, ?)` |
-| `evt_img_entry` | 1 | `evt_img_entry(?)` |
-| `evt_img_free_capture` | 2 | `evt_img_free_capture(?, ?)` |
-| `evt_img_release` | 1 | `evt_img_release(?)` |
-| `evt_img_set_paper` | 2 | `evt_img_set_paper(?, ?)` |
-| `evt_img_set_paper_anim` | 2 | `evt_img_set_paper_anim(?, ?)` |
-| `evt_img_wait_animend` | 1 | `evt_img_wait_animend(?)` |
-
-### `evt_offscreen` <small>3 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_offscreen_delete` | ? | `evt_offscreen_delete()` |
-| `evt_offscreen_entry` | ? | `evt_offscreen_entry()` |
-| `evt_offscreen_get_boundingbox2` | ? | `evt_offscreen_get_boundingbox2()` |
-
-### `evt_paper` <small>2 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_paper_delete` | 1 | `evt_paper_delete(?)` |
-| `evt_paper_entry` | 1 | `evt_paper_entry(?)` |
-
-### `item_event_data` <small>1 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_itemdata_get_return_pipe_info` | 2 | `evt_itemdata_get_return_pipe_info(char * &mapNameOut, char * &doorNameOut)` |
-
-### `machi` <small>2 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `evt_machi_set_elv_descs` | 2 | `evt_machi_set_elv_descs(ElvDesc * descs, s32 count)` |
-| `func_80c4d444` | ? | `func_80c4d444()` |
-
-### `npc_dimeen_l` <small>3 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `func_801e5fd0` | ? | `func_801e5fd0()` |
-| `npc_dimeen_l_box_deal_damage` | 6 | `npc_dimeen_l_box_deal_damage(s32 unused, s32 flags, s32 damage, f32 posX, f32 posY, f32 posZ)` |
-| `npc_dimeen_l_determine_move_pos` | ? | `npc_dimeen_l_determine_move_pos()` |
-
-### `npc_ninja` <small>1 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `bomb_damage_mario` | 0 | `bomb_damage_mario()` |
-
-### `npc_shadoo` <small>7 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `func_802154fc` | ? | `func_802154fc()` |
-| `func_80215514` | ? | `func_80215514()` |
-| `func_80215540` | ? | `func_80215540()` |
-| `func_80215f44` | ? | `func_80215f44()` |
-| `func_80224804` | ? | `func_80224804()` |
-| `func_80224874` | ? | `func_80224874()` |
-| `func_80225380` | ? | `func_80225380()` |
-
-### `sp4_13` <small>1 functions</small>
-
-| Function | Args | Signature |
-|---|---|---|
-| `func_80c5c36c` | 0 | `func_80c5c36c()` |
+| Function | Args | Signature | Returns |
+|---|---|---|---|
+| `evt_paper_delete` | 1 | `evt_paper_delete(?) <small>(not documented)</small>` | ? |  |
+| `evt_paper_entry` | 1 | `evt_paper_entry(?) <small>(not documented)</small>` | ? |  |

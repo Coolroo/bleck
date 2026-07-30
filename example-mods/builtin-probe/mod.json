@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "builtin-probe",
+  "version": "0.1.0",
+  "description": "Call documented getters and read back what they actually write",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2
+  }
+}
