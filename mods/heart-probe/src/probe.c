@@ -1,17 +1,19 @@
 /*
-    What is the Pure Heart, in the game's own terms?
+    What map objects exist in Flipside, and what models do they use?
 
-    `mac_12` (Flipside) is where one actually exists -- the REL bundle holds
-    `heart_01`, `A2_heart_01`, `A3_heart_iwa` and `pure_heart` right beside
-    `mac_12_init_evt`. The model itself lives inside that map's `map.dat`, which
-    is not decoded, so it cannot be read off the disc.
+    The Pure Heart is geometry inside `map.dat`, which is undecoded (D165), so
+    its object cannot be read off the disc. But a live one exists in the first
+    heart pillar once a save with progress is loaded -- so this asks the running
+    game rather than guessing names, which is what the previous attempt did and
+    it found nothing (5 tried, 0 found).
 
-    So this asks the running game instead. For each candidate instance name it
-    calls `mobjNameToPtrNoAssert` and, when something answers, copies the
-    MODEL name back out with `mobjGetModelName`.
+    ⚠️ SAVE SLOT FIRST. On-screen "slot 1" is index 0 (D108), and `nandLoadSave`
+    is safe from the first frame a sequence hook runs -- no delay, unlike
+    `code.boot`. Without it the pillars are empty and there is nothing to find.
 
-    ⚠️ `NoAssert` deliberately: `mobjNameToPtr` asserts on a miss, and a probe
-    whose job is to try names must not halt on the first wrong one.
+    The object list is walked through `MobjWork`, whose pointer sits at
+    0x805ADF10 -- read out of `mobjNameToPtrNoAssert`, since the symbol list
+    does not name it (D165).
 */
 
 typedef unsigned char u8;
@@ -28,33 +30,42 @@ typedef struct
 } SeqDef;
 
 extern SeqDef seq_data[];
-extern void *mobjNameToPtrNoAssert(const char *instanceName);
+extern void nandLoadSave(s32 slot);
 extern const char *mobjGetModelName(void *mobj);
+
+/* ⚠️ Hard-coded because spm.eu0.lst has no `mobjdrv_wp`. Measured, D165. */
+#define MOBJ_WP 0x805ADF10
+#define WORK_MAX 0x00
+#define WORK_ENTRIES 0x04
+#define ENTRY_STRIDE 0x2A8
+#define ENTRY_FLAG0 0x000
+#define ENTRY_NAME 0x008
+#define ENTRY_ACTIVE 0x1u
+
+#define SAVE_SLOT 0 /* on-screen "slot 1" */
 
 #define SEQ_COUNT 6
 #define SEQ_GAME 2
-#define LOOK_AT_FRAME 300
+#define LOOK_EVERY 120
 
 #define PROBE 0x80005000
 #define MAGIC 0x9EA27EEDu
-#define REPORT_WORDS 48
+#define REPORT_WORDS 64
 
 static volatile u32 *const probe = (volatile u32 *) PROBE;
 #define GAME_FRAMES (probe[1])
-#define TRIED (probe[2])
-#define FOUND (probe[3])
-
-/* Candidates, from the strings sitting next to mac_12_init_evt. */
-static const char *const NAMES[] = {
-    "heart_01", "A2_heart_01", "A3_heart_iwa", "A2_heart_01a", "before_iwa",
-};
-#define NAME_COUNT 5
+#define SAVE_LOADED (probe[2])
+#define OBJ_MAX (probe[3])
+#define OBJ_ACTIVE (probe[4])
+#define HEART_HITS (probe[5])
+#define OBJ_NAMED (probe[6])
+#define LOOKS (probe[7])
 
 static SeqFunc *realMain[SEQ_COUNT] = {
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
     (SeqFunc *) 1, (SeqFunc *) 1, (SeqFunc *) 1,
 };
-static u32 done = 0;
+static u32 loaded = 0;
 
 static void copyText(u32 at, const char *text, u32 words)
 {
@@ -69,27 +80,79 @@ static void copyText(u32 at, const char *text, u32 words)
     }
 }
 
-static void look(void)
+/* Case-insensitive "does this name contain 'heart' or 'hart'". */
+static u32 looksLikeHeart(const char *s)
 {
     u32 i;
-    u32 slot = 8;
 
-    for (i = 0; i < NAME_COUNT; i++)
+    for (i = 0; i < 12 && s[i]; i++)
     {
-        void *mobj = mobjNameToPtrNoAssert(NAMES[i]);
+        char a = s[i] | 0x20;
+        char b = s[i + 1] | 0x20;
+        char c = s[i + 2] | 0x20;
+        char d = s[i + 3] | 0x20;
 
-        TRIED += 1;
-        if (mobj == 0)
-            continue;
-        FOUND += 1;
-        /* 4 words of instance name, then 4 of model name, per hit. */
-        copyText(slot, NAMES[i], 4);
-        copyText(slot + 4, mobjGetModelName(mobj), 4);
-        slot += 8;
-        if (slot > REPORT_WORDS - 8)
-            break;
+        if (a == 'h' && b == 'e' && c == 'a' && d == 'r')
+            return 1;
+        if (a == 'h' && b == 'a' && c == 'r' && d == 't')
+            return 1;
     }
-    done = 1;
+    return 0;
+}
+
+static void look(void)
+{
+    u8 *work = *(u8 **) MOBJ_WP;
+    u8 *entries;
+    s32 max;
+    s32 i;
+    u32 active = 0;
+    u32 named = 0;
+    u32 slot = 16;
+
+    LOOKS += 1;
+    if (work == 0)
+        return;
+    max = *(s32 *) (work + WORK_MAX);
+    entries = *(u8 **) (work + WORK_ENTRIES);
+    OBJ_MAX = (u32) max;
+    if (entries == 0 || max <= 0 || max > 512)
+        return;
+
+    for (i = 0; i < max; i++)
+    {
+        u8 *e = entries + i * ENTRY_STRIDE;
+        const char *name;
+
+        name = (const char *) (e + ENTRY_NAME);
+        /* ⚠️ Counted two ways. The flag0 test is what mobjNameToPtr uses, but
+           if it undercounts, a non-empty name still says the slot is in use. */
+        if (*(u32 *) (e + ENTRY_FLAG0) & ENTRY_ACTIVE)
+            active += 1;
+        if (name[0] != 0)
+            named += 1;
+        /* ⚠️ POSITIVE CONTROL. Dump the first few names whatever they are: if
+           they read as sensible strings the walk is right, and if they are
+           garbage the pointer or stride is wrong -- which "0 hearts" alone
+           cannot distinguish. */
+        if (name[0] == 0)
+            continue;
+        if (slot <= REPORT_WORDS - 8)
+        {
+            copyText(slot, name, 4);
+            copyText(slot + 4, mobjGetModelName(e), 4);
+            slot += 8;
+        }
+        if (!looksLikeHeart(name))
+            continue;
+        HEART_HITS += 1;
+    }
+    /* Peaks, not the latest sample: the map populates over time and an early
+       look sees almost nothing -- which is what the first run reported. */
+    if (active > OBJ_ACTIVE)
+        OBJ_ACTIVE = active;
+    if (named > OBJ_NAMED)
+        OBJ_NAMED = named;
 }
 
 static void onSequenceFrame(u32 seq, void *work)
@@ -97,7 +160,14 @@ static void onSequenceFrame(u32 seq, void *work)
     if (seq == SEQ_GAME)
     {
         GAME_FRAMES += 1;
-        if (GAME_FRAMES == LOOK_AT_FRAME && done == 0)
+        if (loaded == 0)
+        {
+            /* No delay needed; the save array is live on frame 1 (D108). */
+            nandLoadSave(SAVE_SLOT);
+            loaded = 1;
+            SAVE_LOADED = 1;
+        }
+        if ((GAME_FRAMES % LOOK_EVERY) == 0)
             look();
     }
     if (realMain[seq] != 0)

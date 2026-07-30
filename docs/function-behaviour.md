@@ -729,3 +729,52 @@ there as they are collected.
 🟢 Next: enumerate `MobjWork.entries` and dump every live instance name and
 model. That replaces guessing names with reading them, and gives `mobjEntry` a
 model string that is known to exist.
+
+---
+
+## ✅ A Pure Heart is map *geometry*, and geometry has its own API (D166)
+
+Four subsystems were searched before the right one: NPCs, global models, effects
+and map objects. It is none of them.
+
+### ⛔ `mac_01` has exactly two map objects, and neither is a heart
+
+Verified with the save loaded (`nandLoadSave(0)`, on-screen slot 1 per D108),
+walking `MobjWork` at `0x805ADF10`, 353 samples across 49,000 frames:
+
+| | |
+|---|---|
+| entry slots | 256 |
+| **live objects** | **2** |
+| `tb_00` | model `MOBJ_thako` |
+| `i_00` | model `MOBJ_thako` |
+
+✅ **The instrument was checked before the negative was believed.** Dumping the
+names whatever they were is what proves the walk: two sensible instance names
+and a real model (`mobj_thako` is in the symbol list) mean the pointer, the
+`0x2A8` stride and the `+0x008` name offset are all right. "0 hearts" from a
+broken walk looks identical.
+
+### ✅ The API that does reach it
+
+Geometry nodes are addressed **by name**, and the scripting language already
+carries the calls:
+
+| builtin | arity | |
+|---|---|---|
+| `evt_mapobj_get_position` | 4 | node → x, y, z |
+| `evt_mapobj_flag_onoff` | 4 | show / hide by name |
+| `evt_mapobj_trans` | 4 | move it |
+| `evt_mapobj_scale` | 4 | |
+| `evt_mapobj_color` | 6 | |
+
+Plus `mapObjFlagOn` (`0x8008C440`) and `mapObjFlagOff` (`0x8008C618`) in C.
+
+🔶 So a Pure Heart is a named node such as `heart_01` / `A2_heart_01` /
+`A3_heart_iwa` inside a `mac_*` map's `map.dat`, shown when the story places it
+and hidden otherwise. That explains every earlier miss: it has no NPC entry, no
+`MOBJ_` model, no tribe, and no effect.
+
+⚠️ **The strings cluster around `mac_12_init_evt`, not `mac_01`.** Flipside is
+many maps; the heart-bearing pillar may not be the one `warp-combo` reaches.
+`evt_mapobj_get_position` answers that in one run per map, without guessing.
