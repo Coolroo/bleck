@@ -39,3 +39,6 @@ dist/
 
 # Example mods build into their own overlays too.
 example-mods/*/overlay/
+
+# Agent instructions -- kept on disk, deliberately untracked
+CLAUDE.md
