@@ -39,8 +39,8 @@ the mod's `mod.rel`, and runs on the game's own scheduler.
 
 </div>
 
-New to this? [Scripting](../guides/scripting.md) is the tutorial; these pages are
-the reference.
+New to this? [Writing a script](../guides/scripting.md) is the walk-through;
+these pages are the reference.
 
 ## What it is not
 

@@ -51,7 +51,7 @@ jobs:
           enable-cache: true
 
       - name: Check the generated reference is current
-        # language/builtins.md and language/storage.md are generated from
+        # scripting/builtins.md and scripting/storage.md are generated from
         # catalog.json and bleck/script/evt.py. A stale reference is worse than
         # none, because it is believed -- so a catalog change that was not
         # followed by a regeneration fails here.

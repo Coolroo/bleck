@@ -1,7 +1,7 @@
 # Syntax
 
 Everything the parser accepts. For a walk-through, start with
-[Scripting](../guides/scripting.md).
+[Writing a script](../guides/scripting.md).
 
 ## Scripts
 

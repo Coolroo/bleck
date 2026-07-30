@@ -105,10 +105,10 @@ chain OK: speedrun
 !!! tip "Reference pages"
 
     This is the tour. The full reference lives under
-    [The scripting language](../language/index.md) —
-    [syntax](../language/syntax.md), [storage classes](../language/storage.md),
-    [attributes](../language/attributes.md) and all
-    [443 built-in functions](../language/builtins.md).
+    [Scripting](../scripting/index.md) —
+    [syntax](../scripting/syntax.md), [storage classes](../scripting/storage.md),
+    [attributes](../scripting/attributes.md) and all
+    [443 built-in functions](../scripting/builtins.md).
 
 
 ### Scripts

@@ -88,15 +88,15 @@ nav:
       - Mods: concepts/mods.md
       - Dependencies: concepts/dependencies.md
       - Disc formats: concepts/disc-formats.md
-  - Language:
-      - language/index.md
-      - Syntax: language/syntax.md
-      - Storage: language/storage.md
-      - Attributes: language/attributes.md
-      - Built-in functions: language/builtins.md
+  - Scripting:
+      - scripting/index.md
+      - Syntax: scripting/syntax.md
+      - Storage: scripting/storage.md
+      - Attributes: scripting/attributes.md
+      - Built-in functions: scripting/builtins.md
   - Guides:
       - Your first mod: guides/first-mod.md
-      - Scripting: guides/scripting.md
+      - Writing a script: guides/scripting.md
       - Testing: guides/testing.md
       - Code mods: guides/code-mods.md
       - Running on a Wii: guides/hardware.md
