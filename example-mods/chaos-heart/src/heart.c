@@ -1,5 +1,5 @@
 /*
-    The Chaos Heart attack: the heart drifts like a DVD logo while five hearts
+    The Chaos Heart attack: the heart drifts like a DVD logo while five beams
     orbit it, evenly spaced and turning together.
 
     ✅ The heart is an EFFECT (D171), spawned by an unnamed function at
@@ -33,10 +33,19 @@ typedef struct
 extern SeqDef seq_data[];
 extern void *marioGetPtr(void);
 
-typedef void *(EffHeartEntry)(s32 variant, f32 x, f32 y, f32 z);
+/* Every effect entry found so far takes this shape: variant, then a position.
+   Shared by the heart and the beam, which is what lets one `summon` drive
+   both. */
+typedef void *(EffEntry)(s32 variant, f32 x, f32 y, f32 z);
 
 #define HEART_ENTRY 0x80094E44
 #define CHAOS 16
+
+/* `robo_beam`, from the 174 effects `scripts/dump_effects.py` lists. Its
+   position sits at userWork +0x10 like the heart's, and it does NOT expire --
+   both measured (D183). */
+#define BEAM_ENTRY 0x800A6880
+#define BEAM_VARIANT 0
 
 #define MARIO_POSITION 0x5C
 #define EFF_USERWORK 0x00C
@@ -143,9 +152,9 @@ static void place(u8 *work, f32 x, f32 y, f32 z)
     *(f32 *) (work + WORK_Z) = z;
 }
 
-static u8 *summon(s32 variant, f32 x, f32 y, f32 z)
+static u8 *summon(u32 address, s32 variant, f32 x, f32 y, f32 z)
 {
-    EffHeartEntry *entry = (EffHeartEntry *) HEART_ENTRY;
+    EffEntry *entry = (EffEntry *) address;
     void *made;
 
     ATTEMPTS += 1;
@@ -170,16 +179,14 @@ static void summonAll(void)
     heartY = homeY;
     heartZ = from[2];
 
-    chaosWork = summon(CHAOS, heartX, heartY, heartZ);
+    chaosWork = summon(HEART_ENTRY, CHAOS, heartX, heartY, heartZ);
     ENTRY_PTR = (u32) chaosWork;
     USERWORK_PTR = (u32) chaosWork;
     RETURNED = chaosWork != 0;
 
-    /* Variants 0..4 are coloured Pure Hearts, so the five orbiters are five
-       different colours rather than five of the same. */
     for (i = 0; i < ORBITERS; i++)
     {
-        orbitWork[i] = summon((s32) i, heartX, heartY, heartZ);
+        orbitWork[i] = summon(BEAM_ENTRY, BEAM_VARIANT, heartX, heartY, heartZ);
         if (orbitWork[i] != 0)
             orbiters += 1;
     }

@@ -11973,3 +11973,48 @@ every sweep removes `mod.rel` and rewrites it a moment later, and calling that
 ⚠️ `check` and `build` shared these steps by copy-paste and now share
 `produce()`. A sweep added to one and not the other would mean a mod that
 checked clean and shipped stale, which is this bug wearing a different hat.
+
+---
+
+## D183 — `robo_beam` is a usable orbiter, and effects do not hit the boss hang (2026-07-30)
+
+Two open questions from D173, both answered in one run, and a third answered by
+accident that matters more than either.
+
+✅ **`robo_beam`'s position is at `userWork+0x10`/`+0x14`**, same as the heart.
+Measured by driving five of them around the heart on a fixed-radius orbit and
+reading the block back: the distance from heart to beam 0 is **170.000 across
+all 38 samples, spread 0.0001**. Only the real position words could hold that.
+
+✅ **It does not self-delete.** Five beams alive from frame 964 to 25,600 — the
+whole run — with `BEAMS_LIVE` never dropping. ⚠️ Count Bleck's beam *NPC* died
+at ~314 frames (D153), which is why this was in doubt; the **effect** does not
+behave the same way, and the NPC's lifetime says nothing about it.
+
+✅ **`userWork+0x24` is a per-frame counter the effect keeps itself.** It equals
+our own driven-frame count in every sample, and the mod writes only `+0x10`,
+`+0x14` and `+0x18` — so it is the beam's, not an echo of ours. Consistent with
+never expiring. 🔶 What it is *for* is unknown.
+
+### 🟢 The freeze does not follow the effect path
+
+D157 measured the boss freezing at **2177, 2184, 2177, 2177** frames across four
+runs — a fixed time, not a fixed cause, and unmoved by changing his behaviour.
+This run reached **25,600 frames**, 11.8x past that, with six effects live
+throughout and no hang.
+
+That is the strongest evidence yet for D157's remaining hypothesis: whatever
+fills at a constant rate is on the **NPC** path, not the effect path. An
+attack built from effects sidesteps it entirely, which is what `chaos-heart`
+now is.
+
+⚠️ Not a proof that the boss hang is fixed — this run has no boss NPC in it. It
+narrows where to look.
+
+### The swap
+
+`example-mods/chaos-heart` now orbits five `robo_beam`s instead of five coloured
+Pure Hearts. ✅ Verified in game after the change: `ATTEMPTS 6`, `MADE 5`,
+22,350 frames, no freeze. `summon()` gained an entry-point argument, since every
+effect entry found so far takes `(variant, x, y, z)` and only the address
+differs.
