@@ -10826,3 +10826,59 @@ starts with — so `mario_pouch.h`'s +0x010 is right on this build.
 
 ⛔ **Not death-proof**, and the mod says so: pits, crushes and scripted deaths
 never touch `hp`.
+
+---
+
+## D153 — The boss's attack decodes, and the new one is expressible today (2026-07-29)
+
+Tasks 2 and 3 of the boss-research arc turned out to be mostly *reading*. Full
+decode and tables in [`function-behaviour.md`](function-behaviour.md).
+
+### What the attack actually is
+
+Not a projectile: `evt_npc_arc_to` onto the player's position, with random
+scatter, clamped, then smoke, a 3D sound and a camera shake. ✅ The sound is
+named `SFX_BS_DMNL_LANDING1`, which confirms the reading by a route independent
+of the disassembly — a leap-and-slam, not a spell.
+
+### ✅ The new attack needs no new machinery
+
+Three things had to be true, and all three are:
+
+1. **Every function his attack uses is already a bleck builtin** — eight for
+   eight, with catalog arity matching the decoded argc in every case.
+2. **`"me"` is the NPC self-reference**, a plain string, so a replacement can
+   name the boss without a pointer.
+3. **Output parameters lower correctly** — `evt_mario_get_pos(mx, my, mz)`
+   compiles to `0xFE363C80/81/82`, the same local-work slots the game's own
+   script uses. Verified by compiling it.
+
+So the charge-and-launch attack is a **bleck script**, not hand-written
+bytecode.
+
+### How it attaches — and why `code.replace` does not apply
+
+⛔ `code.replace` (D150) is `door:`-only, and deliberately so. The attack
+routine is not a `DoorDesc` field: it is the **argument word** to the
+`RUN_CHILD_EVT` at +23 of his move script, i.e. word 24 holding `0x8045D328`.
+
+✅ Which means the mechanism already exists and is already proven *on this exact
+script*: `mods/boss-harder` rewrites two argument words in it and was verified
+in game (D151). Writing a compiled script's address over word 24 is the same
+operation.
+
+🟢 This is the second time an argument-word edit has been the right answer where
+a selector was not. Worth a manifest form — "set word N of this script, guarded
+by its header" — which would cover `code.patches`' gap without a handler.
+
+### What is still unknown
+
+⛔ **Which part is the head cannot be answered statically**: all 40 of tribe
+309's `NPCPartDef` positions are `(0,0,0)`, so the rig places them at runtime.
+`e_Dmenl_lh`/`rh` are the hands and `e_Dmenl_r` is 28 orbiting pieces, but
+`_k` versus `_f` is a 🔶 hypothesis until a live entry is walked.
+
+🔶 So "launches his head" may reduce to "launches *himself*" — which is what
+`arc_to` already does, and what the existing attack is. Making the new attack
+visually distinct probably means the charge phase and a different arc, not
+detaching a body part. That should be settled before writing it.

@@ -558,3 +558,65 @@ damage ever landing would show `lowest hp = 10`.
 ⛔ **Not death-proof.** Pits, crushes and scripted deaths do not go through
 `hp`. 🔶 Only self-inflicted damage has been observed being absorbed; a real
 enemy hit takes the same path in principle, but has not been watched.
+
+---
+
+## ✅ Super Dimentio's attack, fully decoded (D153)
+
+His move loop runs a child script at **`0x8045D328`**. Decoded from the DOL and
+named against `spm.eu0.lst`:
+
+```
+     <two unnamed user funcs: 0x801e8ed0(5), 0x801e92ac(3)>
++6   LBL 0
++8   evt_mario_get_pos(LW10, LW11, LW12)        <- where the player is
++13  evt_npc_get_position("me", LW0, LW1, LW2)
++19  evt_sub_random(300, LW3)                   <- scatter on X
++34  evt_sub_random(50,  LW4)                   <- scatter on Z
+     ... arithmetic toward the player, then clamped to X +/-600, Z +/-120
++91  evt_npc_flag8_onoff("me", 1, 0x800)        <- "attacking" flag on
++96  evt_npc_arc_to("me", LW0, LW1, LW2, 2500, ...)   <- THE ATTACK: he arcs onto the player
++108 0x800fe4e8("me", 9..12, LW0, LW1, LW2)     x4, each followed by
++115 evt_eff(..., "kemuri_test", ...)           <- smoke bursts
++201 evt_npc_get_position("me", ...)
++207 evt_snd_sfxon_3d("SFX_BS_DMNL_LANDING1", ...)
++213 evt_cam_shake(5, ...)                      <- impact
++228 evt_npc_flag8_onoff("me", 0, 0x800)        <- flag off
++233 evt_npc_wait_for("me", 15)
+```
+
+✅ **The sound name confirms the reading independently**: `SFX_BS_DMNL_LANDING1`
+— boss, Dimentio Large, *landing*. The `arc_to` is a leap-and-slam, not a
+projectile.
+
+### `"me"` is how a script names its own NPC
+
+Every `evt_npc_*` call passes `0x805B4628`, which is the **string `"me"`**.
+Count Bleck's script passes `0x805B4918`, a different address holding the *same*
+string. So the first parameter of `evt_npc_get_position(const char *name, ...)`
+is an instance name, and `"me"` is the self-reference convention — matching the
+header signature exactly.
+
+⚠️ This matters for writing a replacement: a new script can simply pass the
+literal `"me"`.
+
+### ✅ Every function it uses is already in bleck's catalog
+
+| function | arity in catalog | arity decoded |
+|---|---|---|
+| `evt_mario_get_pos` | 3 | 3 |
+| `evt_npc_get_position` | 4 | 4 |
+| `evt_npc_arc_to` | 10 | 10 |
+| `evt_sub_random` | 2 | 2 |
+| `evt_cam_shake` | 6 | 6 |
+| `evt_snd_sfxon_3d` | 4 | 4 |
+| `evt_npc_flag8_onoff` | 3 | 3 |
+| `evt_npc_wait_for` | 2 | 2 |
+
+Eight for eight, with no disagreement — so a new attack can be **written in the
+scripting language** rather than hand-assembled as bytecode.
+
+✅ **Output parameters lower correctly.** Compiling
+`evt_mario_get_pos(mx, my, mz)` with three `var`s emits `-30000000`,
+`-29999999`, `-29999998` — i.e. `0xFE363C80/81/82`, the *same* local-work slot
+encoding the game's own script uses at +8. Verified by compiling it, not assumed.
