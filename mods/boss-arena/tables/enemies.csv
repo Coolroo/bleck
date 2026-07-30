@@ -1,0 +1,11 @@
+# Super Dimentio, placed into an1_02 by the setup file rather than spawned at
+# runtime. D127 proved this path with Mr. L on Lineland Road: any template can
+# be placed in any map and behaves normally.
+#
+# an1_02 ships 15 enemies in slots 0-14. Slot 15 is the first empty one, and
+# D79 is why it must be the FIRST empty one -- the game stops reading at a gap.
+#
+# copy_from 0 inherits a working enemy's undocumented bytes (D123); slot 0 is a
+# Dry Bones, so Super Dimentio starts from something that already spawns.
+map,slot,template,x,y,z,copy_from
+an1_02,15,255,0,0,0,0

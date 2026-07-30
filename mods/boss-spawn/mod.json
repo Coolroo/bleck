@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "name": "boss-spawn",
+  "version": "0.1.0",
+  "description": "Spawns Super Dimentio into a running map, so the final boss can be measured",
+  "base": "eu0",
+  "code": {
+    "sources": [
+      "src"
+    ],
+    "target": "eu0",
+    "module_id": 2,
+    "banner": false,
+    "hooks": [
+      {
+        "function": "__assert2",
+        "call": "on_assert",
+        "mode": "before"
+      }
+    ],
+    "boot": "an1_02"
+  }
+}

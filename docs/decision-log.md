@@ -10882,3 +10882,63 @@ by its header" — which would cover `code.patches`' gap without a handler.
 `arc_to` already does, and what the existing attack is. Making the new attack
 visually distinct probably means the charge phase and a different arc, not
 detaching a body part. That should be settled before writing it.
+
+---
+
+## D155 — Super Dimentio spawns outside his own map, and the control saved the conclusion (2026-07-29)
+
+✅ **The final boss now exists in `an1_02`**, an ordinary Chapter 1 room, and can
+be measured. `mods/boss-arena` places him; `mods/invincible` (D152) is what makes
+standing next to him survivable.
+
+| | |
+|---|---|
+| entry | `0x807C2698` |
+| maxHp / hp | **200 / 200** — exactly tribe 309's DOL value (D151) |
+| flag8 | `0x34218319` → `0x34218B19`, changing every sample |
+| position | x −155 → −161, y 275 → 405 |
+| active for | 68 consecutive scans |
+
+The HP matching the statically-read tribe value is the check that says this is
+really him and not some other entry.
+
+### ⛔ The runtime spawn does not work, and a Goomba proved why
+
+Three runs went into `npcEntryFromTemplate` called from a `seq_data` hook. Every
+one hung the game at exactly the frame of the call, with no assert.
+
+⚠️ **The first run used the boss, and the obvious conclusion was "a boss assumes
+state its own map sets up".** That conclusion was wrong. Adding a **Goomba** —
+template 2, the simplest thing in the game — as a control hung it identically.
+So it is the *call*, not the boss.
+
+Ruled out since: the map (an1_02 has 15 enemies and hangs the same), an assert
+(`__assert2` hooked, never fired), and the stride (`SIZE_ASSERT(NPCEnemyTemplate,
+0x68)` confirms the pointer arithmetic). 🔶 Remaining hypothesis: the function is
+not safe to call from the sequence-main hook — the game's own callers reach it
+during npcdrv's update or map init.
+
+⛔ **This is the fourth time a control has overturned a first reading** (D93,
+D94, D107, and now this). The rule holds: a negative result measured one way is
+worth very little.
+
+### The setup file was the answer all along
+
+D127 placed Mr. L on Lineland Road through `tables/enemies.csv` and he behaved
+normally. Super Dimentio needed the same three lines. ⚠️ **The runtime spawn was
+never necessary** — it was chosen because the task said "spawn", and a proven
+declarative path was walked straight past.
+
+### ⛔ Still hangs, ~36 seconds in
+
+The game reaches frame **2184** with the boss alive and moving, then stops. Not
+yet diagnosed: `boss-arena` has no `__assert2` hook, which is the one technique
+that turns a hang into a filename and a line (D130).
+
+### Two instrument errors, both self-inflicted
+
+1. `NPCWork.num` is the array **capacity** (80), not the live count. A
+   `MAX_SCAN 64` guard silently skipped the entire scan and reported zeros —
+   which reads exactly like "he did not spawn".
+2. The first probe used `0x80003000`; the rig reads `0x80005000` (D151 already
+   recorded this and it happened again in a new mod).
