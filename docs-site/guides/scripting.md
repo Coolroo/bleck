@@ -321,6 +321,26 @@ Now `on_arrive` runs each time that map is reached. A mod using only map hooks
 does **not** need a `script main` — that is just the script that free-runs, and
 this one has its own way to start.
 
+### Attaching it in the script instead
+
+The same attachment can be written above the script, so the map name sits with
+the code it runs:
+
+```
+#[map("mac_01")]
+script on_arrive {
+    evt_pouch_add_coins(10)
+}
+```
+
+Then `mod.json` needs no `maps` block at all. `#[combo("dev")]` works the same
+way for a button combination from `bleck.yml`.
+
+!!! warning "Declare it once"
+
+    A `#[map(...)]` attribute and a `maps` entry for the same map is an error,
+    naming both places. Neither overrides the other.
+
 Find map names with [`bleck maps`](../reference/cli.md#bleck-maps):
 
 ```bash

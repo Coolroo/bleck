@@ -126,6 +126,13 @@ Every mod has a `mod.json` at its root.
             map is left — evt state is rebuilt on every map change, so nothing
             survives one.
 
+            !!! tip "Or attach it in the script"
+
+                `#[map("aa4_01")]` above a `script` declaration takes the place
+                of an entry here. See
+                [Scripting](../guides/scripting.md#attaching-it-in-the-script-instead).
+                Declaring the same map in both places is an error.
+
             You do not have to know map names by heart — `bleck` lists them,
             with the chapter each belongs to:
 
@@ -293,6 +300,14 @@ Every mod has a `mod.json` at its root.
             - `call` — a function in your own `code.sources`. It has to accept
               the same arguments as the function it hooks, in every mode.
             - `mode` — `"replace"` (the default), `"before"` or `"after"`.
+
+            !!! tip "Or declare it in the source"
+
+                `BLECK_HOOK(npcDispMain, replace)` above the function takes the
+                place of an entry here, and reads the name from the definition
+                below it rather than repeating it as a string. See
+                [Code mods](../guides/code-mods.md#declaring-the-hook-in-the-source-instead).
+                Declaring the same **game** function in both places is an error.
 
             | `mode` | What runs | Your return value |
             |---|---|---|

@@ -541,6 +541,13 @@ reads a final value.
 
 ## Patching the game's own code
 
+⚠️ **A hook may be declared as a tag in the source instead of in `mod.json`** --
+`BLECK_HOOK(function, mode)` above the function it names (D178). The manifest
+form still works and the two may not both claim one game function. The reasoning
+for the macro over a comment, and for refusing rather than picking a winner, is
+in D178; the user-facing form is in
+[`docs-site/guides/code-mods.md`](../docs-site/guides/code-mods.md).
+
 Evt patching reaches scripts. Reaching a **C function** needs an instruction
 written at a live address, which every module now carries helpers for. ✅
 Measured with a control that failed in the expected direction (D94).

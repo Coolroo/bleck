@@ -262,6 +262,47 @@ it loads.
 void count_npcs(void) { ... }
 ```
 
+### Declaring the hook in the source instead
+
+Naming `call` in `mod.json` means the manifest and the code have to be kept in
+step by hand — rename the C function and the build breaks somewhere else. You can
+declare the hook where the function actually is:
+
+```c title="src/hooks.c"
+#include <bleck.h>
+
+BLECK_HOOK(npcDispMain, replace)
+void count_npcs(void) { ... }
+```
+
+```json
+"code": {
+  "sources": ["src"]
+}
+```
+
+That is the whole manifest — no `hooks` array. `bleck` reads the tag, takes the
+function name from the definition below it, and builds the same hook.
+
+!!! note "`BLECK_HOOK` is a real macro"
+
+    It comes from `bleck.h`, which is always on your include path, and expands
+    to nothing. It exists so the compiler checks the syntax: a typo is a build
+    error rather than a tag that silently does nothing.
+
+!!! warning "Declare it once"
+
+    A tag and a `mod.json` entry naming the same **game** function is an error,
+    and `bleck` names both places. Neither wins — pick one. Only the game
+    function is exclusive, so one of your functions may hook two different
+    targets.
+
+Only sources listed in `code.sources` are scanned, so a tag in a file you do not
+build cannot take effect by accident. `example-mods/tag-demo` is the worked
+example.
+
+### Fields
+
 - `function` — a game symbol by name, resolved against your `target`'s symbol
   list while the mod builds. A name that is not there fails the build, with a
   suggestion. A raw address (`"0x801adef0"`) works too, for something unnamed.
