@@ -224,4 +224,11 @@ def cmd_doors(args: argparse.Namespace) -> int:
         print("  and no scripts, so they cannot be patched:")
         for zone in entry.zones:
             print(f"    {zone.describe()}")
+    if entry.zone_events:
+        print(
+            f"  this map attaches {entry.zone_events} zone event(s) itself with "
+            f"evt_door_set_event,\n"
+            f"  so a loading zone can carry a script even though its descriptor "
+            f"has no field for one"
+        )
     return 0

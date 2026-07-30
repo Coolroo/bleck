@@ -88,6 +88,14 @@ class MapDoors:
     doors: list[Door] = field(default_factory=list)
     zones: list[Zone] = field(default_factory=list)
 
+    zone_events: int = 0
+    """How many times this map's own init script calls `evt_door_set_event`.
+
+    ⚠️ A loading zone has **no script fields**, but the game can still attach one
+    to it by name at run time, and does so on 13 maps (D143). So a non-zero
+    count here means a `MapDoorDesc` this map registers does carry behaviour --
+    just not anywhere `door:` can see."""
+
     def door(self, index: int) -> Door | None:
         for found in self.doors:
             if found.index == index:
@@ -131,6 +139,7 @@ def catalog() -> DoorCatalog:
         maps=[
             MapDoors(
                 map_name=entry.get("map", ""),
+                zone_events=entry.get("zone_events", 0),
                 doors=[
                     Door(
                         index=door.get("index", 0),

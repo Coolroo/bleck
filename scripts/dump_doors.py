@@ -49,6 +49,11 @@ MAP_INIT_SCRIPT = 0x18
 SET_DOOR_DESCS = 0x800E2610
 SET_MAP_DOOR_DESCS = 0x800E4118
 
+#: `evt_door_set_event(door, which, script)` -- attaches a script to a LOADING
+#: ZONE, which has no script fields of its own. Recorded per map so "can a mod
+#: use this" is answerable from the catalog rather than by guessing (D143).
+SET_EVENT = 0x800E45C8
+
 #: `DoorDesc`, 0x58 (spm-headers `evt_door.h`, MIT).
 DOORDESC_SIZE = 0x58
 DOOR_NAME = 0x0C
@@ -110,6 +115,9 @@ def _setter_arrays(dme, script: int) -> dict:  # pylint: disable=container-retur
             return found
         if opcode == EVT_USER_FUNC and argc >= 3:
             target = dme.read_word(script + (at + 1) * 4)
+            if target == SET_EVENT:
+                found[SET_EVENT] = {"array": 0, "count": found.get(
+                    SET_EVENT, {"count": 0})["count"] + 1}
             if target in (SET_DOOR_DESCS, SET_MAP_DOOR_DESCS):
                 found[target] = {
                     "array": dme.read_word(script + (at + 2) * 4),
@@ -176,8 +184,11 @@ def dump(dme) -> list[dict]:  # pylint: disable=container-return
                 doors = _doors(dme, array, count)
             else:
                 zones = _zones(dme, array, count)
+        events = arrays.get(SET_EVENT, {}).get("count", 0)
         if doors or zones:
-            found.append({"map": name, "doors": doors, "zones": zones})
+            found.append(
+                {"map": name, "doors": doors, "zones": zones, "zone_events": events}
+            )
     return found
 
 

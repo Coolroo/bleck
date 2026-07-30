@@ -88,7 +88,8 @@
      "to_map": "an1_01",
      "to_door": "doa7_l"
     }
-   ]
+   ],
+   "zone_events": 6
   },
   {
    "map": "mac_03",
@@ -106,7 +107,8 @@
      "to_map": "mac_19",
      "to_door": "doa16_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mac_04",
@@ -132,7 +134,8 @@
      }
     }
    ],
-   "zones": []
+   "zones": [],
+   "zone_events": 0
   },
   {
    "map": "mac_09",
@@ -195,7 +198,8 @@
      "to_map": "mac_03",
      "to_door": "doa6_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mac_12",
@@ -248,7 +252,8 @@
      "to_map": "ls1_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 1
   },
   {
    "map": "mac_14",
@@ -274,7 +279,8 @@
      }
     }
    ],
-   "zones": []
+   "zones": [],
+   "zone_events": 0
   },
   {
    "map": "mac_19",
@@ -337,7 +343,8 @@
      "to_map": "mac_03",
      "to_door": "doa16_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he1_01",
@@ -372,7 +379,8 @@
      "to_map": "he1_06",
      "to_door": "ie_doa"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he1_02",
@@ -390,7 +398,8 @@
      "to_map": "he1_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he1_04",
@@ -408,7 +417,8 @@
      "to_map": "he1_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he1_05",
@@ -420,7 +430,8 @@
      "to_map": "he1_04",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he1_06",
@@ -432,7 +443,8 @@
      "to_map": "he1_01",
      "to_door": "ie_doa_02"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_01",
@@ -450,7 +462,8 @@
      "to_map": "he2_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_02",
@@ -474,7 +487,8 @@
      "to_map": "he2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_03",
@@ -527,7 +541,8 @@
      "to_map": "he2_02",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_06",
@@ -539,7 +554,8 @@
      "to_map": "he2_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_07",
@@ -551,7 +567,8 @@
      "to_map": "he2_09",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he2_09",
@@ -569,7 +586,8 @@
      "to_map": "he2_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_01",
@@ -587,7 +605,8 @@
      "to_map": "he3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_02",
@@ -599,7 +618,8 @@
      "to_map": "he3_01",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_03",
@@ -617,7 +637,8 @@
      "to_map": "he3_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_04",
@@ -635,7 +656,8 @@
      "to_map": "he3_06",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_06",
@@ -659,7 +681,8 @@
      "to_map": "he3_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_07",
@@ -671,7 +694,8 @@
      "to_map": "he3_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he3_08",
@@ -683,7 +707,8 @@
      "to_map": "he3_06",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_01",
@@ -695,7 +720,8 @@
      "to_map": "he4_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_02",
@@ -713,7 +739,8 @@
      "to_map": "he4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_03",
@@ -737,7 +764,8 @@
      "to_map": "he4_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_04",
@@ -749,7 +777,8 @@
      "to_map": "he4_03",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_05",
@@ -773,7 +802,8 @@
      "to_map": "he4_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_06",
@@ -785,7 +815,8 @@
      "to_map": "he4_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_07",
@@ -803,7 +834,8 @@
      "to_map": "he4_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_08",
@@ -821,7 +853,8 @@
      "to_map": "he4_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_09",
@@ -833,7 +866,8 @@
      "to_map": "he4_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_10",
@@ -845,7 +879,8 @@
      "to_map": "he4_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_11",
@@ -857,7 +892,8 @@
      "to_map": "he4_10",
      "to_door": "doa_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "he4_12",
@@ -875,7 +911,8 @@
      "to_map": "he4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_01",
@@ -893,7 +930,8 @@
      "to_map": "mi1_01",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_02",
@@ -911,7 +949,8 @@
      "to_map": "mi1_10",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_03",
@@ -929,7 +968,8 @@
      "to_map": "mi1_10",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_04",
@@ -941,7 +981,8 @@
      "to_map": "mi1_10",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_08",
@@ -965,7 +1006,8 @@
      "to_map": "mi1_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_09",
@@ -977,7 +1019,8 @@
      "to_map": "mi1_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_10",
@@ -1019,7 +1062,8 @@
      "to_map": "mi1_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi1_11",
@@ -1037,7 +1081,8 @@
      "to_map": "mi1_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_01",
@@ -1049,7 +1094,8 @@
      "to_map": "mi2_02",
      "to_door": "doa_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_02",
@@ -1067,7 +1113,8 @@
      "to_map": "mi2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_03",
@@ -1109,7 +1156,8 @@
      "to_map": "mi2_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_04",
@@ -1121,7 +1169,8 @@
      "to_map": "mi2_03",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_05",
@@ -1133,7 +1182,8 @@
      "to_map": "mi2_03",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_06",
@@ -1145,7 +1195,8 @@
      "to_map": "mi2_03",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_07",
@@ -1157,7 +1208,8 @@
      "to_map": "mi2_03",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi2_08",
@@ -1169,7 +1221,8 @@
      "to_map": "mi2_03",
      "to_door": "doa6_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_01",
@@ -1205,7 +1258,8 @@
      "to_map": "mi3_04",
      "to_door": "doa_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_02",
@@ -1217,7 +1271,8 @@
      "to_map": "mi3_01",
      "to_door": "doa_03_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_03",
@@ -1229,7 +1284,8 @@
      "to_map": "mi3_01",
      "to_door": "doa_04_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_04",
@@ -1241,7 +1297,8 @@
      "to_map": "mi3_01",
      "to_door": "doa_05_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_05",
@@ -1253,7 +1310,8 @@
      "to_map": "mi3_01",
      "to_door": "doa_02_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi3_06",
@@ -1265,7 +1323,8 @@
      "to_map": "mi3_01",
      "to_door": "doa_01_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_01",
@@ -1283,7 +1342,8 @@
      "to_map": "mi4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_02",
@@ -1301,7 +1361,8 @@
      "to_map": "mi4_04",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_03",
@@ -1325,7 +1386,8 @@
      "to_map": "mi4_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_04",
@@ -1349,7 +1411,8 @@
      "to_map": "mi4_03",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_05",
@@ -1367,7 +1430,8 @@
      "to_map": "mi4_06",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_06",
@@ -1391,7 +1455,8 @@
      "to_map": "mi4_09",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_07",
@@ -1415,7 +1480,8 @@
      "to_map": "mi4_10",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_08",
@@ -1445,7 +1511,8 @@
      "to_map": "mi4_11",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_09",
@@ -1469,7 +1536,8 @@
      "to_map": "mi4_11",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_10",
@@ -1499,7 +1567,8 @@
      "to_map": "mi4_07",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_11",
@@ -1529,7 +1598,8 @@
      "to_map": "mi4_08",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_12",
@@ -1553,7 +1623,8 @@
      "to_map": "mi4_14",
      "to_door": "doa1_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_13",
@@ -1565,7 +1636,8 @@
      "to_map": "mi4_12",
      "to_door": "doa3_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_14",
@@ -1577,7 +1649,8 @@
      "to_map": "mi4_12",
      "to_door": "doa4_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "mi4_15",
@@ -1595,7 +1668,8 @@
      "to_map": "mi4_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta1_01",
@@ -1613,7 +1687,8 @@
      "to_map": "ta1_01",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta1_02",
@@ -1631,7 +1706,8 @@
      "to_map": "ta1_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta1_09",
@@ -1643,7 +1719,8 @@
      "to_map": "ta1_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta2_01",
@@ -1655,7 +1732,8 @@
      "to_map": "ta2_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta2_03",
@@ -1667,7 +1745,8 @@
      "to_map": "ta2_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta2_04",
@@ -1679,7 +1758,8 @@
      "to_map": "ta2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta2_05",
@@ -1691,7 +1771,8 @@
      "to_map": "ta2_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta3_01",
@@ -1714,7 +1795,8 @@
      "to_map": "ta3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta3_02",
@@ -1732,7 +1814,8 @@
      "to_map": "ta3_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta3_03",
@@ -1744,7 +1827,8 @@
      "to_map": "ta3_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_01",
@@ -1756,7 +1840,8 @@
      "to_map": "ta4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_03",
@@ -1774,7 +1859,8 @@
      "to_map": "ta4_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_04",
@@ -1798,7 +1884,8 @@
      "to_map": "ta4_13",
      "to_door": "K_doa_L"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_05",
@@ -1816,7 +1903,8 @@
      "to_map": "ta4_06",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_06",
@@ -1840,7 +1928,8 @@
      "to_map": "ta4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_07",
@@ -1858,7 +1947,8 @@
      "to_map": "ta4_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_08",
@@ -1876,7 +1966,8 @@
      "to_map": "ta4_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_09",
@@ -1894,7 +1985,8 @@
      "to_map": "ta4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_10",
@@ -1906,7 +1998,8 @@
      "to_map": "ta4_09",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_11",
@@ -1918,7 +2011,8 @@
      "to_map": "ta4_14",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_13",
@@ -1930,7 +2024,8 @@
      "to_map": "ta4_04",
      "to_door": "K_doa_L"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ta4_14",
@@ -1948,7 +2043,8 @@
      "to_map": "ta4_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn1_01",
@@ -2027,7 +2123,8 @@
      "to_map": "gn1_01",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn1_02",
@@ -2039,7 +2136,8 @@
      "to_map": "gn1_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn2_01",
@@ -2051,7 +2149,8 @@
      "to_map": "gn2_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn2_02",
@@ -2075,7 +2174,8 @@
      "to_map": "gn2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn2_03",
@@ -2087,7 +2187,8 @@
      "to_map": "gn2_02",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn2_04",
@@ -2099,7 +2200,8 @@
      "to_map": "gn2_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_02",
@@ -2123,7 +2225,8 @@
      "to_map": "gn3_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_03",
@@ -2135,7 +2238,8 @@
      "to_map": "gn3_13",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_04",
@@ -2147,7 +2251,8 @@
      "to_map": "gn3_15",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_06",
@@ -2159,7 +2264,8 @@
      "to_map": "gn3_11",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_08",
@@ -2171,7 +2277,8 @@
      "to_map": "gn3_12",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_09",
@@ -2183,7 +2290,8 @@
      "to_map": "gn3_14",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_11",
@@ -2201,7 +2309,8 @@
      "to_map": "gn3_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_12",
@@ -2219,7 +2328,8 @@
      "to_map": "gn3_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_13",
@@ -2237,7 +2347,8 @@
      "to_map": "gn3_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_14",
@@ -2255,7 +2366,8 @@
      "to_map": "gn3_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn3_15",
@@ -2279,7 +2391,8 @@
      "to_map": "gn3_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_01",
@@ -2291,7 +2404,8 @@
      "to_map": "gn4_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_02",
@@ -2315,7 +2429,8 @@
      "to_map": "gn4_03",
      "to_door": "mini_doa"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_03",
@@ -2333,7 +2448,8 @@
      "to_map": "gn4_02",
      "to_door": "mini_doa"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_04",
@@ -2345,7 +2461,8 @@
      "to_map": "gn4_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_05",
@@ -2363,7 +2480,8 @@
      "to_map": "gn4_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_06",
@@ -2375,7 +2493,8 @@
      "to_map": "gn4_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_07",
@@ -2387,7 +2506,8 @@
      "to_map": "gn4_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_08",
@@ -2405,7 +2525,8 @@
      "to_map": "gn4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_09",
@@ -2417,7 +2538,8 @@
      "to_map": "gn4_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_10",
@@ -2435,7 +2557,8 @@
      "to_map": "gn4_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_11",
@@ -2447,7 +2570,8 @@
      "to_map": "gn4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_14",
@@ -2465,7 +2589,8 @@
      "to_map": "gn4_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_15",
@@ -2483,7 +2608,8 @@
      "to_map": "gn4_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "gn4_16",
@@ -2495,7 +2621,8 @@
      "to_map": "gn4_15",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp1_01",
@@ -2507,7 +2634,8 @@
      "to_map": "sp1_01",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_01",
@@ -2525,7 +2653,8 @@
      "to_map": "sp2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_02",
@@ -2537,7 +2666,8 @@
      "to_map": "sp2_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_03",
@@ -2567,7 +2697,8 @@
      "to_map": "sp2_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_04",
@@ -2585,7 +2716,8 @@
      "to_map": "sp2_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_05",
@@ -2603,7 +2735,8 @@
      "to_map": "sp2_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_06",
@@ -2615,7 +2748,8 @@
      "to_map": "sp2_03",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_07",
@@ -2627,7 +2761,8 @@
      "to_map": "sp2_04",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_08",
@@ -2639,7 +2774,8 @@
      "to_map": "sp2_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp2_10",
@@ -2657,7 +2793,8 @@
      "to_map": "sp2_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp3_01",
@@ -2669,7 +2806,8 @@
      "to_map": "sp3_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp3_02",
@@ -2687,7 +2825,8 @@
      "to_map": "sp3_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp3_03",
@@ -2699,7 +2838,8 @@
      "to_map": "sp3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_01",
@@ -2711,7 +2851,8 @@
      "to_map": "sp4_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_02",
@@ -2735,7 +2876,8 @@
      "to_map": "sp4_04",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_03",
@@ -2765,7 +2907,8 @@
      "to_map": "sp4_06",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_04",
@@ -2795,7 +2938,8 @@
      "to_map": "sp4_02",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_05",
@@ -2807,7 +2951,8 @@
      "to_map": "sp4_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_06",
@@ -2843,7 +2988,8 @@
      "to_map": "sp4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_07",
@@ -2867,7 +3013,8 @@
      "to_map": "sp4_04",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_08",
@@ -2885,7 +3032,8 @@
      "to_map": "sp4_04",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_09",
@@ -2897,7 +3045,8 @@
      "to_map": "sp4_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_10",
@@ -2921,7 +3070,8 @@
      "to_map": "sp4_11",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_11",
@@ -2939,7 +3089,8 @@
      "to_map": "sp4_10",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_12",
@@ -2975,7 +3126,8 @@
      "to_map": "sp4_12",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_13",
@@ -2993,7 +3145,8 @@
      "to_map": "sp4_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_14",
@@ -3005,7 +3158,8 @@
      "to_map": "sp4_13",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "sp4_16",
@@ -3023,7 +3177,8 @@
      "to_map": "sp4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_01",
@@ -3041,7 +3196,8 @@
      "to_map": "wa1_01",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_02",
@@ -3059,7 +3215,8 @@
      "to_map": "wa1_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_03",
@@ -3077,7 +3234,8 @@
      "to_map": "wa1_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_04",
@@ -3095,7 +3253,8 @@
      "to_map": "wa1_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_05",
@@ -3113,7 +3272,8 @@
      "to_map": "wa1_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_06",
@@ -3131,7 +3291,8 @@
      "to_map": "wa1_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_07",
@@ -3149,7 +3310,8 @@
      "to_map": "wa1_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_08",
@@ -3167,7 +3329,8 @@
      "to_map": "wa1_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_09",
@@ -3185,7 +3348,8 @@
      "to_map": "wa1_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_10",
@@ -3203,7 +3367,8 @@
      "to_map": "wa1_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_11",
@@ -3221,7 +3386,8 @@
      "to_map": "wa1_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_12",
@@ -3239,7 +3405,8 @@
      "to_map": "wa1_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_13",
@@ -3257,7 +3424,8 @@
      "to_map": "wa1_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_14",
@@ -3275,7 +3443,8 @@
      "to_map": "wa1_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_15",
@@ -3293,7 +3462,8 @@
      "to_map": "wa1_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_16",
@@ -3311,7 +3481,8 @@
      "to_map": "wa1_17",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_17",
@@ -3329,7 +3500,8 @@
      "to_map": "wa1_18",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_18",
@@ -3347,7 +3519,8 @@
      "to_map": "wa1_19",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_19",
@@ -3365,7 +3538,8 @@
      "to_map": "wa1_20",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_20",
@@ -3383,7 +3557,8 @@
      "to_map": "wa1_21",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_21",
@@ -3401,7 +3576,8 @@
      "to_map": "wa1_22",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_22",
@@ -3419,7 +3595,8 @@
      "to_map": "wa1_23",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_23",
@@ -3437,7 +3614,8 @@
      "to_map": "wa1_24",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_24",
@@ -3455,7 +3633,8 @@
      "to_map": "wa1_25",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_25",
@@ -3473,7 +3652,8 @@
      "to_map": "wa1_26",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_26",
@@ -3485,7 +3665,8 @@
      "to_map": "wa1_25",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa1_27",
@@ -3497,7 +3678,8 @@
      "to_map": "mac_02",
      "to_door": "doa12_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_01",
@@ -3509,7 +3691,8 @@
      "to_map": "wa2_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_02",
@@ -3527,7 +3710,8 @@
      "to_map": "wa2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_03",
@@ -3545,7 +3729,8 @@
      "to_map": "wa2_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_04",
@@ -3563,7 +3748,8 @@
      "to_map": "wa2_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_05",
@@ -3581,7 +3767,8 @@
      "to_map": "wa2_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_06",
@@ -3599,7 +3786,8 @@
      "to_map": "wa2_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_07",
@@ -3617,7 +3805,8 @@
      "to_map": "wa2_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_08",
@@ -3635,7 +3824,8 @@
      "to_map": "wa2_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_09",
@@ -3653,7 +3843,8 @@
      "to_map": "wa2_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_10",
@@ -3671,7 +3862,8 @@
      "to_map": "wa2_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_11",
@@ -3689,7 +3881,8 @@
      "to_map": "wa2_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_12",
@@ -3707,7 +3900,8 @@
      "to_map": "wa2_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_13",
@@ -3725,7 +3919,8 @@
      "to_map": "wa2_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_14",
@@ -3743,7 +3938,8 @@
      "to_map": "wa2_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_15",
@@ -3761,7 +3957,8 @@
      "to_map": "wa2_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_16",
@@ -3779,7 +3976,8 @@
      "to_map": "wa2_17",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_17",
@@ -3797,7 +3995,8 @@
      "to_map": "wa2_18",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_18",
@@ -3815,7 +4014,8 @@
      "to_map": "wa2_19",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_19",
@@ -3833,7 +4033,8 @@
      "to_map": "wa2_20",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_20",
@@ -3851,7 +4052,8 @@
      "to_map": "wa2_21",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_21",
@@ -3869,7 +4071,8 @@
      "to_map": "wa2_22",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_22",
@@ -3887,7 +4090,8 @@
      "to_map": "wa2_23",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_23",
@@ -3905,7 +4109,8 @@
      "to_map": "wa2_24",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_24",
@@ -3923,7 +4128,8 @@
      "to_map": "wa2_25",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa2_25",
@@ -3935,7 +4141,8 @@
      "to_map": "wa2_24",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_01",
@@ -3947,7 +4154,8 @@
      "to_map": "wa3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_02",
@@ -3965,7 +4173,8 @@
      "to_map": "wa3_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_03",
@@ -3983,7 +4192,8 @@
      "to_map": "wa3_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_04",
@@ -4001,7 +4211,8 @@
      "to_map": "wa3_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_05",
@@ -4019,7 +4230,8 @@
      "to_map": "wa3_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_06",
@@ -4037,7 +4249,8 @@
      "to_map": "wa3_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_07",
@@ -4055,7 +4268,8 @@
      "to_map": "wa3_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_08",
@@ -4073,7 +4287,8 @@
      "to_map": "wa3_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_09",
@@ -4091,7 +4306,8 @@
      "to_map": "wa3_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_10",
@@ -4109,7 +4325,8 @@
      "to_map": "wa3_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_11",
@@ -4127,7 +4344,8 @@
      "to_map": "wa3_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_12",
@@ -4145,7 +4363,8 @@
      "to_map": "wa3_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_13",
@@ -4163,7 +4382,8 @@
      "to_map": "wa3_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_14",
@@ -4181,7 +4401,8 @@
      "to_map": "wa3_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_15",
@@ -4199,7 +4420,8 @@
      "to_map": "wa3_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_16",
@@ -4217,7 +4439,8 @@
      "to_map": "wa3_17",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_17",
@@ -4235,7 +4458,8 @@
      "to_map": "wa3_18",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_18",
@@ -4253,7 +4477,8 @@
      "to_map": "wa3_19",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_19",
@@ -4271,7 +4496,8 @@
      "to_map": "wa3_20",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_20",
@@ -4289,7 +4515,8 @@
      "to_map": "wa3_21",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_21",
@@ -4307,7 +4534,8 @@
      "to_map": "wa3_22",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_22",
@@ -4325,7 +4553,8 @@
      "to_map": "wa3_23",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_23",
@@ -4343,7 +4572,8 @@
      "to_map": "wa3_24",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_24",
@@ -4361,7 +4591,8 @@
      "to_map": "wa3_25",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa3_25",
@@ -4373,7 +4604,8 @@
      "to_map": "wa3_24",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_01",
@@ -4385,7 +4617,8 @@
      "to_map": "wa4_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_02",
@@ -4403,7 +4636,8 @@
      "to_map": "wa4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_03",
@@ -4421,7 +4655,8 @@
      "to_map": "wa4_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_04",
@@ -4439,7 +4674,8 @@
      "to_map": "wa4_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_05",
@@ -4457,7 +4693,8 @@
      "to_map": "wa4_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_06",
@@ -4475,7 +4712,8 @@
      "to_map": "wa4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_07",
@@ -4493,7 +4731,8 @@
      "to_map": "wa4_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_08",
@@ -4511,7 +4750,8 @@
      "to_map": "wa4_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_09",
@@ -4529,7 +4769,8 @@
      "to_map": "wa4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_10",
@@ -4547,7 +4788,8 @@
      "to_map": "wa4_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_11",
@@ -4565,7 +4807,8 @@
      "to_map": "wa4_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_12",
@@ -4583,7 +4826,8 @@
      "to_map": "wa4_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_13",
@@ -4601,7 +4845,8 @@
      "to_map": "wa4_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_14",
@@ -4619,7 +4864,8 @@
      "to_map": "wa4_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_15",
@@ -4637,7 +4883,8 @@
      "to_map": "wa4_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_16",
@@ -4655,7 +4902,8 @@
      "to_map": "wa4_17",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_17",
@@ -4673,7 +4921,8 @@
      "to_map": "wa4_18",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_18",
@@ -4691,7 +4940,8 @@
      "to_map": "wa4_19",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_19",
@@ -4709,7 +4959,8 @@
      "to_map": "wa4_20",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_20",
@@ -4727,7 +4978,8 @@
      "to_map": "wa4_21",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_21",
@@ -4745,7 +4997,8 @@
      "to_map": "wa4_22",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_22",
@@ -4763,7 +5016,8 @@
      "to_map": "wa4_23",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_23",
@@ -4781,7 +5035,8 @@
      "to_map": "wa4_24",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_24",
@@ -4799,7 +5054,8 @@
      "to_map": "wa4_25",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_25",
@@ -4817,7 +5073,8 @@
      "to_map": "wa4_26",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "wa4_26",
@@ -4829,7 +5086,8 @@
      "to_map": "wa4_25",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_01",
@@ -4847,7 +5105,8 @@
      "to_map": "an1_01",
      "to_door": "doa7_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_02",
@@ -4871,7 +5130,8 @@
      "to_map": "an1_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_03",
@@ -4895,7 +5155,8 @@
      "to_map": "an1_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_04",
@@ -4913,7 +5174,8 @@
      "to_map": "an1_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_05",
@@ -4925,7 +5187,8 @@
      "to_map": "an1_04",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_06",
@@ -4943,7 +5206,8 @@
      "to_map": "an1_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_07",
@@ -4955,7 +5219,8 @@
      "to_map": "an1_06",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an1_08",
@@ -4967,7 +5232,8 @@
      "to_map": "an1_02",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_01",
@@ -4979,7 +5245,8 @@
      "to_map": "an2_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_02",
@@ -4997,7 +5264,8 @@
      "to_map": "an2_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 1
   },
   {
    "map": "an2_03",
@@ -5021,7 +5289,8 @@
      "to_map": "an2_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_04",
@@ -5033,7 +5302,8 @@
      "to_map": "an2_03",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_05",
@@ -5051,7 +5321,8 @@
      "to_map": "an2_06",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 1
   },
   {
    "map": "an2_06",
@@ -5075,7 +5346,8 @@
      "to_map": "an2_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_07",
@@ -5087,7 +5359,8 @@
      "to_map": "an2_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an2_08",
@@ -5105,7 +5378,8 @@
      "to_map": "an2_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 1
   },
   {
    "map": "an2_09",
@@ -5117,7 +5391,8 @@
      "to_map": "an2_08",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_01",
@@ -5129,7 +5404,8 @@
      "to_map": "an3_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_02",
@@ -5165,7 +5441,8 @@
      "to_map": "an3_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_03",
@@ -5201,7 +5478,8 @@
      "to_map": "an3_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_04",
@@ -5213,7 +5491,8 @@
      "to_map": "an3_15",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_05",
@@ -5225,7 +5504,8 @@
      "to_map": "an3_13",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_06",
@@ -5237,7 +5517,8 @@
      "to_map": "an3_02",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_07",
@@ -5249,7 +5530,8 @@
      "to_map": "an3_02",
      "to_door": "doa5_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_08",
@@ -5261,7 +5543,8 @@
      "to_map": "an3_02",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_09",
@@ -5273,7 +5556,8 @@
      "to_map": "an3_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_10",
@@ -5285,7 +5569,8 @@
      "to_map": "an3_03",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_11",
@@ -5297,7 +5582,8 @@
      "to_map": "an3_03",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_12",
@@ -5315,7 +5601,8 @@
      "to_map": "an3_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_13",
@@ -5339,7 +5626,8 @@
      "to_map": "an3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_14",
@@ -5357,7 +5645,8 @@
      "to_map": "an3_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an3_15",
@@ -5375,7 +5664,8 @@
      "to_map": "an3_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_01",
@@ -5393,7 +5683,8 @@
      "to_map": "an4_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_02",
@@ -5417,7 +5708,8 @@
      "to_map": "an4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_03",
@@ -5446,7 +5738,8 @@
      "to_map": "an4_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_04",
@@ -5458,7 +5751,8 @@
      "to_map": "an4_01",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_05",
@@ -5488,7 +5782,8 @@
      "to_map": "an4_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_06",
@@ -5500,7 +5795,8 @@
      "to_map": "an4_05",
      "to_door": "doa4_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_07",
@@ -5512,7 +5808,8 @@
      "to_map": "an4_05",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_08",
@@ -5524,7 +5821,8 @@
      "to_map": "an4_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_09",
@@ -5542,7 +5840,8 @@
      "to_map": "an4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "an4_10",
@@ -5554,7 +5853,8 @@
      "to_map": "an4_09",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_01",
@@ -5572,7 +5872,8 @@
      "to_map": "ls1_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_02",
@@ -5590,7 +5891,8 @@
      "to_map": "ls1_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_03",
@@ -5614,7 +5916,8 @@
      "to_map": "ls1_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 4
   },
   {
    "map": "ls1_04",
@@ -5626,7 +5929,8 @@
      "to_map": "ls1_03",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 2
   },
   {
    "map": "ls1_05",
@@ -5650,7 +5954,8 @@
      "to_map": "ls1_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 4
   },
   {
    "map": "ls1_06",
@@ -5662,7 +5967,8 @@
      "to_map": "ls1_05",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 2
   },
   {
    "map": "ls1_08",
@@ -5680,7 +5986,8 @@
      "to_map": "ls1_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_09",
@@ -5698,7 +6005,8 @@
      "to_map": "ls1_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_10",
@@ -5716,7 +6024,8 @@
      "to_map": "ls1_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_11",
@@ -5734,7 +6043,8 @@
      "to_map": "ls1_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls1_12",
@@ -5746,7 +6056,8 @@
      "to_map": "ls1_11",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_01",
@@ -5758,7 +6069,8 @@
      "to_map": "ls2_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 2
   },
   {
    "map": "ls2_02",
@@ -5776,7 +6088,8 @@
      "to_map": "ls2_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 4
   },
   {
    "map": "ls2_03",
@@ -5794,7 +6107,8 @@
      "to_map": "ls2_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_04",
@@ -5806,7 +6120,8 @@
      "to_map": "ls2_03",
      "to_door": "doa2_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_05",
@@ -5818,7 +6133,8 @@
      "to_map": "ls2_03",
      "to_door": "doa1_r"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_07",
@@ -5842,7 +6158,8 @@
      "to_map": "ls2_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 4
   },
   {
    "map": "ls2_08",
@@ -5854,7 +6171,8 @@
      "to_map": "ls2_07",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 2
   },
   {
    "map": "ls2_09",
@@ -5872,7 +6190,8 @@
      "to_map": "ls2_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_13",
@@ -5890,7 +6209,8 @@
      "to_map": "ls2_14",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_14",
@@ -5908,7 +6228,8 @@
      "to_map": "ls2_15",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_15",
@@ -5926,7 +6247,8 @@
      "to_map": "ls2_16",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_16",
@@ -5944,7 +6266,8 @@
      "to_map": "ls2_17",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_17",
@@ -5962,7 +6285,8 @@
      "to_map": "ls2_18",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls2_18",
@@ -5974,7 +6298,8 @@
      "to_map": "ls2_17",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_01",
@@ -5986,7 +6311,8 @@
      "to_map": "ls3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_02",
@@ -6004,7 +6330,8 @@
      "to_map": "ls3_02",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_03",
@@ -6022,7 +6349,8 @@
      "to_map": "ls3_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_04",
@@ -6046,7 +6374,8 @@
      "to_map": "ls3_05",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_05",
@@ -6064,7 +6393,8 @@
      "to_map": "ls3_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_06",
@@ -6082,7 +6412,8 @@
      "to_map": "ls3_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_07",
@@ -6106,7 +6437,8 @@
      "to_map": "ls3_09",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_08",
@@ -6118,7 +6450,8 @@
      "to_map": "ls3_07",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_09",
@@ -6130,7 +6463,8 @@
      "to_map": "ls3_07",
      "to_door": "doa3_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_10",
@@ -6148,7 +6482,8 @@
      "to_map": "ls3_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_11",
@@ -6166,7 +6501,8 @@
      "to_map": "ls3_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_12",
@@ -6184,7 +6520,8 @@
      "to_map": "ls3_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls3_13",
@@ -6196,7 +6533,8 @@
      "to_map": "ls3_12",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_01",
@@ -6208,7 +6546,8 @@
      "to_map": "ls4_13",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_02",
@@ -6226,7 +6565,8 @@
      "to_map": "ls4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_03",
@@ -6244,7 +6584,8 @@
      "to_map": "ls4_04",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_04",
@@ -6262,7 +6603,8 @@
      "to_map": "ls4_06",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_06",
@@ -6280,7 +6622,8 @@
      "to_map": "ls4_07",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_07",
@@ -6298,7 +6641,8 @@
      "to_map": "ls4_08",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_08",
@@ -6316,7 +6660,8 @@
      "to_map": "ls4_09",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_09",
@@ -6334,7 +6679,8 @@
      "to_map": "ls4_10",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_10",
@@ -6352,7 +6698,8 @@
      "to_map": "ls4_11",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_11",
@@ -6370,7 +6717,8 @@
      "to_map": "ls4_12",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_12",
@@ -6382,7 +6730,8 @@
      "to_map": "ls4_11",
      "to_door": "doa2_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "ls4_13",
@@ -6400,7 +6749,8 @@
      "to_map": "ls4_03",
      "to_door": "doa1_l"
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_01",
@@ -6418,7 +6768,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_02",
@@ -6436,7 +6787,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_03",
@@ -6454,7 +6806,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_04",
@@ -6472,7 +6825,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_21",
@@ -6490,7 +6844,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_22",
@@ -6508,7 +6863,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_23",
@@ -6526,7 +6882,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_24",
@@ -6544,7 +6901,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_30",
@@ -6556,7 +6914,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_41",
@@ -6574,7 +6933,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_42",
@@ -6592,7 +6952,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_43",
@@ -6610,7 +6971,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_44",
@@ -6628,7 +6990,8 @@
      "to_map": "",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_61",
@@ -6646,7 +7009,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_62",
@@ -6664,7 +7028,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_63",
@@ -6682,7 +7047,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_64",
@@ -6700,7 +7066,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   },
   {
    "map": "dan_70",
@@ -6712,7 +7079,8 @@
      "to_map": "dan_01",
      "to_door": ""
     }
-   ]
+   ],
+   "zone_events": 0
   }
  ]
 }

@@ -10160,3 +10160,59 @@ A broken mod is now **skipped and remembered**:
 wrapped the error in a `RegistryError`, which reads fine and quietly breaks
 every `pytest.raises(ManifestError)` and every caller catching it. Re-raising
 the original loses nothing.
+
+---
+
+## D143 — ✅ A script can be attached to a loading zone (2026-07-29)
+
+`door:` reaches `DoorDesc` only — **35 in the whole game** (D141) — while the
+**691** `MapDoorDesc` loading zones have no script fields at all. That looked
+like a hard ceiling on what a mod can hook. It is not.
+
+### ✅ `evt_door_set_event` works, measured
+
+`evt_door_set_event(char *door, int which, EvtScriptCode *script)` finds a zone
+by `name_l` and stores a script pointer in a per-zone slot array — two slots
+each, at `doorWork + 0x374 + index*8 + which*4` (D138's disassembly).
+
+It is an **evt user func**, so it cannot be called from C; the probe builds a
+`USER_FUNC` calling it and hands that to `evtEntry`, the same trick D135 used.
+
+| | |
+|---|---|
+| zone count the game registered | **3**, matching `he1_01` (D138) — the offsets are right |
+| both slots before | **0** — the control |
+| slot 0 after | **our script's address** |
+| asserts | none |
+
+⚠️ argc counts the function pointer, so three arguments is **argc 4**.
+
+### ✅ And the game uses it — 13 maps do
+
+Scanning every map's init script for calls (now recorded in the door catalog):
+`mac_02` makes 6, `ls1_03` and `ls1_05` 4 each, `mac_12`, `an2_02`, `an2_05`,
+`an2_08` one each, and more — **13 maps in total**.
+
+That matters more than the read-back. A function whose slots are always empty
+might be vestigial; one the game exercises on 13 maps is a supported path, and a
+mod using it is doing what the game does.
+
+### 🔶 Still not observed running
+
+Nothing has watched an attached script fire on zone entry — that needs a player
+to walk into the zone, and input cannot be injected (D48). What is established
+is that the attachment lands and that the game relies on the same mechanism.
+
+⚠️ Recorded as 🔶 deliberately. D126 and D133 are both entries this week where
+"the mechanism is obviously fine" preceded a wrong conclusion.
+
+### What this changes
+
+`door:` is not the ceiling. A mod can reach **691 loading zones** as well as 35
+doors, through a function the game already calls — no pointer swapping, no GPL
+code, nothing unsupported.
+
+🟢 What is missing is a *declaration* for it. Doing this from a `bleck` script
+needs the language to name a compiled script as a **value**, which it cannot
+today — the one small gap between here and `"zones": {"doa2_l": "on_enter"}`
+in a manifest.
