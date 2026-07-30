@@ -11319,3 +11319,48 @@ which map hosts hearts.
 
 ⛔ **Not the argument shape, not the script, not the viewing angle.** Those three
 cost a run each and are now closed.
+
+---
+
+## D168 — Cutscene props are script-made NPCs, not tribe spawns (2026-07-30)
+
+`ls4_12` — Castle Bleck's white altar room, where the Chaos Heart is created —
+holds exactly **one** named entity at boot:
+
+| | |
+|---|---|
+| NPCs | 1 |
+| map objects | **0** |
+| distinct names ever seen | 1 |
+| `book` | **tribe 0** |
+
+2,135 samples across 64,000 frames, recording every distinct name rather than
+looking for one — because a prop that exists for seconds is what a single sample
+misses, which is how four earlier probes failed.
+
+✅ **`book` is the Dark Prognosticus, and it is an NPC.** So cutscene props are
+NPCs with explicit instance names, not map objects and not geometry.
+
+⛔ **But `tribe 0` is Goomba, which it plainly is not.** `npcdrv.h` says `hp` and
+`maxHp` are "1 for NPCs not spawned by tribe", so tribe 0 here means *no tribe* —
+the prop was created by script and given its model directly, bypassing
+`npcEnemyTemplates` entirely.
+
+🔶 That explains the whole search. A tribe-less, template-less, script-made
+entity has no row in any table to find, which is why 1,687 assets, 169 model
+names, 397 archives, 435 templates, 535 tribes and the room's own geometry all
+came back empty. **The Chaos Heart was never going to be in a list.**
+
+⛔ `konton` itself never appeared: 0 sightings. It is created later in the
+cutscene than a plain map load reaches.
+
+### ⚠️ Runs were three times longer than they needed to be
+
+Every run this session used `--seconds 80`–`110`. The game is playable about
+**10 seconds** in, so most of each run measured a steady state that had already
+been established. At two to three minutes a run that is a large fraction of the
+session's cost, and nothing required it.
+
+🟢 `--seconds 25` is enough for anything that settles at map load. Reserve long
+runs for things that accumulate — the boss hang at frame 2,177 genuinely needed
+them.
