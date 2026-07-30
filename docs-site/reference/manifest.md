@@ -43,6 +43,32 @@ Every mod has a `mod.json` at its root.
     cannot apply to a US disc at all.
 
 
+`assets` <span class="pf-type">`"original"` or `"derived"`</span> <span class="pf-default">default: unstated</span>
+
+:   Where the files in your `overlay/` came from. **Only you know this**, so
+    `bleck` asks rather than assuming.
+
+    An overlay file replaces something on the disc — but that says nothing
+    about its contents. A texture you drew is entirely your own work; one you
+    vendored and edited is a modified Nintendo asset. They sit at the same
+    path and look identical to the tool.
+
+    - `"original"` — you made them. They pack into a `.bleck` like any other
+      file you wrote, with no prompt.
+    - `"derived"` — they started as game data. `bleck mod pack` leaves them
+      out unless you pass `--include-assets`, because sharing them
+      redistributes Nintendo's work in modified form.
+    - Omitted — `bleck mod pack` asks once, and tells you how to stop being
+      asked.
+
+    Whichever you state travels inside the archive, so whoever installs it
+    sees what you said rather than a guess.
+
+    !!! note "This has nothing to do with whether the mod builds"
+
+        It only affects sharing. A mod builds identically either way.
+
+
 `dependencies` <span class="pf-type">array</span>
 
 :   Mods that must apply before this one. Each entry is `{ "name": "..." }` with

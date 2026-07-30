@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 
 from bleck.mods.errors import ManifestError
@@ -44,6 +45,26 @@ from bleck.mods.manifest.placements import (  # noqa: F401
     _parse_tables,
     tables_to_json,
 )
+
+
+class AssetOrigin(StrEnum):
+    """Where a mod's overlay files came from, as its author states it.
+
+    ⛔ **Never inferred.** `bleck` classified overlay files by path and called
+    every one game-derived, which is true of a vendored-and-edited texture and
+    false of one somebody drew. The tool has no way to tell those apart; the
+    author does (D186).
+    """
+
+    UNSTATED = "unstated"
+    """Not declared. Pack asks, because nobody has said."""
+
+    ORIGINAL = "original"
+    """The author's own work. Packs without ceremony."""
+
+    DERIVED = "derived"
+    """Started as game data. Packing redistributes it, so it takes a flag."""
+
 
 MANIFEST_NAME = "mod.json"
 # Named `overlay`, not `files`: the disc's data partition is already `files/`.
@@ -121,6 +142,14 @@ class Manifest:  # pylint: disable=too-many-instance-attributes
     author: str = ""
     base: str = ""
     created: str = ""
+    assets: AssetOrigin = AssetOrigin.UNSTATED
+    """Where this mod's overlay files came from, as the author states it.
+
+    ⚠️ **`bleck` cannot work this out.** An overlay file replaces something on
+    the disc, but a replacement can be original artwork with no game data in it
+    at all. Guessing from the path was wrong in both directions (D186), so the
+    one person who knows says.
+    """
     dependencies: list[Requirement] = field(default_factory=list)
     exclusive: list[str] = field(default_factory=list)
     remove: list[str] = field(default_factory=list)
@@ -202,6 +231,8 @@ class Manifest:  # pylint: disable=too-many-instance-attributes
             "exclusive": self.exclusive,
             "remove": self.remove,
         }
+        if self.assets is not AssetOrigin.UNSTATED:
+            body["assets"] = str(self.assets)
         if self.setup:
             body["setup"] = {
                 placement.map_name: _map_json(placement) for placement in self.setup
@@ -244,6 +275,7 @@ class Manifest:  # pylint: disable=too-many-instance-attributes
             author=raw.get("author", ""),
             base=raw.get("base", ""),
             created=raw.get("created", ""),
+            assets=_parse_assets(raw.get("assets"), source),
             dependencies=_parse_dependencies(raw.get("dependencies", []), source),
             exclusive=list(raw.get("exclusive", [])),
             remove=list(raw.get("remove", [])),
@@ -252,6 +284,24 @@ class Manifest:  # pylint: disable=too-many-instance-attributes
             tables=_parse_tables(raw.get("tables"), source),
             levels=_parse_levels(raw.get("levels"), source),
         )
+
+
+def _parse_assets(raw: object, source: str) -> AssetOrigin:
+    """Read `assets`, which only the author can answer."""
+    if raw is None:
+        return AssetOrigin.UNSTATED
+    if not isinstance(raw, str):
+        raise ManifestError(f"{source}: 'assets' must be a string")
+    try:
+        return AssetOrigin(raw.strip().lower())
+    except ValueError:
+        known = ", ".join(f"'{member}'" for member in AssetOrigin)
+        raise ManifestError(
+            f"{source}: unknown 'assets' value {raw!r}. Known values are "
+            f"{known}.\n"
+            f"  'original' means you made the overlay files yourself; "
+            f"'derived' means they started as game data."
+        ) from None
 
 
 def _map_json(placement: MapPlacements) -> object:

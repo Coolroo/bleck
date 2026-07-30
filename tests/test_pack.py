@@ -18,23 +18,26 @@ from bleck.mods import pack, registry
 from bleck.mods.errors import ManifestError
 
 
-def a_mod(root: Path, name: str, overlay: dict[str, bytes] | None = None):
+def a_mod(
+    root: Path,
+    name: str,
+    overlay: dict[str, bytes] | None = None,
+    assets: str | None = None,
+):
     """A mod on disk, with whatever overlay files the test needs."""
     where = root / name
     (where / "tables").mkdir(parents=True)
-    (where / "mod.json").write_text(
-        json.dumps(
-            {
-                "schema": 1,
-                "name": name,
-                "version": "0.1.0",
-                "description": name,
-                "base": "eu0",
-                "tables": {"enemies": "tables/enemies.csv"},
-            }
-        ),
-        encoding="utf-8",
-    )
+    body = {
+        "schema": 1,
+        "name": name,
+        "version": "0.1.0",
+        "description": name,
+        "base": "eu0",
+        "tables": {"enemies": "tables/enemies.csv"},
+    }
+    if assets is not None:
+        body["assets"] = assets
+    (where / "mod.json").write_text(json.dumps(body), encoding="utf-8")
     (where / "tables" / "enemies.csv").write_text(
         "map,slot,template,x,y,z,copy_from\nhe1_01,3,2,0,0,0,0\n", encoding="utf-8"
     )
@@ -193,3 +196,67 @@ class TestInstall:
             archive.writestr("mod.json", "{}")
         with pytest.raises(ManifestError, match="not written by bleck"):
             pack.read_toc(bogus)
+
+
+class TestAssetOrigin:
+    """Who decides whether an overlay file is game data.
+
+    ⛔ **Not `bleck`.** It classified by path and called every overlay file
+    game-derived, which is true of a vendored-and-edited texture and false of
+    one somebody drew. The tool cannot tell them apart; the author can (D186).
+    """
+
+    def test_unstated_still_asks(self, tmp_path: Path):
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"art"})
+        assert pack.plan(mod).needs_consent
+
+    def test_original_does_not_ask(self, tmp_path: Path):
+        """An author shipping their own artwork is not confessing to anything."""
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"art"}, assets="original")
+        assert not pack.plan(mod).needs_consent
+
+    def test_derived_does_not_ask_either_but_still_withholds(self, tmp_path: Path):
+        """⚠️ Already answered, so asking again is noise -- but the answer was
+        'this is game data', so it takes the flag."""
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"x"}, assets="derived")
+        plan_ = pack.plan(mod)
+        assert not plan_.needs_consent
+        assert not pack.packs_assets(plan_, include_assets=False)
+
+    def test_original_assets_are_packed_without_a_flag(self, tmp_path: Path):
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"art"}, assets="original")
+        out = tmp_path / "m.bleck"
+        result = pack.write(mod, pack.plan(mod), out)
+        assert "overlay/files/map/a.tpl" in result.packed
+        assert result.assets_included
+        with zipfile.ZipFile(out) as archive:
+            assert archive.read("overlay/files/map/a.tpl") == b"art"
+
+    def test_derived_assets_need_the_flag(self, tmp_path: Path):
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"x"}, assets="derived")
+        without = pack.write(mod, pack.plan(mod), tmp_path / "a.bleck")
+        assert "overlay/files/map/a.tpl" not in without.packed
+        assert "overlay/files/map/a.tpl" in without.skipped
+
+        withflag = pack.write(
+            mod, pack.plan(mod), tmp_path / "b.bleck", include_assets=True
+        )
+        assert "overlay/files/map/a.tpl" in withflag.packed
+
+    def test_a_mod_with_no_overlay_never_asks_whatever_it_declares(self, tmp_path: Path):
+        for stated in (None, "original", "derived"):
+            mod = a_mod(tmp_path / str(stated), "m", assets=stated)
+            assert not pack.plan(mod).needs_consent
+
+    def test_the_prompt_does_not_assert_what_it_cannot_know(self, tmp_path: Path):
+        """⛔ It used to say the files *are* derived from the game."""
+        mod = a_mod(tmp_path, "m", overlay={"files/map/a.tpl": b"art"})
+        text = pack.plan(mod).describe_assets()
+        assert "so they are derived from the game" not in text
+        assert "If you made them" in text
+        # And it says how to stop being asked.
+        assert '"assets": "original"' in text
+
+    def test_an_unknown_value_is_refused_by_name(self, tmp_path: Path):
+        with pytest.raises(ManifestError, match="unknown 'assets' value"):
+            a_mod(tmp_path, "m", assets="mine-i-swear")

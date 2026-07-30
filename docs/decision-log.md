@@ -12135,3 +12135,53 @@ line numbers. A test asserted to work is not the same as a test shown to work
 
 A `test_the_pages_contain_tables_at_all` guards the guard, since a parser that
 finds nothing passes everything.
+
+---
+
+## D186 — `bleck` cannot tell whose bytes an overlay file holds, so it stops guessing (2026-07-30)
+
+D158 classified every overlay file as game-derived, on the reasoning that an
+overlay file *replaces a file on the disc*, so it must come from the disc.
+⛔ **That does not follow.** A replacement texture may be entirely the author's
+own work; only its *path* is game-shaped. The tool cannot see the difference and
+was asserting the worse reading as fact:
+
+> `so they are derived from the game` … `Packing them redistributes Nintendo's
+> work in modified form.`
+
+Both stated to someone who may have drawn the file themselves, followed by a
+prompt requiring them to type `yes I understand` before sharing their own art.
+
+### The author says, once
+
+`"assets"` in `mod.json`, three states, defaulting to unstated:
+
+| | Packing |
+|---|---|
+| `"original"` | packs like any other source, no prompt |
+| `"derived"` | withheld unless `--include-assets` |
+| omitted | asks, and says how to stop being asked |
+
+⚠️ It **travels in the archive**, so `bleck mod install` reports what the author
+declared rather than what the recipient's copy of `bleck` would have guessed. An
+archive written before this reads as unstated.
+
+### What did not change
+
+⛔ **An asset is still never refused outright**, and `derived` still takes an
+explicit flag. Relaxing the *assertion* is not relaxing the *care*: the tool no
+longer claims to know something it cannot, and a mod that really is a vendored
+edit is treated exactly as before.
+
+⛔ **Nothing here weakens the rule at the top of `CLAUDE.md`.** Game assets stay
+out of git and `work/` stays ignored. This is about what a *user* may share
+about their own work, which was never the same question.
+
+### 🔶 It does not remove the case for declarative textures
+
+Textures were listed as "the last thing that cannot be shared". That was only
+ever half the reason. The other half is in `vision.md` and is unaffected:
+**edits are declared as data and generated at build time, never shipped as
+baked bytes**, because a blob cannot be undone, reviewed, or opened in an
+editor. A `tables/textures.csv` is still what makes a texture edit *editable* —
+it is just no longer the only route to sharing one.

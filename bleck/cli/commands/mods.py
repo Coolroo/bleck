@@ -414,7 +414,13 @@ def cmd_pack(args: argparse.Namespace) -> int:
     if result.skipped:
         print(f"  left out, rebuilt on install: {len(result.skipped)} file(s)")
     if result.assets_included:
-        print("  WARNING: contains game-derived assets; do not share publicly.")
+        # ⚠️ What the author declared, not what bleck assumed. Telling someone
+        # their own artwork is game-derived was the bug (D186).
+        if mod.manifest.assets is manifest.AssetOrigin.ORIGINAL:
+            print("  Includes this mod's overlay files, declared as your own work.")
+        else:
+            print("  WARNING: includes overlay files that may be game-derived.")
+            print('  Declare `"assets"` in mod.json to say which.')
     return 0
 
 
@@ -423,7 +429,11 @@ def cmd_install(args: argparse.Namespace) -> int:
     done = pack.install(Path(args.file), registry.mods_root(), force=args.force)
     print(f"{done.name} -> {done.root}  ({len(done.files)} file(s))")
     if done.assets_included:
-        print("  WARNING: this archive carried game-derived assets.")
+        if done.assets_origin is manifest.AssetOrigin.ORIGINAL:
+            print("  Includes overlay files the author declares as their own work.")
+        else:
+            print("  WARNING: this archive carried overlay files that replace disc")
+            print("  content, and the author did not say where they came from.")
     print(f"  build it with: bleck mod build {done.name}")
     return 0
 
