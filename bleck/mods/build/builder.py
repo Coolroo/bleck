@@ -16,6 +16,7 @@ from bleck import platforms
 from bleck.common.errors import BleckError
 from bleck.common.fsio import remove_tree
 from bleck.formats import lz77, u8
+from bleck.mods.build import generated
 from bleck.mods.build.conflicts import Conflict, detect, effective_edits, merge_three_way
 from bleck.mods.build.edits import PlacementBuild, apply_chain
 from bleck.mods.build.overlay import Plan, build_plan
@@ -50,6 +51,9 @@ class BuildReport:
     conflicts: list[Conflict] = field(default_factory=list)
     code_builds: list[CodeBuild] = field(default_factory=list)
     placement_builds: list[PlacementBuild] = field(default_factory=list)
+
+    swept: list[str] = field(default_factory=list)
+    """Overlay files the previous build wrote that this one no longer produces."""
 
     @property
     def is_clean(self) -> bool:
@@ -222,6 +226,50 @@ def compile_code(chain: Chain, override: CodeOverride | None = None) -> CodeResu
     return build_chain(chain, override=override)
 
 
+def produce(
+    chain: Chain, base: Path, override: CodeOverride | None, report: BuildReport
+) -> None:
+    """Regenerate every mod's overlay content, taking back the last build's.
+
+    ⚠️ Shared by `check` and `build` on purpose. They used to repeat these
+    steps, and a sweep added to one and not the other would mean a mod checked
+    clean and shipped stale — the two answering differently is the failure this
+    is meant to end.
+
+    ⛔ The sweep runs **before** anything writes. `prepare` builds the disc plan
+    by walking `overlay/`, so a file removed after that point is already in it.
+    """
+    removed: set[str] = set()
+    for mod in chain.mods:
+        swept = generated.sweep(mod)
+        removed.update(f"{mod.name}/{path}" for path in swept.removed)
+        report.warnings += swept.notes
+
+    compiled = compile_code(chain, override)
+    report.code_builds = compiled.builds
+    report.warnings += compiled.notes
+    report.warnings += [note for b in report.code_builds for note in b.warnings]
+    report.placement_builds = apply_chain(chain, base)
+    report.warnings += [note for b in report.placement_builds for note in b.warnings]
+
+    # Recorded from what the builds say they wrote, never re-derived: a second
+    # implementation of "where does this land" would drift from the first.
+    written: dict[str, list[Path]] = {mod.name: [] for mod in chain.mods}
+    for built in report.code_builds:
+        for name in built.mod.split(", "):
+            written.setdefault(name, []).append(built.output)
+    for placed in report.placement_builds:
+        written.setdefault(placed.mod, []).extend([placed.output, placed.also_wrote])
+    for mod in chain.mods:
+        generated.record(mod, written.get(mod.name, []))
+        removed -= {f"{mod.name}/{path}" for path in generated.read(mod)}
+
+    # ⚠️ Only what did *not* come back. Nearly every sweep removes `mod.rel`
+    # and rewrites it a moment later; calling that "cleared" would bury the
+    # line that matters -- a placement whose declaration is gone (D156).
+    report.swept = sorted(removed)
+
+
 def check(
     chain: Chain,
     base: Path,
@@ -233,12 +281,7 @@ def check(
     Scripts are still compiled: a mod whose code does not build fails checking.
     """
     report = BuildReport(staged=Path())
-    compiled = compile_code(chain, override)
-    report.code_builds = compiled.builds
-    report.warnings += compiled.notes
-    report.warnings += [note for b in report.code_builds for note in b.warnings]
-    report.placement_builds = apply_chain(chain, base)
-    report.warnings += [note for b in report.placement_builds for note in b.warnings]
+    produce(chain, base, override, report)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan, report.placement_builds)
@@ -254,12 +297,7 @@ def build(
 ) -> BuildReport:
     """Stage the base, apply the chain, and report what happened."""
     report = BuildReport(staged=staged)
-    compiled = compile_code(chain, override)
-    report.code_builds = compiled.builds
-    report.warnings += compiled.notes
-    report.warnings += [note for b in report.code_builds for note in b.warnings]
-    report.placement_builds = apply_chain(chain, base)
-    report.warnings += [note for b in report.placement_builds for note in b.warnings]
+    produce(chain, base, override, report)
     plan = prepare(chain, base)
     report.conflicts = detect(chain, plan, base, allow_binary)
     report.warnings += _duplicate_warnings(base, plan, report.placement_builds)

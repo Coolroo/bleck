@@ -11910,3 +11910,66 @@ has seen the purple, the top-left placement, or the two labels together. The
 title screen is unreachable unattended (D47, D48) and the rig reads memory, not
 pixels — `scripts/ingame.py` has no screenshot path and Dolphin on this host has
 no `Hotkeys.ini`, so there is currently no way to close this without a human.
+
+---
+
+## D182 — Generated overlay files belong to the build that wrote them (2026-07-30)
+
+✅ **Fixed, and reproduced first.** D156's control is now a test and a scratch
+mod: declare `he1_01,0,squig`, build, delete the row, rebuild. Before, the two
+generated setup files survived and the disc shipped the deleted Squig. Now:
+
+```
+cleared 2 file(s) from the previous build:
+  stale-probe/files/map/he1_01.bin/dvd/setup/he1_01.dat
+  stale-probe/files/setup/he1_01.dat
+```
+
+D156 lost a whole run to this and wrote down two plausible, wrong readings
+("the placement is not what spawned him", "something else places him") before
+anyone checked a timestamp. ⚠️ The control **passed while being wrong**, which
+is the dangerous direction.
+
+### A ledger, not a pattern
+
+Each build records the overlay paths it wrote to `work/build/.generated/<mod>.json`,
+and the next build removes what it recorded but no longer produces.
+
+⛔ **Rejected: deriving the paths from patterns.** `pack.py` already has such a
+list, and a second copy would drift from `edits.py`, which is the code that
+actually decides where a placement lands. Worse, a pattern that guessed wrong
+would delete a hand-written overlay. The ledger is populated from what
+`CodeBuild.output` and `PlacementBuild.output` *say they wrote* — so only a
+path this tool recorded writing is a path it will remove.
+
+⛔ **Nothing unrecorded is ever removed.** No ledger, corrupt ledger, or a file
+the author put there: the sweep does nothing. That makes the worst case one
+stale build rather than lost work.
+
+### Where it lives, and where it must not
+
+⚠️ Inside `overlay/` the ledger would ship on the disc — `overlay_paths()`
+skips only OS clutter. In the mod root, `mod pack` would carry it as a source.
+It goes under the build directory, which is regenerable by definition.
+
+### Two things the fix turned up
+
+⚠️ **A warning that fires when nothing is wrong.** The first version also
+flagged any `files/setup/` file it did not own. But vendoring and hand-editing
+a setup file is supported — it is what D62's duplicate warning is about — so
+every build of such a mod would nag forever. Narrowed to `files/mod/mod.rel`,
+which nobody writes by hand. Same lesson as D122.
+
+⚠️ **The suite was writing into the real `work/build/`.** A full run left twelve
+ledgers named after test fixtures (`edit`, `tex`, `one`, `two`) where a real mod
+of the same name would have inherited one. Fixed with an autouse `conftest`
+fixture pointing `BLECK_BUILD_DIR` at `tmp_path` — which now protects anything
+else that writes there, not just this.
+
+✅ **Reported, not silent**, and only for files that did not come back: nearly
+every sweep removes `mod.rel` and rewrites it a moment later, and calling that
+"cleared" would bury the line that matters. A no-op rebuild prints nothing.
+
+⚠️ `check` and `build` shared these steps by copy-paste and now share
+`produce()`. A sweep added to one and not the other would mean a mod that
+checked clean and shipped stale, which is this bug wearing a different hat.

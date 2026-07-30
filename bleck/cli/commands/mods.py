@@ -363,6 +363,12 @@ def _embed_loader(
 
 
 def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
+    # Said out loud, not silently: a file disappearing from an overlay is the
+    # sort of thing someone needs to be able to correlate with a result (D156).
+    if report.swept:
+        print(f"cleared {len(report.swept)} file(s) from the previous build:")
+        for relative in report.swept:
+            print(f"  {relative}")
     for built in report.code_builds:
         print(built.describe())
     for warning in report.warnings:

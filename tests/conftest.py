@@ -19,6 +19,22 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "gamedata: needs an extracted disc")
 
 
+@pytest.fixture(autouse=True)
+def isolated_build_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point `BLECK_BUILD_DIR` at a scratch directory for every test.
+
+    ⚠️ Autouse, because a build writes there whether or not the test is *about*
+    building. `builder.produce` records which overlay files it generated under
+    the build root, and without this a run of the suite left a dozen ledgers
+    named after test fixtures (`edit`, `tex`, `one`) in the real `work/build/`
+    -- where a real mod of the same name would then inherit one.
+    """
+    root = tmp_path / "build"
+    root.mkdir()
+    monkeypatch.setenv("BLECK_BUILD_DIR", str(root))
+    return root
+
+
 @pytest.fixture(scope="session")
 def game_data() -> Path:
     if not GAME_DATA.is_dir():

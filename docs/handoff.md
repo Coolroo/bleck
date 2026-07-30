@@ -535,9 +535,10 @@ record of what was finished and why.
    and whether it self-deletes the way Count Bleck's beam *NPC* did at ~314
    frames. `mods/bleck-chaos` is built and never run; its probe dumps beam 0's
    `userWork` head unconditionally, so one run answers both.
-2. **`bleck` leaves stale generated overlay files behind.** This has already
-   caused a false-positive control run *and* shipped a boss into a map after its
-   CSV row was deleted. Fix before trusting another placement result.
+2. ~~`bleck` leaves stale generated overlay files behind.~~ ✅ Fixed (D182): a
+   build records what it wrote to `work/build/.generated/<mod>.json` and the
+   next one takes back what it no longer produces. Nothing unrecorded is ever
+   removed.
 
 ### Textures — the last thing that cannot be shared
 
