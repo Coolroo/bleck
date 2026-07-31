@@ -13454,3 +13454,43 @@ D70/D73/D74 was a control measured with a broken ruler. D209 was a control that
 did not share the flaw being tested. **Ask what makes the test pass trivially,
 not only what makes it fail.** A degenerate case satisfying the property is the
 same bug as a control that cannot detect it.
+
+## D212 — The rest of the model is a chain of size-prefixed records (2026-07-30)
+
+✅ **Verified**, and this is the way out of D211's 13.6% coverage.
+
+`p_wii_mario`'s **leading word is `0x15F5C`** — exactly the boundary D202
+measured, where the tables end and 200 KB of dense packed data begins. That
+word is not a size; it points at the **root record**, and the data there is a
+chain: each record begins with its own size, and the next starts immediately
+after.
+
+Walking it from the root gives **40 contiguous records** in `p_wii_mario`,
+sizes `0xA0` to `0x2894`, running to the end of the file.
+
+### Why every earlier scan missed it
+
+⛔ **These records use offsets relative to their own base**, not file-absolute
+ones. Every tool built so far — `offsets`, `streams`, the shape-record search in
+D207 — looked for ascending *in-file* offsets, so an 8 KB sweep past the
+boundary reported "no ascending offset table" while sitting on top of one. The
+values are small (`0x5c`, `0x68`, `0x94`, `0x98`) and read as counts.
+
+The root record confirms itself: six floats at `+0x40` are
+`(-30.0, -14.68, 0.0)..(10.775, 58.7, 3.2)`, which is the bounding box already
+measured independently and the reason `Bounds` reads Mario as 73.4 units tall.
+
+### What this changes
+
+D211 said the other shapes "are stored differently, and finding them is the next
+piece of work". They are, and this is where. `scripts/modelscan.py chain` walks
+it and reports each record's in-record offsets.
+
+🔶 **Not yet established:** which records are geometry rather than animation
+curves, and how a record names itself — none carry an inline name, so names must
+be referenced from the table region by offset. 40 records against 88 shape names
+means a record is not simply one shape.
+
+⚠️ **Nothing in `bleck` reads these yet.** `mesh()` still returns the single
+front-of-file shape, and still reports its coverage honestly. This is a located
+lead, not a decode.

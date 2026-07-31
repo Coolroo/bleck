@@ -325,6 +325,37 @@ def cmd_streams(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_chain(args: argparse.Namespace) -> int:
+    """Walk the size-prefixed records the leading word points at.
+
+    ⚠️ **These use offsets relative to their own base**, which is why every
+    scan for absolute in-file offsets missed them and why `mesh` only ever
+    found one shape (D212). The first record also carries the model's real
+    bounding box, six floats in.
+    """
+    data = resolve(args.file).read_bytes()
+    total = len(data)
+    at = struct.unpack_from(">I", data, 0)[0]
+    print(f"leading word {at:#x}, file {total:,} bytes")
+    count = 0
+    while at + 8 < total and count < args.limit:
+        size = struct.unpack_from(">I", data, at)[0]
+        if not 8 <= size <= 0x10000 or at + size > total:
+            print(f"  {at:#08x}  size {size:#x} -- chain stops here")
+            break
+        words = struct.unpack_from(">8I", data, at + 4)
+        relative = [w for w in words if 0 < w < size]
+        print(
+            f"  {at:#08x}  size {size:#07x}  "
+            f"{len(relative)} in-record offset(s)  "
+            + " ".join(f"{w:#x}" for w in relative[:6])
+        )
+        at += size
+        count += 1
+    print(f"\n{count} record(s) walked; ends at {at:#x} of {total:#x}")
+    return 0
+
+
 def cmd_mesh(args: argparse.Namespace) -> int:
     from bleck.formats import model  # pylint: disable=import-outside-toplevel
 
@@ -404,6 +435,11 @@ def main(argv: list[str]) -> int:
     streams_p.add_argument("--least", type=int, default=64, help="shortest run to show")
     streams_p.add_argument("--limit", type=int, default=12)
     streams_p.set_defaults(func=cmd_streams)
+
+    chain_p = sub.add_parser("chain", help="walk the size-prefixed record chain")
+    chain_p.add_argument("file")
+    chain_p.add_argument("--limit", type=int, default=40)
+    chain_p.set_defaults(func=cmd_chain)
 
     mesh_p = sub.add_parser("mesh", help="the decoded position and normal arrays")
     mesh_p.add_argument("file")
