@@ -13597,3 +13597,33 @@ the array scores better whether or not it is right).
 
 The next move is a **control for coverage**: shuffle the group bases and check
 that real bases beat shuffled ones. Until that exists, this stays a hypothesis.
+
+### D214 addendum — the control refutes the cumulative base (2026-07-30)
+
+⛔ **Ruled out.** D214 said the next move was a control for coverage. Here it
+is: assign each group a base as before, then **shuffle the bases among the
+groups** and re-measure.
+
+| bases | planar (non-degenerate quads) | median coverage |
+|---|---|---|
+| real, cumulative | 53.3% | 92.1% |
+| **shuffled** | **49.8%** | 72.7% |
+
+A 3.5-point gap is nothing. If the cumulative base were the right reading,
+scrambling it would collapse planarity toward the 21.5% random-point control;
+it barely moves. So the 53.3% is **not** evidence for the base assignment — it
+is evidence that a model's vertices are locally clustered enough that most
+quads come out planar however they are grouped.
+
+⚠️ **And that weakens the coverage number too.** Shuffled bases still reach
+72.7% coverage, so high coverage is largely a property of spreading indices
+across the array at all, not of spreading them *correctly*. Coverage should not
+be used as evidence again without this control beside it.
+
+**So the flat reading stays**, on the strength of the only measurement with a
+control that discriminates: 72.4% planar against 21.5% for shuffled points.
+Its 13.6% coverage remains unexplained and is reported honestly everywhere.
+
+The open contradiction is unchanged and now better fenced: a shape has 324
+positions, 336 corners, and no stream that can address 324 things. What has been
+ruled out is that a per-group base closes the gap.
