@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "effdata-probe",
+  "version": "0.1.0",
+  "description": "Read the effect system's work struct and the loaded effdata.dat",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2,
+    "sources": ["src"]
+  }
+}

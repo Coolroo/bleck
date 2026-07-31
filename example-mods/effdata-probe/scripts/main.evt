@@ -1,0 +1,6 @@
+-- Give the C a per-frame hook. Everything interesting is in watch().
+script main {
+    loop {
+        wait(1)
+    }
+}

@@ -12763,3 +12763,48 @@ Chaos Heart from weeks of searching into one run (D172, D173).
 
 🔶 The section parser itself is not yet found. The loader hands off to
 `0x8019FC5C` and `0x8019F724`; what walks the 16 offsets is further in.
+
+---
+
+## D198 — The effect work struct is live, and +0x0C is not what it looked like (2026-07-30)
+
+✅ **`effsub_wp` (`0x805AE7E4`) is the global D197 saw as `r13-30492`.** It reads
+`0x8050B830` in a running game, and `0x805AE7E4 + 30492 = 0x805B5F00` is a clean
+small-data base — the arithmetic and the live value agree.
+
+✅ **`effdrv_wp` points at `0x8050B820`, sixteen bytes below it.** The two work
+structs are adjacent, which is worth knowing before anyone treats a stray
+pointer near one as belonging to the other.
+
+### ⛔ The inference was wrong, and the guard is why we know
+
+D197 saw the loader do `stw r3,12(r4)` and read it as "the loaded `effdata.dat`
+lands at +0x0C". `example-mods/effdata-probe` checked that rather than assuming
+it, against **two marks measured from the file on disc** (D190): the first word
+being `0x40`, and `EFDT` at offset `0x40`.
+
+**Both failed.** What +0x0C points at is:
+
+```
++0x00  01 04 00 01  then zeros
++0x20  "./eff/effdata.tpl"
+```
+
+A **file handle carrying a resolved path** — and the *texture* file, not the
+data one. So the loader stores a request, not a buffer.
+
+⚠️ **Without the check this run would have produced twenty words of
+plausible-looking memory and a confident wrong answer**, which is precisely the
+D70/D73/D74 shape. The two marks cost four lines of C and turned a wrong
+conclusion into a fact.
+
+### 🔶 Where the parsed data actually lives is still open
+
+The handle at +0x0C is for `effdata.tpl`; the `.dat` presumably has its own,
+somewhere else in the same struct or in `effdrv_wp`'s. The probe dumped 24 words
+of the work struct and only one non-zero pointer appeared in them, so the answer
+is further out than 0x60 bytes.
+
+⚠️ **Next probe should widen rather than re-aim**: dump 64+ words of both work
+structs and look for a pointer whose target *does* start `0x40 ... EFDT`. That
+is a search with an exact, unmistakable target, and one run answers it.
