@@ -12808,3 +12808,47 @@ is further out than 0x60 bytes.
 ⚠️ **Next probe should widen rather than re-aim**: dump 64+ words of both work
 structs and look for a pointer whose target *does* start `0x40 ... EFDT`. That
 is a search with an exact, unmistakable target, and one run answers it.
+
+---
+
+## D199 — `effdata.dat` is relocated in place when it loads (2026-07-30)
+
+✅ **All sixteen section offsets become absolute pointers.** Measured live:
+the buffer sits at `0x91E66F40` in MEM2, and `header[n] == 0x91E66F40 +
+offset[n]` for **16 of 16**, checked against the offsets read off the disc.
+
+| | on disc | in memory |
+|---|---|---|
+| section 0 | `0x40` | `0x91E66F80` |
+| section 2 | `0x4F60` | `0x91E6BEA0` |
+| section 15 | `0x154B20` | `0x91FBBA60` |
+
+### ⚠️ Why this matters beyond the header
+
+**A memory dump and a disc read of the same file disagree by design.** Sixteen
+numbers that look nothing alike are the same sixteen facts. Anyone checking
+`bleck`'s reading against a live dump — the obvious next debugging step — would
+find a total mismatch and conclude the parser was wrong.
+
+🔶 And it raises the real question: **what else is relocated?** Section 8's
+`offset` field is always a multiple of 32 and stops at 64,960 (D196); if that is
+also rewritten to a pointer at load time, the search for "which section does it
+address" was looking for something that only exists on disc. Same for the
+section-10 offsets into section 2 (D195). Reading those fields *live* would
+settle in one run what shape analysis could not.
+
+### 🟢 How this was found, and the method that produced it
+
+⛔ **The previous probe followed one pointer and cost a run** to discover it was
+a file handle (D198). This one followed nothing: it swept MEM2 and MEM1 for
+`EFDT` plus its build stamp — a signature that cannot occur by accident — and
+reported generously around the hit.
+
+Before that, `ingame.py --find` was given **two** patterns rather than one: the
+file's first sixteen bytes, and the `EFDT` block. The first got **0 hits**, the
+second **1**. ⚠️ **That disagreement is the entire finding.** One pattern alone
+would have said "found it" or "not there" and neither would have been the truth.
+
+⚠️ Recorded as method: a wide first measurement with two independent marks cost
+the same single run as a narrow one and answered a question that had already
+consumed two.

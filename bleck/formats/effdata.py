@@ -11,6 +11,12 @@ the rest are binary parameter data and are not.
 0x40  "EFDT"     then a build stamp: "Tue Jan 1 10:43:27   2002"
 ```
 
+⚠️ **On disc those sixteen words are offsets; in memory they are pointers.**
+The game rewrites the header in place when it loads the file, so
+`header[n] == buffer + offset[n]` for all sixteen (D199, measured live). Anyone
+comparing a memory dump against this module's reading will see sixteen numbers
+that disagree completely and are the same thing.
+
 | Section | Size | What |
 |---|---|---|
 | 0 | 6,176 | ✅ **139 effect records**, 44 bytes each |

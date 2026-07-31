@@ -1,39 +1,34 @@
 # effdata-probe
 
-**Reading the effect system's work struct out of a running game** — and the
-example of a probe whose guard earned its keep by *failing*.
+**Finding the loaded `effdata.dat` in memory** — and the worked example of
+starting wide instead of following one pointer.
 
 ```bash
-uv run python scripts/ingame.py effdata-probe --words 52 --seconds 80 \
-    --mods-dir example-mods
+uv run python scripts/ingame.py effdata-probe --words 26 --seconds 90     --mods-dir example-mods
 ```
 
-## What it was testing
+## What it found
 
-D197 found the `effdata` loader inside `effSubMain` and saw it store a pointer
-at **+0x0C** of a global reached as `r13-30492`. The symbol list names
-`effsub_wp` at `0x805AE7E4`, and `0x805AE7E4 + 30492 = 0x805B5F00` — a clean
-small-data base, which is what suggested they are the same global.
+✅ The file is loaded to MEM2, and **its header is relocated in place**: all
+sixteen section offsets are rewritten to absolute pointers, so
+`header[n] == buffer + offset[n]` for 16 of 16 (D199).
 
-⚠️ **The inference was that +0x0C holds the parsed `effdata.dat`. It does not.**
+⚠️ That means a memory dump and a disc read of the same file show sixteen
+numbers that look nothing alike and are the same sixteen facts.
 
-## Why the guard mattered
+## Why it scans instead of following a pointer
 
-The probe does not just dump the pointer, it checks two marks measured from the
-file *on disc* (D190): the first word being `0x40`, and `EFDT` at offset `0x40`.
-Neither can appear by coincidence.
+⛔ **The first version of this probe followed one pointer and was wrong.** D197
+saw the loader do `stw r3,12(r4)` and read it as "the parsed file lands at
++0x0C". It does not — that is a file handle carrying `./eff/effdata.tpl` — and
+finding out cost a full run (D198).
 
-`LOOKS_RIGHT` came back **0**. What +0x0C actually points at is a file handle
-whose `+0x20` holds the string `./eff/effdata.tpl` — so the loader stores a
-*request*, not a buffer, and it is the texture file rather than the data one.
+This version follows nothing. It sweeps MEM2 and then MEM1 for `EFDT` **plus
+its build stamp**, a two-word signature that cannot occur by accident, and
+reports generously around whatever it hits.
 
-⛔ Without that check the run would have produced 20 words of plausible-looking
-memory and a confident wrong conclusion. Recording the refutation is the result
-(D198).
-
-## What it did establish
-
-- ✅ `effsub_wp` is live and points at `0x8050B830`
-- ✅ `effdrv_wp` points at `0x8050B820` — **16 bytes below it**, so the two work
-  structs are adjacent
-- ✅ +0x0C is a file handle with the path at +0x20
+⚠️ The same lesson applies one level up. Before this ran, `ingame.py --find` was
+given **two** patterns: the file's first sixteen bytes and the `EFDT` block. The
+first got 0 hits, the second got 1 — and *that disagreement* is what revealed
+the relocation. Either pattern alone would have given a clean, single, wrong
+answer.
