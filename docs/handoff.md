@@ -535,55 +535,66 @@ record of what was finished and why.
    and a real Count Bleck fight — the effect path sidesteps it rather than
    explaining it.
 
-### Textures — the last thing that cannot be shared
+### Assets — textures done, models not started
 
-2. **Decode and re-encode TPL losslessly**, then **CMPR endpoint colour ops**,
-   then **a declarative `tables/textures.csv`**. This is what makes `tex-koopa`
-   and `title-invert` shareable: their whole content is game bytes today, so a
-   `.bleck` archive either omits them or carries Nintendo's data.
-   [`plan-textures.md`](./plan-textures.md) has the measured format survey —
-   CMPR is 90.6% of 9,403 images and **zero** textures are paletted.
+2. ✅ **Texture edits are declared, not baked** (D187, D193). `tables/textures.csv`
+   names a disc path and a colour operation; the build reads the texture from
+   the user's own disc and rewrites it in the CMPR endpoint domain, so a rebuild
+   costs no quality. `bleck mod pack tex-koopa` ships two files and no game
+   bytes. ⛔ **Tier 2 — replacing artwork — needs a real DXT1 encoder** and is
+   not started; everything today is exact *because* it never re-compresses.
+3. 🔶 **`effdata.dat`: 2 of 16 sections read** (D190, D191). 139 effects, 704
+   parts, 4,048 transform rows — and `chaos` holds an exact 72-degree rotation,
+   matching the five-fold ring measured in game. ⛔ **The part-to-texture link
+   is still missing**, and the obvious candidate is refuted. Nine sections
+   remain, none with any strings.
+4. ⛔ **The model container is unidentified.** `a/p_wii_mario` announces a Jan
+   2007 Maya export and skinned shape names and decodes to nothing; `map.dat`
+   names its sections (`mesh`, `animation_table`, `vcd_table`). A string table
+   is not a mesh. This blocks the viewer's 3D stages
+   ([`plan-viewer.md`](./plan-viewer.md)).
 
 ### The language
 
-3. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining gap.
+5. **`peek`/`poke` for `SET_RAM`/`GET_RAM`.** The biggest remaining gap.
    ⚠️ Maps did **not** need it (D51) and doors do **not** (D103) — read D51
    before assuming NPCs will.
-4. **Emit `SETI` instead of refusing ambiguous literals** (D39). `var a =
+6. **Emit `SETI` instead of refusing ambiguous literals** (D39). `var a =
    -30000000` is a compile error and need not be.
-5. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
+7. **`IF_FLAG`, detached `spawn`, `SET_PRI`/`SET_SPD`.** Unwritten, not blocked.
    ⚠️ `RUN_EVT` is emitted nowhere, so `spawn` starts from scratch — and
    D184 measured the consequence: a spawned script's **parent waits for
    it**, so `spawn` cannot currently isolate a call that never returns.
-6. **Switch to the decomp's symbol table** (D39): ~9,566 named symbols against
+8. **Switch to the decomp's symbol table** (D39): ~9,566 named symbols against
    `spm.eu0.lst`'s 1,111, with sizes and types, so hook targets could be
    *validated* rather than merely resolved. ⚠️ It states no licence (D54), so it
    stays a local convenience and nothing derived from it ships.
 
 ### Toward the base app
 
-7. **More editing surfaces through the API.** The map archive is the prize and
+9. **More editing surfaces through the API.** The map archive is the prize and
    is **not decoded** — research before it is an editing problem.
-8. **A GUI over the API.** Any language; the contract is JSON and the schema is
+10. **A GUI over the API.** Any language; the contract is JSON and the schema is
    published.
-9. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
+11. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
     answer is a PyO3 port of *just the compressor* — not a rewrite.
 
 ### Needs a human, once
 
-10. **A save state.** Driving into a map leaves Mario invisible: no save, no
+12. **A save state.** Driving into a map leaves Mario invisible: no save, no
     profile (D63). `--state` exists on `bleck launch` and `ingame.py`; making
     one needs someone to play far enough and press F1.
-11. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each.
+13. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each.
     `a`, `b`, `1`, `2` are confirmed (D68).
-12. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is
+14. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is
     the route; extend it to the next safe batch. ⛔ `evt_pouch_check_have_item`
     never returns and nobody knows why.
-13. 🔶 **The banner has never been seen on screen** since it gained the version
+15. 🔶 **The viewer has never been looked at** (D192). It builds, passes clippy, and holds a live window; this machine cannot screenshot its own desktop. `cd viewer && cargo run -- ../work/export`.
+16. 🔶 **The banner has never been seen on screen** since it gained the version
     and the purple loader line (D181). Both strings are confirmed in the
     module; the title screen is unreachable unattended and the rig reads
     memory, not pixels.
-14. 🔶 **The docs site has never been opened in a browser.** `mkdocs --strict`
+17. 🔶 **The docs site has never been opened in a browser.** `mkdocs --strict`
     passing is not the same as looking right.
 
 ## Things worth not rediscovering
