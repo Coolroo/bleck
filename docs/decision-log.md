@@ -12709,3 +12709,57 @@ Four candidate fields have now been checked and refuted against
 curve record's leading `u32` (max 621, D195), and section 8's `reference`
 (max 522) and `offset` (max 64,960). ⚠️ Recording the refutations matters as much
 as the findings — each is a search someone need not repeat.
+
+---
+
+## D197 — The effdata loader, found from the DOL rather than inferred (2026-07-30)
+
+Following the method that cracked `assign_tbl` and the door descriptors (D128,
+D130, D133, D136): find the string, find who builds its address, read the code.
+
+### ⚠️ The first two leads were false, and how they showed it
+
+`dolscan strings effdata` gives `%s/eff/%seffdata.dat` at `0x80327328`. ⛔ A
+direct `xref` on it finds **nothing**, and widening the window to `0x40` returns
+a base of `0x803272E0` used at two sites.
+
+That base is not the strings. Disassembling `0x803272E0` shows `-1.0f`, `1.0f`,
+`100.0f` — a **float constant pool** that happens to sit within 0x40 of the path
+table, and the two "callers" are geometry code full of `sin`/`cos`.
+
+⚠️ Worth recording as a trap in the tool: `--window` finds bases *near* a
+target, which is what made D128 work, and near is not the same as related. The
+disassembly is what settled it.
+
+### ✅ The paths live in a pointer table
+
+The real reference is a table, so no instruction ever builds a single string's
+address. Searching the DOL for the literal word `0x80327328` finds it once, at
+file offset 4,210,580, immediately after the `.tpl` pointer — the table is at
+**`0x80407E90`**, 8 pairs.
+
+`xref 0x80407E90` then gives three sites, and the loader at `0x8005BFE8` states
+the layout in code rather than by adjacency:
+
+```
+slwi  r0, r28, 3        index x 8, so entries are POINTER PAIRS
+lwz   r5, 4(r31)        +4 is the .dat, +0 the .tpl
+```
+
+✅ Eight pairs: the main set, `_test`, and six `_sub_*` sets (`samurai`,
+`levelup`, `pure_heart_get`, `stage_clear`, `stage_start`, `title`).
+
+### 🟢 The anchor worth having
+
+Both the loader and the spawn path go through one global at **`r13 - 30492`** —
+the effect system's state. The loader stores the loaded file's pointer at **+12**
+of it (`lwz r4,-30492(r13); stw r3,12(r4)`), and checks **+16** for zero.
+
+⚠️ **That is the efficient route from here.** The remaining ten sections are
+being read by shape, which is slow and just stopped at a coin toss (D196). A
+probe that reads this global from a *running* game sees the structures already
+parsed, with real pointers into them — the same technique that turned the
+Chaos Heart from weeks of searching into one run (D172, D173).
+
+🔶 The section parser itself is not yet found. The loader hands off to
+`0x8019FC5C` and `0x8019F724`; what walks the 16 offsets is further in.
