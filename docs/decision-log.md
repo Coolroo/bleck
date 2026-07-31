@@ -14671,3 +14671,52 @@ source-rate ratio set comes out at 32000/44100 = **0.73x speed** — slower in
 game than a faithful 44100 export, which is exactly the shape of the
 listener's complaint. Untested; it predicts that 117 of 135 tracks should be
 written at 32000.
+
+## D232 — A stated 44100 plays at 22050, measured against a real recording (2026-07-31)
+
+✅ **Solved, by a reference the listener supplied.** They uploaded a known-good
+recording of the pure-heart jingle. Reading its **371 MPEG1 Layer-3 frames**
+straight from the frame headers gives **8.90 seconds** — the first hard number
+in this whole investigation.
+
+`ff_pureheart_get_s2_lp` holds **193,816 samples per channel**:
+
+```
+193,816 / 8.90 s = 21,777 Hz  ->  22050, exactly half its stated 44100
+```
+
+Exported at 22050 it runs 8.79 s and the listener confirmed it. A factor of
+**2.000** is not a judgement call.
+
+### What it took to get there, and what it cost
+
+⚠️ **Four rounds of asking "does it sound right" produced four contradictory
+answers** — "a bit fast", then "44k is right for those", then "waaay too fast",
+then "32k is still too fast". None of it was wrong; a listener comparing
+against memory cannot give a ratio. **One reference file settled in a single
+measurement what four rounds of listening could not.**
+
+⛔ Two hypotheses died on the way, both worth recording:
+
+| hypothesis | how it died |
+|---|---|
+| a rate modifier in the archive or `.dat` | the promising 0/8 flag is **only ever 8 on a 44.1 kHz track** — but 78 other 44.1 kHz tracks carry 0 (D230) |
+| the channels are even/odd samples of one mono stream | this would explain a 2x exactly; interleaving them **lowers** adjacent-sample correlation, 0.78 -> 0.49 |
+
+### The rule, and what it is not
+
+`Stream.playback_rate` halves a stated rate **above 40000**.
+
+⛔ **It is fitted to two points, not decoded**, and the docstring says so.
+Nothing in the DOL, `wiimario_snd.dat` or the sound archive encodes it — the
+two files it is fitted to are structurally identical, same RSAR entry, same
+stream spec, same block layout, differing only in this field.
+
+⚠️ **The threshold is 40000, not 32000.** The disc uses four rates — 32000,
+32028, 32728, 44100 — and the two odd ones are six real tracks. A threshold at
+the AX mixer's native 32 kHz would halve them to 16 kHz on no evidence
+whatever. Only 44100 is measured, so only 44100 is halved.
+
+⚠️ `sys_title1_44k_lp` tests the *other* way on the interleave check —
+correlation rises 0.837 -> 0.879 when interleaved, the signature of mono. So
+"every track is stereo" may be another assumption that does not hold.

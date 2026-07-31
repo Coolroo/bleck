@@ -98,7 +98,7 @@ def _walk(base: Path, pattern: str, seconds: float, decode: bool = True) -> list
 def _capped(stream: brstm.Stream, seconds: float) -> brstm.Stream:
     if seconds <= 0 or stream.seconds <= seconds:
         return stream
-    keep = int(seconds * stream.rate)
+    keep = int(seconds * stream.playback_rate)
     return brstm.Stream(
         rate=stream.rate,
         channels=stream.channels,
@@ -134,7 +134,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     written = 0
     for entry in found:
         try:
-            data = wav.write(entry.stream.rate, entry.stream.pcm)
+            data = wav.write(entry.stream.playback_rate, entry.stream.pcm)
         except ValueError:
             continue
         (out / entry.filename).write_bytes(data)
@@ -144,7 +144,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "name": entry.name,
                 "file": entry.filename,
                 "source": entry.disc_path,
-                "rate": entry.stream.rate,
+                "rate": entry.stream.playback_rate,
+                "header_rate": entry.stream.rate,
                 "channels": entry.stream.channels,
                 "seconds": round(entry.stream.seconds, 3),
                 "loops": entry.stream.loops,

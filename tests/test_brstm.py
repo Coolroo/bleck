@@ -136,3 +136,38 @@ class TestAgainstTheDisc:
             loud = sum(1 for v in window if abs(v) >= 0x7FFE)
             assert max(abs(v) for v in window) > 100, f"{name} is silent"
             assert loud * 100 < len(window), f"{name} is clipped throughout"
+
+
+class TestThePlaybackRate:
+    """⛔ The rule that a stated rate above 40 kHz is halved (D232).
+
+    Fitted to two measured points, not decoded from anything: a known-good
+    recording of `ff_pureheart_get_s2_lp` runs 8.90 s, which puts its 193,816
+    samples at 21,777 Hz against a stated 44100; and a listener confirmed
+    `ff_itemget1_32k` is correct at its stated 32000.
+    """
+
+    def a_stream(self, rate: int) -> brstm.Stream:
+        return brstm.Stream(
+            rate=rate, channels=2, samples=193816, loop_start=0, loops=False
+        )
+
+    def test_a_44100_stream_plays_at_half(self):
+        assert self.a_stream(44100).playback_rate == 22050
+
+    def test_a_32000_stream_is_left_alone(self):
+        assert self.a_stream(32000).playback_rate == 32000
+
+    def test_the_near_32k_variants_are_left_alone(self):
+        """⚠️ 32028 and 32728 are six real tracks. A threshold at 32000 rather
+        than 40000 would halve them to 16 kHz on no evidence at all."""
+        assert self.a_stream(32028).playback_rate == 32028
+        assert self.a_stream(32728).playback_rate == 32728
+
+    def test_the_duration_matches_the_reference_recording(self):
+        """✅ The measured point: 8.90 s, from 371 MPEG1 Layer-3 frames."""
+        assert self.a_stream(44100).seconds == pytest.approx(8.79, abs=0.02)
+
+    def test_describe_says_when_it_disagrees_with_the_header(self):
+        assert "header says 44100" in self.a_stream(44100).describe()
+        assert "header says" not in self.a_stream(32000).describe()

@@ -63,6 +63,16 @@ CHANNEL_ENTRY = 8
 COEFFICIENT_BLOCK = 0x28
 
 
+#: Above this a stated rate is halved (D232). The Wii's AX mixer is natively
+#: 32 kHz, and the disc uses four rates: 32000, 32028, 32728 and 44100.
+#:
+#: ⚠️ **The threshold sits at 40000, not 32000.** 32028 and 32728 are
+#: near-32k variants -- six tracks -- and a threshold of 32000 would halve them
+#: to 16 kHz on no evidence at all. Only 44100 is measured (D232), so only
+#: 44100 is halved.
+HALVE_ABOVE = 40000
+
+
 #: A frame is one header byte plus seven of packed nibbles.
 FRAME_BYTES = 8
 FRAME_SAMPLES = 14
@@ -101,12 +111,36 @@ class Stream:
     """One list of signed 16-bit samples per channel."""
 
     @property
+    def playback_rate(self) -> int:
+        """The rate the track is actually heard at, which is not always `rate`.
+
+        ✅ **Measured against a known-good recording** (D232). A reference of
+        `ff_pureheart_get_s2_lp` runs **8.90 s**; the file holds 193,816 samples
+        per channel, so it plays at 193,816 / 8.90 = **21,777 Hz** -- 22050,
+        exactly half the 44100 its header states.
+
+        ⚠️ A listener separately confirmed `ff_itemget1_32k` is correct at its
+        stated 32000. Those two files are structurally identical -- same RSAR
+        entry shape, same stream spec, same block layout -- and differ only in
+        this field, so the rule keys off the field itself.
+
+        ⛔ **This is a rule fitted to two points**, not a decoded one. Nothing
+        in the DOL, `wiimario_snd.dat` or the sound archive was found to encode
+        it (D230): no rate override, no pitch modifier, and the one promising
+        flag correlates with rate without selecting it.
+        """
+        return self.rate // 2 if self.rate > HALVE_ABOVE else self.rate
+
+    @property
     def seconds(self) -> float:
-        return self.samples / self.rate if self.rate else 0.0
+        rate = self.playback_rate
+        return self.samples / rate if rate else 0.0
 
     def describe(self) -> str:
         kind = "looping" if self.loops else "one-shot"
-        return f"{self.rate} Hz, {self.channels}ch, {self.seconds:.1f}s, {kind}"
+        rate = self.playback_rate
+        halved = f" (header says {self.rate})" if rate != self.rate else ""
+        return f"{rate} Hz{halved}, {self.channels}ch, {self.seconds:.1f}s, {kind}"
 
 
 def is_brstm(data: bytes) -> bool:
