@@ -1,25 +1,81 @@
-//! The effect table, its timeline, and the image bank under it. **This is the
-//! UI layer** — the manifest it draws is read by `crate::data::effects`.
+//! The effect table, its viewport, its timeline, and the image bank under it.
+//! **This is the UI layer** — the manifest it draws is read by
+//! `crate::data::effects` and the pixels come from `crate::render`.
 
 use std::path::Path;
 
 use eframe::egui;
 
 use super::{Viewer, PAD};
-use crate::data::{self, effects};
+use crate::data::{self, effects, texture};
+use crate::render;
 
 /// Thumbnail edge for the effect image bank, in points. Smaller than the
 /// texture grid's: the strip is one row deep and shares the window with the
 /// effect it sits under.
 const BANK_THUMB: f32 = 64.0;
 
-/// Marks a part that is running at the timeline's current position.
-const ACTIVE: egui::Color32 = egui::Color32::from_rgb(120, 200, 120);
-
 /// Carries the standing warning that a part's image is not decoded. The same
 /// amber the model pane uses for a fragment: both say "this is less than it
 /// looks like".
 const UNDECODED: egui::Color32 = egui::Color32::from_rgb(220, 170, 90);
+
+/// Share of the detail panel the viewport takes, as a column count. Two
+/// columns: the effect on the left, the numbers behind it on the right.
+const COLUMNS: usize = 2;
+
+/// An image the user chose to preview on a part.
+///
+/// ⛔ Both ends of this are choices made in the window. Nothing in the export
+/// says which image a part draws, so nothing may fill either field in from a
+/// field a part carries — see `crate::render::effect::Manual`.
+struct Chosen {
+    /// Position in the texture catalog, so the bank can mark the thumbnail.
+    catalog: usize,
+    name: String,
+    image: texture::Texture,
+}
+
+/// The effect viewport's own state: where the camera is, the frame it drew
+/// last, and the image a user asked to see on a part.
+#[derive(Default)]
+pub(super) struct Stage {
+    view: render::View,
+    /// The last rasterised frame, uploaded once and replaced in place.
+    frame: Option<egui::TextureHandle>,
+    /// Which part `chosen` is drawn on. Zero until someone moves it.
+    part: usize,
+    chosen: Option<Chosen>,
+    /// Why the last image pick produced nothing, so a failed decode says so
+    /// rather than looking like a viewport that ignores clicks.
+    note: Option<String>,
+}
+
+impl Stage {
+    /// Whether a frame has been rasterised and uploaded. The headless layout
+    /// test is the only evidence this window draws at all, and it cannot see
+    /// pixels — only that the viewport got as far as producing some.
+    #[cfg(test)]
+    pub(super) fn drawn(&self) -> bool {
+        self.frame.is_some()
+    }
+
+    /// The image being previewed, and the part it is on.
+    #[cfg(test)]
+    pub(super) fn previewing(&self) -> Option<(&str, usize)> {
+        self.chosen
+            .as_ref()
+            .map(|chosen| (chosen.name.as_str(), self.part))
+    }
+
+    /// What the renderer is told to paint on a part, if anything.
+    fn manual(&self) -> Option<render::effect::Manual<'_>> {
+        self.chosen.as_ref().map(|chosen| render::effect::Manual {
+            part: self.part,
+            image: &chosen.image,
+        })
+    }
+}
 
 /// Everything the effect mode owns.
 ///
@@ -36,6 +92,7 @@ pub(super) struct EffectPane {
     /// Resolved once when a folder is opened: the filter is by disc file, and
     /// neither the catalog nor that file changes while the folder is open.
     pub(super) bank: Vec<usize>,
+    pub(super) stage: Stage,
 }
 
 impl EffectPane {
@@ -58,8 +115,23 @@ impl Viewer {
             self.effects.library.len()
         ));
         ui.separator();
+        egui::ComboBox::from_label("background")
+            .selected_text(self.effects.stage.view.background.label())
+            .show_ui(ui, |ui| {
+                for background in render::BACKGROUNDS {
+                    ui.selectable_value(
+                        &mut self.effects.stage.view.background,
+                        background,
+                        background.label(),
+                    );
+                }
+            });
+        if ui.button("fit").clicked() {
+            self.fit_effect();
+        }
+        ui.separator();
         ui.label(
-            egui::RichText::new("durations are frames at 60Hz, counted inclusively")
+            egui::RichText::new("drag to orbit · scroll to zoom · durations are frames at 60Hz")
                 .weak()
                 .small(),
         );
@@ -150,9 +222,31 @@ impl Viewer {
 
     /// Pick an effect and put the timeline back at its start: a different
     /// effect has a different length, and the old position may be past its end.
+    ///
+    /// The preview part goes back to the first one for the same reason — the
+    /// new effect may have fewer parts than the old one.
     pub(super) fn select_effect(&mut self, index: usize) {
         self.effects.selected = Some(index);
         self.effects.play.rewind();
+        self.effects.stage.part = 0;
+        self.fit_effect();
+    }
+
+    /// Frame the whole layout, running or not.
+    ///
+    /// ⚠️ Done on a new selection and on the button, and nowhere else.
+    /// Refitting every frame would fight the user's own orbit, and refitting as
+    /// parts start and stop would jerk the camera each time the timeline
+    /// crossed a duration.
+    fn fit_effect(&mut self) {
+        let Some(entry) = self
+            .effects
+            .selected
+            .and_then(|index| self.effects.library.entries().get(index))
+        else {
+            return;
+        };
+        self.effects.stage.view.camera = render::Camera::fit(render::effect::bounds(entry));
     }
 
     pub(super) fn effect_detail(&mut self, ui: &mut egui::Ui) {
@@ -186,11 +280,117 @@ impl Viewer {
         ui.separator();
 
         let time = self.effects.play.time;
-        egui::ScrollArea::vertical().show(ui, |ui| {
-            Self::part_table(ui, entry, time);
-            ui.add_space(12.0);
-            Self::row_table(ui, entry);
+        let stage = &mut self.effects.stage;
+        ui.columns(COLUMNS, |columns| {
+            Self::effect_stage(&mut columns[0], entry, stage, time);
+            egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
+                Self::part_table(ui, entry, time);
+                ui.add_space(12.0);
+                Self::row_table(ui, entry);
+            });
         });
+    }
+
+    /// The viewport: one camera-facing quad per running part, drawn by the same
+    /// software rasteriser the model tab uses.
+    ///
+    /// ⚠️ Rasterised on every frame, with no stale flag. The timeline moves the
+    /// geometry, so a frame that was skipped because nothing was clicked would
+    /// freeze the animation this panel exists to show.
+    fn effect_stage(ui: &mut egui::Ui, entry: &effects::Entry, stage: &mut Stage, time: f32) {
+        Self::manual_row(ui, entry, stage);
+        let area = ui.available_size();
+        if area.x < 1.0 || area.y < 1.0 {
+            return;
+        }
+        let (rect, response) = ui.allocate_exact_size(area, egui::Sense::click_and_drag());
+        Self::steer_camera(ui, &response, &mut stage.view.camera);
+
+        let size = Self::frame_size(area);
+        let quads = render::effect::quads(entry, time, &stage.view.camera, stage.manual());
+        let pieces: Vec<render::Piece<'_>> = quads
+            .iter()
+            .map(|quad| render::Piece {
+                mesh: &quad.mesh,
+                flat: quad.colour,
+            })
+            .collect();
+        let drawn = render::scene(&pieces, &stage.view, size);
+        Self::upload(ui, &mut stage.frame, "effect-stage", &drawn);
+
+        if let Some(handle) = &stage.frame {
+            ui.painter().image(
+                handle.id(),
+                rect,
+                egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+
+        // Names the shapes on screen. A quad carries the part it came from, and
+        // an unlabelled coloured square says nothing about which row it is.
+        let running: Vec<&str> = quads
+            .iter()
+            .filter_map(|quad| entry.parts.get(quad.part))
+            .map(|part| part.composed.as_str())
+            .collect();
+        response.on_hover_text(if running.is_empty() {
+            "no part is running at this point in the timeline".to_string()
+        } else {
+            format!("running: {}", running.join(", "))
+        });
+    }
+
+    /// The manual image chooser, and the standing statement that it is manual.
+    ///
+    /// ⛔ The label below is not decoration. Nothing in the export pairs a part
+    /// with an image, and a viewport that showed one beside the other without
+    /// saying so would look exactly like a decoded fact.
+    fn manual_row(ui: &mut egui::Ui, entry: &effects::Entry, stage: &mut Stage) {
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("preview an image on part")
+                    .weak()
+                    .small(),
+            );
+            let chosen_part = entry
+                .parts
+                .get(stage.part)
+                .map_or_else(|| "—".to_string(), |part| part.composed.clone());
+            egui::ComboBox::from_id_salt("effect-manual-part")
+                .selected_text(chosen_part)
+                .show_ui(ui, |ui| {
+                    for (index, part) in entry.parts.iter().enumerate() {
+                        ui.selectable_value(&mut stage.part, index, part.composed.as_str());
+                    }
+                });
+            match &stage.chosen {
+                Some(chosen) => {
+                    ui.label(egui::RichText::new(chosen.name.as_str()).monospace());
+                    if ui.button("clear").clicked() {
+                        stage.chosen = None;
+                    }
+                }
+                None => {
+                    ui.label(
+                        egui::RichText::new("none — click one in the bank below")
+                            .weak()
+                            .small(),
+                    );
+                }
+            }
+        });
+        ui.label(
+            egui::RichText::new(
+                "no image is bound to a part in the data; this is a manual preview, \
+                 not a decoded pairing",
+            )
+            .color(UNDECODED)
+            .small(),
+        );
+        if let Some(note) = &stage.note {
+            ui.label(egui::RichText::new(note.as_str()).color(UNDECODED).small());
+        }
     }
 
     /// Play, pause and scrub.
@@ -238,6 +438,9 @@ impl Viewer {
 
     /// The parts, with the ones running at the current time marked.
     ///
+    /// The mark takes the colour that part's quad is drawn in, so a row and a
+    /// shape in the viewport can be matched up by eye.
+    ///
     /// ⛔ A part is a name, a table position and a duration — that is
     /// everything known about it. It is deliberately not shown beside an
     /// image, because which image a part draws is not decoded.
@@ -251,9 +454,11 @@ impl Viewer {
                     ui.label(egui::RichText::new(heading).weak().small());
                 }
                 ui.end_row();
-                for part in &entry.parts {
+                for (index, part) in entry.parts.iter().enumerate() {
                     let mark = if part.active_at(time) {
-                        egui::RichText::new("●").color(ACTIVE)
+                        let drawn = render::effect::colour(index);
+                        egui::RichText::new("●")
+                            .color(egui::Color32::from_rgb(drawn.r, drawn.g, drawn.b))
                     } else {
                         egui::RichText::new("·").weak()
                     };
@@ -305,10 +510,14 @@ impl Viewer {
     /// the disc file it comes from and shown in catalog order. Ordering it by
     /// anything a part carries would invent a mapping.
     ///
+    /// Clicking one puts it on the part the viewport is previewing. That is a
+    /// choice the user made and the labels say so; it is not a binding.
+    ///
     /// ⚠️ Unlike the texture grid this is not virtualised, and can stay that
     /// way only because the bank is one disc file — 219 images — where the
     /// grid spans 21,780 and would exhaust texture memory.
-    pub(super) fn effect_bank(&self, ctx: &egui::Context) {
+    pub(super) fn effect_bank(&mut self, ctx: &egui::Context) {
+        let mut picked = None;
         egui::TopBottomPanel::bottom("effect-bank").show(ctx, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -326,12 +535,19 @@ impl Viewer {
                 ui.label(
                     egui::RichText::new(
                         "which image a part draws is not decoded — nothing here \
-                         is paired with a part",
+                         is paired with a part. Click one to preview it on the \
+                         part you chose above.",
                     )
                     .color(UNDECODED)
                     .small(),
                 );
             });
+            let marked = self
+                .effects
+                .stage
+                .chosen
+                .as_ref()
+                .map(|chosen| chosen.catalog);
             egui::ScrollArea::horizontal()
                 .max_height(BANK_THUMB + PAD)
                 .show(ui, |ui| {
@@ -340,20 +556,53 @@ impl Viewer {
                             let Some(entry) = self.catalog.entries().get(index) else {
                                 continue;
                             };
-                            ui.add(
+                            let thumb = egui::ImageButton::new(
                                 egui::Image::new(entry.uri())
                                     .fit_to_exact_size(egui::vec2(BANK_THUMB, BANK_THUMB))
                                     .maintain_aspect_ratio(true),
                             )
-                            .on_hover_text(format!(
-                                "{}\n{}",
-                                entry.name,
-                                entry.describe()
-                            ));
+                            .selected(marked == Some(index));
+                            if ui
+                                .add(thumb)
+                                .on_hover_text(format!("{}\n{}", entry.name, entry.describe()))
+                                .clicked()
+                            {
+                                picked = Some(index);
+                            }
                         }
                     });
                 });
             ui.add_space(4.0);
         });
+        if let Some(index) = picked {
+            self.choose_image(index);
+        }
+    }
+
+    /// Decode a bank image so the viewport can paint it on a part.
+    ///
+    /// ⛔ Which image and which part are both the user's choice. Nothing here
+    /// may derive either from the effect data.
+    pub(super) fn choose_image(&mut self, index: usize) {
+        let Some(entry) = self.catalog.entries().get(index) else {
+            return;
+        };
+        self.effects.stage.note = None;
+        let decoded = std::fs::read(&entry.path)
+            .map_err(|why| format!("{} could not be read: {why}", entry.path.display()))
+            .and_then(|raw| texture::Texture::decode(&raw));
+        match decoded {
+            Ok(image) => {
+                self.effects.stage.chosen = Some(Chosen {
+                    catalog: index,
+                    name: entry.name.clone(),
+                    image,
+                });
+            }
+            Err(why) => {
+                self.effects.stage.chosen = None;
+                self.effects.stage.note = Some(why);
+            }
+        }
     }
 }

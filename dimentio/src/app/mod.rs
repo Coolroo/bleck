@@ -9,6 +9,7 @@
 use eframe::egui;
 
 use crate::data;
+use crate::render;
 
 mod effects;
 mod models;
@@ -20,6 +21,19 @@ use models::ModelPane;
 /// Space around each thumbnail, so the grid arithmetic matches the layout.
 /// Shared by the texture grid and the effect image strip.
 const PAD: f32 = 8.0;
+
+/// Radians of orbit per point of drag.
+const ORBIT_SPEED: f32 = 0.008;
+
+/// How hard a scroll notch pulls the camera in. Applied as an exponent, so
+/// zoom is proportional and cannot walk through zero.
+const ZOOM_SPEED: f32 = 0.0015;
+
+/// ⚠️ Longest edge a viewport is rasterised at, whatever size its panel is.
+/// Every pixel costs CPU here, and a maximised 4K window would otherwise
+/// rasterise ~8M of them on each frame of a drag. Beyond this the frame is
+/// drawn smaller and scaled up by the GPU. Shared by both viewports.
+const MAX_EDGE: f32 = 1600.0;
 
 /// Which part of the program is on screen. One export folder feeds them all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -174,6 +188,63 @@ impl Viewer {
         ui.label(egui::RichText::new(key).weak());
         ui.label(egui::RichText::new(value).monospace());
     }
+
+    /// Drag orbits, scroll zooms. Reports whether the camera moved, which is
+    /// what tells a cached frame it is out of date.
+    ///
+    /// The camera does its own clamping, so no input here can put it somewhere
+    /// it cannot come back from.
+    fn steer_camera(ui: &egui::Ui, response: &egui::Response, camera: &mut render::Camera) -> bool {
+        let mut moved = false;
+        let drag = response.drag_delta();
+        if drag != egui::Vec2::ZERO {
+            camera.orbit(drag.x * ORBIT_SPEED, drag.y * ORBIT_SPEED);
+            moved = true;
+        }
+        if response.hovered() {
+            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
+            if scroll != 0.0 {
+                camera.zoom((-scroll * ZOOM_SPEED).exp());
+                moved = true;
+            }
+        }
+        moved
+    }
+
+    /// Rasterise `pixels` into `handle`, replacing what is there.
+    ///
+    /// ⚠️ The handle is reused rather than replaced. A new one per frame leaks
+    /// a GPU texture per frame, which a viewport that redraws while a timeline
+    /// runs would do sixty times a second.
+    fn upload(
+        ui: &egui::Ui,
+        handle: &mut Option<egui::TextureHandle>,
+        name: &str,
+        drawn: &render::Image,
+    ) {
+        let size = drawn.size();
+        let image =
+            egui::ColorImage::from_rgba_unmultiplied([size.width, size.height], drawn.as_rgba());
+        match handle {
+            Some(existing) => existing.set(image, egui::TextureOptions::LINEAR),
+            None => {
+                *handle = Some(
+                    ui.ctx()
+                        .load_texture(name, image, egui::TextureOptions::LINEAR),
+                );
+            }
+        }
+    }
+
+    /// The size to rasterise a viewport at: the panel's own aspect ratio, with
+    /// only the resolution capped.
+    fn frame_size(area: egui::Vec2) -> render::Size {
+        let scale = (MAX_EDGE / area.x.max(area.y).max(1.0)).min(1.0);
+        render::Size::new(
+            ((area.x * scale) as usize).max(1),
+            ((area.y * scale) as usize).max(1),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -199,11 +270,27 @@ mod tests {
        "width": 64, "height": 64, "source": "files/map/aa1_01.tpl"}
     ]}"#;
 
-    fn export_folder() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("dimentio-ui-{}", std::process::id()));
+    /// ⚠️ The PNGs are written for real. `choose_image` decodes the file the
+    /// catalog names, so a folder of manifests with no images behind them would
+    /// exercise only the failure path.
+    /// ⚠️ Tagged per test. One folder shared between them races: a test that
+    /// deletes an image to reach the failure path would delete it under a test
+    /// running beside it.
+    fn export_folder(tag: &str) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("dimentio-ui-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&root).expect("scratch dir");
         std::fs::write(root.join("effects.json"), EFFECTS).expect("effects.json");
         std::fs::write(root.join("textures.json"), TEXTURES).expect("textures.json");
+        let texel = crate::data::texture::Texel {
+            r: 0,
+            g: 220,
+            b: 220,
+            a: 255,
+        };
+        for name in ["a.png", "b.png"] {
+            std::fs::write(root.join(name), crate::data::texture::png(1, 1, &[texel]))
+                .expect("a real png");
+        }
         root
     }
 
@@ -225,7 +312,7 @@ mod tests {
     /// nobody can photograph.
     #[test]
     fn the_effect_panels_lay_out_and_play_without_a_window() {
-        let root = export_folder();
+        let root = export_folder("panels");
         let mut viewer = Viewer {
             mode: Mode::Effects,
             ..Viewer::empty()
@@ -259,6 +346,8 @@ mod tests {
         // panels have to survive.
         viewer.effects.selected = None;
         draw(&mut viewer, &ctx);
+        viewer.select_effect(0);
+        draw(&mut viewer, &ctx);
         let mut bare = Viewer {
             mode: Mode::Effects,
             ..Viewer::empty()
@@ -266,5 +355,49 @@ mod tests {
         bare.open(std::env::temp_dir().join("dimentio-ui-absent"));
         assert!(bare.effects.library.problem().is_some());
         draw(&mut bare, &ctx);
+    }
+
+    /// The viewport's plumbing, end to end through the window: an effect is
+    /// picked, a frame is rasterised, and a bank image the user clicked reaches
+    /// the part they chose.
+    ///
+    /// ⛔ The pairing is the user's. Nothing here reads an image out of the
+    /// effect data, and `render::effect`'s own tests are what prove the chosen
+    /// image changes the pixels — this only proves the window can deliver it.
+    #[test]
+    fn the_viewport_rasterises_and_takes_a_manually_chosen_image() {
+        let root = export_folder("stage");
+        let mut viewer = Viewer {
+            mode: Mode::Effects,
+            ..Viewer::empty()
+        };
+        viewer.open(root);
+        let ctx = egui::Context::default();
+
+        viewer.select_effect(0);
+        assert!(!viewer.effects.stage.drawn(), "nothing has been drawn yet");
+        draw(&mut viewer, &ctx);
+        assert!(viewer.effects.stage.drawn(), "the viewport drew no frame");
+        assert_eq!(
+            viewer.effects.stage.previewing(),
+            None,
+            "nothing was picked"
+        );
+
+        let image = viewer.effects.bank[0];
+        viewer.choose_image(image);
+        assert_eq!(
+            viewer.effects.stage.previewing(),
+            Some(("files/eff/effdata.tpl#0", 0)),
+            "the clicked image did not reach the chosen part"
+        );
+        draw(&mut viewer, &ctx);
+
+        // A catalog entry whose PNG is not on disk must say so rather than
+        // silently keeping the last image.
+        std::fs::remove_file(&viewer.catalog.entries()[image].path).expect("the png");
+        viewer.choose_image(image);
+        assert_eq!(viewer.effects.stage.previewing(), None);
+        draw(&mut viewer, &ctx);
     }
 }

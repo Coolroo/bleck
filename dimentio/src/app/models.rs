@@ -13,19 +13,6 @@ use super::Viewer;
 use crate::data::{self, mesh};
 use crate::render;
 
-/// Radians of orbit per point of drag.
-const ORBIT_SPEED: f32 = 0.008;
-
-/// How hard a scroll notch pulls the camera in. Applied as an exponent, so
-/// zoom is proportional and cannot walk through zero.
-const ZOOM_SPEED: f32 = 0.0015;
-
-/// ⚠️ Longest edge the viewport is rasterised at, whatever size the panel is.
-/// Every pixel costs CPU here, and a maximised 4K window would otherwise
-/// rasterise ~8M of them on each frame of a drag. Beyond this the frame is
-/// drawn smaller and scaled up by the GPU.
-const MAX_EDGE: f32 = 1600.0;
-
 /// Colour of the standing warning that a model is one shape out of a file that
 /// holds many. The same amber the effect pane uses for an undecoded part: both
 /// say "this is less than it looks like".
@@ -293,11 +280,7 @@ impl Viewer {
 
         // Rasterised at the panel's aspect ratio, so a wide window does not
         // squash the model; only the resolution is capped.
-        let scale = (MAX_EDGE / area.x.max(area.y).max(1.0)).min(1.0);
-        let size = render::Size::new(
-            ((area.x * scale) as usize).max(1),
-            ((area.y * scale) as usize).max(1),
-        );
+        let size = Self::frame_size(area);
         if size != self.models.size {
             self.models.size = size;
             self.models.stale = true;
@@ -305,20 +288,7 @@ impl Viewer {
 
         if self.models.stale || self.models.frame.is_none() {
             let drawn = render::render(&self.models.mesh, &self.models.view, size);
-            let image = egui::ColorImage::from_rgba_unmultiplied(
-                [size.width, size.height],
-                drawn.as_rgba(),
-            );
-            match &mut self.models.frame {
-                Some(handle) => handle.set(image, egui::TextureOptions::LINEAR),
-                None => {
-                    self.models.frame = Some(ui.ctx().load_texture(
-                        "viewport",
-                        image,
-                        egui::TextureOptions::LINEAR,
-                    ));
-                }
-            }
+            Self::upload(ui, &mut self.models.frame, "viewport", &drawn);
             self.models.stale = false;
         }
 
@@ -336,20 +306,8 @@ impl Viewer {
     /// itself does the clamping, so no input can put it somewhere it cannot
     /// come back from.
     fn steer(&mut self, ui: &egui::Ui, response: &egui::Response) {
-        let drag = response.drag_delta();
-        if drag != egui::Vec2::ZERO {
-            self.models
-                .view
-                .camera
-                .orbit(drag.x * ORBIT_SPEED, drag.y * ORBIT_SPEED);
+        if Self::steer_camera(ui, response, &mut self.models.view.camera) {
             self.models.stale = true;
-        }
-        if response.hovered() {
-            let scroll = ui.input(|input| input.smooth_scroll_delta.y);
-            if scroll != 0.0 {
-                self.models.view.camera.zoom((-scroll * ZOOM_SPEED).exp());
-                self.models.stale = true;
-            }
         }
     }
 }

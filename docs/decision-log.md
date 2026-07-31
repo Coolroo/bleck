@@ -14223,3 +14223,56 @@ vertex happened to be last, which is the artefact D223 removed.
 (the container, 410), `modelmesh.py` (493), `modelanim.py` (267) and
 `modelbase.py` (24, breaking the import cycle). The public API is re-exported
 whole; all 1,367 tests pass unchanged, which is the proof.
+
+## D225 — The Effects tab gets a viewport, and its layout is a display choice (2026-07-30)
+
+✅ **Effects are drawn, not just described.** The tab listed parts, durations
+and transform rows; a person said plainly that a table is not a render. It now
+has a viewport: one camera-facing quad per part that is running at the current
+time, driven by the existing scrubber.
+
+`render::scene(pieces, view, size)` was added so several meshes share one depth
+buffer, and `render()` became a one-piece call to it. ⛔ **There is still one
+rasteriser** — a second would drift from the first silently.
+
+### ⚠️ The placement is invented, and must stay labelled
+
+A part's transform row is read as a **direction**, and the part placed along
+it; parts with no usable row fall back to an even ring by index, each one
+spread further out so two cannot stack. That puts `chaos`'s four parts on the
+five-fold ring D172 measured — which is encouraging and **is not evidence**.
+
+⛔ **This is a layout, not a decoded scene graph.** Nothing in the data has
+been shown to mean "position". A reader who skips the comment could mistake
+the ring for a measured arrangement, so it is stated at the function and in
+the UI.
+
+### ⛔ Still no part-to-image pairing, now with a safe way to explore one
+
+Parts draw **untextured**, in a flat colour per index. The bank thumbnails are
+buttons: clicking one applies that image to the *chosen* part, under a standing
+label — *"no image is bound to a part in the data; this is a manual preview,
+not a decoded pairing"*.
+
+That is deliberate. Six candidates are refuted (D210) and the real reference is
+one hop further out (D218), so the honest move is to let a person try pairings
+by hand — which may be how the binding is eventually found — while never
+letting the program claim one.
+
+### Mutation results
+
+| break | caught by |
+|---|---|
+| `Part::active_at` always true | 8 tests, incl. 4 new pixel tests and the real-export one |
+| viewport iterating all parts, data layer intact | **4** — only the viewport tests; the data tests were blind to it |
+| manual image applied to every part | 1, on part 0 keeping its flat colour |
+
+⚠️ **The second mutation is the useful one.** It breaks only the viewport, and
+only the viewport's own pixel tests see it. Testing the data layer would have
+proved nothing about what is drawn.
+
+Two tests run against the real 139-effect export and were confirmed *running*
+rather than skipping.
+
+⛔ **Nobody has looked at the window.** The two-column split, the tooltip and
+the combo box have never been seen rendered.

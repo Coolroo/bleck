@@ -7,11 +7,14 @@
 //! screen. Moving it onto `wgpu` would remove that.
 //!
 //! `camera` places the viewer and projects; `raster` fills triangles, keeps the
-//! depth buffer and shades; `background` draws what sits behind. `render` below
-//! is the only way in, and the test fixtures it needs are shared with all three.
+//! depth buffer and shades; `background` draws what sits behind; `effect` turns
+//! an effect's running parts into quads to hand back in. `render` and `scene`
+//! below are the only ways in, and the test fixtures they need are shared with
+//! all four.
 
 mod background;
 mod camera;
+pub mod effect;
 mod raster;
 
 pub use background::{Background, BACKGROUNDS};
@@ -76,20 +79,62 @@ pub struct View {
     pub background: Background,
 }
 
+/// One drawable in a scene: geometry, plus the colour its untextured faces
+/// take.
+///
+/// A mesh that carries a texture is painted with it and ignores `flat`; a mesh
+/// that does not is filled with `flat` and shaded by the same lighting term.
+#[derive(Debug, Clone, Copy)]
+pub struct Piece<'a> {
+    pub mesh: &'a Mesh,
+    pub flat: Rgba,
+}
+
+impl<'a> Piece<'a> {
+    /// A mesh in the default surface colour — what a model with no material
+    /// draws as, and what the model viewport asks for.
+    pub fn plain(mesh: &'a Mesh) -> Self {
+        Self {
+            mesh,
+            flat: raster::SURFACE,
+        }
+    }
+}
+
 /// Draw `mesh` through `view` at `size`.
 ///
 /// Always returns a full frame: an empty mesh, a zero size or geometry entirely
 /// behind the camera produce the background rather than a failure, because the
 /// caller is a window that has to draw something.
 pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
+    scene(&[Piece::plain(mesh)], view, size)
+}
+
+/// Draw several pieces through one camera into one frame.
+///
+/// ⚠️ One depth buffer covers all of them, so a piece behind another is hidden
+/// by it. Rendering each piece into its own frame and compositing the results
+/// would order them by draw order instead, which is the bug the depth buffer
+/// exists to prevent.
+pub fn scene(pieces: &[Piece], view: &View, size: Size) -> Image {
     let mut image = Image::filled(size, view.background);
-    if size.pixels() == 0 || mesh.is_empty() {
+    if size.pixels() == 0 {
         return image;
     }
-
     let basis = Basis::of(&view.camera);
     let lens = Lens::new(view.camera.fov_y, size);
     let mut depth = vec![f32::NEG_INFINITY; size.pixels()];
+    for piece in pieces {
+        draw(&mut image, &mut depth, &basis, &lens, piece);
+    }
+    image
+}
+
+fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece: &Piece) {
+    let mesh = piece.mesh;
+    if mesh.is_empty() {
+        return;
+    }
     let positions = mesh.positions();
     // Resolved once: a mesh either carries a texture and coordinates or it
     // does not, and asking per face would re-check 3,500 times a frame.
@@ -109,7 +154,7 @@ pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
             continue;
         }
         let screen = viewed.map(|corner| lens.project(corner));
-        let intensity = raster::lighting(&basis, &corners);
+        let intensity = raster::lighting(basis, &corners);
         // A face whose corners the UV list does not reach falls back to flat,
         // so a short TEXCOORD_0 accessor loses a triangle's texture rather
         // than the whole model.
@@ -124,11 +169,10 @@ pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
                 })
         }) {
             Some(textured) => textured,
-            None => raster::Paint::Flat(raster::surface(intensity)),
+            None => raster::Paint::Flat(piece.flat.shaded(intensity)),
         };
-        raster::raster(&mut image, &mut depth, &screen, &paint);
+        raster::raster(image, depth, &screen, &paint);
     }
-    image
 }
 
 /// The geometry and the measurements every part of the renderer tests against,

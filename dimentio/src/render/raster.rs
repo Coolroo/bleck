@@ -27,8 +27,9 @@ const AMBIENT: f32 = 0.25;
 const LIGHT: Vec3 = Vec3::new(-0.4, 0.6, -0.7);
 
 /// Untextured surface colour. 277 of 864 models export without a material, so
-/// their faces differ only by how they are lit.
-const SURFACE: Rgba = Rgba::new(214, 208, 196);
+/// their faces differ only by how they are lit. A caller that wants a different
+/// flat colour passes one in `Piece::flat`; this is the default it starts from.
+pub(super) const SURFACE: Rgba = Rgba::new(214, 208, 196);
 
 /// glTF's default `alphaCutoff` in 8-bit terms: under `alphaMode: "MASK"` a
 /// texel below this is discarded outright.
@@ -120,11 +121,6 @@ pub(super) fn lighting(basis: &Basis, corners: &[Vec3; 3]) -> f32 {
     }
     let lit = facing.dot(LIGHT.normalised()).max(0.0);
     AMBIENT + (1.0 - AMBIENT) * lit
-}
-
-/// The untextured surface at a given light level.
-pub(super) fn surface(intensity: f32) -> Rgba {
-    SURFACE.shaded(intensity)
 }
 
 /// Half the cross product of two triangle edges: positive on one side of the
@@ -360,7 +356,7 @@ mod tests {
     #[test]
     fn shading_darkens_a_face_turned_away_from_the_light() {
         let basis = Basis::of(&head_on());
-        let shade = |corners: &[Vec3; 3]| surface(lighting(&basis, corners));
+        let shade = |corners: &[Vec3; 3]| SURFACE.shaded(lighting(&basis, corners));
         let facing = shade(&[
             Vec3::new(-1.0, -1.0, 0.0),
             Vec3::new(1.0, -1.0, 0.0),
