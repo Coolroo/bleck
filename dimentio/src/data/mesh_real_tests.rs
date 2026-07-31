@@ -84,15 +84,16 @@ fn the_textured_models_are_the_single_shape_minority() {
             None => bare += 1,
         }
     }
-    // ⛔ This asserted that *most* models are textured, which stopped being
-    // true when `bleck` stopped painting one image across every shape of a
-    // model (D229). A model with several shapes has one image per shape and
-    // the binding is not decoded, so it exports bare on purpose.
+    // ⛔ **This must not assume which flags produced the export.** It once
+    // asserted most models are textured, which D229 reversed; then a textured
+    // minority, which `--guess-textures` reverses back. Either export is
+    // legitimate, so assert only what holds for both.
     assert!(
-        painted > 0 && bare > painted,
-        "expected a textured minority; got {painted} textured, {bare} bare of {}",
+        painted > 0,
+        "no model was textured at all, of {}",
         library.len()
     );
+    assert_eq!(painted + bare, library.len());
 }
 
 /// The whole point, measured on real data: a textured model reaches the
@@ -109,6 +110,12 @@ fn a_textured_model_reaches_the_frame_as_more_than_one_colour() {
 
     let mut checked = 0;
     for entry in library.entries() {
+        // ⛔ A guessed texture is image 0 painted on a shape that does not
+        // own it, and can legitimately be one flat colour -- so it cannot
+        // answer "was the texture sampled" (D229).
+        if entry.texture_guessed {
+            continue;
+        }
         let mesh = Mesh::load(&entry.path).expect("mesh");
         if mesh.surface().is_none() || mesh.faces().len() < 200 {
             continue;

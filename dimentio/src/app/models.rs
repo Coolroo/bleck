@@ -220,6 +220,13 @@ impl Viewer {
                 asset.inline(ui, "extent", &entry.extent());
                 ui.separator();
                 asset.inline(ui, "texture", painted.as_deref().unwrap_or("none"));
+                if entry.texture_guessed {
+                    ui.separator();
+                    ui.label(egui::RichText::new("texture is a guess").color(FRAGMENT))
+                        .on_hover_text(
+                            "This model has several shapes and each has its own                              image, but which image goes with which shape is not                              decoded. --guess-textures gave every shape image 0,                              which is wrong for most models.",
+                        );
+                }
                 if entry.fragment {
                     ui.separator();
                     ui.label(

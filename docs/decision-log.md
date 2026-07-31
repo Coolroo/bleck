@@ -14858,3 +14858,28 @@ fails 8.
 🔶 `EFF_koopa` is the one model whose rebased UV index overflows — 198 against
 191 UVs, on 1 face of 67 — and exports untextured. Same shape as the 22 faces
 D224 already records as rebasing past the end. Not investigated.
+
+### D234 addendum — two tests were asserting which flags an export used (2026-07-31)
+
+⛔ **A test must not depend on how the export it reads was produced.** Two
+real-export tests broke, and neither was a code fault:
+
+- `the_textured_models_are_the_single_shape_minority` asserted `bare > painted`.
+  That was true under D229's default and false under `--guess-textures`, which
+  is an equally legitimate export.
+- `a_textured_model_reaches_the_frame_as_more_than_one_colour` failed on
+  `e_card_mat1` drawing one colour — because a **guessed** texture is image 0
+  painted on a shape that does not own it, and can legitimately be flat.
+
+⚠️ **That test has now been rewritten three times to chase the truth of the
+moment**: "most models are textured" (before D229), then "a textured minority"
+(after D229), then this. Each rewrite encoded a fact that a later decision
+reversed. It now asserts only what holds for *both* exports — that something is
+textured, and that painted plus bare accounts for every model.
+
+The colour test skips guessed entries, which required carrying
+`texture_guessed` through to the Rust `Entry`. ✅ Rather than silence the
+resulting dead-code warning, the field earns its keep in the window: the model
+facts strip now shows **"texture is a guess"** in the same amber as the
+fragment label, with the reason on hover. A flag the user can see beats one
+only a test reads.

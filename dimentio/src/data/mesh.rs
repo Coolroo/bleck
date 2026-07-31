@@ -63,6 +63,11 @@ pub struct Entry {
     /// window says otherwise.
     #[serde(default)]
     pub fragment: bool,
+    /// ⚠️ Set when `bleck --guess-textures` gave a multi-shape model image 0
+    /// anyway. The image is almost certainly the wrong one, so a test asserting
+    /// what a texture *looks like* must skip these (D229).
+    #[serde(default)]
+    pub texture_guessed: bool,
     /// Bounds as `bleck` measured them. Shown as facts; the camera fits itself
     /// to the bounds of the geometry actually parsed, so a wrong number here
     /// mis-labels a model rather than mis-framing it.
@@ -670,6 +675,7 @@ mod tests {
             triangles: 1,
             coverage: 1.0,
             fragment: false,
+            texture_guessed: false,
             min: [0.0; 3],
             max: [1.0; 3],
         }
