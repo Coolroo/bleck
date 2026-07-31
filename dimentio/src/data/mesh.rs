@@ -24,6 +24,7 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use super::gltf;
+use super::morph::{Animation, ClipEntry};
 use super::texture::Texture;
 
 /// The file `bleck model export` writes alongside the meshes.
@@ -35,7 +36,7 @@ struct Manifest {
 }
 
 /// One exported model, as `bleck` described it.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 pub struct Entry {
     /// Stable identifier: the disc file the model came from.
     pub name: String,
@@ -75,6 +76,18 @@ pub struct Entry {
     pub min: [f32; 3],
     #[serde(default)]
     pub max: [f32; 3],
+    /// Clips written into the `.glb`, so a list can say how many a model has
+    /// without opening it.
+    #[serde(default)]
+    pub animations: usize,
+    /// ⚠️ Clips the exporter's per-file budget left out. Reported, because a
+    /// model that exported 3 of its 94 clips otherwise reads as a model with
+    /// three animations.
+    #[serde(default)]
+    pub animations_dropped: usize,
+    /// Every clip the file holds, written or not.
+    #[serde(default)]
+    pub clips: Vec<ClipEntry>,
 }
 
 impl Entry {
@@ -311,18 +324,34 @@ pub(crate) struct Parts {
     /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
     /// below the cutoff is not drawn at all.
     pub(crate) masked: bool,
+    /// The morph targets and clips the file carried, when it carried any.
+    pub(crate) animation: Option<Animation>,
 }
 
 impl Parts {
+    /// Everything a file that carries only geometry produces.
+    pub(crate) fn bare(positions: Vec<Vec3>, faces: Vec<Face>) -> Self {
+        Self {
+            positions,
+            faces,
+            uvs: None,
+            texture: None,
+            masked: false,
+            animation: None,
+        }
+    }
+
     pub(crate) fn into_mesh(self) -> Mesh {
         let bounds = Bounds::around(&self.positions, &self.faces);
         Mesh {
             positions: self.positions,
+            posed: Vec::new(),
             faces: self.faces,
             bounds,
             uvs: self.uvs,
             texture: self.texture,
             masked: self.masked,
+            animation: self.animation,
         }
     }
 }
@@ -356,16 +385,63 @@ impl Surface<'_> {
 #[derive(Debug, Clone, Default)]
 pub struct Mesh {
     positions: Vec<Vec3>,
+    /// The rest positions displaced by whichever pose is being held. Empty
+    /// whenever nothing is posed, which is every mesh that carries no
+    /// animation and every animated one before a clip is picked.
+    posed: Vec<Vec3>,
     faces: Vec<Face>,
     bounds: Bounds,
     uvs: Option<Vec<Uv>>,
     texture: Option<Texture>,
     masked: bool,
+    animation: Option<Animation>,
 }
 
 impl Mesh {
+    /// What to draw: the pose being held, or the rest positions when none is.
     pub fn positions(&self) -> &[Vec3] {
+        if self.posed.is_empty() {
+            &self.positions
+        } else {
+            &self.posed
+        }
+    }
+
+    /// The positions as the file recorded them, whatever is posed on top.
+    ///
+    /// Only the tests read this: the window draws whatever is posed, and the
+    /// evidence that a pose *is* a displacement of the rest positions rather
+    /// than a separate mesh has to compare the two.
+    #[allow(dead_code)]
+    pub fn rest_positions(&self) -> &[Vec3] {
         &self.positions
+    }
+
+    /// The clips this mesh can play, or `None` when it carries none — which
+    /// 646 of 864 exported models do.
+    pub fn animation(&self) -> Option<&Animation> {
+        self.animation.as_ref()
+    }
+
+    /// Hold the pose `time` seconds into `clip`.
+    ///
+    /// ⚠️ **The bounds do not move with it.** They are measured once, from the
+    /// rest pose, and the camera is framed from them — a box that followed the
+    /// animation would zoom the viewport in and out on every frame.
+    pub fn pose(&mut self, clip: usize, time: f32) {
+        let Some(animation) = &self.animation else {
+            return;
+        };
+        self.posed = animation.displace(&self.positions, clip, time);
+    }
+
+    /// Drop the held pose and draw the file's own positions again.
+    ///
+    /// Paired with `pose` and read only by the tests — the window replaces the
+    /// whole mesh when the selection changes, so it never needs to undo one.
+    #[allow(dead_code)]
+    pub fn unpose(&mut self) {
+        self.posed = Vec::new();
     }
 
     pub fn faces(&self) -> &[Face] {
@@ -450,14 +526,7 @@ impl Mesh {
             }
         }
 
-        Ok(Parts {
-            positions,
-            faces,
-            uvs: None,
-            texture: None,
-            masked: false,
-        }
-        .into_mesh())
+        Ok(Parts::bare(positions, faces).into_mesh())
     }
 }
 
@@ -678,6 +747,7 @@ mod tests {
             texture_guessed: false,
             min: [0.0; 3],
             max: [1.0; 3],
+            ..Default::default()
         }
     }
 

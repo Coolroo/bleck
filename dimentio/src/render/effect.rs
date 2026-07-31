@@ -185,6 +185,9 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
         ]),
         texture: image,
         masked,
+        // A billboard is built fresh from the camera each frame; there is
+        // nothing to morph and nothing that would outlive one.
+        animation: None,
     }
     .into_mesh()
 }

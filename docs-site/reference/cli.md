@@ -208,7 +208,22 @@ adds per-vertex offsets to a copy of the position array. That maps onto glTF
 **morph targets**, so an exported `.glb` plays in any viewer with no skeleton
 involved. In Blender the poses also appear as **Shape Keys**.
 
-One clip per file is written; extra clips are another full set of dense targets.
+**Every clip that fits is written**, each as its own named glTF animation. A
+full export writes **2,256 clips across 218 models**.
+
+!!! warning "There is a budget, and it says what it dropped"
+
+    A morph target is a position delta for *every* vertex — `vertices × 12`
+    bytes — so one file's clips can dwarf its geometry. Each file is capped at
+    **256 targets or 2 MiB of morph data**, whichever binds first, and clips are
+    kept in file order until the budget runs out. The command prints how many
+    were written and how many were dropped, and `models.json` lists every clip
+    with `"written": true` or `false`.
+
+Key times are **frames at 60 Hz** in the file and are written to the `.glb` as
+seconds, since that is what glTF's samplers are defined in. The manifest carries
+both.
+
 Textures come from image 0 of the bank beside each model — ⚠️ **which image a
 shape actually uses is not decoded**, so a bank holding several may pair the
 wrong one.

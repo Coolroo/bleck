@@ -14883,3 +14883,95 @@ resulting dead-code warning, the field earns its keep in the window: the model
 facts strip now shows **"texture is a guess"** in the same amber as the
 fragment label, with the reason on hover. A flag the user can see beats one
 only a test reads.
+
+## D235 — Every clip a model can afford, and the viewport plays them (2026-07-31)
+
+⛔ **The exporter wrote one clip per file and the viewport ignored it.**
+`_animation` returned the *first* clip whose pose count fit under `MAX_POSES =
+64`, and Dimentio's glTF reader read `POSITION`, `TEXCOORD_0`, indices and the
+image — never `targets`, `meshes[].weights` or `animations`. So the one clip
+that was written did nothing on screen, and 94 of `p_wii_mario`'s 95 were not
+written at all.
+
+### The budget, measured before it was chosen
+
+✅ Surveyed all 864 exportable models: **218** hold at least one clip that moves
+something, **3,079** such clips between them, and the welded vertex counts run
+to 3,811 (`e_3D_manera2`). A dense morph target costs `vertices * 12` bytes, so
+the cost of a file's animation is `poses * vertices * 12`.
+
+| total-target cap | models that get a clip | clips kept | morph bytes | worst file |
+|---|---|---|---|---|
+| 64 | 202 | 1,565 | 24.6 MB | 2.08 MB |
+| 128 | 209 | 1,914 | 36.7 MB | 2.08 MB |
+| **256** | **218** | **2,256** | **49.5 MB** | **2.08 MB** |
+| unlimited | 218 | 3,079 | 132.4 MB | 36.2 MB |
+
+**256 is the smallest cap under which every animated model gets at least one
+clip.** Below it, models whose shortest usable clip runs to 245 poses get
+nothing — and "this model has no animation" is exactly the wrong thing for a
+budget to say. Rejected: 64 (loses 16 models entirely), 128 (loses 9), no cap
+(`e_3D_manera2` alone would carry 36 MB of morph data on a 130 KB mesh).
+
+⚠️ **A target cap alone is the wrong shape**, because the cost per target
+varies 25-fold across the disc. `MORPH_BUDGET = 2 MiB` binds first on large
+meshes; `MAX_TARGETS = 256` binds on small ones. Whichever is smaller wins.
+
+The walk is greedy in file order and **skips** a clip that will not fit rather
+than stopping at it — `p_wii_mario` has a 245-pose clip partway through 94, and
+stopping would cost every shorter clip behind it.
+
+Measured on the full export: 864 files, **218 animated, 2,256 clips written as
+14,469 morph targets, 823 dropped**. `work/export/models` grew 20 MB → 71 MB.
+
+### 🔶 Key times are frames, and are divided by 60
+
+Decoded key times are whole numbers running to 280 (`mario_S_1`). glTF defines
+a sampler's input as **seconds**, so writing them raw plays a 4.7-second clip
+over 4 minutes 40 in every viewer. `effdata` already converts effect frames at
+60 Hz (D219), so this is the same inference applied to a second table — not a
+separate measurement, and it is marked 🔶 for that reason. The manifest carries
+both `frames` and `seconds` per clip, so the raw number is never lost.
+
+### Dropped clips are named, not counted away
+
+Silent truncation reads as "the model has fewer animations". So `models.json`
+carries `animations`, `animations_dropped`, `targets`, and a per-clip row with
+`name`, `poses`, `frames`, `seconds` and **`written`**; the CLI prints both
+counts; and the viewport's facts strip shows "N clip(s) not exported" in the
+fragment amber, naming them on hover.
+
+⚠️ `written` is matched **by identity, not by name** — clip names inside one
+file are not unique, and a by-name test marks a dropped clip as written.
+
+### The viewport
+
+`data/morph.rs` applies the weights; `data/gltf.rs` reads the targets and every
+`weights` channel; `app/models.rs` adds a clip picker, play/pause, rewind and a
+scrub bar, **paused on the first frame** by default.
+
+⚠️ **Interpolation is glTF `LINEAR`, not "snap to the exporter's shape."** The
+exporter writes one pose at weight 1 at a time, and a reader that assumed that
+would be right today and wrong the moment anything blends. Held at the first key
+before a clip starts and at the last key after it ends.
+
+⚠️ **Bounds are measured once, from the rest pose.** A box that followed the
+animation would refit the camera on every frame.
+
+`Playback` moved from `data::effects` to a new `data::transport` and is now
+shared by the effect timeline and the model transport. ⛔ `sounds::Transport` is
+deliberately *not* the same type: a track stops at its end, distinguishes paused
+from stopped, and carries a volume; a clip loops and has no device to feed.
+
+### Mutation test
+
+Making `weights_at` ignore `time` and always return keyframe 0's weights fails
+**8 tests**: `halfway_between_two_keys_lands_between_them`,
+`a_quarter_of_the_way_is_a_quarter_of_the_way`,
+`halfway_displaces_halfway_towards_each_pose`,
+`the_last_keyframes_weights_hold_past_the_end`,
+`on_the_frame::a_clip_draws_differently_at_two_different_times`,
+`on_the_frame::halfway_through_a_clip_is_a_third_picture`,
+`gltf::posing_a_loaded_mesh_moves_the_vertices_its_target_names` and
+`app::playing_advances_the_clip_and_displaces_the_mesh` — three of them on the
+pixel buffer, which is the only place a window nobody can look at is visible.

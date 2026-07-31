@@ -236,7 +236,7 @@ class TestMorphAnimation:
         )
 
     def test_targets_appear_on_the_primitive(self):
-        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        document = parsed(gltf.write(a_mesh(), clips=[self.a_clip()]))
         targets = document["meshes"][0]["primitives"][0]["targets"]
         assert len(targets) == 2
         assert all("POSITION" in t for t in targets)
@@ -244,11 +244,11 @@ class TestMorphAnimation:
     def test_the_mesh_declares_a_weight_per_target(self):
         """⚠️ Required: a mesh with targets and no weights is rejected by
         strict readers and silently static in lenient ones."""
-        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        document = parsed(gltf.write(a_mesh(), clips=[self.a_clip()]))
         assert document["meshes"][0]["weights"] == [0.0, 0.0]
 
     def test_the_animation_drives_weights_on_the_node(self):
-        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        document = parsed(gltf.write(a_mesh(), clips=[self.a_clip()]))
         channel = document["animations"][0]["channels"][0]
         assert channel["target"]["path"] == "weights"
         assert channel["target"]["node"] == 0
@@ -256,7 +256,7 @@ class TestMorphAnimation:
     def test_one_weight_per_target_per_keyframe(self):
         """⛔ glTF requires output count == input count * target count. Getting
         this wrong loads without complaint and plays nothing."""
-        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        document = parsed(gltf.write(a_mesh(), clips=[self.a_clip()]))
         sampler = document["animations"][0]["samplers"][0]
         times = document["accessors"][sampler["input"]]["count"]
         weights = document["accessors"][sampler["output"]]["count"]
@@ -266,7 +266,7 @@ class TestMorphAnimation:
 
     def test_a_target_actually_moves_something(self):
         """⚠️ An all-zero target is a valid file that animates nothing."""
-        blob = gltf.write(a_mesh(), clip=self.a_clip())
+        blob = gltf.write(a_mesh(), clips=[self.a_clip()])
         document = parsed(blob)
         accessor = document["accessors"][
             document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
@@ -277,5 +277,76 @@ class TestMorphAnimation:
         assert "animations" not in parsed(gltf.write(a_mesh()))
 
     def test_an_empty_clip_is_not_written_as_an_animation(self):
-        document = parsed(gltf.write(a_mesh(), clip=gltf.Clip(name="none")))
+        document = parsed(gltf.write(a_mesh(), clips=[gltf.Clip(name="none")]))
         assert "animations" not in document
+
+
+class TestSeveralClips:
+    """More than one animation per file, over the one target list glTF allows.
+
+    ⛔ **There is no per-animation target list.** Every clip drives the same
+    weights array, so a clip that did not zero the other clips' targets would
+    play its own poses *plus* whatever the previous clip left standing.
+    """
+
+    def clips(self) -> list:
+        return [
+            gltf.Clip(
+                name="wave",
+                poses=[
+                    model.Morph(time=0.0, offsets=[(0, 1, 0, 0)]),
+                    model.Morph(time=1.0, offsets=[(1, 0, 2, 0)]),
+                ],
+            ),
+            gltf.Clip(name="jump", poses=[model.Morph(time=0.0, offsets=[(2, 0, 0, 3)])]),
+        ]
+
+    def test_every_clip_becomes_its_own_named_animation(self):
+        document = parsed(gltf.write(a_mesh(), clips=self.clips()))
+        assert [a["name"] for a in document["animations"]] == ["wave", "jump"]
+
+    def test_the_clips_share_one_target_list(self):
+        document = parsed(gltf.write(a_mesh(), clips=self.clips()))
+        targets = document["meshes"][0]["primitives"][0]["targets"]
+        assert len(targets) == 3, "two poses plus one, in one list"
+        assert document["meshes"][0]["weights"] == [0.0, 0.0, 0.0]
+
+    def test_each_keyframe_weights_every_target_in_the_file(self):
+        document = parsed(gltf.write(a_mesh(), clips=self.clips()))
+        for animation in document["animations"]:
+            sampler = animation["samplers"][0]
+            times = document["accessors"][sampler["input"]]["count"]
+            weights = document["accessors"][sampler["output"]]["count"]
+            assert weights == times * 3
+
+    def test_a_later_clip_drives_its_own_targets_and_zeroes_the_rest(self):
+        """⚠️ The off-by-one that would look right: the second clip driving
+        target 0 plays the *first* clip's opening pose under its own name."""
+        blob = gltf.write(a_mesh(), clips=self.clips())
+        document = parsed(blob)
+        sampler = document["animations"][1]["samplers"][0]
+        weights = _floats(blob, document, sampler["output"])
+        assert weights == [0.0, 0.0, 1.0]
+
+    def test_the_first_clip_holds_the_later_ones_at_zero(self):
+        blob = gltf.write(a_mesh(), clips=self.clips())
+        document = parsed(blob)
+        sampler = document["animations"][0]["samplers"][0]
+        weights = _floats(blob, document, sampler["output"])
+        assert weights == [1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+
+    def test_a_clip_with_no_poses_is_skipped_not_written_empty(self):
+        document = parsed(
+            gltf.write(a_mesh(), clips=[gltf.Clip(name="empty"), *self.clips()])
+        )
+        assert [a["name"] for a in document["animations"]] == ["wave", "jump"]
+
+
+def _floats(blob: bytes, document: dict, accessor: int) -> list:
+    """One float accessor's values, read back out of the binary chunk."""
+    json_length = struct.unpack_from("<I", blob, 12)[0]
+    binary = 20 + json_length + 8
+    record = document["accessors"][accessor]
+    view = document["bufferViews"][record["bufferView"]]
+    at = binary + view["byteOffset"]
+    return list(struct.unpack_from(f"<{record['count']}f", blob, at))

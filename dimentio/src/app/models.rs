@@ -11,7 +11,8 @@ use eframe::egui;
 
 use super::clipboard::Asset;
 use super::Viewer;
-use crate::data::{self, mesh};
+use crate::data::transport::Playback;
+use crate::data::{self, mesh, morph};
 use crate::render;
 
 /// Colour of the standing warning that a model is one shape out of a file that
@@ -48,6 +49,22 @@ pub(super) struct ModelPane {
     /// Set by anything that changes what the frame should look like. ⚠️ Without
     /// it the rasteriser runs every frame, whether or not anything moved.
     pub(super) stale: bool,
+    /// Which of the selection's clips the transport is on.
+    pub(super) clip: usize,
+    /// ⚠️ **Paused at the first frame by default**, which `Playback::default`
+    /// is. A viewport that started animating on selection would never show the
+    /// pose the geometry was authored in.
+    pub(super) play: Playback,
+    /// What the geometry is currently displaced to, so a re-pose only happens
+    /// when it has to — posing walks every vertex of every weighted target.
+    pub(super) posed: Option<Posed>,
+}
+
+/// A point in a clip: which one, and how far in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct Posed {
+    clip: usize,
+    time: f32,
 }
 
 impl ModelPane {
@@ -57,6 +74,18 @@ impl ModelPane {
             whole_only: true,
             ..Default::default()
         }
+    }
+
+    /// How long the selected clip runs, or zero when there is nothing to play.
+    ///
+    /// ⚠️ Read from the geometry, not the manifest, for the same reason the
+    /// sound pane reads the decoded file: the manifest records what the
+    /// exporter meant to write, and the scrubber has to match what it wrote.
+    fn span(&self) -> f32 {
+        self.mesh
+            .animation()
+            .and_then(|animation| animation.clips().get(self.clip))
+            .map_or(0.0, |clip| clip.seconds())
     }
 }
 
@@ -220,6 +249,19 @@ impl Viewer {
                 asset.inline(ui, "extent", &entry.extent());
                 ui.separator();
                 asset.inline(ui, "texture", painted.as_deref().unwrap_or("none"));
+                ui.separator();
+                asset.inline(ui, "clips", &Self::clip_count(&entry));
+                if entry.animations_dropped > 0 {
+                    ui.separator();
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{} clip(s) not exported",
+                            entry.animations_dropped
+                        ))
+                        .color(FRAGMENT),
+                    )
+                    .on_hover_text(Self::dropped_clips(&entry));
+                }
                 if entry.texture_guessed {
                     ui.separator();
                     ui.label(egui::RichText::new("texture is a guess").color(FRAGMENT))
@@ -246,6 +288,178 @@ impl Viewer {
         });
     }
 
+    /// How many clips the manifest says are playable, out of how many the file
+    /// holds. A model whose clips all decode to nothing says "none".
+    fn clip_count(entry: &mesh::Entry) -> String {
+        let held = entry.clips.len();
+        if held == 0 {
+            return "none".to_owned();
+        }
+        let longest = entry
+            .clips
+            .iter()
+            .filter(|clip| clip.written)
+            .map(|clip| clip.seconds)
+            .fold(0.0f32, f32::max);
+        format!(
+            "{} of {held} playable, longest {longest:.2}s",
+            entry.animations
+        )
+    }
+
+    /// The clips that moved something but did not fit the exporter's budget,
+    /// by name and size.
+    ///
+    /// ⚠️ Named, not counted. "12 clips not exported" gives nobody a way to
+    /// find out which, and the manifest already carries them.
+    fn dropped_clips(entry: &mesh::Entry) -> String {
+        let mut said = String::from(
+            "The exporter caps the morph targets one file may carry, because each \
+             is a full set of per-vertex deltas. Left out of the .glb:\n",
+        );
+        let left: Vec<&morph::ClipEntry> = entry
+            .clips
+            .iter()
+            .filter(|clip| clip.poses > 0 && !clip.written)
+            .collect();
+        for clip in left.iter().take(12) {
+            said.push_str(&format!("\n  {} — {} poses", clip.name, clip.poses));
+        }
+        if left.len() > 12 {
+            said.push_str(&format!("\n  ... and {} more", left.len() - 12));
+        }
+        said
+    }
+
+    /// Pick a clip, play it, and scrub through it.
+    ///
+    /// ⚠️ Shown only when the selection has one. 646 of 864 exported models
+    /// carry no clip, and a transport over nothing reads as a viewer whose
+    /// play button does not work.
+    pub(super) fn model_transport(&mut self, ctx: &egui::Context) {
+        if self.models.selected.is_none() || self.models.mesh.animation().is_none() {
+            return;
+        }
+        egui::TopBottomPanel::bottom("model-animation").show(ctx, |ui| {
+            ui.add_space(4.0);
+            let targets = self
+                .models
+                .mesh
+                .animation()
+                .map_or(0, |animation| animation.targets());
+            ui.horizontal_wrapped(|ui| {
+                Self::clip_picker(ui, &mut self.models);
+                ui.separator();
+                Self::clip_transport(ui, &mut self.models);
+                ui.separator();
+                ui.label(
+                    egui::RichText::new(format!("{targets} morph target(s)"))
+                        .weak()
+                        .small(),
+                )
+                .on_hover_text(
+                    "Every clip in a file shares one target list, and each target \
+                     is a position delta for every vertex.",
+                );
+            });
+            ui.add_space(4.0);
+        });
+    }
+
+    /// The clips this model carries, by name.
+    ///
+    /// Changing it rewinds: a new clip has its own length, and the old
+    /// position may be past the end of it.
+    fn clip_picker(ui: &mut egui::Ui, pane: &mut ModelPane) {
+        let Some(animation) = pane.mesh.animation() else {
+            return;
+        };
+        let clips = animation.clips();
+        let chosen = pane.clip.min(clips.len().saturating_sub(1));
+        let label = clips
+            .get(chosen)
+            .map_or_else(|| "none".to_owned(), |clip| clip.describe());
+        let mut picked = chosen;
+        egui::ComboBox::from_id_salt("model-clip")
+            .selected_text(label)
+            .width(240.0)
+            .show_ui(ui, |ui| {
+                for (index, clip) in clips.iter().enumerate() {
+                    ui.selectable_value(&mut picked, index, clip.describe());
+                }
+            });
+        ui.label(
+            egui::RichText::new(format!("{} clip(s)", clips.len()))
+                .weak()
+                .small(),
+        );
+        if picked != pane.clip {
+            pane.clip = picked;
+            pane.play.rewind();
+        }
+    }
+
+    /// Play, pause, rewind and scrub — the timeline the effect pane uses, over
+    /// a morph clip instead of an effect.
+    fn clip_transport(ui: &mut egui::Ui, pane: &mut ModelPane) {
+        let span = pane.span();
+        if span <= 0.0 {
+            // A clip of one pose is a still. There is nothing to scrub, and a
+            // slider over an empty range cannot be moved.
+            pane.play.playing = false;
+            ui.label(egui::RichText::new("a single pose — nothing to play").weak());
+            return;
+        }
+        let symbol = if pane.play.playing { "⏸" } else { "▶" };
+        if ui.button(symbol).on_hover_text("play / pause").clicked() {
+            pane.play.playing = !pane.play.playing;
+        }
+        if ui.button("⏮").on_hover_text("back to the start").clicked() {
+            pane.play.rewind();
+        }
+        ui.add(
+            egui::Slider::new(&mut pane.play.time, 0.0..=span)
+                .suffix(" s")
+                .fixed_decimals(2),
+        );
+        ui.label(egui::RichText::new(format!("of {span:.2}s")).monospace());
+    }
+
+    /// Follow the clip, and keep frames coming while it moves.
+    ///
+    /// ⚠️ `request_repaint` is what makes it animate at all. egui redraws in
+    /// response to input and nothing else, so without it the model would step
+    /// one frame per mouse movement.
+    pub(super) fn run_model_clock(&mut self, ctx: &egui::Context) {
+        if !self.models.play.playing {
+            return;
+        }
+        let span = self.models.span();
+        let dt = ctx.input(|input| input.stable_dt);
+        self.models.play.advance(dt, span);
+        ctx.request_repaint();
+    }
+
+    /// Displace the geometry to wherever the transport is, if it has moved.
+    ///
+    /// A model with no animation is left exactly as it was loaded — which is
+    /// what makes the untouched case cost nothing and look unchanged.
+    pub(super) fn hold_pose(&mut self) {
+        if self.models.mesh.animation().is_none() {
+            return;
+        }
+        let wanted = Posed {
+            clip: self.models.clip,
+            time: self.models.play.time,
+        };
+        if self.models.posed == Some(wanted) {
+            return;
+        }
+        self.models.mesh.pose(wanted.clip, wanted.time);
+        self.models.posed = Some(wanted);
+        self.models.stale = true;
+    }
+
     /// Read the geometry for `index` and frame it.
     ///
     /// ⚠️ The camera is refitted here and nowhere else. Refitting on every
@@ -265,6 +479,12 @@ impl Viewer {
         };
         self.models.selected = Some(index);
         self.models.stale = true;
+        // ⚠️ Back to clip 0, paused at its first frame. Carrying the old
+        // position across would drop a new model into the middle of a clip it
+        // may not even have.
+        self.models.clip = 0;
+        self.models.play = Playback::default();
+        self.models.posed = None;
         match mesh::Mesh::load(&path) {
             Ok(mesh) => {
                 self.models.view.camera = render::Camera::fit(mesh.bounds());
@@ -276,6 +496,7 @@ impl Viewer {
                 self.models.problem = Some(problem);
             }
         }
+        self.hold_pose();
     }
 
     pub(super) fn viewport(&mut self, ui: &mut egui::Ui) {

@@ -35,8 +35,20 @@ back for what is on screen.
 
 **Models** — a searchable model list, and a viewport: drag to orbit, scroll to
 zoom, three background presets, and a camera that fits itself to a model's
-bounds on load. It reads `models.json` and the Wavefront OBJs that
+bounds on load. It reads `models.json` and the binary glTF that
 `bleck model export` writes.
+
+**Animation** — a model that carries clips gets a clip picker, play/pause,
+rewind and a scrub bar, **paused on the first frame** when it is selected.
+Animation in this game is per-vertex morphing, so playing a clip is a weighted
+sum of position deltas over the rest pose (`src/data/morph.rs`).
+
+⚠️ **Weights are interpolated the way glTF's `LINEAR` sampler is defined.**
+`bleck` writes one pose at weight 1 at a time, and a reader that assumed that
+shape would be right today and wrong the moment anything blends.
+
+⚠️ **Bounds are measured once, from the rest pose**, so the camera does not
+refit itself on every frame of a clip.
 
 ⚠️ **The viewport is a software rasteriser** (`src/render/`), not a `wgpu`
 surface — perspective projection, a depth buffer, and flat shading from each

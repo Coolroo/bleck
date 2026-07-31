@@ -18,8 +18,10 @@ pub mod catalog;
 pub mod effects;
 pub mod gltf;
 pub mod mesh;
+pub mod morph;
 pub mod sounds;
 pub mod texture;
+pub mod transport;
 pub mod wav;
 
 #[cfg(test)]

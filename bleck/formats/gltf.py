@@ -43,6 +43,11 @@ UNSIGNED_INT = 5125
 ARRAY_BUFFER = 34962
 ELEMENT_ARRAY_BUFFER = 34963
 
+#: What one dense morph target costs per glTF vertex: three floats of position
+#: delta. ⚠️ The whole reason animation needs a budget -- a file's targets are
+#: `poses * vertices * 12` bytes, which passes the geometry at three poses.
+TARGET_BYTES = 12
+
 
 @dataclass
 class _Blob:
@@ -139,8 +144,21 @@ def _morph_targets(blob: _Blob, accessors: list, vertices: list, poses: list) ->
     return out
 
 
+@dataclass(frozen=True)
+class Slot:
+    """Where one clip's poses sit in the target list every clip shares.
+
+    ⚠️ **glTF has one target list per primitive, not one per animation.** Two
+    clips in a file therefore drive the *same* weights, and each has to hold the
+    other's targets at zero — which is what `first` and `total` are for.
+    """
+
+    first: int
+    total: int
+
+
 def _weight_animation(
-    blob: _Blob, accessors: list, poses: list, targets: list, name: str
+    blob: _Blob, accessors: list, poses: list, slot: Slot, name: str
 ) -> dict:
     # pylint: disable=container-return
     """One pose active at a time, stepping through the clip.
@@ -158,7 +176,8 @@ def _weight_animation(
 
     weights = []
     for index in range(len(poses)):
-        weights += [1.0 if slot == index else 0.0 for slot in range(len(targets))]
+        active = slot.first + index
+        weights += [1.0 if at == active else 0.0 for at in range(slot.total)]
     weight_view = blob.add(struct.pack(f"<{len(weights)}f", *weights))
     weight_accessor = len(accessors)
     accessors.append(_accessor(weight_view, len(weights), "SCALAR", FLOAT))
@@ -176,13 +195,54 @@ def _weight_animation(
     }
 
 
+def _morphs(document: dict, blob: _Blob, vertices: list, clips: list) -> None:
+    """Every clip's poses as one target list, and one animation per clip.
+
+    A clip with no poses is skipped rather than written as an empty animation:
+    a sampler with no keyframes is not loadable, and the caller has already
+    counted it.
+    """
+    usable = [clip for clip in clips if clip.poses]
+    if not usable:
+        return
+    accessors = document["accessors"]
+    poses = [pose for clip in usable for pose in clip.poses]
+    targets = _morph_targets(blob, accessors, vertices, poses)
+
+    primitive = document["meshes"][0]["primitives"][0]
+    primitive["targets"] = [{"POSITION": index} for index in targets]
+    document["meshes"][0]["weights"] = [0.0] * len(targets)
+
+    animations = []
+    first = 0
+    for clip in usable:
+        slot = Slot(first=first, total=len(targets))
+        animations.append(_weight_animation(blob, accessors, clip.poses, slot, clip.name))
+        first += len(clip.poses)
+    document["animations"] = animations
+
+
+def vertex_count(mesh) -> int:
+    """How many glTF vertices a mesh welds to.
+
+    A dense morph target costs this many times `TARGET_BYTES`, so it is what a
+    caller budgeting animation has to divide by. Welding is what decides it —
+    the model's own position count is a lower bound, not the answer.
+    """
+    return len(_welded(mesh)[0])
+
+
 def write(  # pylint: disable=too-many-locals
-    mesh, texture: bytes = b"", name: str = "", clip=None
+    mesh, texture: bytes = b"", name: str = "", clips: list | None = None
 ) -> bytes:
     """One mesh as a `.glb`, with the texture embedded when there is one.
 
     ⚠️ Returns bytes rather than writing a file, so a caller can size it,
     checksum it or hand it to a test without touching a disk.
+
+    ⚠️ **`clips` is a list, and the caller decides how long it is.** Every
+    entry is another full set of dense morph targets; nothing here refuses one
+    for being large, because only the caller knows the file's budget.
     """
     vertices, indices = _welded(mesh)
     if not vertices or not indices:
@@ -257,14 +317,8 @@ def write(  # pylint: disable=too-many-locals
         ]
         document["meshes"][0]["primitives"][0]["material"] = 0
 
-    if clip and clip.poses:
-        targets = _morph_targets(blob, accessors, vertices, clip.poses)
-        primitive = document["meshes"][0]["primitives"][0]
-        primitive["targets"] = [{"POSITION": index} for index in targets]
-        document["meshes"][0]["weights"] = [0.0] * len(targets)
-        document["animations"] = [
-            _weight_animation(blob, accessors, clip.poses, targets, clip.name)
-        ]
+    if clips:
+        _morphs(document, blob, vertices, clips)
 
     document["buffers"] = [{"byteLength": len(blob.data)}]
     return _container(document, bytes(blob.data))

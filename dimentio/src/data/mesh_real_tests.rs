@@ -60,6 +60,92 @@ fn a_real_mesh_carries_the_triangles_the_manifest_promised() {
     }
 }
 
+/// ⚠️ **The fixture cannot catch this.** `animated_quad` is written by this
+/// crate's own test module and would agree with a reader that had the
+/// animation chain wrong; only a file `bleck` wrote can disagree.
+#[test]
+fn the_clips_the_manifest_names_are_the_clips_the_mesh_carries() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    if library.entries().iter().all(|entry| entry.animations == 0) {
+        eprintln!("this export predates per-clip manifest entries; skipped");
+        return;
+    }
+
+    let mut checked = 0;
+    for entry in library.entries() {
+        let promised: Vec<&str> = entry
+            .clips
+            .iter()
+            .filter(|clip| clip.written)
+            .map(|clip| clip.name.as_str())
+            .collect();
+        if promised.is_empty() {
+            continue;
+        }
+        let mesh = Mesh::load(&entry.path).expect("mesh");
+        let animation = mesh
+            .animation()
+            .unwrap_or_else(|| panic!("{} promised clips and carries none", entry.name));
+        let carried: Vec<&str> = animation
+            .clips()
+            .iter()
+            .map(|clip| clip.name.as_str())
+            .collect();
+        assert_eq!(
+            promised, carried,
+            "{} disagrees with its manifest",
+            entry.name
+        );
+        assert_eq!(promised.len(), entry.animations, "{}", entry.name);
+        checked += 1;
+        if checked == 20 {
+            break;
+        }
+    }
+    assert!(checked >= 5, "only {checked} model(s) carried a clip");
+}
+
+/// A real clip has to reach the geometry, not merely parse. Several models,
+/// because one that happens to open with a near-empty pose would prove nothing.
+#[test]
+fn a_real_clip_displaces_a_real_model() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let mut moved = 0;
+    let mut looked = 0;
+    for entry in library.entries() {
+        if entry.animations == 0 {
+            continue;
+        }
+        let mut mesh = Mesh::load(&entry.path).expect("mesh");
+        let rest = mesh.rest_positions().to_vec();
+        let span = mesh
+            .animation()
+            .and_then(|animation| animation.clips().first())
+            .map_or(0.0, |clip| clip.seconds());
+        mesh.pose(0, span / 2.0);
+        looked += 1;
+        if mesh.positions() != rest {
+            moved += 1;
+        }
+        if looked == 25 {
+            break;
+        }
+    }
+    assert!(looked > 0, "no model in the export declared a clip");
+    assert!(
+        moved * 2 > looked,
+        "only {moved} of {looked} clips moved anything"
+    );
+}
+
 /// ⚠️ Most of the export is textured — a run that finds none of them is
 /// the bug this was written for, not a quiet pass. The fixtures elsewhere
 /// are written by this crate's own tests and would agree with a reader

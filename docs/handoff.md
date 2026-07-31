@@ -78,7 +78,7 @@ eframe) reads them:
 
 ```bash
 bleck texture export --out work/export   # 21,780 images, PNG
-bleck model   export --out work/export   # 864 OBJ + models.json
+bleck model   export --out work/export   # 864 .glb + models.json
 bleck effect  export --out work/export   # 139 effects + effects.json
 ```
 
@@ -86,7 +86,7 @@ bleck effect  export --out work/export   # 139 effects + effects.json
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
 | **Models** | ✅ geometry, UVs and textures — confirmed by a person in Blender |
-| **Animations** | ✅ **playable**, as glTF morph targets (D217) |
+| **Animations** | ✅ **played in the viewport** — 2,256 clips across 218 models, with a clip picker and a scrub bar (D235) |
 | **Effects** | 🔶 structure, part durations and transform rows; **no part→image link** |
 
 ⛔ **Animation is per-vertex morphing, not skeletal** (D217). Two sessions went

@@ -130,8 +130,11 @@ impl eframe::App for Viewer {
                 });
             }
             Mode::Models => {
+                self.run_model_clock(ctx);
                 self.model_list(ctx);
                 self.model_facts(ctx);
+                self.model_transport(ctx);
+                self.hold_pose();
                 egui::CentralPanel::default().show(ctx, |ui| {
                     if self.root.is_none() {
                         Self::message(ui, WELCOME);
@@ -324,7 +327,15 @@ mod tests {
        "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
       {"name": "files/a/sourceless.dat", "shape": "", "file": "sourceless.obj",
        "positions": 3, "faces": 1, "triangles": 1, "coverage": 1.0,
-       "fragment": false, "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]}
+       "fragment": false, "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
+      {"name": "files/a/waving.dat", "shape": "wavingShape", "file": "waving.glb",
+       "source": "files/a/waving.dat", "positions": 4, "faces": 2,
+       "triangles": 2, "coverage": 1.0, "fragment": false,
+       "animated": true, "animations": 2, "animations_dropped": 1,
+       "clips": [{"name": "wave", "poses": 2, "seconds": 1.0, "written": true},
+                 {"name": "jump", "poses": 1, "seconds": 0.0, "written": true},
+                 {"name": "vast", "poses": 900, "seconds": 15.0, "written": false}],
+       "min": [-2.0, -2.0, 0.0], "max": [2.0, 2.0, 0.0]}
     ]}"#;
 
     /// The smallest thing the OBJ reader accepts, so a selected model has real
@@ -366,6 +377,14 @@ mod tests {
         for name in ["kuribo.obj", "sourceless.obj"] {
             std::fs::write(root.join(name), TRIANGLE).expect("a real obj");
         }
+        // ⚠️ A real `.glb` with real morph targets, not a stub. The transport
+        // reads its clip list out of the geometry, so a manifest row with
+        // nothing behind it would exercise only the no-animation path.
+        std::fs::write(
+            root.join("waving.glb"),
+            crate::data::gltf::fixtures::animated_quad(),
+        )
+        .expect("a real glb");
         let texel = crate::data::texture::Texel {
             r: 0,
             g: 220,
@@ -765,12 +784,127 @@ mod tests {
 
     /// One egui frame with every model panel in it, and no window anywhere.
     fn draw_models(viewer: &mut Viewer, ctx: &egui::Context) {
-        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+        draw_models_at(viewer, ctx, 0.0);
+    }
+
+    /// One model frame at simulated time `at`, with the animation clock and
+    /// the transport in it — the same panels `update` runs, in the same order.
+    fn draw_models_at(viewer: &mut Viewer, ctx: &egui::Context, at: f64) {
+        let input = egui::RawInput {
+            time: Some(at),
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
             viewer.top_bar(ctx);
+            viewer.run_model_clock(ctx);
             viewer.model_list(ctx);
             viewer.model_facts(ctx);
+            viewer.model_transport(ctx);
+            viewer.hold_pose();
             egui::CentralPanel::default().show(ctx, |ui| viewer.viewport(ui));
         });
+    }
+
+    /// The index of the animated row in `MODELS`.
+    const WAVING: usize = 2;
+
+    fn model_viewer(tag: &str) -> Viewer {
+        let mut viewer = Viewer {
+            mode: Mode::Models,
+            ..Viewer::empty()
+        };
+        viewer.open(export_folder(tag));
+        viewer
+    }
+
+    /// ⚠️ **Paused on the first frame**, which is what was asked for: a model
+    /// that started animating the moment it was picked would never sit still
+    /// long enough to look at.
+    #[test]
+    fn a_newly_selected_model_is_paused_at_the_first_frame_of_its_first_clip() {
+        let mut viewer = model_viewer("anim-default");
+        let ctx = egui::Context::default();
+        viewer.select_model(WAVING);
+        draw_models(&mut viewer, &ctx);
+
+        assert!(!viewer.models.play.playing, "it started playing by itself");
+        assert_eq!(viewer.models.play.time, 0.0);
+        assert_eq!(viewer.models.clip, 0);
+        let animation = viewer.models.mesh.animation().expect("the glb has clips");
+        assert_eq!(animation.clips().len(), 2);
+        assert_eq!(animation.clips()[0].name, "wave");
+        // The first pose is held, not the rest geometry: vertex 0 is lifted.
+        let rest = viewer.models.mesh.rest_positions().to_vec();
+        assert_ne!(viewer.models.mesh.positions()[0], rest[0]);
+    }
+
+    /// A model with no clip must behave exactly as it did: no transport, no
+    /// pose, and the geometry the file carried.
+    #[test]
+    fn a_model_with_no_animation_is_left_alone() {
+        let mut viewer = model_viewer("anim-none");
+        let ctx = egui::Context::default();
+        viewer.select_model(0);
+        draw_models(&mut viewer, &ctx);
+        assert!(viewer.models.mesh.animation().is_none());
+        assert_eq!(viewer.models.posed, None, "nothing was posed");
+        assert_eq!(
+            viewer.models.mesh.positions(),
+            viewer.models.mesh.rest_positions()
+        );
+    }
+
+    /// Playing moves the clip on, and moving it re-poses the geometry.
+    #[test]
+    fn playing_advances_the_clip_and_displaces_the_mesh() {
+        let mut viewer = model_viewer("anim-play");
+        let ctx = egui::Context::default();
+        viewer.select_model(WAVING);
+        draw_models_at(&mut viewer, &ctx, 0.0);
+        let first = viewer.models.mesh.positions().to_vec();
+
+        viewer.models.play.playing = true;
+        for step in 1..6 {
+            draw_models_at(&mut viewer, &ctx, f64::from(step) * STEP);
+        }
+        assert!(viewer.models.play.time > 0.0, "the clock did not run");
+        assert_ne!(
+            viewer.models.mesh.positions(),
+            first,
+            "the geometry did not follow the clock"
+        );
+    }
+
+    /// Picking another clip rewinds: the old position may be past the end of
+    /// the new one, and a clip that opened halfway through would look wrong.
+    #[test]
+    fn choosing_another_clip_rewinds_to_its_start() {
+        let mut viewer = model_viewer("anim-pick");
+        let ctx = egui::Context::default();
+        viewer.select_model(WAVING);
+        draw_models(&mut viewer, &ctx);
+        viewer.models.play.time = 0.75;
+        viewer.models.clip = 1;
+        viewer.models.play.rewind();
+        draw_models(&mut viewer, &ctx);
+        assert_eq!(viewer.models.play.time, 0.0);
+        // `jump` is a single key: nothing to scrub, and nothing to divide by.
+        assert!(!viewer.models.play.playing);
+    }
+
+    /// Scrubbing past the end, onto a clip that does not exist, and through a
+    /// clip of zero length are all reachable from the window.
+    #[test]
+    fn a_scrub_past_the_end_or_onto_a_missing_clip_does_not_panic() {
+        let mut viewer = model_viewer("anim-edges");
+        let ctx = egui::Context::default();
+        viewer.select_model(WAVING);
+        for (clip, time) in [(0, 900.0), (0, -3.0), (1, 5.0), (9, 0.5)] {
+            viewer.models.clip = clip;
+            viewer.models.play.time = time;
+            draw_models(&mut viewer, &ctx);
+        }
+        assert!(!viewer.models.mesh.positions().is_empty());
     }
 
     /// All four tabs, laid out with the copy widgets in them.
@@ -791,9 +925,13 @@ mod tests {
         draw_textures(&mut viewer, &ctx);
 
         viewer.mode = Mode::Models;
-        assert_eq!(viewer.models.library.len(), 2);
+        assert_eq!(viewer.models.library.len(), 3);
         draw_models(&mut viewer, &ctx);
         viewer.select_model(0);
+        draw_models(&mut viewer, &ctx);
+        // The animated row, which lays out a clip picker and a transport the
+        // other two do not have.
+        viewer.select_model(WAVING);
         draw_models(&mut viewer, &ctx);
         // ⚠️ The row with no `source`. Its facts strip and its menu must come
         // out one item shorter rather than offering an empty path.

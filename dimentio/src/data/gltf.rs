@@ -1,10 +1,14 @@
 //! Reading the binary glTF `bleck model export` writes: the JSON chunk
 //! describes accessors, the BIN chunk holds them.
 //!
-//! `POSITION`, `TEXCOORD_0`, the index accessor and the embedded PNG are read.
-//! Normals and morph targets are present in the file and ignored here — the
-//! rasteriser shades from face normals and draws one pose, so reading them
+//! `POSITION`, `TEXCOORD_0`, the index accessor, the embedded PNG, the morph
+//! targets and every weights animation are read. Normals are present in the
+//! file and ignored — the rasteriser shades from face normals, so reading them
 //! would cost memory for nothing.
+//!
+//! ⚠️ **A file's morph targets are one list, shared by all its animations**,
+//! and each animation holds the others' targets at zero. So the targets are
+//! read once and the clips index into them; `morph` is where they are applied.
 //!
 //! ⚠️ **A missing texture is not a failure.** 277 of 864 real models carry no
 //! image and no `TEXCOORD_0`, and they must still load and draw flat-shaded.
@@ -12,6 +16,7 @@
 //! chain that breaks anywhere yields an untextured mesh rather than an error.
 
 use super::mesh::{Face, Parts, Uv, Vec3};
+use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::Texture;
 
 /// The four bytes every binary glTF opens with.
@@ -52,6 +57,7 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
         .as_u64()
         .and_then(|index| read_vec2(&json, bin, index as usize).ok());
     let paint = material(&json, bin, &primitive);
+    let animation = Animation::new(targets(&json, bin, &primitive), clips(&json, bin));
 
     Ok(Parts {
         positions,
@@ -59,7 +65,103 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
         uvs,
         texture: paint.texture,
         masked: paint.masked,
+        animation,
     })
+}
+
+/// The primitive's morph targets, as position deltas.
+///
+/// ⚠️ Only `POSITION` is read. glTF allows `NORMAL` and `TANGENT` targets too;
+/// the rasteriser shades from face normals, so a normal target would be
+/// decoded and then thrown away.
+///
+/// A target that will not read is skipped rather than failing the file: the
+/// geometry is still worth drawing, and the clips that referred to it will
+/// simply weigh a target that is not there.
+fn targets(json: &serde_json::Value, bin: &[u8], primitive: &serde_json::Value) -> Vec<Pose> {
+    let Some(list) = primitive["targets"].as_array() else {
+        return Vec::new();
+    };
+    list.iter()
+        .filter_map(|target| target["POSITION"].as_u64())
+        .filter_map(|index| read_vec3(json, bin, index as usize).ok())
+        .map(|deltas| Pose { deltas })
+        .collect()
+}
+
+/// Every animation in the file that drives weights, with its keyframes.
+///
+/// ⛔ **Only the `weights` path is understood.** A channel driving translation,
+/// rotation or scale is ignored: this reader has no node transform to apply it
+/// to, and pretending otherwise would play a clip that moves nothing while
+/// reporting that it plays.
+fn clips(json: &serde_json::Value, bin: &[u8]) -> Vec<Clip> {
+    let Some(list) = json["animations"].as_array() else {
+        return Vec::new();
+    };
+    list.iter()
+        .enumerate()
+        .filter_map(|(index, animation)| {
+            let sampler = weight_sampler(animation)?;
+            let times = read_scalars(json, bin, sampler.input).ok()?;
+            let weights = read_scalars(json, bin, sampler.output).ok()?;
+            let name = animation["name"]
+                .as_str()
+                .map_or_else(|| format!("clip {index}"), str::to_owned);
+            Some(Clip {
+                name,
+                keys: keys(&times, &weights),
+            })
+        })
+        .collect()
+}
+
+/// The accessors one sampler reads its input and output from.
+struct Sampler {
+    input: usize,
+    output: usize,
+}
+
+/// The sampler behind this animation's first `weights` channel.
+fn weight_sampler(animation: &serde_json::Value) -> Option<Sampler> {
+    let index = animation["channels"]
+        .as_array()?
+        .iter()
+        .find(|channel| channel["target"]["path"].as_str() == Some("weights"))?["sampler"]
+        .as_u64()? as usize;
+    let sampler = animation["samplers"].as_array()?.get(index)?;
+    Some(Sampler {
+        input: sampler["input"].as_u64()? as usize,
+        output: sampler["output"].as_u64()? as usize,
+    })
+}
+
+/// Split a flat weight array into one keyframe per time.
+///
+/// ⚠️ glTF requires `output.len() == input.len() * targets`, and the target
+/// count is not stated anywhere — it is implied by that division. A file whose
+/// arrays do not divide evenly yields the keys that do fit, so a truncated
+/// export plays as far as it goes instead of not at all.
+fn keys(times: &[f32], weights: &[f32]) -> Vec<Key> {
+    if times.is_empty() {
+        return Vec::new();
+    }
+    let stride = weights.len() / times.len();
+    if stride == 0 {
+        return Vec::new();
+    }
+    times
+        .iter()
+        .enumerate()
+        .filter_map(|(index, &time)| {
+            let at = index * stride;
+            let slice = weights.get(at..at + stride)?;
+            Some(Key {
+                time,
+                weights: slice.to_vec(),
+            })
+        })
+        .collect()
 }
 
 /// The two chunks a `.glb` is made of.
@@ -205,6 +307,15 @@ fn read_vec2(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<U
         .collect())
 }
 
+/// One `SCALAR` float accessor — keyframe times, and the weights they carry.
+fn read_scalars(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<f32>, String> {
+    let read = accessor_bytes(json, bin, index)?;
+    if read.bytes.len() < read.count * 4 {
+        return Err("a scalar accessor is shorter than its count".into());
+    }
+    Ok((0..read.count).map(|i| float(read.bytes, i * 4)).collect())
+}
+
 fn read_indices(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<usize>, String> {
     let kind = json["accessors"][index]["componentType"]
         .as_u64()
@@ -340,6 +451,75 @@ pub(crate) mod fixtures {
         container(&json, &bin)
     }
 
+    /// The quad with two morph targets and two named animations over them, in
+    /// the shape `bleck.formats.gltf` writes: one shared target list, and each
+    /// clip holding the other's target at zero.
+    ///
+    /// Target 0 lifts vertex 0 by 3 on Y; target 1 pushes vertex 2 by 3 on X.
+    /// `wave` steps from the first to the second over one second; `jump` is a
+    /// single key holding the second.
+    pub(crate) fn animated_quad() -> Vec<u8> {
+        let positions: [f32; 12] = [
+            -2.0, -2.0, 0.0, 2.0, -2.0, 0.0, 2.0, 2.0, 0.0, -2.0, 2.0, 0.0,
+        ];
+        let mut bin = Vec::new();
+        push_floats(&mut bin, &positions);
+        let indices = pad(&mut bin, &[0u32, 1, 2, 0, 2, 3]);
+
+        let first_at = bin.len();
+        push_floats(
+            &mut bin,
+            &[0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        );
+        let second_at = bin.len();
+        push_floats(
+            &mut bin,
+            &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        );
+
+        let wave_times = bin.len();
+        push_floats(&mut bin, &[0.0, 1.0]);
+        let wave_weights = bin.len();
+        push_floats(&mut bin, &[1.0, 0.0, 0.0, 1.0]);
+        let jump_times = bin.len();
+        push_floats(&mut bin, &[0.0]);
+        let jump_weights = bin.len();
+        push_floats(&mut bin, &[0.0, 1.0]);
+
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0"}},
+                "meshes":[{{"weights":[0.0,0.0],
+                            "primitives":[{{"attributes":{{"POSITION":0}},"indices":1,
+                              "targets":[{{"POSITION":2}},{{"POSITION":3}}]}}]}}],
+                "animations":[
+                  {{"name":"wave",
+                    "samplers":[{{"input":4,"output":5,"interpolation":"LINEAR"}}],
+                    "channels":[{{"sampler":0,"target":{{"node":0,"path":"weights"}}}}]}},
+                  {{"name":"jump",
+                    "samplers":[{{"input":6,"output":7,"interpolation":"LINEAR"}}],
+                    "channels":[{{"sampler":0,"target":{{"node":0,"path":"weights"}}}}]}}],
+                "accessors":[{{"bufferView":0,"componentType":5126,"count":4,"type":"VEC3"}},
+                             {{"bufferView":1,"componentType":5125,"count":6,"type":"SCALAR"}},
+                             {{"bufferView":2,"componentType":5126,"count":4,"type":"VEC3"}},
+                             {{"bufferView":3,"componentType":5126,"count":4,"type":"VEC3"}},
+                             {{"bufferView":4,"componentType":5126,"count":2,"type":"SCALAR"}},
+                             {{"bufferView":5,"componentType":5126,"count":4,"type":"SCALAR"}},
+                             {{"bufferView":6,"componentType":5126,"count":1,"type":"SCALAR"}},
+                             {{"bufferView":7,"componentType":5126,"count":2,"type":"SCALAR"}}],
+                "bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":48}},
+                               {{"buffer":0,"byteOffset":{indices},"byteLength":24}},
+                               {{"buffer":0,"byteOffset":{first_at},"byteLength":48}},
+                               {{"buffer":0,"byteOffset":{second_at},"byteLength":48}},
+                               {{"buffer":0,"byteOffset":{wave_times},"byteLength":8}},
+                               {{"buffer":0,"byteOffset":{wave_weights},"byteLength":16}},
+                               {{"buffer":0,"byteOffset":{jump_times},"byteLength":4}},
+                               {{"buffer":0,"byteOffset":{jump_weights},"byteLength":8}}],
+                "buffers":[{{"byteLength":{}}}]}}"#,
+            bin.len()
+        );
+        container(&json, &bin)
+    }
+
     fn push_floats(bin: &mut Vec<u8>, values: &[f32]) {
         for value in values {
             bin.extend_from_slice(&value.to_le_bytes());
@@ -384,7 +564,7 @@ pub(crate) mod fixtures {
 
 #[cfg(test)]
 mod tests {
-    use super::fixtures::{bare_triangle, textured_quad, QUAD_UVS};
+    use super::fixtures::{animated_quad, bare_triangle, textured_quad, QUAD_UVS};
     use super::*;
     use crate::data::mesh::Mesh;
     use crate::data::scratch::Scratch;
@@ -485,6 +665,95 @@ mod tests {
     /// document declares. Reading the wrong view yields geometry bytes, which
     /// the PNG decoder rejects — so this is the test that the chain
     /// material → texture → image → bufferView is walked correctly.
+    /// ⚠️ Every model that carries no clip must come back exactly as it did
+    /// before any of this existed. 646 of 864 exported models are in that
+    /// state, and an `Animation` conjured out of an empty target list would
+    /// give every one of them a clip picker over nothing.
+    #[test]
+    fn a_model_with_no_targets_carries_no_animation() {
+        let parts = parse(&bare_triangle()).expect("bare triangle parses");
+        assert!(parts.animation.is_none());
+        assert!(parts.into_mesh().animation().is_none());
+    }
+
+    #[test]
+    fn the_targets_and_both_clips_are_read() {
+        let parts = parse(&animated_quad()).expect("animated quad parses");
+        let animation = parts.animation.as_ref().expect("an animation");
+        assert_eq!(animation.targets(), 2);
+        let names: Vec<&str> = animation
+            .clips()
+            .iter()
+            .map(|clip| clip.name.as_str())
+            .collect();
+        assert_eq!(names, ["wave", "jump"]);
+    }
+
+    /// ⛔ The failure that looks like success: reading the sampler's *index*
+    /// as its accessor. Both are small integers, the file still loads, and the
+    /// clip plays whatever accessor 0 happens to be.
+    #[test]
+    fn a_clips_keyframes_are_its_own_times_and_weights() {
+        let parts = parse(&animated_quad()).expect("animated quad parses");
+        let animation = parts.animation.as_ref().expect("an animation");
+        let wave = &animation.clips()[0];
+        assert_eq!(wave.keys.len(), 2);
+        assert_eq!(wave.keys[0].time, 0.0);
+        assert_eq!(wave.keys[0].weights, vec![1.0, 0.0]);
+        assert_eq!(wave.keys[1].time, 1.0);
+        assert_eq!(wave.keys[1].weights, vec![0.0, 1.0]);
+        assert_eq!(wave.seconds(), 1.0);
+
+        let jump = &animation.clips()[1];
+        assert_eq!(jump.keys.len(), 1);
+        assert_eq!(jump.keys[0].weights, vec![0.0, 1.0]);
+    }
+
+    /// The whole point, on the mesh rather than the accessors: posing moves
+    /// the vertices the target names and leaves the others where they were.
+    #[test]
+    fn posing_a_loaded_mesh_moves_the_vertices_its_target_names() {
+        let scratch = Scratch::new("glb-morph");
+        scratch.write("wave.glb", animated_quad());
+        let mut mesh = Mesh::load(&scratch.path.join("wave.glb")).expect("animated quad loads");
+        let rest = mesh.rest_positions().to_vec();
+        assert_eq!(mesh.positions(), rest, "nothing is posed until it is asked");
+
+        mesh.pose(0, 0.0);
+        assert_eq!(mesh.positions()[0], rest[0] + Vec3::new(0.0, 3.0, 0.0));
+        assert_eq!(mesh.positions()[2], rest[2]);
+
+        mesh.pose(0, 1.0);
+        assert_eq!(mesh.positions()[0], rest[0]);
+        assert_eq!(mesh.positions()[2], rest[2] + Vec3::new(3.0, 0.0, 0.0));
+
+        mesh.unpose();
+        assert_eq!(mesh.positions(), rest);
+    }
+
+    /// ⚠️ The bounds are measured once, from the rest pose. A box that
+    /// followed the animation would refit the camera on every frame.
+    #[test]
+    fn posing_does_not_move_the_bounds_the_camera_is_framed_from() {
+        let scratch = Scratch::new("glb-morph-bounds");
+        scratch.write("wave.glb", animated_quad());
+        let mut mesh = Mesh::load(&scratch.path.join("wave.glb")).expect("loads");
+        let before = mesh.bounds();
+        mesh.pose(0, 0.0);
+        assert_eq!(mesh.bounds(), before);
+    }
+
+    #[test]
+    fn posing_a_mesh_with_no_animation_leaves_it_exactly_as_it_was() {
+        let scratch = Scratch::new("glb-nomorph");
+        scratch.write("bare.glb", bare_triangle());
+        let mut mesh = Mesh::load(&scratch.path.join("bare.glb")).expect("loads");
+        let before = mesh.positions().to_vec();
+        mesh.pose(0, 0.5);
+        mesh.pose(7, 900.0);
+        assert_eq!(mesh.positions(), before);
+    }
+
     #[test]
     fn the_texture_survives_a_round_trip_through_a_file_on_disk() {
         let scratch = Scratch::new("glb-textured");

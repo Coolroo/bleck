@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from bleck.cli.types import AddCommand
@@ -50,6 +50,44 @@ MODEL_DIR = "files/a"
 #: which made it useless to filter on — a viewer honouring it hid everything.
 #: 132 of 864 models clear this bar (D211).
 WHOLE = 0.95
+
+
+#: The game's video rate, which is what a clip's key times are counted in.
+#: 🔶 The times decode as whole numbers running to 280 for a Mario clip, and
+#: `effdata` already converts effect frames at 60 (D219) -- so this is the same
+#: inference, not a separate measurement. glTF's sampler input is defined as
+#: seconds, so writing raw frame numbers there would play a 4.7-second clip
+#: over 280 seconds in every viewer.
+FRAME_RATE = 60.0
+
+
+@dataclass(frozen=True)
+class ClipInfo:
+    """One animation clip of a file, decoded both ways it can be read.
+
+    `curves` is the track data (D216) and `poses` the per-vertex morphs (D217).
+    The manifest reports both; only `poses` can be written into a `.glb`.
+    """
+
+    name: str
+    curves: list = field(default_factory=list)  # pylint: disable=container-return
+    poses: list = field(default_factory=list)  # pylint: disable=container-return
+
+    @property
+    def frames(self) -> float:
+        """The clip's last key, on the timeline the file counts in."""
+        return max((pose.time for pose in self.poses), default=0.0)
+
+    @property
+    def seconds(self) -> float:
+        return self.frames / FRAME_RATE
+
+    def as_gltf(self) -> gltf.Clip:
+        """The same clip with its key times in seconds, which glTF requires."""
+        return gltf.Clip(
+            name=self.name,
+            poses=[replace(pose, time=pose.time / FRAME_RATE) for pose in self.poses],
+        )
 
 
 @dataclass(frozen=True)
@@ -112,47 +150,98 @@ def _walk(base: Path, pattern: str) -> list[Found]:  # pylint: disable=container
         except model.ModelError:
             continue
         if mesh.is_drawable:
-            found.append(Found(relative, mesh, _clips_of(data)))
+            found.append(Found(relative, mesh, _clips_of(data, mesh)))
     return found
 
 
-def _clips_of(data: bytes) -> list:  # pylint: disable=container-return
-    """A file's animation clips, with their curves decoded.
+def _clips_of(data: bytes, mesh: model.Mesh) -> list:  # pylint: disable=container-return
+    """A file's animation clips, with their curves and their poses decoded.
 
     ⚠️ An unreadable header costs the clips, never the geometry -- `read` is
     stricter than `mesh` and refuses files whose bounding box does not check
     out, which is no reason to drop a model that renders.
+
+    ⚠️ A pose reaching past the mesh's own positions is dropped here rather
+    than at write time, so the count the manifest reports is the count that
+    could be written.
     """
     try:
         found = model.read(data)
     except model.ModelError:
         return []
-    return [(clip, model.curves(data, clip)) for clip in found.animations]
-
-
-#: A dense morph target costs `vertices * 12` bytes, so a clip with dozens of
-#: poses on a large mesh dwarfs its own geometry. Past this the animation is
-#: dropped and said so, rather than writing a file nothing will open.
-MAX_POSES = 64
-
-
-def _animation(data: bytes, mesh: model.Mesh):
-    """The first clip that actually moves something, as a glTF clip.
-
-    ⚠️ **One clip per file.** glTF holds many, but every extra clip is another
-    full set of dense morph targets, and a file that is 90% animation of a
-    fragment helps nobody. The first is the useful one to look at.
-    """
-    try:
-        found = model.read(data)
-    except model.ModelError:
-        return None
+    reach = len(mesh.positions)
+    clips = []
     for clip in found.animations:
         poses = model.morphs(data, clip)
-        poses = [p for p in poses if p.offsets and p.reach < len(mesh.positions)]
-        if poses and len(poses) <= MAX_POSES:
-            return gltf.Clip(name=clip.name, poses=poses)
-    return None
+        clips.append(
+            ClipInfo(
+                name=clip.name,
+                curves=model.curves(data, clip),
+                poses=[p for p in poses if p.offsets and p.reach < reach],
+            )
+        )
+    return clips
+
+
+#: Morph targets one file may carry, across every clip in it.
+#:
+#: ⚠️ **Measured, not picked round.** 218 of 864 models have a clip that moves
+#: something, and they hold 3,079 such clips between them; 256 is the smallest
+#: cap under which *every one of those 218 gets at least one clip*, because a
+#: file whose shortest usable clip is 245 poses gets nothing from a smaller one.
+#: It keeps 2,256 of the 3,079 (D235).
+MAX_TARGETS = 256
+
+#: ...and the bytes those targets may take, whichever binds first. A target
+#: costs `vertices * 12`, so the cap above alone would give `e_3D_manera2` --
+#: 3,811 welded vertices -- an 11 MB animation block on a 130 KB mesh. At 2 MiB
+#: the largest file in a full export is 2.08 MB.
+MORPH_BUDGET = 2 * 1024 * 1024
+
+
+@dataclass(frozen=True)
+class Animations:
+    """The clips one file's budget allowed, and what was left out.
+
+    ⚠️ `dropped` is reported, never swallowed. A model that silently exported
+    3 of its 94 clips reads as a model with 3 animations.
+    """
+
+    clips: list = field(default_factory=list)  # pylint: disable=container-return
+    dropped: int = 0
+    targets: int = 0
+
+    def wrote(self, clip: ClipInfo) -> bool:
+        """Whether this exact clip is one of the ones written.
+
+        ⚠️ Identity, not the name. Clip names inside one file are not unique,
+        and a by-name test would mark a dropped clip as written.
+        """
+        return any(kept is clip for kept in self.clips)
+
+
+def budget(vertices: int) -> int:
+    """How many targets this mesh may carry, of the two caps that apply."""
+    cost = max(vertices * gltf.TARGET_BYTES, 1)
+    return min(MAX_TARGETS, MORPH_BUDGET // cost)
+
+
+def fit_animations(clips: list, vertices: int) -> Animations:
+    """Every clip that moves something and fits, in the file's own order.
+
+    ⚠️ **Greedy, in file order, skipping what does not fit.** A clip too big
+    for what is left does not end the walk — a 245-pose clip in the middle of a
+    file must not cost every shorter clip behind it.
+    """
+    usable = [clip for clip in clips if clip.poses]
+    allowed = budget(vertices)
+    kept: list = []
+    left = allowed
+    for clip in usable:
+        if len(clip.poses) <= left:
+            left -= len(clip.poses)
+            kept.append(clip)
+    return Animations(clips=kept, dropped=len(usable) - len(kept), targets=allowed - left)
 
 
 def texture_for(
@@ -255,6 +344,25 @@ def _above_coverage(found: list, percent: float) -> list:
     return kept
 
 
+def _clip_entry(clip: ClipInfo, written: bool) -> dict:
+    # pylint: disable=container-return
+    """One clip as the manifest carries it.
+
+    `written` is the field the viewer needs: a clip listed here without one in
+    the `.glb` is a clip the budget dropped, not a clip that failed to decode.
+    """
+    return {
+        "name": clip.name,
+        "curves": len(clip.curves),
+        "keys": sum(len(c.times) for c in clip.curves),
+        "span": round(max((c.span for c in clip.curves), default=0.0), 3),
+        "poses": len(clip.poses),
+        "frames": round(clip.frames, 3),
+        "seconds": round(clip.seconds, 4),
+        "written": written,
+    }
+
+
 def _summarise(entries: list) -> None:
     """What the export produced, in the terms that decide whether to trust it."""
     textured = sum(1 for entry in entries if entry["textured"])
@@ -263,6 +371,9 @@ def _summarise(entries: list) -> None:
     clips = sum(len(entry["clips"]) for entry in entries)
     curves = sum(c["curves"] for entry in entries for c in entry["clips"])
     guessed = sum(1 for entry in entries if entry["texture_guessed"])
+    played = sum(entry["animations"] for entry in entries)
+    dropped = sum(entry["animations_dropped"] for entry in entries)
+    targets = sum(entry["targets"] for entry in entries)
     print(f"  {textured} carry an embedded texture")
     if guessed:
         print(
@@ -277,6 +388,13 @@ def _summarise(entries: list) -> None:
             f"    --guess-textures paints image 0 on them anyway."
         )
     print(f"  {animated} carry a playable morph animation")
+    print(f"  {played} clip(s) written as {targets} morph target(s)")
+    if dropped:
+        print(
+            f"  ! {dropped} further clip(s) did NOT fit the per-file budget of\n"
+            f"    {MAX_TARGETS} target(s) or {MORPH_BUDGET // 1024} KiB, whichever\n"
+            f"    binds first. Each is listed in the manifest with written: false."
+        )
     print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
     print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
 
@@ -297,10 +415,16 @@ def cmd_export(args: argparse.Namespace) -> int:
                 base, entry.disc_path, entry.mesh.shapes, args.guess_textures
             )
         )
-        data = (base / entry.disc_path).read_bytes()
-        clip = None if args.no_animation else _animation(data, entry.mesh)
+        animation = (
+            Animations()
+            if args.no_animation
+            else fit_animations(entry.clips, gltf.vertex_count(entry.mesh))
+        )
+        written = [clip.as_gltf() for clip in animation.clips]
         try:
-            tree.write(entry.relative, gltf.write(entry.mesh, texture, entry.name, clip))
+            tree.write(
+                entry.relative, gltf.write(entry.mesh, texture, entry.name, written)
+            )
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
             continue
@@ -319,15 +443,12 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "textured": entry.mesh.is_textured and bool(texture),
                 "texture_guessed": bool(texture) and entry.mesh.shapes > 1,
                 "shapes": entry.mesh.shapes,
-                "animated": bool(clip),
+                "animated": bool(animation.clips),
+                "animations": len(animation.clips),
+                "animations_dropped": animation.dropped,
+                "targets": animation.targets,
                 "clips": [
-                    {
-                        "name": clip.name,
-                        "curves": len(curves),
-                        "keys": sum(len(c.times) for c in curves),
-                        "span": round(max((c.span for c in curves), default=0.0), 3),
-                    }
-                    for clip, curves in entry.clips
+                    _clip_entry(clip, animation.wrote(clip)) for clip in entry.clips
                 ],
                 "min": [round(v, 4) for v in lowest],
                 "max": [round(v, 4) for v in highest],
