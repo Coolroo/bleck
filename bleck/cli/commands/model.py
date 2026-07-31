@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck.cli.types import AddCommand
@@ -45,6 +45,7 @@ class Found:
 
     disc_path: str
     mesh: model.Mesh
+    clips: list = field(default_factory=list)  # pylint: disable=container-return
 
     @property
     def name(self) -> str:
@@ -92,8 +93,22 @@ def _walk(base: Path, pattern: str) -> list[Found]:  # pylint: disable=container
         except model.ModelError:
             continue
         if mesh.is_drawable:
-            found.append(Found(relative, mesh))
+            found.append(Found(relative, mesh, _clips_of(data)))
     return found
+
+
+def _clips_of(data: bytes) -> list:  # pylint: disable=container-return
+    """A file's animation clips, with their curves decoded.
+
+    ⚠️ An unreadable header costs the clips, never the geometry -- `read` is
+    stricter than `mesh` and refuses files whose bounding box does not check
+    out, which is no reason to drop a model that renders.
+    """
+    try:
+        found = model.read(data)
+    except model.ModelError:
+        return []
+    return [(clip, model.curves(data, clip)) for clip in found.animations]
 
 
 def texture_for(base: Path, disc_path: str) -> bytes:
@@ -204,6 +219,15 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": True,
                 "textured": entry.mesh.is_textured and bool(texture),
+                "clips": [
+                    {
+                        "name": clip.name,
+                        "curves": len(curves),
+                        "keys": sum(len(c.times) for c in curves),
+                        "span": round(max((c.span for c in curves), default=0.0), 3),
+                    }
+                    for clip, curves in entry.clips
+                ],
                 "min": [round(v, 4) for v in lowest],
                 "max": [round(v, 4) for v in highest],
             }
@@ -214,8 +238,12 @@ def cmd_export(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     textured = sum(1 for entry in entries if entry["textured"])
+    clips = sum(len(entry["clips"]) for entry in entries)
+    curves = sum(c["curves"] for entry in entries for c in entry["clips"])
     print(f"wrote {len(entries)} .glb file(s) and {MANIFEST} to {out}")
     print(f"  {textured} carry an embedded texture")
+    print(f"  {clips} animation clip(s), {curves} decoded curve(s), in the manifest")
+    print("  ! a curve's values are decoded; which node it drives is not (D216)")
     print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
     if failed:
         print(f"\n{len(failed)} could not be written:")

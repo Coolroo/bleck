@@ -13692,3 +13692,62 @@ slots carry the same offset when one channel is in use, so the obvious
 
 ⚠️ **Image 0 of the bank, not the right image.** Which texture a shape draws
 with is still not decoded.
+
+## D216 — Animation keyframes are delta-encoded, and the deltas decode (2026-07-30)
+
+✅ **Verified.** A clip's keys are four bytes each: a **time step**, a **signed
+16-bit value delta**, and a zero. Accumulating the deltas yields a curve;
+reading the same bytes as absolute values does not.
+
+### The instrument
+
+A real animation curve is **smooth**. So: mean second difference over range,
+per track, median across a clip — and a control that shuffles the key array.
+
+| reading | roughness |
+|---|---|
+| `b1b2` as s16, **accumulated** | **0.0112** |
+| `b1` as s8, accumulated | 0.0167 |
+| `b1b2` as s16, absolute | 0.3229 |
+| `b1` as s8, absolute | 0.32 |
+| **shuffled control, accumulated** | **0.155** |
+
+A **fourteen-fold** separation between the accumulated reading and the control,
+and a thirty-fold one between accumulated and absolute. ⚠️ Note the absolute
+readings score *worse than the shuffled control* — they were never close.
+
+### The scale, fixed by an independent number
+
+Values are signed 8.8 fixed point. Track 5 of `mario_S_1` accumulates to
+**15052**, and 15052/256 = **58.8** — the model's measured Y bound is **58.7**.
+Other tracks land in the same range: −111 to 105 against a model 73 units tall.
+That is what fixes the divisor rather than guessing it.
+
+### What this reaches
+
+All 80 chain records are **exactly** clip starts — every one, not most — which
+confirms D212's region is the animation data. `p_wii_mario` yields **727 curves
+across 94 clips**; the whole disc yields far more.
+
+The clip header is fully mapped: counts at `+0x08`/`+0x0C`/`+0x14`/`+0x1C`
+(62 tracks, 1152 keys, 14, 613), section offsets at `+0x24` **relative to the
+record**, and the bounding box at `+0x44`. Track records are 44 bytes with two
+cumulative `(first, count)` pairs — one into the keys, summing to exactly 1152,
+and one into section 6, summing to exactly 613.
+
+### ⛔ What is still missing, and why nothing plays yet
+
+**Which node or property a track drives is unknown.** 62 tracks against 176
+joint names, and no established mapping. glTF animation needs a channel target
+— a node plus one of translation/rotation/scale — and inventing one would
+animate the wrong thing convincingly.
+
+⚠️ Field 0 of a track record was read as a duration and is not: it **ascends**
+across a clip's tracks (20, 24, 25, 30, 35, 40, 42), so it is a position on a
+timeline. Summed time steps come to ~32 for every track regardless of key
+count, so the step is normalised rather than raw frames.
+
+So the manifest carries each clip's name, curve count, key count and value
+span, and the curves are decoded and tested — **and no `.glb` claims an
+animation it cannot drive**. Section 6's 613 packed 4-byte records, which carry
+a sign bit in byte 0 and look like compressed rotations, are the next piece.

@@ -611,6 +611,102 @@ def _names_between(data: bytes, start: int, end: int) -> list[str]:
     return found
 
 
+#: A clip record's own layout. Its section offsets are **relative to the
+#: record**, not file-absolute, which is why every absolute-offset scan walked
+#: straight past them (D212).
+CLIP_SECTIONS_AT = 0x24
+CLIP_SECTIONS = 8
+CLIP_TRACK_STRIDE = 44
+CLIP_KEY_STRIDE = 4
+
+#: Sections within a clip, by index into its own table.
+TRACK_SECTION = 1
+KEY_SECTION = 2
+
+#: A key's value is signed 8.8 fixed point, so an accumulated total is divided
+#: by this to reach model space. ✅ Track 5 of `mario_S_1` accumulates to 15052,
+#: and 15052/256 = 58.8 -- the model's Y bound is 58.7 (D216).
+KEY_SCALE = 256.0
+
+
+@dataclass(frozen=True)
+class Curve:
+    """One track of a clip: times, and the values they carry.
+
+    ⚠️ **The encoding is verified; what the curve *drives* is not.** Which node
+    or property a track belongs to is unknown, so these are real numbers with
+    no established meaning (D216).
+    """
+
+    index: int
+    mark: float
+    """Field 0 of the track record. Ascends across a clip's tracks, so it is a
+    position on the timeline rather than a duration."""
+
+    times: list = field(default_factory=list)  # pylint: disable=container-return
+    values: list = field(default_factory=list)  # pylint: disable=container-return
+
+    @property
+    def span(self) -> float:
+        return max(self.values) - min(self.values) if self.values else 0.0
+
+
+def curves(data: bytes, clip: Clip) -> list:  # pylint: disable=container-return
+    """A clip's tracks, decoded from their delta-compressed keys.
+
+    Each key is four bytes: a time step, a **signed 16-bit delta**, and a zero.
+    Accumulating the deltas is what makes a curve; reading them as absolute
+    values does not.
+
+    ✅ Verified by smoothness against a shuffled control: accumulated keys score
+    0.0112 where shuffled ones score 0.155, a fourteen-fold separation (D216).
+    """
+    base = clip.offset
+    if base + CLIP_SECTIONS_AT + CLIP_SECTIONS * 4 > len(data):
+        return []
+    table = struct.unpack_from(f">{CLIP_SECTIONS}I", data, base + CLIP_SECTIONS_AT)
+    tracks_at, keys_at = base + table[TRACK_SECTION], base + table[KEY_SECTION]
+    count = (table[TRACK_SECTION + 1] - table[TRACK_SECTION]) // CLIP_TRACK_STRIDE
+    keys = (table[KEY_SECTION + 1] - table[KEY_SECTION]) // CLIP_KEY_STRIDE
+    if count <= 0 or keys <= 0:
+        return []
+
+    found = []
+    for index in range(count):
+        at = tracks_at + index * CLIP_TRACK_STRIDE
+        if at + CLIP_TRACK_STRIDE > len(data):
+            break
+        first, length = struct.unpack_from(">2I", data, at + 4)
+        if length < 2 or first + length > keys:
+            continue
+        mark = struct.unpack_from(">f", data, at)[0]
+        span = Span(at=keys_at + first * CLIP_KEY_STRIDE, length=length)
+        found.append(_curve(data, index, mark, span))
+    return found
+
+
+@dataclass(frozen=True)
+class Span:
+    """Where one track's keys start, and how many there are."""
+
+    at: int
+    length: int
+
+
+def _curve(data: bytes, index: int, mark: float, span: Span) -> Curve:
+    """One track's keys, accumulated into times and values."""
+    times, values = [], []
+    clock = 0
+    total = 0
+    for step in range(span.length):
+        key = span.at + step * CLIP_KEY_STRIDE
+        clock += data[key]
+        total += struct.unpack_from(">h", data, key + 1)[0]
+        times.append(float(clock))
+        values.append(total / KEY_SCALE)
+    return Curve(index=index, mark=mark, times=times, values=values)
+
+
 def _clips(data: bytes, start: int, end: int) -> list[Clip]:
     """The animation table: fixed-stride records of name plus data pointer.
 
