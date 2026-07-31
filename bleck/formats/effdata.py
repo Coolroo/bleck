@@ -15,8 +15,10 @@ the rest are binary parameter data and are not.
 |---|---|---|
 | 0 | 6,176 | ✅ **139 effect records**, 44 bytes each |
 | 1 | 14,080 | ✅ **704 part records**, 20 bytes each |
+| 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats |
 | 6 | 64,768 | ✅ **4,048 transform rows**, four floats each |
-| 2-5, 7-15 | ~1.3 MB | 🔶 binary; no strings, no structure established |
+| 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 |
+| 3-5, 7-9, 11-15 | ~700 KB | 🔶 binary; no structure established |
 
 An **effect record** is a 32-byte name then three u32s: the index of its first
 part, how many parts it has, and a third running index into something in
@@ -48,7 +50,26 @@ the disc, and why searching for one found nothing.
 `+18` — reaches 621 against 219 images, so it is not a TPL index. Until that is
 found, this reader can say what an effect is made of but not what it looks like.
 
-⛔ **The remaining sections.** 1.3 MB, no strings.
+## The curves, and how they are reached
+
+Section 10 is a flat list of **4,752 `(tag, offset)` pairs** — a `u32` tag in
+0..9, then a `u32` offset **into section 2**. The largest offset is 619,864
+against section 2's 619,936 bytes, which is what says the offsets are relative
+to that section rather than absolute.
+
+A section 2 record is a `u32`, two `u16`, a zero `u32`, then `count` floats,
+where `count` is the second `u16`. ✅ **1,231 records have exactly that size**,
+measured as the gap to the next referenced offset. The rest of the offsets land
+*inside* records — a command list pointing at sub-ranges, which is why the naive
+"gap = record size" reading only accounts for a third of them.
+
+🟢 **They are plainly curves.** The first record's 60 floats are
+`6, 12, 18 ... 354, 360` — a linear ramp to a full rotation, sampled 60 times,
+which is one second at 60 fps. ⚠️ The leading `u32` is mostly ≡ 1 (mod 10) and
+runs 1..621 with 53 distinct values, the same shape as a part record's second
+`u16`; a duration in some unit is the obvious reading and is **not** established.
+
+⛔ **The remaining sections.** ~700 KB, no strings.
 
 ⚠️ **What a transform row *means* is not established.** They are plainly
 geometry -- 42% are unit-length vectors, and `chaos` holds an exact 72-degree
@@ -241,3 +262,69 @@ def _attach_rows(data: bytes, offsets: list[int], effects: list[Effect]) -> list
             )
         )
     return out
+
+
+#: Section 10: `(tag, offset)` pairs addressing section 2.
+COMMAND_SECTION = 10
+COMMAND_STRIDE = 8
+
+#: Section 2: curve records, reached by those offsets.
+CURVE_SECTION = 2
+CURVE_HEADER = 12
+
+
+@dataclass(frozen=True)
+class Command:
+    """One `(tag, offset)` pair. What the ten tags mean is unestablished."""
+
+    tag: int
+    offset: int
+    """Relative to section 2, not to the file."""
+
+
+@dataclass(frozen=True)
+class Curve:
+    """A sampled curve out of section 2.
+
+    ⚠️ `samples` is the whole of what is established. The first record reads
+    `6, 12, 18 ... 360` -- a linear ramp to a full rotation over 60 samples,
+    one second at 60 fps -- but which curve drives what is not known.
+    """
+
+    offset: int
+    leading: int
+    """The header's first `u32`. Mostly congruent to 1 mod 10, range 1..621.
+    🔶 A duration is the obvious reading and is not established."""
+
+    marker: int
+    """The first `u16`. Unestablished."""
+
+    samples: tuple
+
+    @property
+    def is_monotonic(self) -> bool:
+        return all(b >= a for a, b in itertools.pairwise(self.samples))
+
+
+def commands(data: bytes) -> list[Command]:  # pylint: disable=container-return
+    """Section 10, in file order."""
+    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
+    start, end = offsets[COMMAND_SECTION], offsets[COMMAND_SECTION + 1]
+    return [
+        Command(*struct.unpack_from(">II", data, at))
+        for at in range(start, end - COMMAND_STRIDE + 1, COMMAND_STRIDE)
+    ]
+
+
+def curve_at(data: bytes, offset: int) -> Curve:
+    """One curve record, by its section-2-relative offset."""
+    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
+    at = offsets[CURVE_SECTION] + offset
+    leading = struct.unpack_from(">I", data, at)[0]
+    marker, count = struct.unpack_from(">HH", data, at + 4)
+    return Curve(
+        offset=offset,
+        leading=leading,
+        marker=marker,
+        samples=struct.unpack_from(f">{count}f", data, at + CURVE_HEADER),
+    )

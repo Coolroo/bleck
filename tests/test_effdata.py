@@ -12,6 +12,7 @@ coincidence to break them consistently.
 
 from __future__ import annotations
 
+import itertools
 import math
 import struct
 from pathlib import Path
@@ -159,3 +160,48 @@ class TestTransformRows:
         transform, and the per-effect counts refute it."""
         counts = [len(e.rows) for e in self._all()]
         assert any(count % 3 for count in counts)
+
+
+@pytest.mark.gamedata
+class TestCurves:
+    """Section 10 addresses section 2, and section 2 holds sampled curves."""
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def test_the_command_list_uses_ten_tags(self):
+        commands = effdata.commands(self._data())
+        assert len(commands) == 4752
+        assert sorted({c.tag for c in commands}) == list(range(10))
+
+    def test_offsets_are_relative_to_section_two_not_absolute(self):
+        """⚠️ The measurement that settled it: the largest offset is just under
+        section 2's size, and nowhere near the file's."""
+        data = self._data()
+        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        section_size = offsets[3] - offsets[2]
+        biggest = max(c.offset for c in effdata.commands(data))
+        assert biggest < section_size
+        assert biggest > section_size * 0.9, "suspiciously far from filling it"
+
+    def test_the_first_curve_is_a_full_rotation(self):
+        """🟢 6, 12, 18 ... 360 over 60 samples -- one second at 60 fps."""
+        curve = effdata.curve_at(self._data(), 0)
+        assert len(curve.samples) == 60
+        assert curve.samples[0] == 6.0
+        assert curve.samples[-1] == 360.0
+        assert curve.is_monotonic
+
+    def test_most_records_are_exactly_as_long_as_they_claim(self):
+        """⚠️ Only ~a third, and that is the finding: the rest of the offsets
+        point *inside* records, which is what a command list does."""
+        data = self._data()
+        targets = sorted({c.offset for c in effdata.commands(data)})
+        exact = sum(
+            1
+            for a, b in itertools.pairwise(targets)
+            if b - a == effdata.CURVE_HEADER + 4 * len(effdata.curve_at(data, a).samples)
+        )
+        assert exact > 1000, f"only {exact} records matched their declared size"

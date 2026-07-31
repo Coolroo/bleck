@@ -12619,3 +12619,50 @@ may contain whatever they like — that is their distribution decision, not this
 project's. The pack-side change in D193 stands, but for a different reason than
 stated there: a generated texture is excluded because it is **regenerable**,
 exactly like `mod.rel` and setup files, not because of licensing.
+
+---
+
+## D195 — `effdata.dat`'s curves, and where the command list points (2026-07-30)
+
+✅ **Two more sections read**, taking `effdata.dat` from 2 of 16 to 4 of 16.
+
+| Section | | |
+|---|---|---|
+| 10 | 38,016 | **4,752 `(tag, offset)` pairs** — a `u32` tag in 0..9, then an offset |
+| 2 | 619,936 | **Sampled curves**: `u32`, two `u16`, a zero `u32`, then `count` floats |
+
+### The offsets are into section 2, and the file says so
+
+The largest offset is **619,864** against section 2's **619,936 bytes**. Read as
+absolute they would scatter across a 1.4 MB file and stop well short of its end;
+read as section-relative they fill that one section almost exactly. ⚠️ That
+near-miss is the whole argument, and it is why the check is pinned as a test
+rather than left as a comment.
+
+### 🟢 They are curves, and the first one is unmistakable
+
+The first record's 60 floats are `6, 12, 18 ... 354, 360` — a linear ramp to a
+full rotation, sampled 60 times. **One second at 60 fps.**
+
+That is the second time this file has answered with a number measured elsewhere:
+D191 found `chaos` holding an exact 72-degree rotation matrix, matching the
+five-fold ring measured in game. Section 6 says *where* things sit; section 2
+says *how they move*.
+
+### ⚠️ Only a third of the records match their declared size
+
+`gap == 12 + 4 * count` holds for **1,231 of 3,220** consecutive offset pairs.
+⛔ That is not a partial failure — it is the finding. The other offsets land
+**inside** records, which is exactly what a command list pointing at sub-ranges
+of a curve does. A stride-based reading would have called section 2 malformed.
+
+### 🔶 Still not found: the texture link
+
+The record's leading `u32` looked promising — small values, and the same shape
+as a part record's second `u16` — and it is not a texture index either: it runs
+1..621 against `effdata.tpl`'s 219 images, with 53 distinct values, mostly
+congruent to 1 mod 10. A duration in some unit is the obvious reading and is
+**not** established.
+
+So `bleck` can now say what an effect is made of, where its pieces sit, and how
+they move — and still not what they look like. Ten sections remain.
