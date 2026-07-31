@@ -1,9 +1,9 @@
 //! What `bleck` exported, and nothing else.
 //!
 //! Every module here reads a manifest `bleck` wrote and the files named in it —
-//! PNGs, OBJs, effect tables. No game format is decoded at this layer, or at
-//! any other: `bleck` owns TPL, U8, LZ77, setup files and evt bytecode, and is
-//! tested against a real disc.
+//! PNGs, OBJs, effect tables, WAVs. No game format is decoded at this layer, or
+//! at any other: `bleck` owns TPL, U8, LZ77, BRSTM, setup files and evt
+//! bytecode, and is tested against a real disc.
 //!
 //! ⚠️ The manifest is the contract, not the directory listing. Scanning a
 //! folder for `*.png` or `*.obj` would work today and lose everything `bleck`
@@ -18,7 +18,9 @@ pub mod catalog;
 pub mod effects;
 pub mod gltf;
 pub mod mesh;
+pub mod sounds;
 pub mod texture;
+pub mod wav;
 
 #[cfg(test)]
 pub mod scratch;
@@ -26,3 +28,4 @@ pub mod scratch;
 pub use catalog::Catalog;
 pub use effects::Library as EffectLibrary;
 pub use mesh::Library as ModelLibrary;
+pub use sounds::Library as SoundLibrary;

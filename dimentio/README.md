@@ -9,7 +9,8 @@ Named for the jester who steps sideways out of the world to watch it.
 cargo run -- ../work/export        # a folder bleck exported into
 ```
 
-Three modes over the same folder: **Textures**, **Models** and **Effects**.
+Four modes over the same folder: **Textures**, **Models**, **Effects** and
+**Sounds**.
 
 ## ⛔ This program reads no game formats, and never should
 
@@ -22,7 +23,7 @@ So `bleck` exports PNG and JSON; this renders them. The viewer improves for
 free as `bleck` learns more formats, and a format bug has exactly one place to
 be fixed. The full reasoning is in [`docs/plan-dimentio.md`](../docs/plan-dimentio.md).
 
-## State: stages 1, 2 and 3
+## State: stages 1, 2, 3 and 4
 
 **Textures** — a virtualised grid, search, a format filter, and a detail panel
 showing size, format, source disc file and archive member.
@@ -65,9 +66,38 @@ system's bank as a whole — separate from the part list, selected by disc file,
 and labelled with that limit. Pairing a part with an image would look exactly
 like a decoded fact.
 
+**Sounds** — the 135 tracks from `sounds.json`: a searchable, virtualised list,
+the facts `bleck` recorded about each one, play / pause / stop with a seek
+scrubber and a volume control, and the whole track drawn as a waveform with a
+playhead on it. Pressing anywhere in the waveform moves the playhead there.
+
+⚠️ **A scrub moves the transport on every frame, and the mixer once** — on the
+frame the pointer comes up. Requeueing the mixer per frame restarts the sound as
+fast as frames are drawn, and each restart blocks the UI thread until the
+mixer's queue drains.
+
+⚠️ **`capped` means the file is shorter than the game's track.** The exporter
+truncates at `--seconds`, so the duration shown is the *export's* duration and
+the panel says so in amber.
+
+⚠️ **Only 16-bit PCM is read**, because that is all `bleck` writes. A float or
+24-bit WAV is refused by name rather than played: read as integers, either one
+is full-scale noise, which looks like a bug in `bleck`'s BRSTM decoder rather
+than in this reader.
+
+⚠️ **The audio device is opened on the first play, not when the folder is.** A
+window opened to look at textures does not seize the sound card, a machine
+without one says so instead of ignoring the play button, and `cargo test` never
+touches audio hardware at all.
+
+⛔ **Every `rodio` type stays inside `src/app/audio.rs`.** The rest of the
+window deals in seconds and a `Transport`, which is what lets play, pause, stop
+and seek be tested with no device present.
+
 ### What has been checked, and how
 
-`cargo test` — 51 tests, no display required. The renderer's evidence is a
+`cargo test` — 130 tests, no display required and no sound card. The renderer's
+evidence is a
 rendered cube covering **29.1%** of a 200×200 frame in exactly **4 colours**
 (background plus the three faces a cube shows from a general direction), a
 centroid at 97.4, 102.6 against a centre of 99.5, and corners left untouched.
@@ -103,6 +133,28 @@ the two cases a screenshot would have had to catch: playback advancing on a
 drawn frame, and a zero-length effect, whose scrubber would otherwise be a
 slider over an empty range. Deleting that guard fails the test.
 
+Against the real export the sound loader reads **135 tracks** — 2,084 s in
+total, every one stereo, at 32,000 / 32,028 / 32,728 / 44,100 Hz, all 135 capped
+and 102 of them looping. All 135 WAVs decode, and the first 24 checked in detail
+agree with their manifest row on rate, channels and duration to within 10 ms.
+
+The waveform is a function over the samples, so it is checked on pixels: silence
+draws as a one-pixel line through the centre of every column, a full-scale track
+reaches both edges of every column, and a track that swells draws wider on the
+right than the left. The playhead's time → column mapping is asserted at the
+start, the middle and the end.
+
+| Break | Test that failed |
+|---|---|
+| Playhead's duration divisor dropped | `the_playhead_maps_time_to_a_column`, `a_playhead_outside_the_track_is_pinned_or_absent`, `the_playhead_is_drawn_in_the_column_the_mapping_names` |
+| `Transport::play` rewinds instead of resuming | `pause_then_play_resumes_rather_than_restarting` |
+
+⛔ **Playback itself is unverified.** Nothing in the suite opens an audio device
+— on purpose, since a test that seized the sound card could not run on CI — so
+what has been checked is the transport, the decode, the waveform and the layout.
+Whether sound comes out of the speakers, at the right pitch, in the right order,
+has to be checked by a person with ears.
+
 🔶 **Still not confirmed by eye.** The window opens, holds, and responds — but
 the machine this was written on cannot capture its own interactive desktop, so
 nobody has *looked* at any mode. What the tests cannot cover is whether the
@@ -127,3 +179,7 @@ single static binary per platform with no runtime to install.
 Needs a recent stable Rust. `Cargo.lock` is committed, and `image` is pinned to
 0.25.5 because 0.25.10 requires rustc 1.88 while this was written against 1.87 —
 raise it once the toolchain floor moves.
+
+⚠️ **Linux needs ALSA's development headers** (`libasound2-dev` on Debian and
+Ubuntu). `rodio` builds on `cpal`, which links against them; without them the
+build fails in `alsa-sys` rather than in this crate.

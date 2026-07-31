@@ -7,8 +7,8 @@ license = "MIT"
 
 # ⛔ No game-format crates here, and there must never be any. `bleck` owns
 # every format on the disc and is tested against real data; a second
-# implementation in Rust would drift from it silently. This program reads PNG
-# and JSON that `bleck` exports (docs/plan-viewer.md).
+# implementation in Rust would drift from it silently. This program reads PNG,
+# WAV and JSON that `bleck` exports (docs/plan-viewer.md).
 [dependencies]
 # egui plus winit plus wgpu, wired together. One dependency instead of four
 # that have to agree on versions.
@@ -22,6 +22,12 @@ egui_extras = { version = "0.29", features = ["image", "file"] }
 # ⚠️ `egui_extras` pulls `image` in with **no format features**, so PNG has to
 # be asked for here or every decode fails after the loader finds the bytes.
 image = { version = "0.25", default-features = false, features = ["png"] }
+# Audio output. ⚠️ `default-features = false` drops the Symphonia decoders,
+# which are MPL-2.0 and would otherwise be linked into an MIT binary for nothing:
+# `bleck` exports 16-bit PCM and `data::wav` reads it, so no decoder is needed.
+# `playback` is the feature that keeps `cpal` and the device sink.
+# ⚠️ On Linux this needs ALSA's development headers (`libasound2-dev`) to build.
+rodio = { version = "0.22", default-features = false, features = ["playback"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

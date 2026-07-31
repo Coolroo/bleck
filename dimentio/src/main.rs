@@ -19,14 +19,19 @@
 //! uv run bleck texture export --out work/export
 //! uv run bleck model   export --out work/export
 //! uv run bleck effect  export --out work/export
+//! uv run bleck sound   export --out work/export
 //! cargo run -- ../work/export
 //! ```
 //!
 //! # Shape
 //!
-//! `data` reads what `bleck` exported, `render` turns a mesh into pixels, and
-//! `app` is the window: three modes over one export folder — the texture
-//! browser, the model viewport, and the effect table with its timeline.
+//! `data` reads what `bleck` exported, `render` turns a mesh or a track into
+//! pixels, and `app` is the window: four modes over one export folder — the
+//! texture browser, the model viewport, the effect table with its timeline, and
+//! the sound list with its waveform.
+//!
+//! Audio playback is the one thing here that reaches hardware, and it is
+//! confined to `app::audio`.
 
 use eframe::egui;
 

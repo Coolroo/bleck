@@ -14359,3 +14359,56 @@ something other than "the two samples before this point". The listener's
 with the listener; the factor that sounds right will name the bug, and picking
 a variant that happens to match one 16-bit value would be exactly the
 coincidence-driven reading this project keeps having to undo.
+
+## D227 — Dimentio plays the music, and a UI idiom nearly hid a bug (2026-07-31)
+
+✅ **A Sounds tab with real playback.** A searchable, virtualised list of the
+135 tracks, the facts from the manifest, play/pause/stop, a seek scrubber, a
+volume control, and a waveform with a playhead.
+
+### Choices worth keeping
+
+**`rodio 0.22`, with `default-features = false`.** The default features pull in
+Symphonia's decoders, which are **MPL-2.0** — and this repo is MIT, where a
+GPL/MPL dependency is a licence problem the top of `CLAUDE.md` exists to
+prevent. They would also be dead weight: `bleck` writes 16-bit PCM and
+`data::wav` reads it, so nothing needs decoding. ⚠️ 0.22 renamed the old API —
+`DeviceSinkBuilder::open_default_sink()` and `Player`, not `OutputStream`/`Sink`.
+
+⚠️ **Linux now needs `libasound2-dev`** to build `dimentio`. CI does not build
+this crate, so nothing there breaks, but a fresh Linux clone will.
+
+**The device opens lazily, on the first play.** Running the test suite, or
+opening the window to look at textures, never touches the sound card. Leaving
+the tab, changing selection and opening another folder all stop playback, and
+`Engine::drop` stops the player before the stream is torn down.
+
+**PCM-only, by refusal.** A float or 24-bit WAV is rejected by name rather than
+played as noise — the same rule the model and texture readers follow.
+
+### ⛔ The bug the tests found, which no reading of the code would have
+
+A real-export panel test failed on `assert!(!audio.live())`: an audio device
+had been opened with nobody touching anything.
+
+`egui::Slider::fixed_decimals` **rewrites the value** to that many places, so a
+running clock makes the slider report `changed()` on **every frame**. The first
+cut read that as a scrub and requeued the mixer sixty times a second — and each
+requeue blocks the UI thread until rodio's queue drains.
+
+⚠️ **The symptom was "a device is open", not "audio stutters".** A test
+asserting something adjacent to the fault is what caught it. Scrubbing is now
+gated on `is_pointer_button_down_on()` and the mixer is told where to go once,
+on the release edge.
+
+### Verified, and not
+
+130 tests pass. Mutations: dropping the `/ seconds` in `playhead` fails three
+tests; making `play` also zero the clock fails
+`pause_then_play_resumes_rather_than_restarting`. All 135 real tracks decode,
+and the first 24 agree with their manifest row to within 10 ms.
+
+⛔ **Playback itself is unverified, deliberately.** No test opens a device.
+Whether sound comes out, at the right pitch, from the right offset, needs a
+person with ears — which is doubly true while D226's "definitely sped up"
+remains unexplained.

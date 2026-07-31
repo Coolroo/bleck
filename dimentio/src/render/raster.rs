@@ -80,7 +80,9 @@ impl Image {
         }
     }
 
-    fn set(&mut self, x: usize, y: usize, colour: Rgba) {
+    /// Paint one pixel. `wave` draws whole columns through this rather than
+    /// through the triangle filler, which has no shape to give it.
+    pub(super) fn set(&mut self, x: usize, y: usize, colour: Rgba) {
         let at = (y * self.size.width + x) * 4;
         self.pixels[at] = colour.r;
         self.pixels[at + 1] = colour.g;

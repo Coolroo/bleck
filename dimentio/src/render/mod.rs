@@ -11,11 +11,15 @@
 //! an effect's running parts into quads to hand back in. `render` and `scene`
 //! below are the only ways in, and the test fixtures they need are shared with
 //! all four.
+//!
+//! `wave` is the exception: a track has no geometry, so it fills columns into
+//! the same `Image` directly rather than going through the triangle filler.
 
 mod background;
 mod camera;
 pub mod effect;
 mod raster;
+pub mod wave;
 
 pub use background::{Background, BACKGROUNDS};
 pub use camera::Camera;
