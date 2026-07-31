@@ -16,7 +16,12 @@
 
 pub mod catalog;
 pub mod effects;
+pub mod gltf;
 pub mod mesh;
+pub mod texture;
+
+#[cfg(test)]
+pub mod scratch;
 
 pub use catalog::Catalog;
 pub use effects::Library as EffectLibrary;

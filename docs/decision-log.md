@@ -14051,3 +14051,56 @@ nothing about whether the exporter still wrote that format.
 **That last pair is the actual lesson.** A fixture written by the test that
 reads it cannot detect a disagreement between two programs. The suite needed
 one foot in the real output.
+
+## D222 — The viewport samples textures, and the tests were mutation-checked (2026-07-30)
+
+✅ **Models draw their textures in Dimentio.** Until now the rasteriser
+flat-shaded from face normals and sampled nothing, so every model was grey
+while the same `.glb` showed its texture correctly in Blender — a person
+reported it as "models are rendering without materials".
+
+The UVs and the PNG were already in the file, unread: `parse_glb` took
+`POSITION` and indices and skipped everything else.
+
+### Four things the format forced
+
+- ⚠️ **glTF's UV origin is top-left**, not bottom-left. A sampler that assumed
+  otherwise renders a plausible, vertically mirrored texture — the failure that
+  looks like success.
+- ⚠️ **Wrapping, not clamping.** The exporter sets `wrapS`/`wrapT` to REPEAT and
+  **21% of models have UVs outside [0,1]**; a clamping sampler smears the edge
+  texel across the whole tiled region instead of repeating it.
+- ⛔ **The `alphaMode: MASK` discard must happen *before* the depth write.**
+  Writing depth for a discarded pixel punches a hole that hides whatever is
+  behind it.
+- Perspective-correct interpolation, using the `inv_z` already carried on each
+  projected point.
+
+A mesh with no texture keeps exactly the old flat shading; **588 of 865 exported
+models carry an embedded image and 277 do not**, counted independently from the
+files' JSON chunks.
+
+### The suite was mutation-tested — five breaks, five caught
+
+| mutation | caught by |
+|---|---|
+| u and v swapped | the quadrant test, and the wrap test |
+| V axis flipped | those two **plus** both sampler-orientation tests |
+| clamp instead of wrap | both wrap tests |
+| alpha mask ignored | the transparent-texture and depth-hole tests |
+| **never take the textured path at all** | five, incl. the real-export test |
+
+⛔ **That last mutation is the one that mattered.** It reproduces the original
+bug, and it proves the real-export test is a *live instrument* rather than one
+silently skipping — which is precisely how D221's OBJ-only reader survived a
+format change with a green suite.
+
+### Layout
+
+The glTF reader moved to `data/gltf.rs` and the PNG sampler to `data/texture.rs`,
+which is what kept `data/mesh.rs` under the ceiling at 973 lines. ⚠️ That is
+close enough that the next addition there should split rather than squeeze.
+
+⚠️ **A PNG that fails to decode yields an untextured mesh, not an error** — one
+bad image must not take an export down — but it is silent. The facts strip
+showing `texture: none` is the visible symptom.

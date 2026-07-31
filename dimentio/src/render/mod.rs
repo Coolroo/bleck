@@ -91,6 +91,9 @@ pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
     let lens = Lens::new(view.camera.fov_y, size);
     let mut depth = vec![f32::NEG_INFINITY; size.pixels()];
     let positions = mesh.positions();
+    // Resolved once: a mesh either carries a texture and coordinates or it
+    // does not, and asking per face would re-check 3,500 times a frame.
+    let surface = mesh.surface();
 
     for face in mesh.faces() {
         let (Some(&a), Some(&b), Some(&c)) = (
@@ -106,12 +109,24 @@ pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
             continue;
         }
         let screen = viewed.map(|corner| lens.project(corner));
-        raster::raster(
-            &mut image,
-            &mut depth,
-            &screen,
-            raster::shade(&basis, &corners),
-        );
+        let intensity = raster::lighting(&basis, &corners);
+        // A face whose corners the UV list does not reach falls back to flat,
+        // so a short TEXCOORD_0 accessor loses a triangle's texture rather
+        // than the whole model.
+        let paint = match surface.and_then(|surface| {
+            surface
+                .corners(*face)
+                .map(|corners| raster::Paint::Textured {
+                    texture: surface.texture,
+                    corners,
+                    intensity,
+                    masked: surface.masked,
+                })
+        }) {
+            Some(textured) => textured,
+            None => raster::Paint::Flat(raster::surface(intensity)),
+        };
+        raster::raster(&mut image, &mut depth, &screen, &paint);
     }
     image
 }

@@ -168,6 +168,15 @@ impl Viewer {
         else {
             return;
         };
+        // What the mesh file actually carried, as opposed to what the manifest
+        // said about it: an untextured model and one whose image failed to
+        // decode are indistinguishable on screen, and both look like a broken
+        // renderer.
+        let painted = self
+            .models
+            .mesh
+            .surface()
+            .map(|surface| format!("{}x{}", surface.texture.width(), surface.texture.height()));
         egui::TopBottomPanel::bottom("model-facts").show(ctx, |ui| {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
@@ -182,6 +191,8 @@ impl Viewer {
                 Self::inline_fact(ui, "tris", &entry.triangles.to_string());
                 ui.separator();
                 Self::inline_fact(ui, "extent", &entry.extent());
+                ui.separator();
+                Self::inline_fact(ui, "texture", painted.as_deref().unwrap_or("none"));
                 if entry.fragment {
                     ui.separator();
                     ui.label(

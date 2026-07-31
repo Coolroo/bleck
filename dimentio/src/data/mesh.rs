@@ -1,25 +1,30 @@
-//! What `bleck model export` wrote: a manifest, and one Wavefront OBJ per model.
+//! What `bleck model export` wrote: a manifest, and one mesh file per model.
 //!
-//! The manifest reader and the OBJ parser sit together because a model is only
+//! The manifest reader and the mesh sit together because a model is only
 //! identified by both — the geometry says what to draw, the manifest says what
 //! it is — and the end-to-end test at the foot of this file walks the two of
-//! them plus the rasteriser in one pass.
+//! them plus the rasteriser in one pass. The binary glTF the exporter writes is
+//! decoded next door in `gltf`; the OBJ parser below is what came before it.
 //!
 //! ⚠️ The manifest is the contract, not the directory listing — the rule for
-//! this whole layer, stated once in `data`'s module doc. A `.obj` filename
-//! cannot say which disc file the model came from or which Maya shape inside it
-//! produced these triangles, and both are how a model is identified.
+//! this whole layer, stated once in `data`'s module doc. A filename cannot say
+//! which disc file the model came from or which Maya shape inside it produced
+//! these triangles, and both are how a model is identified.
 //!
 //! ⚠️ Geometry is read on demand, not at load. The manifest is a few hundred
 //! bytes per model; the meshes are not, and a folder of them would sit in
 //! memory for the sake of the one that is on screen.
 //!
-//! Only `v` and `f` lines are understood, because only those are written. A
-//! line this does not recognise is skipped rather than rejected, so a mesh
-//! carrying normals or materials still loads.
+//! In OBJ only `v` and `f` lines are understood, because only those were ever
+//! written. A line this does not recognise is skipped rather than rejected, so
+//! a mesh carrying normals or materials still loads — untextured, since an OBJ
+//! from this exporter never named a material to load.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
+
+use super::gltf;
+use super::texture::Texture;
 
 /// The file `bleck model export` writes alongside the meshes.
 const MANIFEST: &str = "models.json";
@@ -197,6 +202,21 @@ pub struct Face {
     pub c: usize,
 }
 
+/// Where a vertex lands on its texture. glTF's convention: (0, 0) is the
+/// image's top-left corner, and both axes run outside [0, 1] wherever the art
+/// tiles.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct Uv {
+    pub u: f32,
+    pub v: f32,
+}
+
+impl Uv {
+    pub const fn new(u: f32, v: f32) -> Self {
+        Self { u, v }
+    }
+}
+
 /// The box a model occupies, which is what the camera frames itself against.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct Bounds {
@@ -258,12 +278,69 @@ impl Bounds {
     }
 }
 
-/// Positions and triangles, with nothing else the format may have carried.
+/// Everything a mesh file can carry, before bounds are measured from it.
+///
+/// The glTF reader builds this and hands it back rather than a `Mesh`, so that
+/// `Bounds::around` stays the one place a model's extent is decided.
+pub(crate) struct Parts {
+    pub(crate) positions: Vec<Vec3>,
+    pub(crate) faces: Vec<Face>,
+    /// One per position, when the file carried `TEXCOORD_0`.
+    pub(crate) uvs: Option<Vec<Uv>>,
+    pub(crate) texture: Option<Texture>,
+    /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
+    /// below the cutoff is not drawn at all.
+    pub(crate) masked: bool,
+}
+
+impl Parts {
+    pub(crate) fn into_mesh(self) -> Mesh {
+        let bounds = Bounds::around(&self.positions, &self.faces);
+        Mesh {
+            positions: self.positions,
+            faces: self.faces,
+            bounds,
+            uvs: self.uvs,
+            texture: self.texture,
+            masked: self.masked,
+        }
+    }
+}
+
+/// The texture a mesh is painted with, and the coordinates that index it.
+///
+/// Only ever handed out when both are present, so the rasteriser cannot reach
+/// a half-textured mesh — UVs with no image would sample nothing, and an image
+/// with no UVs has no coordinate to sample it at.
+#[derive(Debug, Clone, Copy)]
+pub struct Surface<'a> {
+    pub texture: &'a Texture,
+    pub uvs: &'a [Uv],
+    pub masked: bool,
+}
+
+impl Surface<'_> {
+    /// The three coordinates a face samples at, or `None` when the UV list does
+    /// not reach one of its corners — which leaves that face flat-shaded rather
+    /// than dropping it.
+    pub fn corners(&self, face: Face) -> Option<[Uv; 3]> {
+        Some([
+            *self.uvs.get(face.a)?,
+            *self.uvs.get(face.b)?,
+            *self.uvs.get(face.c)?,
+        ])
+    }
+}
+
+/// Positions and triangles, plus the texture the file named if it named one.
 #[derive(Debug, Clone, Default)]
 pub struct Mesh {
     positions: Vec<Vec3>,
     faces: Vec<Face>,
     bounds: Bounds,
+    uvs: Option<Vec<Uv>>,
+    texture: Option<Texture>,
+    masked: bool,
 }
 
 impl Mesh {
@@ -273,6 +350,16 @@ impl Mesh {
 
     pub fn faces(&self) -> &[Face] {
         &self.faces
+    }
+
+    /// What to paint this mesh with, or `None` when it is untextured — 277 of
+    /// 864 real models are, and they are drawn flat-shaded.
+    pub fn surface(&self) -> Option<Surface<'_>> {
+        Some(Surface {
+            texture: self.texture.as_ref()?,
+            uvs: self.uvs.as_deref()?,
+            masked: self.masked,
+        })
     }
 
     /// The box around the geometry that will actually be drawn — not around
@@ -297,12 +384,14 @@ impl Mesh {
     /// the folder reported "Mesh file is missing" while sitting on disk.
     pub fn load(path: &Path) -> Result<Self, Problem> {
         let raw = std::fs::read(path).map_err(|_| Problem::NoMesh(path.to_path_buf()))?;
-        if raw.starts_with(GLB_MAGIC) {
-            return Self::parse_glb(&raw).map_err(|why| Problem::BadMesh {
-                file: path.to_path_buf(),
-                line: 0,
-                why,
-            });
+        if raw.starts_with(gltf::MAGIC) {
+            return gltf::parse(&raw)
+                .map(Parts::into_mesh)
+                .map_err(|why| Problem::BadMesh {
+                    file: path.to_path_buf(),
+                    line: 0,
+                    why,
+                });
         }
         let text = String::from_utf8(raw).map_err(|_| Problem::BadMesh {
             file: path.to_path_buf(),
@@ -313,43 +402,6 @@ impl Mesh {
             file: path.to_path_buf(),
             line: flaw.line,
             why: flaw.why,
-        })
-    }
-
-    /// Read a binary glTF: the JSON chunk describes accessors, the BIN chunk
-    /// holds them.
-    ///
-    /// Only `POSITION` and the index accessor are read. Normals, UVs, materials
-    /// and morph targets are all present in the file and all ignored here —
-    /// the rasteriser shades from face normals and samples no texture, so
-    /// reading them would cost memory for nothing.
-    pub fn parse_glb(raw: &[u8]) -> Result<Self, String> {
-        let (document, bin) = split_chunks(raw)?;
-        let json: serde_json::Value =
-            serde_json::from_slice(document).map_err(|e| format!("glTF JSON: {e}"))?;
-
-        let primitive = json["meshes"][0]["primitives"][0].clone();
-        let position = primitive["attributes"]["POSITION"]
-            .as_u64()
-            .ok_or("no POSITION attribute")? as usize;
-        let indices = primitive["indices"].as_u64().ok_or("no indices")? as usize;
-
-        let positions = read_vec3(&json, bin, position)?;
-        let corners = read_indices(&json, bin, indices)?;
-        let faces = corners
-            .chunks_exact(3)
-            .map(|c| Face {
-                a: c[0],
-                b: c[1],
-                c: c[2],
-            })
-            .collect::<Vec<_>>();
-
-        let bounds = Bounds::around(&positions, &faces);
-        Ok(Self {
-            positions,
-            faces,
-            bounds,
         })
     }
 
@@ -378,118 +430,15 @@ impl Mesh {
             }
         }
 
-        let bounds = Bounds::around(&positions, &faces);
-        Ok(Self {
+        Ok(Parts {
             positions,
             faces,
-            bounds,
-        })
-    }
-}
-
-/// The four bytes every binary glTF opens with.
-const GLB_MAGIC: &[u8] = b"glTF";
-
-/// glTF component types, for the index accessor. Indices are written as
-/// `UNSIGNED_INT`, but a reader that only understood one would break on any
-/// other exporter's file for no reason.
-const UNSIGNED_BYTE: u64 = 5121;
-const UNSIGNED_SHORT: u64 = 5123;
-const UNSIGNED_INT: u64 = 5125;
-
-/// Split a `.glb` into its JSON and binary chunks.
-///
-/// ⚠️ Each chunk is padded to four bytes and the header length **includes**
-/// the padding, so the next chunk starts at the declared length, not at the
-/// end of the meaningful data.
-fn split_chunks(raw: &[u8]) -> Result<(&[u8], &[u8]), String> {
-    if raw.len() < 20 {
-        return Err("too short to be a glTF".into());
-    }
-    let mut at = 12;
-    let mut json: &[u8] = &[];
-    let mut bin: &[u8] = &[];
-    while at + 8 <= raw.len() {
-        let length = u32::from_le_bytes(raw[at..at + 4].try_into().unwrap()) as usize;
-        let kind = &raw[at + 4..at + 8];
-        let start = at + 8;
-        let stop = start.saturating_add(length).min(raw.len());
-        match kind {
-            b"JSON" => json = &raw[start..stop],
-            b"BIN\0" => bin = &raw[start..stop],
-            _ => {}
+            uvs: None,
+            texture: None,
+            masked: false,
         }
-        at = start + length;
+        .into_mesh())
     }
-    if json.is_empty() {
-        return Err("glTF has no JSON chunk".into());
-    }
-    Ok((json, bin))
-}
-
-/// The bytes one accessor covers, following it through its buffer view.
-fn accessor_bytes<'a>(
-    json: &serde_json::Value,
-    bin: &'a [u8],
-    index: usize,
-) -> Result<(&'a [u8], usize), String> {
-    let accessor = &json["accessors"][index];
-    let count = accessor["count"].as_u64().ok_or("accessor has no count")? as usize;
-    let view = accessor["bufferView"]
-        .as_u64()
-        .ok_or("accessor has no bufferView")? as usize;
-    let view = &json["bufferViews"][view];
-    let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize
-        + accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
-    let length = view["byteLength"]
-        .as_u64()
-        .ok_or("view has no byteLength")? as usize;
-    if offset + length > bin.len() {
-        return Err("a buffer view runs past the binary chunk".into());
-    }
-    Ok((&bin[offset..offset + length], count))
-}
-
-fn read_vec3(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<Vec3>, String> {
-    let (bytes, count) = accessor_bytes(json, bin, index)?;
-    if bytes.len() < count * 12 {
-        return Err("POSITION accessor is shorter than its count".into());
-    }
-    Ok((0..count)
-        .map(|i| {
-            let at = i * 12;
-            let f = |k: usize| {
-                f32::from_le_bytes(bytes[at + k * 4..at + k * 4 + 4].try_into().unwrap())
-            };
-            Vec3::new(f(0), f(1), f(2))
-        })
-        .collect())
-}
-
-fn read_indices(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<usize>, String> {
-    let kind = json["accessors"][index]["componentType"]
-        .as_u64()
-        .ok_or("index accessor has no componentType")?;
-    let (bytes, count) = accessor_bytes(json, bin, index)?;
-    let width = match kind {
-        UNSIGNED_BYTE => 1,
-        UNSIGNED_SHORT => 2,
-        UNSIGNED_INT => 4,
-        other => return Err(format!("index componentType {other} is not an integer")),
-    };
-    if bytes.len() < count * width {
-        return Err("index accessor is shorter than its count".into());
-    }
-    Ok((0..count)
-        .map(|i| {
-            let at = i * width;
-            match width {
-                1 => bytes[at] as usize,
-                2 => u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) as usize,
-                _ => u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize,
-            }
-        })
-        .collect())
 }
 
 fn read_position<'a>(words: impl Iterator<Item = &'a str>, line: usize) -> Result<Vec3, Flaw> {
@@ -641,6 +590,7 @@ impl Library {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::scratch::Scratch;
 
     const TRIANGLE: &str = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
 
@@ -724,33 +674,6 @@ mod tests {
         assert!(mesh.is_empty());
         assert_eq!(mesh.bounds().min, Vec3::new(5.0, 5.0, 5.0));
         assert_eq!(mesh.bounds().max, Vec3::new(7.0, 9.0, 5.0));
-    }
-
-    /// A directory of our own under the system temp dir, removed on drop, so
-    /// the manifest tests touch the real filesystem without a dev-dependency.
-    pub(super) struct Scratch {
-        pub(super) path: PathBuf,
-    }
-
-    impl Scratch {
-        pub(super) fn new(tag: &str) -> Self {
-            static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-            let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let path =
-                std::env::temp_dir().join(format!("dimentio-{tag}-{}-{count}", std::process::id()));
-            std::fs::create_dir_all(&path).expect("scratch dir");
-            Self { path }
-        }
-
-        fn write(&self, name: &str, text: &str) {
-            std::fs::write(self.path.join(name), text).expect("scratch file");
-        }
-    }
-
-    impl Drop for Scratch {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.path);
-        }
     }
 
     const MANIFEST_TEXT: &str = r#"{"models": [
@@ -903,96 +826,6 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod glb_tests {
-    use super::tests::Scratch;
-    use super::*;
-
-    /// ⛔ The regression that prompted this reader. A `.glb` is binary, and
-    /// reading it as UTF-8 text fails in a way that looked like the file was
-    /// absent — every model in the folder reported "Mesh file is missing"
-    /// while sitting on disk.
-    #[test]
-    fn a_binary_gltf_is_not_reported_as_a_missing_file() {
-        let scratch = Scratch::new("glb-missing");
-        let path = scratch.path.join("cube.glb");
-        std::fs::write(&path, a_glb()).expect("scratch glb");
-        let mesh = Mesh::load(&path).expect("a glb should load");
-        assert_eq!(mesh.positions().len(), 3);
-        assert_eq!(mesh.faces().len(), 1);
-    }
-
-    #[test]
-    fn the_format_is_sniffed_by_content_not_by_extension() {
-        let scratch = Scratch::new("glb-sniff");
-        let path = scratch.path.join("actually_gltf.obj");
-        std::fs::write(&path, a_glb()).expect("scratch glb");
-        assert!(Mesh::load(&path).is_ok(), "extension should not decide");
-    }
-
-    #[test]
-    fn obj_still_loads_alongside_it() {
-        let scratch = Scratch::new("glb-obj");
-        let path = scratch.path.join("plain.obj");
-        std::fs::write(&path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n").expect("scratch obj");
-        assert_eq!(Mesh::load(&path).expect("obj").faces().len(), 1);
-    }
-
-    #[test]
-    fn a_truncated_glb_is_refused_rather_than_panicking() {
-        let mut raw = a_glb();
-        raw.truncate(40);
-        assert!(Mesh::parse_glb(&raw).is_err());
-    }
-
-    #[test]
-    fn something_that_is_neither_gltf_nor_text_is_named_as_such() {
-        let scratch = Scratch::new("glb-junk");
-        let path = scratch.path.join("junk.glb");
-        std::fs::write(&path, [0xFF_u8, 0xFE, 0x00, 0x01, 0x02]).expect("scratch junk");
-        let problem = Mesh::load(&path).expect_err("junk should not load");
-        assert!(format!("{problem:?}").contains("text"), "{problem:?}");
-    }
-
-    /// One triangle, written the way `bleck.formats.gltf` writes one.
-    fn a_glb() -> Vec<u8> {
-        let positions: [f32; 9] = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
-        let indices: [u32; 3] = [0, 1, 2];
-        let mut bin = Vec::new();
-        for value in positions {
-            bin.extend_from_slice(&value.to_le_bytes());
-        }
-        for value in indices {
-            bin.extend_from_slice(&value.to_le_bytes());
-        }
-        let json = format!(
-            r#"{{"asset":{{"version":"2.0"}},"meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},"indices":1}}]}}],
-                "accessors":[{{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}},
-                             {{"bufferView":1,"componentType":5125,"count":3,"type":"SCALAR"}}],
-                "bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":36}},
-                               {{"buffer":0,"byteOffset":36,"byteLength":12}}],
-                "buffers":[{{"byteLength":{}}}]}}"#,
-            bin.len()
-        );
-        let mut text = json.into_bytes();
-        while text.len() % 4 != 0 {
-            text.push(b' ');
-        }
-        let mut out = Vec::new();
-        out.extend_from_slice(GLB_MAGIC);
-        out.extend_from_slice(&2u32.to_le_bytes());
-        let total = 12 + 8 + text.len() + 8 + bin.len();
-        out.extend_from_slice(&(total as u32).to_le_bytes());
-        out.extend_from_slice(&(text.len() as u32).to_le_bytes());
-        out.extend_from_slice(b"JSON");
-        out.extend_from_slice(&text);
-        out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
-        out.extend_from_slice(b"BIN\0");
-        out.extend_from_slice(&bin);
-        out
-    }
-}
-
 /// Loading the real export, when one happens to be on this machine.
 ///
 /// ⚠️ `work/` is git-ignored, so these skip rather than fail on a fresh clone
@@ -1031,7 +864,12 @@ mod real_export_tests {
                 Err(problem) => failed.push(format!("{}: {}", entry.name, problem.describe())),
             }
         }
-        assert!(failed.is_empty(), "{} failed, e.g. {:?}", failed.len(), &failed[..failed.len().min(3)]);
+        assert!(
+            failed.is_empty(),
+            "{} failed, e.g. {:?}",
+            failed.len(),
+            &failed[..failed.len().min(3)]
+        );
         assert_eq!(loaded, entries.len());
     }
 
@@ -1051,5 +889,85 @@ mod real_export_tests {
                 entry.name
             );
         }
+    }
+
+    /// ⚠️ Most of the export is textured — a run that finds none of them is
+    /// the bug this was written for, not a quiet pass. The fixtures elsewhere
+    /// are written by this crate's own tests and would agree with a reader
+    /// that had the material chain wrong.
+    #[test]
+    fn most_real_models_carry_a_texture_the_decoder_understands() {
+        let Some(root) = export() else {
+            eprintln!("no work/export on this machine; skipped");
+            return;
+        };
+        let library = Library::load(&root);
+        let mut painted = 0;
+        let mut bare = 0;
+        for entry in library.entries() {
+            let mesh = Mesh::load(&entry.path).expect("mesh");
+            match mesh.surface() {
+                Some(surface) => {
+                    assert!(surface.texture.width() > 0, "{}", entry.name);
+                    assert_eq!(surface.uvs.len(), mesh.positions().len(), "{}", entry.name);
+                    painted += 1;
+                }
+                None => bare += 1,
+            }
+        }
+        assert!(
+            painted > library.len() / 2,
+            "only {painted} of {} models textured, {bare} bare",
+            library.len()
+        );
+    }
+
+    /// The whole point, measured on real data: a textured model reaches the
+    /// frame as several colours, an untextured one as flat grey.
+    #[test]
+    fn a_textured_model_reaches_the_frame_as_more_than_one_colour() {
+        let Some(root) = export() else {
+            eprintln!("no work/export on this machine; skipped");
+            return;
+        };
+        let library = Library::load(&root);
+        let size = crate::render::Size::new(160, 160);
+        let sky = crate::render::Background::DarkGrey.pixel(0, 0, size);
+
+        let mut checked = 0;
+        for entry in library.entries() {
+            let mesh = Mesh::load(&entry.path).expect("mesh");
+            if mesh.surface().is_none() || mesh.faces().len() < 200 {
+                continue;
+            }
+            let view = crate::render::View {
+                camera: crate::render::Camera::fit(mesh.bounds()),
+                background: crate::render::Background::DarkGrey,
+            };
+            let image = crate::render::render(&mesh, &view, size);
+            let mut seen: Vec<crate::render::Rgba> = Vec::new();
+            for y in 0..size.height {
+                for x in 0..size.width {
+                    let pixel = image.pixel(x, y);
+                    if pixel != sky && !seen.contains(&pixel) && seen.len() < 8 {
+                        seen.push(pixel);
+                    }
+                }
+            }
+            assert!(
+                seen.len() > 1,
+                "{} drew {} distinct colour(s) — the texture was not sampled",
+                entry.name,
+                seen.len()
+            );
+            checked += 1;
+            if checked == 12 {
+                break;
+            }
+        }
+        assert!(
+            checked > 0,
+            "no textured model in the export was big enough"
+        );
     }
 }
