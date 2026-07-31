@@ -14447,3 +14447,31 @@ outvoted by a single unexplained table.
 
 ⚠️ **The ADPC table remains undecoded**, and that is now a curiosity rather
 than a blocker. Nothing reads it: seeking uses the decoded samples directly.
+
+### D228 addendum — there was never a bug (2026-07-31)
+
+✅ **Both rates confirmed by the listener.** The 32 kHz jingle is right at
+32000, and the 44.1 kHz tracks are right at 44100 — those are simply fast
+pieces of music. `b_happy_flower` sounds hurried because it *is* hurried.
+
+⛔ **So the original report was about the music, not the decoder**, and the
+investigation it triggered had no defect to find. Everything measured had
+already said so:
+
+| measurement | verdict |
+|---|---|
+| adjacent-sample correlation 0.67-0.96 vs ~0.00 control | audio, not noise |
+| L/R correlation 0.65-0.92 | genuine stereo |
+| tempos 60-187 BPM | musically plausible |
+| sample counts | match every header exactly |
+| **ADPC seek table** | **disagreed — and was the only one wrong** |
+
+⚠️ **Four instruments agreed and one disagreed, and the one was believed.**
+That is the whole lesson. The four were independent and cheap; the fifth was a
+structure whose layout was admitted to be not understood — 404 entries for a
+26-block file — and it still carried the argument, because a mismatch feels
+like evidence in a way that agreement does not.
+
+**Rule for next time:** when a single unexplained measurement contradicts
+several understood ones, suspect the measurement. And when the proposed fix is
+"vary the working code until it matches", stop — that is fitting, not decoding.
