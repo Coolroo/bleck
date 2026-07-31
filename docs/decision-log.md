@@ -13751,3 +13751,34 @@ So the manifest carries each clip's name, curve count, key count and value
 span, and the curves are decoded and tested — **and no `.glb` claims an
 animation it cannot drive**. Section 6's 613 packed 4-byte records, which carry
 a sign bit in byte 0 and look like compressed rotations, are the next piece.
+
+### D216 addendum — `mark` is a channel duration, and the delta chain runs within a block (2026-07-30)
+
+✅ Two readings both explained why the largest `mark` equals the clip's declared
+duration (376 of 484 clips), so smoothness had to separate them:
+
+| accumulation | roughness |
+|---|---|
+| **within one track's block** | **0.0161** |
+| across blocks, same slot each time | 0.0779 |
+| random control | 0.1663 |
+
+Within-block wins by 5×, so **a track's block is one channel's curve over
+time** — D216's reading stands.
+
+⚠️ **But `mark` is not a timeline position, as D216 said.** It is each
+channel's own duration, and the tracks are **sorted by it**, which is why the
+values ascend and why the last one equals the clip length: the longest channel
+spans the whole clip. Both facts follow from sorting, and neither needs a
+timeline.
+
+⛔ **Still unbound.** No field in the 44-byte track record ranges over anything
+like the 176 joint names — fields 3 and 4 are always zero, 5 is 2 or 14, 6 is
+0 or 2, 7 and 8 are 0 or 1. There is no node index here, so the channel target
+must live in section 6 (613 packed records, sign bit in byte 0) or section 4
+(14 records of 12 bytes), and neither is decoded.
+
+**So no `.glb` gets an animation.** glTF requires a channel target — a node plus
+translation, rotation or scale. Binding 62 curves to guessed joints would
+produce smooth, confident, wrong motion, which is the exact failure mode this
+project has already had to undo three times (D70/D73/D74, D209, D211).
