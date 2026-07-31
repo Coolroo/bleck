@@ -11,9 +11,11 @@ The export writes `models.json` beside the OBJ files, and *that* is the
 contract Dimentio reads. A filename cannot say which shape inside a file it
 came from, how many faces it had, or what it measures.
 
-⚠️ **One shape per file, for now.** A character file holds several shapes and
-only the first is read (D208), so an exported OBJ is a part of a model rather
-than the whole of one.
+⛔ **What this exports is a fragment, and it says so.** One shape record is
+read per file; a character file names dozens. Median coverage is **13.6%** —
+`p_big_kuppa` exports three of its 3,401 vertices. Every command here prints the
+coverage, and the manifest carries it, so nothing downstream can mistake a
+fragment for a character (D211).
 """
 
 from __future__ import annotations
@@ -136,13 +138,29 @@ def cmd_list(args: argparse.Namespace) -> int:
     for entry in shown:
         mesh = entry.mesh
         print(
-            f"{entry.name:<24} {mesh.name[:30]:<32} "
-            f"{len(mesh.positions):>6} verts {len(mesh.faces):>6} faces"
+            f"{entry.name:<24} {mesh.name[:26]:<28} "
+            f"{len(mesh.positions):>6} verts {len(mesh.faces):>5} faces "
+            f"{mesh.coverage * 100:>5.1f}% covered"
         )
     if len(found) > len(shown):
         print(f"... and {len(found) - len(shown)} more (raise --limit)")
     print(f"\n{len(found)} model(s)")
+    _warn_about_coverage(found)
     return 0
+
+
+def _warn_about_coverage(found: list[Found]) -> None:
+    """⚠️ Printed every time, never once. A number this bad has to stay in
+    front of whoever is looking at the output."""
+    if not found:
+        return
+    ranked = sorted(entry.mesh.coverage for entry in found)
+    median = ranked[len(ranked) // 2]
+    print(
+        f"\n! these are fragments: median coverage {median * 100:.1f}% of each\n"
+        f"  file's vertices. One shape record is read per file and a character\n"
+        f"  holds dozens -- see D211. Do not treat one as a whole model."
+    )
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -163,6 +181,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "positions": len(entry.mesh.positions),
                 "faces": len(entry.mesh.faces),
                 "triangles": len(entry.mesh.triangles()),
+                "coverage": round(entry.mesh.coverage, 4),
+                "fragment": True,
                 "min": [round(v, 4) for v in lowest],
                 "max": [round(v, 4) for v in highest],
             }
@@ -173,6 +193,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
     print(f"wrote {len(entries)} OBJ file(s) and {MANIFEST} to {out}")
+    _warn_about_coverage(found)
     return 0
 
 

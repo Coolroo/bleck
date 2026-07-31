@@ -40,5 +40,10 @@ jobs:
             libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
 
       - run: cargo fmt --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy --all-targets -- -D warnings
+
+      # ⚠️ The rasteriser's tests are the only check that the model viewport
+      # draws the right thing: they assert on a pixel buffer, so they need no
+      # display and run on every runner in the matrix.
+      - run: cargo test
       - run: cargo build --release

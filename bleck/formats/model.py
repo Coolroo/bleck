@@ -212,8 +212,10 @@ class Corner:
 class Mesh:
     """The vertex arrays of one shape, as the game hands them to GX.
 
-    ⚠️ **One shape, not the whole model.** The table holds 24 slots and a file
-    holds several shapes; this reads the first (D208).
+    ⛔ **A fragment, not a model.** The table holds 24 slots describing one
+    shape, and a character file names dozens; `p_wii_mario` carries 88 shape
+    names and 200 KB of data this record does not reach. Median coverage across
+    the disc is **13.6%** (D211). Check `coverage` before drawing anything.
     """
 
     name: str
@@ -240,12 +242,29 @@ class Mesh:
         return sum(face.corners for face in self.faces)
 
     @property
+    def coverage(self) -> float:
+        """The fraction of `positions` any face actually reaches.
+
+        ⛔ **Usually small, and that is the honest headline.** The median across
+        the disc is 13.6%: `p_big_kuppa` has 3,401 positions and its faces touch
+        three of them. A shape record describes one shape, and a character file
+        holds many, so what this reads is a *fragment* (D211).
+
+        Read this before trusting a mesh. `is_drawable` only says the indices
+        resolve; this says how much of the model they resolve *to*.
+        """
+        if not self.positions:
+            return 0.0
+        used = {index for triangle in self.triangles() for index in triangle}
+        return len(used) / len(self.positions)
+
+    @property
     def is_drawable(self) -> bool:
         """Whether every face resolves to a real position.
 
-        ⚠️ Checked per model rather than assumed. A file whose faces run off
-        the end of its position array is one this reading does not cover, and
-        a viewer must be told that rather than shown a torn mesh.
+        ⚠️ **This is not "the mesh is complete".** It is a bounds check, and it
+        passes on a fragment that reaches 0.1% of the model. Ask `coverage` for
+        that, and see D211 for why the two came apart.
         """
         if not self.faces or not self.positions:
             return False
@@ -292,7 +311,7 @@ class Mesh:
         return (
             f"{self.name}: {len(self.positions)} position(s), "
             f"{len(self.normals)} normal(s), {len(self.faces)} face(s) / "
-            f"{self.corners} corner(s), drawable {self.is_drawable}"
+            f"{self.corners} corner(s), {self.coverage * 100:.1f}% covered"
         )
 
 

@@ -63,8 +63,13 @@ big-endian float32 XYZ at stride 12, indexed by `u16`. The section table at file
 streams, and the loader relocates it in place, so the runtime offsets *are* the
 file offsets.
 
-All **864** readable models are drawable — 127,076 triangles — and `bleck model
-export` writes them as OBJ plus a `models.json` manifest.
+All **864** readable models resolve their indices — 127,076 triangles — and
+`bleck model export` writes them as OBJ plus a `models.json` manifest.
+
+⛔ **But each is a fragment** (D211). Median coverage is 13.6% of a file's
+vertices; `p_big_kuppa` reaches three of 3,401. One shape record is read and a
+character file names dozens, so **the viewport has geometry to draw and not yet
+a character to show.**
 
 ⚠️ **Two things are still not decoded.** A file holds several shapes and only
 the first is read, so an exported OBJ is a part rather than a character; and

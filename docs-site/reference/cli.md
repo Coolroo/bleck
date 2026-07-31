@@ -182,10 +182,13 @@ triangles, with occasional n-gons — fanned into triangles on export. **864** o
 the disc's models read; the six that fail a consistency check are skipped rather
 than exported as noise.
 
-!!! warning "One shape per file, for now"
+!!! danger "These are fragments, not characters"
 
-    A character file holds several shapes and only the first is read, so an
-    exported OBJ is a **part of a model** rather than a whole character.
+    One shape record is read per file, and a character file names dozens.
+    **Median coverage is 13.6%** of a file's vertices — `p_big_kuppa` exports
+    three of its 3,401. Every command prints the coverage and the manifest
+    carries `"fragment": true`.
+
     Animation is not decoded at all — the clips have names and nothing to play.
 
 ### `bleck effect`

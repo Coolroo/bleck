@@ -13400,3 +13400,57 @@ effect's parts, durations and transform rows. The 219 images come from
 can show an effect's structure, timing and image bank, and cannot yet show
 which image a given part draws. That limit is stated in the command's own
 docstring so it does not get quietly forgotten.
+
+## D211 — D209 overstated: the mesh is a fragment, and the test was fooled twice (2026-07-30)
+
+⛔ **Supersedes the "all 864 models are drawable" claim in D209.** The indices
+resolve; the mesh does not. **Median coverage is 13.6%** — the faces of
+`p_big_kuppa` reference **3 of its 3,401 vertices**, `p_big_mario` 3 of 2,255.
+
+`is_drawable` was doing a bounds check and being read as a completeness claim.
+Both are now exposed: `is_drawable` still means "the indices resolve", and
+`Mesh.coverage` says how much of the model they resolve to. `bleck model list`
+and `export` print it every time, and the manifest carries `"fragment": true`.
+
+### How the planarity test passed anyway
+
+Two independent flaws, and the second one is the embarrassing one because D209
+was *written about* the first.
+
+1. ✅ Already recorded: the first shape measured was flat, so the random control
+   was coplanar too.
+2. ⛔ **Not caught: degenerate faces are planar for free.** 16% of quads
+   reference fewer than four distinct vertices. `e_big_nok` scored **100%
+   planar using three vertices** — every "quad" was a triangle or a line, and a
+   line is trivially coplanar with anything. The control drew four *distinct*
+   random points, so it had to clear a bar the real faces were walking under.
+
+Excluding degenerate faces, over 24,091 real quads on 125 three-dimensional
+shapes:
+
+| | real faces | shuffled control |
+|---|---|---|
+| median planar | **72.4%** | 15.2% |
+
+So the position stream *is* right — a five-fold gap is not luck — and the
+headline figure of 98.2% was inflated by degeneracy. The test now excludes
+degenerate faces and asserts the gap, not the rate.
+
+### What is actually missing
+
+`p_wii_mario` carries **88 shape names** and one shape record. Searching the
+whole file for another name-pointer-plus-table found **exactly one**. The 24-slot
+table reaches `0x147dc`; D202 measured 200 KB of dense packed data beyond
+`0x15F5C` that nothing here touches. So the other shapes are stored differently,
+and finding them is the next piece of work — not a refinement of this one.
+
+**Rejected:** raising the coverage bar inside `mesh()` so low-coverage models
+fail to read. They read correctly; they are just small. Refusing them would hide
+the measurement that says how far this has actually got.
+
+### The lesson, since it is now three for three
+
+D70/D73/D74 was a control measured with a broken ruler. D209 was a control that
+did not share the flaw being tested. **Ask what makes the test pass trivially,
+not only what makes it fail.** A degenerate case satisfying the property is the
+same bug as a control that cannot detect it.

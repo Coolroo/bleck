@@ -399,10 +399,17 @@ class TestTheFacesAreRealGeometry:
     is allowed to be True at all.
 
     A 4-corner face of a real mesh is **planar**. Shuffled indices are not.
-    Measured across 125 genuinely three-dimensional shapes, real faces are 98%
-    planar against 16% for a per-model random control -- and the control
-    matters, because the first shape tried was itself flat, so every random
-    quad passed and the result looked like a confirmation (D209).
+
+    ⚠️ **Two separate ways this test lied before it was trusted** (D209, D211):
+
+    1. The first shape measured was itself flat, so every *random* quad was
+       coplanar too and the control confirmed nothing.
+    2. 16% of quads reference fewer than four distinct vertices. A degenerate
+       quad is planar for free, and counting them inflated the result from a
+       real 72% to a meaningless 98%.
+
+    So this excludes degenerate faces and asserts the *gap* to a per-model
+    control, not an absolute rate.
     """
 
     def test_real_faces_are_far_more_planar_than_shuffled_ones(self):
@@ -433,6 +440,8 @@ class TestTheFacesAreRealGeometry:
                 if face.corners != 4:
                     continue
                 corners = found.corner_positions[face.first : face.first + 4]
+                if len(set(corners)) < 4:
+                    continue
                 value = _planarity([found.positions[c] for c in corners])
                 if value is not None:
                     real.append(value)
@@ -453,7 +462,7 @@ class TestTheFacesAreRealGeometry:
         control_rates.sort()
         real_median = real_rates[len(real_rates) // 2]
         control_median = control_rates[len(control_rates) // 2]
-        assert real_median > 0.85, real_median
+        assert real_median > 0.60, real_median
         assert control_median < 0.40, control_median
         assert real_median > control_median * 2
 
@@ -497,3 +506,53 @@ class TestDrawing:
             corner_positions=[0, 1, 99],
         )
         assert not broken.is_drawable
+
+
+class TestCoverageIsReported:
+    """⛔ The check that stops a fragment reading as a model.
+
+    `is_drawable` passes on a mesh that reaches three of 3,401 vertices,
+    because it only bounds-checks indices. Coverage is the number that says
+    what was actually read, and it has to stay visible (D211).
+    """
+
+    def test_coverage_is_low_and_says_so(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        rates = []
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            rates.append(found.coverage)
+        assert len(rates) > 800
+        rates.sort()
+        median = rates[len(rates) // 2]
+        assert 0.0 < median < 0.5, (
+            f"median coverage is {median:.1%}. If this rose above 50% the "
+            "reader improved and D211's warnings should be revisited."
+        )
+
+    def test_describe_names_the_coverage(self):
+        mesh = model.Mesh(
+            name="x",
+            positions=[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (0.0, 1.0, 0.0),
+                (2.0, 2.0, 2.0),
+            ],
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 2],
+        )
+        assert mesh.coverage == 0.75
+        assert "75.0% covered" in mesh.describe()
+
+    def test_an_empty_mesh_has_no_coverage(self):
+        assert model.Mesh(name="x").coverage == 0.0
