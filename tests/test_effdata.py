@@ -288,3 +288,37 @@ class TestTheHeader:
         first = offsets[0] + effdata.EFFECT_STRIDE
         assert data[first : first + 9] == b"3D_switch"
         assert effdata.EFFECT_STRIDE > effdata.TEXTURE_COUNT_AT
+
+
+class TestPartDuration:
+    """`Part.second` is a frame count, and the evidence is its arithmetic.
+
+    ⚠️ It was twice mistaken for a texture index. What settles it is that the
+    values cluster on whole seconds at 60 Hz -- 61, 121, 181 -- which no
+    index into a 219-image bank would do (D210).
+    """
+
+    def test_durations_land_on_whole_seconds(self):
+        path = EFFDATA
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        parts = [p for e in effdata.read(path.read_bytes()) for p in e.parts]
+        assert len(parts) > 500
+        whole = sum(1 for p in parts if p.second % 60 == 1)
+        assert whole / len(parts) > 0.4, f"only {whole}/{len(parts)} on a second"
+
+    def test_seconds_reads_inclusively(self):
+        assert effdata.Part(0, "x", 0, 61).seconds == pytest.approx(1.0)
+        assert effdata.Part(0, "x", 0, 121).seconds == pytest.approx(2.0)
+        assert effdata.Part(0, "x", 0, 0).seconds == 0.0
+
+    def test_first_is_not_a_texture_index(self):
+        """⛔ Pins the refutation so it is not re-proposed a seventh time."""
+        path = EFFDATA
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        for effect in effdata.read(path.read_bytes()):
+            if len(effect.parts) >= 3:
+                run = [p.first for p in effect.parts[:3]]
+                assert run == [run[0], run[0] + 1, run[0] + 2], effect.name
+                break

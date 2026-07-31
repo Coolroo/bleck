@@ -7,6 +7,7 @@ from __future__ import annotations
 from . import (
     archive,
     disc,
+    effect,
     emulate,
     inspect,
     model,
@@ -25,6 +26,7 @@ MODULES = [
     symbols,
     texture,
     model,
+    effect,
     archive,
     mods,
     scripts,
@@ -37,6 +39,7 @@ __all__ = [
     "MODULES",
     "archive",
     "disc",
+    "effect",
     "emulate",
     "inspect",
     "model",

@@ -163,11 +163,25 @@ class Part:
     index: int
     name: str
     first: int
-    """u16 at +16. Runs 0..238 with 146 distinct values; meaning unestablished."""
+    """u16 at +16. A **running index** into an undecoded section, not an image.
+
+    ⛔ It reads like a texture index and is not (D210): the parts of one effect
+    carry consecutive values -- `chaosA` 0, `chaosC` 1, `chaosD` 2 -- which is
+    how `first_part` and `extra` behave, and 14 of 704 parts exceed the 219
+    images outright."""
 
     second: int
-    """u16 at +18. Runs 1..621 with 55 distinct values. ⛔ **Not** a texture
-    index -- there are only 219 images in `effdata.tpl`."""
+    """u16 at +18. A **duration in frames**, counted inclusively.
+
+    ✅ 54% of all parts are exactly 1 mod 60, and the commonest values are 61,
+    121, 31, 41 and 181 -- one second, two, a half, two thirds, three, at the
+    game's 60 Hz (D210). ⛔ Also not a texture index: it reaches 621."""
+
+    @property
+    def seconds(self) -> float:
+        """How long this part lasts, at 60 Hz. ⚠️ Inclusive, so 61 frames is
+        one second rather than 61/60."""
+        return max(self.second - 1, 0) / 60.0
 
 
 @dataclass(frozen=True)

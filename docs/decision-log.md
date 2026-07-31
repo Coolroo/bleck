@@ -13365,3 +13365,38 @@ construction would still have to beat its own control.
   the identity, so the mapping is probably trivial, and "probably" is why it
   is not claimed.
 - ⛔ Animation remains names and pointers only. Nothing here plays a clip.
+
+## D210 — A part's second field is a duration, and its first is not a texture (2026-07-30)
+
+✅ **Verified.** `Part.second` in `effdata.dat` is a **duration in frames**,
+counted inclusively at the game's 60 Hz.
+
+Across all 704 parts, **385 (54%) are exactly 1 mod 60**, and the commonest
+values are 61 (182 parts), 121 (164), 31, 41 and 181 — one second, two, a half,
+two thirds, three. An index into a 219-image bank has no reason to pile up on
+multiples of 60, and this one reaches 621.
+
+`chaos` shows it plainly: its four parts last 181, 61, 121 and 61 frames — three
+seconds, one, two, one.
+
+⛔ **`Part.first` is a running index, not a texture index.** This is the sixth
+refuted candidate for the part→image link, and the most convincing so far: its
+range is 0..238 against 219 images, which looked like a near miss. It is not.
+The parts of a single effect carry **consecutive** values — `chaosA` 0, `chaosC`
+1, `chaosD` 2, `chaosE` 3 — which is exactly how `first_part` and `extra`
+behave, and 14 of 704 parts exceed 218 outright.
+
+**The part→image link remains unknown**, and the candidates now ruled out are:
+`Part.second`, `Part.first`, the `+0x28` header word (which is section 10's
+offset, not a texture count — an earlier note had this wrong), and three field
+offsets tried in D19x. A scan of every section at nine plausible strides found
+**no** field whose values sit in 0..218 with enough distinct entries.
+
+### What shipped anyway
+
+`bleck effect list` / `show` / `export`, writing `effects.json` with each
+effect's parts, durations and transform rows. The 219 images come from
+`files/eff/effdata.tpl`, which `texture export` already writes — so a viewer
+can show an effect's structure, timing and image bank, and cannot yet show
+which image a given part draws. That limit is stated in the command's own
+docstring so it does not get quietly forgotten.
