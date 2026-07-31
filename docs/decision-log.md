@@ -14517,3 +14517,52 @@ texturing reads as what it is.** The artifact was the more misleading state.
 
 `Mesh.shapes` now carries the count, and the manifest carries it per model, so
 a viewer can say why something is bare.
+
+## D230 — How the game reaches its music, and why there is no rate alias (2026-07-31)
+
+The listener proposed that a "sound alias" somewhere sets a playback rate,
+explaining why exported music sounds sped up. ⛔ **Traced, and there is no such
+alias.** Recording the route, because it took three files to establish and the
+negative is the useful part.
+
+### The route
+
+⚠️ **The DOL contains no `.brstm` path at all.** `dolscan strings brstm`
+returns nothing; the only sound paths it builds are
+`%s/sound/wiimario_snd.dat` and `/sound/wiimario_snd.brsar`. So the music is
+not opened by name from code.
+
+| file | what it is |
+|---|---|
+| `wiimario_snd.dat` | **plain text**, 27,688 lines — name/id table |
+| `wiimario_snd.brsar` | RSAR: SYMB (1,416 names), INFO, FILE (14.9 MB) |
+
+✅ **`wiimario_snd.dat` is a text table**, not a binary one: an id, a name like
+`BGM_MAP_STG1`, then six numbers. Field 4 is **64 in all 1,965 records** — pan
+centre — and the field before it runs 0..127, which is volume. Nothing in it is
+a sample rate.
+
+✅ **The BRSAR's INFO section names 129 `.brstm` files** — that is how the
+streams are reached, as external files of the archive.
+
+### ⛔ And no rate override anywhere
+
+Searching INFO for the rates the streams actually use:
+
+| value | u32 hits | u16 hits |
+|---|---|---|
+| 44100 | **0** | 1 |
+| 32000 | 4 | 10 |
+| 32028 | 0 | 0 |
+| 32728 | 0 | 0 |
+
+**44100 appears zero times as a u32**, and the two odd rates the headers carry
+— 32028 and 32728 — appear nowhere at all. A table overriding stream rates
+would have to contain them.
+
+So the BRSTM header's rate field is authoritative, and `bleck` already uses it.
+
+⚠️ **This does not explain the listener's report**, and that stays open. What
+it does is close off the alias theory with evidence rather than leaving it as a
+plausible untested idea — the same service D210's refuted list performs for the
+effect binding.
