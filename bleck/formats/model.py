@@ -176,6 +176,7 @@ FACE_SLOT = 0
 POSITION_SLOT = 1
 POSITION_INDEX_SLOT = 2
 NORMAL_SLOT = 3
+NORMAL_INDEX_SLOT = 4
 
 #: A face is `(first corner, corner count)`, eight bytes. The draw code reads
 #: the pair as `lwz 0(r23)` and `lwz 4(r23)`, indexing `r23` by `idx * 8`.
@@ -199,6 +200,15 @@ class Face:
 
 
 @dataclass(frozen=True)
+class Corner:
+    """One corner of a face: which position it uses, and which normal."""
+
+    position: int
+    normal: int | None
+    """None when the model carries no normal stream for this corner."""
+
+
+@dataclass(frozen=True)
 class Mesh:
     """The vertex arrays of one shape, as the game hands them to GX.
 
@@ -214,6 +224,12 @@ class Mesh:
     faces: list = field(default_factory=list)  # pylint: disable=container-return
     #: One position index per corner, in draw order.
     corner_positions: list = field(  # pylint: disable=container-return
+        default_factory=list
+    )
+    #: One normal index per corner. ⚠️ **Read, never assumed.** It is the plain
+    #: identity in 766 of 870 models, a permutation in 101, and neither in 3 --
+    #: so treating it as `corner == normal` would mis-shade 104 models.
+    corner_normals: list = field(  # pylint: disable=container-return
         default_factory=list
     )
     #: Lengths of the `u16`-in-`u32` index streams, in table order.
@@ -250,9 +266,24 @@ class Mesh:
         4-corner faces on the disc are, against 16% for shuffled indices, which
         is what made the reading trustworthy in the first place (D209).
         """
+        return [tuple(c.position for c in tri) for tri in self.corner_triangles()]
+
+    def corner_triangles(self) -> list:  # pylint: disable=container-return
+        """The same triangles, but keeping each corner's normal alongside it.
+
+        ⚠️ A corner's normal comes from `corner_normals`, which is *not*
+        reliably the identity -- 104 of 870 models would be mis-shaded by
+        assuming it is.
+        """
         out = []
         for face in self.faces:
-            corners = self.corner_positions[face.first : face.first + face.corners]
+            span = slice(face.first, face.first + face.corners)
+            positions = self.corner_positions[span]
+            normals = self.corner_normals[span]
+            corners = [
+                Corner(position=p, normal=normals[i] if i < len(normals) else None)
+                for i, p in enumerate(positions)
+            ]
             for i in range(1, len(corners) - 1):
                 out.append((corners[0], corners[i], corners[i + 1]))
         return out
@@ -425,16 +456,24 @@ def mesh(data: bytes) -> Mesh:
             f"{len(faces)} faces cover {corners} corners, but the index "
             f"streams are {streams} long"
         )
-    first, last = table[POSITION_INDEX_SLOT], edges[POSITION_INDEX_SLOT + 1]
-    corner_positions = list(struct.unpack_from(f">{(last - first) // 4}I", data, first))
     return Mesh(
+        corner_positions=_stream(data, table, edges, POSITION_INDEX_SLOT),
+        corner_normals=_stream(data, table, edges, NORMAL_INDEX_SLOT),
         name=name,
         positions=positions,
         normals=normals,
         faces=faces,
-        corner_positions=corner_positions,
         streams=streams,
     )
+
+
+def _stream(data: bytes, table: tuple, edges: list, slot: int) -> list:
+    # pylint: disable=container-return
+    """One index stream, as the `u16`-in-`u32` words the draw loop reads."""
+    start, stop = table[slot], edges[slot + 1]
+    if stop <= start or (stop - start) % 4:
+        return []
+    return list(struct.unpack_from(f">{(stop - start) // 4}I", data, start))
 
 
 def _faces(data: bytes, start: int, stop: int) -> list:

@@ -104,8 +104,19 @@ def write_obj(mesh: model.Mesh) -> str:
     lines = [f"# {mesh.name}", f"# {len(mesh.positions)} vertices"]
     for x, y, z in mesh.positions:
         lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
-    for a, b, c in mesh.triangles():
-        lines.append(f"f {a + 1} {b + 1} {c + 1}")
+    for x, y, z in mesh.normals:
+        lines.append(f"vn {x:.6g} {y:.6g} {z:.6g}")
+
+    usable = len(mesh.normals)
+    for triangle in mesh.corner_triangles():
+        parts = []
+        for corner in triangle:
+            normal = corner.normal
+            if normal is None or normal >= usable:
+                parts.append(str(corner.position + 1))
+            else:
+                parts.append(f"{corner.position + 1}//{normal + 1}")
+        lines.append("f " + " ".join(parts))
     return "\n".join(lines) + "\n"
 
 

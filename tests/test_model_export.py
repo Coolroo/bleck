@@ -58,12 +58,40 @@ class TestAgainstTheDisc:
             pytest.skip(f"no {path}")
         mesh = model.mesh(path.read_bytes())
         text = command.write_obj(mesh)
-        vertices = len([x for x in text.splitlines() if x.startswith("v ")])
-        for line in text.splitlines():
+        lines = text.splitlines()
+        vertices = len([x for x in lines if x.startswith("v ")])
+        normals = len([x for x in lines if x.startswith("vn ")])
+        assert normals == len(mesh.normals)
+        for line in lines:
             if not line.startswith("f "):
                 continue
             for token in line.split()[1:]:
-                assert 1 <= int(token) <= vertices, line
+                position, _, normal = token.partition("//")
+                assert 1 <= int(position) <= vertices, line
+                if normal:
+                    assert 1 <= int(normal) <= normals, line
+
+    def test_shading_normals_are_not_assumed_to_be_the_identity(self):
+        """⚠️ 104 of 870 models carry a non-identity normal stream, so a
+        corner's normal must come from the stream and not from its own index."""
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        shifted = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                mesh = model.mesh(data)
+            except model.ModelError:
+                continue
+            if mesh.corner_normals and mesh.corner_normals != list(
+                range(len(mesh.corner_normals))
+            ):
+                shifted += 1
+        assert shifted > 50, f"only {shifted} non-identity streams; the read regressed"
 
     def test_export_writes_a_manifest_the_viewer_can_read(self, tmp_path):
         if not MODELS.is_dir():
