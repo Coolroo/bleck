@@ -13804,3 +13804,64 @@ Before doubting the file, the checks that settled it: the material carries
 16,384 pixels** (so `alphaMode: MASK` discards nothing), and the UVs span 0..1
 with 73 distinct u and 45 distinct v. All three passed, which is what made
 "it is the viewer" the right diagnosis.
+
+## D217 — Animation is per-vertex morphing, so there was never a joint to bind (2026-07-30)
+
+✅ **Verified, and it dissolves the blocker in D216.** Two sessions went into
+looking for a track→joint mapping. There is none, because the animation is not
+skeletal.
+
+`animPoseMain` at `0x80045288` reads the clip through `+0x24` (the section
+table this project already decoded), copies the model's **positions** from
+section slot `+0x154` and **normals** from `+0x15C` into working buffers, and
+then at `0x800457e4` does this per key:
+
+```
+lbz   r5,0(r6)       ; byte 0 of the key
+mulli r5,r5,12       ; x 12 -- a vec3 stride
+lfsux f1,r8,r5       ; load WITH UPDATE: the pointer advances by index*12
+fmadds f1,f0,f2,f1   ; dest.x += weight * delta
+stfs  f1,0(r8)       ; ... and the same for .y at +4 and .z at +8
+```
+
+So a key is **`[u8 vertex stride, s8 dx, s8 dy, s8 dz]`**. `lfsux` *advances*
+the destination pointer rather than indexing it, which is why byte 0 is 1 in
+920 of 1,152 keys — consecutive vertices. The `mtspr 914..917` writes just
+above set the paired-single quantisation registers to types 4, 5, 6 and 7, and
+the deltas load through the s8 one.
+
+### Why the earlier reading looked right and was wrong
+
+D216 read bytes 1–2 as one s16 and accumulated them, scoring 0.0112 roughness
+against a 0.155 control. That was a real signal — but it was picking up that
+**adjacent bytes are small correlated deltas**, which is equally true of two
+independent s8 axes. ⚠️ A fourteen-fold separation from a control is not proof
+of the *interpretation*, only that structure exists. The game's own code is
+what settled which structure.
+
+### The checks that confirm it
+
+- All **1,152** keys of `mario_S_1` resolve to vertices inside its 324-position
+  array. A wrong stride reading would run off the end almost immediately.
+- Every `dz` is **zero**, on every key. Paper Mario is a flat character, so a
+  z-delta of zero everywhere is exactly right and is not something a misread
+  produces.
+- Deltas are small — max 9 units on a 73-unit-tall model.
+
+### What this makes possible
+
+**glTF morph targets**, which express per-vertex offsets natively. Each pose
+becomes a target, and one animation channel drives the mesh `weights` — one
+pose at weight 1 at a time, matching the game rebuilding the buffer each frame
+rather than stacking poses.
+
+`p_bibi` and `p_slit` now export with playable animation. Across the 132
+models at 95%+ coverage, **12 carry one**.
+
+⚠️ Targets are written **dense** rather than through glTF sparse accessors:
+sparse support is patchy across readers, and a target that fails to load is
+worse than one that wastes a few kilobytes. `MAX_POSES` caps a clip at 64 so a
+large mesh does not produce a file dwarfed by its own animation.
+
+⚠️ **One clip per file.** glTF holds many; every extra is another full set of
+dense targets.

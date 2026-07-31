@@ -110,7 +110,73 @@ def _welded(mesh) -> tuple:  # pylint: disable=container-return
     return vertices, indices
 
 
-def write(mesh, texture: bytes = b"", name: str = "") -> bytes:
+def _morph_targets(blob: _Blob, accessors: list, vertices: list, poses: list) -> list:
+    # pylint: disable=container-return
+    """Each pose as a dense POSITION-delta target, plus its accessor index.
+
+    ⚠️ **Dense, not sparse.** A pose touches a handful of vertices, but glTF's
+    sparse accessors are widely half-supported and a target that fails to load
+    is worse than one that wastes a few kilobytes.
+
+    ⚠️ Offsets are addressed by *model* vertex, and a glTF vertex is a welded
+    (position, normal, uv) triple — so one offset may land on several of them.
+    """
+    out = []
+    for pose in poses:
+        moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
+        payload = b"".join(
+            struct.pack("<3f", *moved.get(v.position, (0.0, 0.0, 0.0))) for v in vertices
+        )
+        view = blob.add(payload, ARRAY_BUFFER)
+        accessor = _accessor(view, len(vertices), "VEC3", FLOAT)
+        deltas = [moved.get(v.position, (0.0, 0.0, 0.0)) for v in vertices]
+        accessor["min"] = [min(d[i] for d in deltas) for i in range(3)]
+        accessor["max"] = [max(d[i] for d in deltas) for i in range(3)]
+        out.append(len(accessors))
+        accessors.append(accessor)
+    return out
+
+
+def _weight_animation(
+    blob: _Blob, accessors: list, poses: list, targets: list, name: str
+) -> dict:
+    # pylint: disable=container-return
+    """One pose active at a time, stepping through the clip.
+
+    The game rebuilds the vertex buffer from the model each frame and adds one
+    pose's offsets to it, so the poses do not stack — weight 1 for the current
+    target and 0 for every other reproduces that.
+    """
+    times = [float(pose.time) for pose in poses]
+    time_view = blob.add(struct.pack(f"<{len(times)}f", *times))
+    time_accessor = len(accessors)
+    accessors.append(_accessor(time_view, len(times), "SCALAR", FLOAT))
+    accessors[-1]["min"] = [min(times)]
+    accessors[-1]["max"] = [max(times)]
+
+    weights = []
+    for index in range(len(poses)):
+        weights += [1.0 if slot == index else 0.0 for slot in range(len(targets))]
+    weight_view = blob.add(struct.pack(f"<{len(weights)}f", *weights))
+    weight_accessor = len(accessors)
+    accessors.append(_accessor(weight_view, len(weights), "SCALAR", FLOAT))
+
+    return {
+        "name": name,
+        "samplers": [
+            {
+                "input": time_accessor,
+                "output": weight_accessor,
+                "interpolation": "LINEAR",
+            }
+        ],
+        "channels": [{"sampler": 0, "target": {"node": 0, "path": "weights"}}],
+    }
+
+
+def write(  # pylint: disable=too-many-locals
+    mesh, texture: bytes = b"", name: str = "", clip=None
+) -> bytes:
     """One mesh as a `.glb`, with the texture embedded when there is one.
 
     ⚠️ Returns bytes rather than writing a file, so a caller can size it,
@@ -189,8 +255,25 @@ def write(mesh, texture: bytes = b"", name: str = "") -> bytes:
         ]
         document["meshes"][0]["primitives"][0]["material"] = 0
 
+    if clip and clip.poses:
+        targets = _morph_targets(blob, accessors, vertices, clip.poses)
+        primitive = document["meshes"][0]["primitives"][0]
+        primitive["targets"] = [{"POSITION": index} for index in targets]
+        document["meshes"][0]["weights"] = [0.0] * len(targets)
+        document["animations"] = [
+            _weight_animation(blob, accessors, clip.poses, targets, clip.name)
+        ]
+
     document["buffers"] = [{"byteLength": len(blob.data)}]
     return _container(document, bytes(blob.data))
+
+
+@dataclass(frozen=True)
+class Clip:
+    """One animation to write: its name and the poses it steps through."""
+
+    name: str
+    poses: list = field(default_factory=list)  # pylint: disable=container-return
 
 
 def _container(document: dict, binary: bytes) -> bytes:

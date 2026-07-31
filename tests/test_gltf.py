@@ -141,3 +141,67 @@ class TestAgainstTheDisc:
                 view["byteOffset"] + view["byteLength"]
                 <= (document["buffers"][0]["byteLength"])
             ), "a buffer view runs past the end of the buffer"
+
+
+class TestMorphAnimation:
+    """Poses written as glTF morph targets, which is what makes a clip play.
+
+    ⛔ **The binding search was the wrong question.** Animation here is not
+    skeletal: `animPoseMain` adds per-vertex offsets to a copy of the position
+    array, so the target is the vertex list and there is no joint to bind
+    (D217). glTF morph targets express exactly that.
+    """
+
+    def a_clip(self) -> gltf.Clip:
+        return gltf.Clip(
+            name="wave",
+            poses=[
+                model.Morph(time=0.0, offsets=[(0, 1, 0, 0)]),
+                model.Morph(time=10.0, offsets=[(0, 0, 2, 0), (2, -1, 0, 0)]),
+            ],
+        )
+
+    def test_targets_appear_on_the_primitive(self):
+        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        targets = document["meshes"][0]["primitives"][0]["targets"]
+        assert len(targets) == 2
+        assert all("POSITION" in t for t in targets)
+
+    def test_the_mesh_declares_a_weight_per_target(self):
+        """⚠️ Required: a mesh with targets and no weights is rejected by
+        strict readers and silently static in lenient ones."""
+        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        assert document["meshes"][0]["weights"] == [0.0, 0.0]
+
+    def test_the_animation_drives_weights_on_the_node(self):
+        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        channel = document["animations"][0]["channels"][0]
+        assert channel["target"]["path"] == "weights"
+        assert channel["target"]["node"] == 0
+
+    def test_one_weight_per_target_per_keyframe(self):
+        """⛔ glTF requires output count == input count * target count. Getting
+        this wrong loads without complaint and plays nothing."""
+        document = parsed(gltf.write(a_mesh(), clip=self.a_clip()))
+        sampler = document["animations"][0]["samplers"][0]
+        times = document["accessors"][sampler["input"]]["count"]
+        weights = document["accessors"][sampler["output"]]["count"]
+        targets = len(document["meshes"][0]["primitives"][0]["targets"])
+        assert times == 2
+        assert weights == times * targets
+
+    def test_a_target_actually_moves_something(self):
+        """⚠️ An all-zero target is a valid file that animates nothing."""
+        blob = gltf.write(a_mesh(), clip=self.a_clip())
+        document = parsed(blob)
+        accessor = document["accessors"][
+            document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        ]
+        assert accessor["max"] != [0.0, 0.0, 0.0] or accessor["min"] != [0.0, 0.0, 0.0]
+
+    def test_no_clip_means_no_animation_block(self):
+        assert "animations" not in parsed(gltf.write(a_mesh()))
+
+    def test_an_empty_clip_is_not_written_as_an_animation(self):
+        document = parsed(gltf.write(a_mesh(), clip=gltf.Clip(name="none")))
+        assert "animations" not in document

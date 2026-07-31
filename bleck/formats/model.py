@@ -630,6 +630,62 @@ KEY_SCALE = 256.0
 
 
 @dataclass(frozen=True)
+class Morph:
+    """One pose: a sparse set of per-vertex offsets, and when it applies.
+
+    ⛔ **Not skeletal.** `animPoseMain` at `0x800457e4` copies the model's
+    positions into a working buffer and adds these offsets to it directly --
+    there is no joint, no matrix and nothing to bind (D217). A key is
+    `[u8 vertex stride, s8 dx, s8 dy, s8 dz]`, and `lfsux` *advances* the
+    destination pointer by the stride, which is why byte 0 is almost always 1.
+    """
+
+    time: float
+    offsets: list = field(default_factory=list)  # pylint: disable=container-return
+    """`(vertex, dx, dy, dz)`, in model units."""
+
+    @property
+    def reach(self) -> int:
+        return max((v for v, *_ in self.offsets), default=-1)
+
+
+def morphs(data: bytes, clip: Clip) -> list:  # pylint: disable=container-return
+    """A clip's poses, decoded the way the game applies them.
+
+    ✅ Verified against `p_wii_mario`: all 1,152 keys of `mario_S_1` resolve to
+    vertices inside its 324-position array, and every `dz` is zero -- which is
+    what a flat character should produce (D217).
+    """
+    base = clip.offset
+    if base + CLIP_SECTIONS_AT + CLIP_SECTIONS * 4 > len(data):
+        return []
+    table = struct.unpack_from(f">{CLIP_SECTIONS}I", data, base + CLIP_SECTIONS_AT)
+    tracks_at, keys_at = base + table[TRACK_SECTION], base + table[KEY_SECTION]
+    count = (table[TRACK_SECTION + 1] - table[TRACK_SECTION]) // CLIP_TRACK_STRIDE
+    keys = (table[KEY_SECTION + 1] - table[KEY_SECTION]) // CLIP_KEY_STRIDE
+    if count <= 0 or keys <= 0:
+        return []
+
+    found = []
+    for index in range(count):
+        at = tracks_at + index * CLIP_TRACK_STRIDE
+        if at + CLIP_TRACK_STRIDE > len(data):
+            break
+        time = struct.unpack_from(">f", data, at)[0]
+        first, length = struct.unpack_from(">2I", data, at + 4)
+        if length < 1 or first + length > keys:
+            continue
+        offsets = []
+        vertex = 0
+        for step in range(length):
+            key = keys_at + (first + step) * CLIP_KEY_STRIDE
+            vertex += data[key]
+            offsets.append((vertex, *struct.unpack_from(">3b", data, key + 1)))
+        found.append(Morph(time=time, offsets=offsets))
+    return found
+
+
+@dataclass(frozen=True)
 class Curve:
     """One track of a clip: times, and the values they carry.
 

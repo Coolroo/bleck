@@ -111,6 +111,31 @@ def _clips_of(data: bytes) -> list:  # pylint: disable=container-return
     return [(clip, model.curves(data, clip)) for clip in found.animations]
 
 
+#: A dense morph target costs `vertices * 12` bytes, so a clip with dozens of
+#: poses on a large mesh dwarfs its own geometry. Past this the animation is
+#: dropped and said so, rather than writing a file nothing will open.
+MAX_POSES = 64
+
+
+def _animation(data: bytes, mesh: model.Mesh):
+    """The first clip that actually moves something, as a glTF clip.
+
+    ⚠️ **One clip per file.** glTF holds many, but every extra clip is another
+    full set of dense morph targets, and a file that is 90% animation of a
+    fragment helps nobody. The first is the useful one to look at.
+    """
+    try:
+        found = model.read(data)
+    except model.ModelError:
+        return None
+    for clip in found.animations:
+        poses = model.morphs(data, clip)
+        poses = [p for p in poses if p.offsets and p.reach < len(mesh.positions)]
+        if poses and len(poses) <= MAX_POSES:
+            return gltf.Clip(name=clip.name, poses=poses)
+    return None
+
+
 def texture_for(base: Path, disc_path: str) -> bytes:
     """Image 0 of the bank beside a model, as PNG, or empty when there is none.
 
@@ -179,29 +204,34 @@ def _warn_about_coverage(found: list[Found]) -> None:
     )
 
 
+def _above_coverage(found: list, percent: float) -> list:
+    # pylint: disable=container-return
+    """⚠️ Says what it dropped. A filter that silently halved the output would
+    read as "the disc has fewer models"."""
+    if not percent:
+        return found
+    kept = [entry for entry in found if entry.mesh.coverage >= percent / 100.0]
+    print(
+        f"keeping {len(kept)} of {len(found)} model(s) at {percent:g}% coverage or better"
+    )
+    return kept
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
     base = _base()
-    found = _walk(base, args.search or "")
-    if args.min_coverage:
-        wanted = args.min_coverage / 100.0
-        kept = [entry for entry in found if entry.mesh.coverage >= wanted]
-        # ⚠️ Said out loud. A filter that silently halved the output would
-        # read as "the disc has fewer models".
-        print(
-            f"keeping {len(kept)} of {len(found)} model(s) at "
-            f"{args.min_coverage:g}% coverage or better"
-        )
-        found = kept
+    found = _above_coverage(_walk(base, args.search or ""), args.min_coverage)
     entries: list[dict] = []
     failed: list[str] = []
     for entry in found:
         texture = b"" if args.no_textures else texture_for(base, entry.disc_path)
+        data = (base / entry.disc_path).read_bytes()
+        clip = None if args.no_animation else _animation(data, entry.mesh)
         try:
             (out / entry.filename).write_bytes(
-                gltf.write(entry.mesh, texture, entry.name)
+                gltf.write(entry.mesh, texture, entry.name, clip)
             )
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
@@ -219,6 +249,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": True,
                 "textured": entry.mesh.is_textured and bool(texture),
+                "animated": bool(clip),
                 "clips": [
                     {
                         "name": clip.name,
@@ -242,8 +273,9 @@ def cmd_export(args: argparse.Namespace) -> int:
     curves = sum(c["curves"] for entry in entries for c in entry["clips"])
     print(f"wrote {len(entries)} .glb file(s) and {MANIFEST} to {out}")
     print(f"  {textured} carry an embedded texture")
-    print(f"  {clips} animation clip(s), {curves} decoded curve(s), in the manifest")
-    print("  ! a curve's values are decoded; which node it drives is not (D216)")
+    animated = sum(1 for entry in entries if entry["animated"])
+    print(f"  {animated} carry a playable morph animation")
+    print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
     print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
     if failed:
         print(f"\n{len(failed)} could not be written:")
@@ -268,6 +300,7 @@ def register(add: AddCommand) -> None:
     export.add_argument(
         "--no-textures", action="store_true", help="geometry only, smaller files"
     )
+    export.add_argument("--no-animation", action="store_true", help="skip morph targets")
     export.add_argument(
         "--min-coverage",
         type=float,
