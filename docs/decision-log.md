@@ -13145,3 +13145,96 @@ records are sub-models rather than clips is not settled either.
 ⛔ `has_geometry` and `can_animate` remain `False`. Knowing a section's exact
 boundaries and element size is not knowing what an element *means*, and a
 renderer fed a guessed interpretation would draw something confident and wrong.
+
+## D206 — `xref` cannot find a caller, and "nobody calls it" is the wrong read (2026-07-30)
+
+✅ **Verified.** `scripts/dolscan.py xref` tracks how the game *builds an
+address* — `lis`/`addis`/`addi` pairs — which is exactly right for data and
+exactly wrong for code. A `bl` encodes a signed displacement, not an address,
+so asking `xref` who calls `GXSetVtxAttrFmt` at `0x8028EA78` returns **nothing**.
+
+That reads as "nothing calls it", which is plainly false for a GX entry point
+in a shipping game, and it is the failure mode that matters: a tool answering
+confidently with an empty list.
+
+Added `dolscan.py callers <addr>`, which decodes every `bl` displacement in the
+text range and reports the ones landing on the target. It found **178 callers**
+of `GXSetVtxAttrFmt`, five of them inside the character-animation range.
+
+**Rejected:** widening `xref` to cover branches. The two questions have
+different answers and different failure modes; folding them together would have
+kept the empty result silently plausible.
+
+## D207 — The character vertex format, read off the game's own draw code (2026-07-30)
+
+✅ **Verified**, and this supersedes the guessing in D204.
+
+Four separate attempts to find Mario's mesh by pattern-matching the file failed
+or misled. What worked was refusing to guess: `callers` (D206) → the five call
+sites → disassembling `0x80048400`, where the game **states** the format.
+
+### What the code says
+
+```
+80048528: bl 0x8028ea44        GXClearVtxDesc()
+8004852c: li r3,9 ; li r4,3    GXSetVtxDesc(GX_VA_POS,  GX_INDEX16)
+8004854c: bl 0x8028ea78        GXSetVtxAttrFmt(fmt0, GX_VA_POS, GX_POS_XYZ, GX_F32, 0)
+8004855c: bl 0x8028f13c        GXSetArray(GX_VA_POS, r16, stride 12)
+80048560: li r3,10; li r4,3    GXSetVtxDesc(GX_VA_NRM,  GX_INDEX16)
+80048580: bl 0x8028ea78        GXSetVtxAttrFmt(fmt0, GX_VA_NRM, GX_NRM_XYZ, GX_F32, 0)
+80048594: li r3,11; li r4,3    GXSetVtxDesc(GX_VA_CLR0, GX_INDEX16)
+```
+
+So positions and normals are **big-endian float32 XYZ at stride 12**, indexed
+by `u16`. ⛔ D204's s16 reading was wrong — GX *can* quantise positions, and
+this game does not.
+
+The inner loop at `0x800486f0` then writes four index streams into the GX FIFO
+(`sth r0,-32768(r18)`), reading each with `lhz` at a stride of 4 from pointers
+held at `+0x158`, `+0x160`, `+0x168` and `+0x16C`.
+
+### The step that unlocked it
+
+Those runtime offsets are **file** offsets: the loader relocates in place.
+`p_wii_mario` has a table of eight ascending offsets at `0x150`, and three of
+the four `u16`-in-`u32` runs in the file land exactly on its entries.
+
+| slot | offset | what it is |
+|---|---|---|
+| `+0x150` | `0x3cc0` | 192 small ints |
+| `+0x154` | `0x3fc0` | **324 positions**, F32 XYZ |
+| `+0x158` | `0x4ef0` | 336 indices, 23 distinct |
+| `+0x15c` | `0x5430` | **336 normals**, F32 XYZ |
+| `+0x160` | `0x63f0` | 336 indices, 0..335 |
+| `+0x164` | `0x6930` | 336 entries, not floats |
+| `+0x168` | `0x6e70` | 490 indices over 336 values |
+| `+0x16c` | `0x73b0` | 153 indices, 23 distinct |
+
+The shape names itself through the word at `+0x14C` — `R_Arm_skinShape`.
+
+### Why the normals are proof and not a reading
+
+Every triple in slot 3 is **unit length**. Nothing else in a binary does that,
+and a wrong offset or stride scatters immediately. It holds on **864 of the 870
+model files on the disc**, so `mesh()` *checks* it and refuses the other six
+rather than returning plausible nonsense. That check is the load-bearing test.
+
+### What is still not known
+
+⛔ **The triangle list.** 490 corner indices is not divisible by 3, so it is not
+a list; `GXBegin` takes its primitive type from a runtime record this reading
+does not reach. Until that is decoded there is no surface to draw, so
+`Mesh.is_drawable` is a hard `False` — the same discipline as `has_geometry`.
+
+Also unread: slot 5 (colours or texcoords), and why positions (324) and normals
+(336) differ in count — they have separate index streams, so they legitimately
+may.
+
+### A false lead, recorded because it was convincing
+
+Scanning for "records whose `+0x14C` points at a name" found **38 records at a
+constant stride of `0x268`**, which looked like a shape array. It is an
+aliasing artifact: the joint table has a stride of `0x58`, and 7 × 0x58 = 0x268,
+so every seventh joint's inline name lands at `+0x14C`. The constant stride is
+what made it persuasive, and a constant stride is exactly what aliasing
+produces.

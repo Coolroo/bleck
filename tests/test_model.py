@@ -254,3 +254,71 @@ class TestClips:
                 if not any(c and length % c == 0 for c in clip.counts):
                     odd.append((clip.name, index, length, clip.counts))
         assert not odd, f"{len(odd)} counted sections do not divide: {odd[:3]}"
+
+
+class TestTheVertexArrays:
+    """⛔ The load-bearing test in this file, and the reason `mesh` is trusted.
+
+    Slot 3 holding normals is not an inference from where it sits -- it is the
+    only slot whose triples are **unit length**, and that holds on 864 of the
+    870 model files on the disc. A wrong reading cannot produce that; floats
+    read at the wrong stride or offset scatter immediately (D207).
+    """
+
+    def test_every_normal_on_the_disc_is_unit_length(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        decoded = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            decoded += 1
+            for triple in itertools.islice(found.normals, 64):
+                length = sum(v * v for v in triple) ** 0.5
+                assert abs(length - 1.0) <= model.UNIT_TOLERANCE, path.name
+        assert decoded > 800, f"only {decoded} models decoded; the reader regressed"
+
+    def test_mario_matches_what_was_measured(self):
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        assert found.name == "R_Arm_skinShape"
+        assert len(found.positions) == 324
+        assert len(found.normals) == 336
+        assert found.streams == [192, 336, 336, 336]
+
+    def test_positions_sit_inside_a_character_sized_box(self):
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        widest = max(abs(v) for triple in found.positions for v in triple)
+        assert 1.0 < widest < 500.0, f"{widest} is not a character coordinate"
+
+    def test_a_non_unit_slot_is_refused_not_returned(self):
+        """⚠️ The check must reject. Six files on the disc fail it, and a
+        reader that shrugged would hand a viewer garbage that looks like data."""
+        data = bytearray(a_model())
+        data.extend(b"\x00" * (0x20000 - len(data)))
+        import struct  # pylint: disable=import-outside-toplevel
+
+        table = [0x1000 + i * 0x1000 for i in range(model.SHAPE_SECTIONS)]
+        struct.pack_into(">8I", data, model.SHAPE_SECTIONS_AT, *table)
+        struct.pack_into(">I", data, model.SHAPE_NAME_AT, 0x1B0)
+        for i in range(64):
+            at = table[model.NORMAL_SLOT] + i * 12
+            struct.pack_into(">3f", data, at, 5.0, 5.0, 5.0)
+        with pytest.raises(model.ModelError, match="not a normal array"):
+            model.mesh(bytes(data))
+
+    def test_a_file_with_no_section_table_is_refused(self):
+        with pytest.raises(model.ModelError):
+            model.mesh(a_model())

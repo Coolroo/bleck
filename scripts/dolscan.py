@@ -187,6 +187,36 @@ def cmd_xref(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_callers(args: argparse.Namespace) -> int:
+    """Every `bl` that targets an address.
+
+    ⚠️ **`xref` cannot answer this.** That command tracks `lis`/`addi` pairs
+    building a *data* address; a function is reached by a `bl` with a relative
+    displacement and no literal address appears anywhere. Asking `xref` who
+    calls `GXSetVtxAttrFmt` returns nothing, which reads as "nobody" (D206).
+    """
+    image = load()
+    target = int(args.address, 0)
+    found = 0
+    for section in image.text():
+        words = _words(image, section)
+        for index, word in enumerate(words):
+            if word >> 26 != 18 or (word & 3) != 1:
+                continue
+            disp = word & 0x03FFFFFC
+            if disp & 0x02000000:
+                disp -= 0x04000000
+            at = section.address + index * 4
+            if ((at + disp) & 0xFFFFFFFF) == target:
+                print(f"0x{at:08X}  bl 0x{target:08X}")
+                found += 1
+                if args.limit and found >= args.limit:
+                    return 0
+    if not found:
+        print(f"no bl to 0x{target:08X}")
+    return 0
+
+
 def cmd_calls(args: argparse.Namespace) -> int:
     """Find `lwz rX, OFF(rY)` followed by a `bl` to one of `targets`.
 
@@ -242,6 +272,11 @@ def main() -> int:
         help="also report bases up to N bytes below the target (try 0x40)",
     )
     xref.set_defaults(func=cmd_xref)
+
+    callers = sub.add_parser("callers", help="every bl targeting an address")
+    callers.add_argument("address", help="e.g. 0x8028EA78")
+    callers.add_argument("--limit", type=int, default=40)
+    callers.set_defaults(func=cmd_callers)
 
     calls = sub.add_parser("calls", help="a field load followed by a call")
     calls.add_argument("offset", type=lambda v: int(v, 0), help="e.g. 0x40")

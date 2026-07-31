@@ -36,9 +36,30 @@ Paths are relative to the extracted disc, so `files/a/x` works from anywhere.
 - **at** -- dump one place three ways at once. A region that looks like noise as
   hex is often obvious as floats, and vice versa.
 - **vectors** -- the longest run of plausible position triples, as float32 *and*
-  as s16. ⚠️ This is the one that mattered: searching only for floats said
-  `p_wii_mario` has no mesh, and the s16 pass found a 2,438-long run (D204). GX
-  quantises positions, so a float-only search is blind to most geometry.
+  as s16. ⚠️ Both encodings, because a float-only search once said
+  `p_wii_mario` has no mesh at all (D204). Superseded as *evidence* by `mesh`
+  below, which reads the arrays the game itself points at rather than guessing.
+- **streams** -- runs of `u32` words that all fit in `u16`. That is the exact
+  signature of an index array, because the draw loop copies each entry into the
+  GX FIFO with `lhz` and a stride of 4. Three of the four runs it finds in
+  `p_wii_mario` land *on* section-table entries, which is what tied the table to
+  the geometry (D207).
+- **mesh** -- the decoded vertex arrays. Positions and normals, checked.
+
+## How the format was actually found, in case it needs doing again
+
+Pattern-matching on the file failed four times. What worked was reading the
+game's own draw code and letting it name the layout:
+
+1. `dolscan.py callers 0x8028ea78` -- who calls `GXSetVtxAttrFmt`. ⚠️ `xref`
+   cannot answer this; it tracks `lis`/`addi` data addresses, not `bl`
+   displacements, so it returns nothing and that reads as "nobody" (D206).
+2. `dolscan.py dis 0x80048400 100` -- the calls state the format outright:
+   `GX_VA_POS`, `GX_POS_XYZ`, `GX_F32`, and `GXSetArray` with a stride of 12.
+3. The same function's inner loop reads four index streams and writes them to
+   the FIFO, from pointers at `+0x158`/`+0x160`/`+0x168`/`+0x16C`.
+4. Those offsets turn out to be **file** offsets -- the loader relocates in
+   place -- so the table at `0x150` is the geometry, and `streams` confirms it.
 """
 
 from __future__ import annotations
@@ -269,6 +290,66 @@ def cmd_vectors(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_streams(args: argparse.Namespace) -> int:
+    """Index arrays, by the signature the draw loop implies.
+
+    Each entry is copied out with `lhz` at a stride of 4, so an index array is
+    a run of `u32` words that every one fit in `u16`. Nothing else in these
+    files looks like that for hundreds of words at a time.
+    """
+    data = resolve(args.file).read_bytes()
+    total = len(data) // 4
+    words = struct.unpack_from(f">{total}I", data, 0)
+    runs = []
+    start = None
+    for index, value in enumerate(words):
+        if value < 0x10000:
+            start = index if start is None else start
+            continue
+        if start is not None and index - start >= args.least:
+            runs.append((start, index - start))
+        start = None
+    if start is not None and total - start >= args.least:
+        runs.append((start, total - start))
+
+    table = struct.unpack_from(">8I", data, 0x150) if len(data) > 0x170 else ()
+    runs.sort(key=lambda run: -run[1])
+    print(f"{len(runs)} run(s) of >={args.least} words below 0x10000")
+    for at, count in runs[: args.limit]:
+        segment = words[at : at + count]
+        listed = "  <- in the section table" if at * 4 in table else ""
+        print(
+            f"  {at * 4:#08x}  {count:>6,} words  max {max(segment):>6,}  "
+            f"distinct {len(set(segment)):>6,}{listed}"
+        )
+    return 0
+
+
+def cmd_mesh(args: argparse.Namespace) -> int:
+    from bleck.formats import model  # pylint: disable=import-outside-toplevel
+
+    path = resolve(args.file)
+    data = path.read_bytes()
+    if not model.is_model(data):
+        print(f"{path.name} is not a character model")
+        return 1
+    try:
+        found = model.mesh(data)
+    except model.ModelError as exc:
+        print(f"{path.name}: {exc}")
+        return 1
+    print(found.describe())
+    print(f"  drawable: {found.is_drawable}  (no triangle list yet -- D207)")
+    for label, values in (("position", found.positions), ("normal", found.normals)):
+        if not values:
+            continue
+        flat = [v for triple in values for v in triple]
+        print(f"  {label:<9} range {min(flat):9.3f} .. {max(flat):9.3f}")
+        for triple in values[: args.limit]:
+            print("    " + "  ".join(f"{v:9.4f}" for v in triple))
+    return 0
+
+
 def cmd_strings(args: argparse.Namespace) -> int:
     data = resolve(args.file).read_bytes()
     pattern = rb"[ -~]{%d,}" % args.min
@@ -317,6 +398,17 @@ def main(argv: list[str]) -> int:
     vectors_p.add_argument("file")
     vectors_p.add_argument("--start", help="begin here, e.g. 0x15f5c")
     vectors_p.set_defaults(func=cmd_vectors)
+
+    streams_p = sub.add_parser("streams", help="index arrays, by their u16-in-u32 shape")
+    streams_p.add_argument("file")
+    streams_p.add_argument("--least", type=int, default=64, help="shortest run to show")
+    streams_p.add_argument("--limit", type=int, default=12)
+    streams_p.set_defaults(func=cmd_streams)
+
+    mesh_p = sub.add_parser("mesh", help="the decoded position and normal arrays")
+    mesh_p.add_argument("file")
+    mesh_p.add_argument("--limit", type=int, default=4, help="triples to print")
+    mesh_p.set_defaults(func=cmd_mesh)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -163,6 +163,56 @@ class Clip:
         return f"{self.name}: {self.size:,} bytes, counts {self.counts}"
 
 
+#: A shape record lists eight data sections here, as file-absolute offsets,
+#: and names itself through the word just before them.
+SHAPE_SECTIONS_AT = 0x150
+SHAPE_SECTIONS = 8
+SHAPE_NAME_AT = 0x14C
+
+#: Which slot holds what. Named from the draw code at `0x80048520`, which
+#: loads the equivalent runtime pointers from `+0x158`/`+0x160`/`+0x168`/
+#: `+0x16C` and feeds them to `GXSetArray` (D207).
+POSITION_SLOT = 1
+NORMAL_SLOT = 3
+
+#: `GXSetVtxAttrFmt` is called with `GX_F32`, `GX_POS_XYZ` and a stride of 12
+#: for both positions and normals, so a triple is three big-endian floats.
+TRIPLE = 12
+
+#: A normal is unit length. This is the property that *proves* slot 3 rather
+#: than suggesting it, so it is checked rather than assumed.
+UNIT_TOLERANCE = 0.02
+
+
+@dataclass(frozen=True)
+class Mesh:
+    """The vertex arrays of one shape, as the game hands them to GX.
+
+    ⚠️ **Vertices, not triangles.** The four parallel index streams are read
+    and counted, but which primitive they assemble into is not known, so
+    nothing here can be drawn as a surface yet (D207).
+    """
+
+    name: str
+    positions: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Unit-length float triples, one per normal index. Verified on read.
+    normals: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Lengths of the four `u16`-in-`u32` index streams, in table order.
+    streams: list = field(default_factory=list)  # pylint: disable=container-return
+
+    @property
+    def is_drawable(self) -> bool:
+        """⛔ Always False, and deliberately. Positions exist; the triangle
+        list does not, and a viewer handed loose points would draw nothing."""
+        return False
+
+    def describe(self) -> str:
+        return (
+            f"{self.name}: {len(self.positions)} position(s), "
+            f"{len(self.normals)} normal(s), streams {self.streams}"
+        )
+
+
 @dataclass(frozen=True)
 class Model:
     """What a character file says about itself, short of its geometry."""
@@ -260,6 +310,67 @@ def _bounds(data: bytes) -> Bounds:
 
 
 _ANY_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9_.]{1,31}\x00")
+
+
+def _triples(data: bytes, start: int, stop: int) -> list:
+    # pylint: disable=container-return
+    """One section read as big-endian float XYZ, the way `GXSetArray` reads it."""
+    count = (stop - start) // TRIPLE
+    return [struct.unpack_from(">3f", data, start + i * TRIPLE) for i in range(count)]
+
+
+def _is_index_stream(data: bytes, start: int, stop: int) -> bool:
+    """A stream the draw loop copies into the GX FIFO a halfword at a time.
+
+    The loop reads `lhz 0(rN)` then steps by 4, so every entry is a `u32`
+    whose value fits in `u16`. That is the whole signature, and it is what
+    separates an index array from a float array without decoding either.
+    """
+    span = stop - start
+    if span < 4 or span % 4:
+        return False
+    words = struct.unpack_from(f">{span // 4}I", data, start)
+    return all(value < 0x10000 for value in words)
+
+
+def mesh(data: bytes) -> Mesh:
+    """The first shape's vertex arrays, from the section table at `0x150`.
+
+    ⚠️ **The normals are checked, not trusted.** Slot 3 is claimed to hold
+    normals; if its triples are not unit length the claim is wrong and this
+    raises rather than handing back plausible nonsense.
+    """
+    if len(data) < SHAPE_SECTIONS_AT + SHAPE_SECTIONS * 4:
+        raise ModelError("too short to hold a shape record")
+    table = struct.unpack_from(f">{SHAPE_SECTIONS}I", data, SHAPE_SECTIONS_AT)
+    if list(table) != sorted(table) or not all(0 < at < len(data) for at in table):
+        raise ModelError(f"the words at {SHAPE_SECTIONS_AT:#x} are not a section table")
+
+    name_at = struct.unpack_from(">I", data, SHAPE_NAME_AT)[0]
+    name = _text(data[name_at : name_at + FIELD]) if name_at < len(data) else ""
+
+    edges = [*table, len(data)]
+    positions = _triples(data, table[POSITION_SLOT], edges[POSITION_SLOT + 1])
+    normals = _triples(data, table[NORMAL_SLOT], edges[NORMAL_SLOT + 1])
+
+    stray = [n for n in normals if abs(_length(n) - 1.0) > UNIT_TOLERANCE]
+    if stray:
+        raise ModelError(
+            f"slot {NORMAL_SLOT} at {table[NORMAL_SLOT]:#x} is not a normal array: "
+            f"{len(stray)} of {len(normals)} triples are not unit length"
+        )
+
+    streams = [
+        (edges[i + 1] - at) // 4
+        for i, at in enumerate(table)
+        if _is_index_stream(data, at, edges[i + 1])
+    ]
+    return Mesh(name=name, positions=positions, normals=normals, streams=streams)
+
+
+def _length(triple: tuple) -> float:
+    x, y, z = triple
+    return (x * x + y * y + z * z) ** 0.5
 
 
 def section_table(data: bytes) -> tuple:  # pylint: disable=container-return
