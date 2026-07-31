@@ -74,6 +74,24 @@ ANIMS_FROM_END = 1
 CLIP_STRIDE = 0x40
 CLIP_POINTER_AT = 0x3C
 
+#: A clip's own record: its byte size, four counts, then seven sub-section
+#: offsets relative to the record start.
+#:
+#: ✅ Record sizes chain -- `offset + size` lands on the next clip's offset --
+#: and the 94 sizes sum to exactly the 201,580-byte region, so not one byte is
+#: unaccounted for.
+#:
+#: ⚠️ **Sections 1, 2 and 4 are the counted ones**, dividing by one of the
+#: record's counts 94, 88 and 91 times out of 94 with no exceptions. Sections 0,
+#: 5 and 6 are fixed-size or padded and do *not* -- an earlier claim that every
+#: section divides was wrong, and the test that asserts this is what caught it
+#: (D205).
+COUNTED_SECTIONS = (1, 2, 4)
+RECORD_SIZE_AT = 0x00
+RECORD_COUNTS_AT = (0x08, 0x0C, 0x14, 0x1C)
+RECORD_SECTIONS_AT = 0x24
+RECORD_SECTIONS = 7
+
 #: A model's own name and its build stamp sit at fixed offsets in the opening
 #: record, each in a 32-byte field.
 NAME_AT = 0x44
@@ -118,11 +136,31 @@ class Bounds:
 
 @dataclass(frozen=True)
 class Clip:
-    """One animation clip: its name, and where its data begins."""
+    """One clip: its name, where its record is, and that record's shape.
+
+    ⚠️ **The structure is decoded; the payloads are not.** Sizes, counts and
+    sub-section boundaries all check out exactly, and none of that says what a
+    sub-section *means*. A caller can walk this safely and still cannot draw
+    anything from it.
+    """
 
     name: str
     offset: int
-    """Into this file. ⛔ What is there has not been decoded."""
+    size: int = 0
+    counts: tuple = ()
+    """The four counts in the record header. Each sub-section's length divides
+    by one of them."""
+
+    sections: tuple = ()
+    """Sub-section offsets, relative to `offset`."""
+
+    def section_bounds(self) -> list:  # pylint: disable=container-return
+        """Each sub-section as (start, length), relative to the record."""
+        edges = [*self.sections, self.size]
+        return [(edges[i], edges[i + 1] - edges[i]) for i in range(len(edges) - 1)]
+
+    def describe(self) -> str:
+        return f"{self.name}: {self.size:,} bytes, counts {self.counts}"
 
 
 @dataclass(frozen=True)
@@ -289,8 +327,29 @@ def _clips(data: bytes, start: int, end: int) -> list[Clip]:
         offset = struct.unpack_from(">I", data, at + CLIP_POINTER_AT)[0]
         if not name or not 0 < offset < len(data):
             break
-        found.append(Clip(name=name, offset=offset))
+        found.append(_clip_record(data, name, offset))
     return found
+
+
+def _clip_record(data: bytes, name: str, offset: int) -> Clip:
+    """Read a clip's record header, or return the bare pointer if it will not.
+
+    ⚠️ Degrades rather than raises. A record that does not parse is still a
+    real clip with a real offset, and losing the whole list over one is worse
+    than carrying one with empty counts.
+    """
+    if offset + RECORD_SECTIONS_AT + RECORD_SECTIONS * 4 > len(data):
+        return Clip(name=name, offset=offset)
+    size = struct.unpack_from(">I", data, offset + RECORD_SIZE_AT)[0]
+    if not 0 < size <= len(data) - offset:
+        return Clip(name=name, offset=offset)
+    counts = tuple(
+        struct.unpack_from(">I", data, offset + at)[0] for at in RECORD_COUNTS_AT
+    )
+    sections = struct.unpack_from(
+        f">{RECORD_SECTIONS}I", data, offset + RECORD_SECTIONS_AT
+    )
+    return Clip(name=name, offset=offset, size=size, counts=counts, sections=sections)
 
 
 def read(data: bytes) -> Model:

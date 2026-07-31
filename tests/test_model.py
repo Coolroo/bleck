@@ -13,6 +13,7 @@ bank has**, across 787 pairs.
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
 import pytest
@@ -210,5 +211,46 @@ class TestClips:
         assert outside == 0
 
     def test_clips_are_not_playable_and_say_so(self):
-        """⛔ Names and pointers are not keyframes."""
+        """⛔ Names, pointers and section boundaries are not keyframes."""
         assert self._mario().can_animate is False
+
+    def test_record_sizes_chain_to_the_next_clip(self):
+        """`offset + size` lands exactly on the next clip's offset."""
+        found = self._mario()
+        for first, second in itertools.pairwise(found.animations):
+            assert first.offset + first.size == second.offset, first.name
+
+    def test_the_records_account_for_every_byte(self):
+        """⛔ The check that makes this a decode rather than a plausible read.
+
+        94 record sizes sum to exactly the region between the first clip and
+        the end of the file. One wrong size and this misses.
+        """
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip("no p_wii_mario")
+        data = path.read_bytes()
+        found = model.read(data)
+        total = sum(clip.size for clip in found.animations)
+        assert total == len(data) - found.animations[0].offset
+
+    def test_the_counted_sections_divide_by_their_own_counts(self):
+        """⚠️ Only sections 1, 2 and 4 -- and that limit is the finding.
+
+        A first version asserted *every* section divides and failed on a fixed
+        12-byte one. Sections 0, 5 and 6 are fixed-size or padded; the counted
+        ones divide 94, 88 and 91 times out of 94 with no exceptions, which is
+        what says the header's counts describe those sections specifically.
+        """
+        odd = []
+        for clip in self._mario().animations:
+            bounds = clip.section_bounds()
+            for index in model.COUNTED_SECTIONS:
+                if index >= len(bounds):
+                    continue
+                _start, length = bounds[index]
+                if not length:
+                    continue
+                if not any(c and length % c == 0 for c in clip.counts):
+                    odd.append((clip.name, index, length, clip.counts))
+        assert not odd, f"{len(odd)} counted sections do not divide: {odd[:3]}"

@@ -13104,3 +13104,44 @@ a convincing-looking wrong shape, which is worse than nothing.
 scan alone was misleading, and the s16 scan is what corrected it. The tool is
 the point: this is the third time a reading has been overturned here, and each
 overturn came from running one more search rather than thinking harder.
+
+---
+
+## D205 — The clip record is decoded structurally, byte for byte (2026-07-30)
+
+✅ **Every byte of the 201,580-byte clip region is accounted for.** The 94
+record sizes sum to exactly that, and `offset + size` lands on the next clip's
+offset every time.
+
+A record's header is a size, four counts, then seven sub-section offsets:
+
+```
+mario_S_1   10,072 bytes   counts (62, 1152, 14, 613)
+mario_S_2    1,528 bytes   counts (6, 175, 6, 79)
+```
+
+⚠️ **Sections 1, 2 and 4 divide by one of the record's own counts** — 94, 88
+and 91 times out of 94, with no exceptions. That is what says the header's
+counts describe those sections rather than something else.
+
+### ⛔ And the first version of that claim was wrong
+
+The assertion written first was that *every* section divides. It fails
+immediately: section 0 is a fixed 12 bytes, and 12 divides by none of
+`(62, 1152, 14, 613)`. Sections 5 and 6 are padded and miss too.
+
+⚠️ The number that made it look right was a sloppy pre-check requiring only two
+sections per record to divide — which 94 of 94 satisfied, and which says almost
+nothing. **The test asserting the strong claim is what caught it**, and the
+claim is now the narrow, true one.
+
+### 🔶 What the sections hold is still unread
+
+`mario_S_1`'s section 2 is 1,152 four-byte entries that read as small signed
+deltas — `(0, -9, 7, 0)`, `(1, -9, 4, 0)`. Plausibly keyframes, plausibly
+packed vertex attributes. **Not established**, and D204's guess that these
+records are sub-models rather than clips is not settled either.
+
+⛔ `has_geometry` and `can_animate` remain `False`. Knowing a section's exact
+boundaries and element size is not knowing what an element *means*, and a
+renderer fed a guessed interpretation would draw something confident and wrong.
