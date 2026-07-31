@@ -15,6 +15,7 @@ from bleck.common import manifest
 from bleck.common.errors import UserError
 from bleck.formats import detect as formats
 from bleck.formats import items, u8
+from tests.synthetic_msg import BLASTER, BLASTER_WRITTEN
 
 
 @pytest.fixture
@@ -197,29 +198,33 @@ class TestBootMapFlag:
         assert "he1_01" in str(caught.value)
 
 
+@pytest.mark.usefixtures("invented_item_names")
 class TestItemsCommand:
     """`bleck items`, the sibling of `bleck maps` (D120).
 
-    It reads no disc: both an item's id and its names ship inside `bleck`, so
-    every case here runs on a machine that has never seen the game.
+    Ids and constants ship inside `bleck`; the English column does not, and is
+    resolved from `files/msg/<lang>/` under `BLECK_BASE_DIR` at run time (D194).
+    The fixture supplies a table of invented names, so the English tier is
+    exercised on a machine that has never seen the game -- and a developer who
+    *has* extracted a disc gets the same words CI does.
     """
 
     def test_a_name_finds_one_item(self, capsys):
-        assert cli.main(["items", "--search", "fire_burst"]) == 0
+        assert cli.main(["items", "--search", BLASTER_WRITTEN]) == 0
         out = capsys.readouterr().out
-        assert "Fire Burst" in out
+        assert BLASTER in out
         assert "ITEM_ID_USE_HONOO_SAKURETU" in out
         assert "1 of 538 items" in out
 
     def test_the_id_column_is_hex(self, capsys):
         """0x41, the spelling a manifest's `item:` selector takes."""
-        cli.main(["items", "--search", "fire_burst"])
+        cli.main(["items", "--search", BLASTER_WRITTEN])
         assert "0x041" in capsys.readouterr().out
 
     def test_an_internal_name_finds_it_too(self, capsys):
         """The same aliases a manifest accepts, because it is the same tiers."""
         assert cli.main(["items", "--search", "HONOO_SAKURETU"]) == 0
-        assert "Fire Burst" in capsys.readouterr().out
+        assert BLASTER in capsys.readouterr().out
 
     def test_a_substring_finds_a_family(self, capsys):
         """Browsing, not resolution: `resolve('fire')` matches nothing at all."""
@@ -231,10 +236,10 @@ class TestItemsCommand:
         assert "538 of 538 items" in capsys.readouterr().out
 
     def test_a_typo_exits_one_and_suggests(self, capsys):
-        assert cli.main(["items", "--search", "fire_brust"]) == 1
+        assert cli.main(["items", "--search", "widget_blastre"]) == 1
         out = capsys.readouterr().out
         assert "nothing matching" in out
-        assert "fire_burst" in out
+        assert BLASTER_WRITTEN in out
 
     def test_groups_summarise_every_id(self, capsys):
         assert cli.main(["items", "--groups"]) == 0
@@ -260,10 +265,14 @@ class TestItemsWithoutTheCatalog:
     """What survives `itemcatalog.json` going missing — and what does not.
 
     ⚠️ This is the unit half of what `scripts/smoke_binary.py` checks against a
-    frozen binary. The check there asserts on the English name *because* of what
+    frozen binary. The check there asserts on the **name column** because of what
     is pinned here: ids and `ITEM_ID_*` constants come from a module (D119) and
     print fine with no catalog at all, so asserting on either would pass in both
     states and prove nothing.
+
+    ⛔ It used to assert on the English name instead, which stopped working when
+    D194 moved English text off the catalog and onto the user's own disc.
+    `tests/test_smoke_binary.py` is where that check is now held honest.
     """
 
     @pytest.fixture(autouse=True)
@@ -281,7 +290,17 @@ class TestItemsWithoutTheCatalog:
         assert "ITEM_ID_USE_HONOO_SAKURETU" in out
         assert "538 of 538 items" in out
 
-    def test_the_english_name_is_the_only_thing_lost(self, capsys):
-        """So the smoke check can only pass when the JSON is really bundled."""
-        assert cli.main(["items", "--search", "fire_burst"]) == 1
-        assert "Fire Burst" not in capsys.readouterr().out
+    def test_the_internal_name_column_goes_blank(self, capsys):
+        """So the smoke check can only pass when the JSON is really bundled.
+
+        ⚠️ The row still *prints*: `HONOO_SAKURETU` is also reachable from the
+        constant (D114's second tier), so the command succeeds and only the
+        name column empties. A substring test would not see the difference.
+        """
+        assert cli.main(["items", "--search", "honoo_sakuretu"]) == 0
+        columns = [
+            line.split()
+            for line in capsys.readouterr().out.splitlines()
+            if line.strip().startswith("0x041")
+        ]
+        assert columns and columns[0] == ["0x041", "ITEM_ID_USE_HONOO_SAKURETU"]

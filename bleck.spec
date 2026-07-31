@@ -5,10 +5,11 @@
 # and `;` on Windows, and a matrix build that differs only in a separator is a
 # matrix build that breaks on one platform and nobody notices.
 #
-# ⚠️ The four JSON catalogs must land at paths that mirror the package,
+# ⚠️ The five JSON catalogs must land at paths that mirror the package,
 # because each is found with `Path(__file__).with_name(...)`:
 #
 #     bleck/backends/maps.py    -> mapcatalog.json
+#     bleck/backends/doors.py   -> doorcatalog.json
 #     bleck/formats/setup.py    -> npccatalog.json
 #     bleck/formats/items.py    -> itemcatalog.json
 #     bleck/script/catalog.py   -> catalog.json
@@ -22,6 +23,7 @@ from PyInstaller.utils.hooks import collect_submodules
 
 DATA = [
     ("bleck/backends/mapcatalog.json", "bleck/backends"),
+    ("bleck/backends/doorcatalog.json", "bleck/backends"),
     ("bleck/formats/npccatalog.json", "bleck/formats"),
     ("bleck/formats/itemcatalog.json", "bleck/formats"),
     ("bleck/script/catalog.json", "bleck/script"),

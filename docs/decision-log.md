@@ -15662,3 +15662,56 @@ halves can see them without importing each other. Tests are
 `tests/test_model_geometry.py`, which pins the *invariants* — the slices tile,
 nothing falls off the end, the positive controls stay under 5° — rather than the
 counts, because the counts in this area have already been rewritten three times.
+
+### D241 — Invented item names in a synthetic `files/msg` table ✅ (2026-07-31)
+
+D194 stopped shipping the game's English words, resolving them at run time
+from the user's own `files/msg/` instead. That left **15 tests asserting on
+names that only exist with an extracted disc**, so `checks` was red on every
+runner and `release` — which needs `[binary, checks]` — was blocked.
+
+⛔ **Rejected: skipping the tests without a disc.** Fifteen one-line edits, but
+it deletes CI coverage of the entire English-resolution path. Measured:
+**nothing under `tests/` imports `bleck/formats/msg.py`**, so that reader would
+have been left wholly untested.
+
+✅ **Chosen:** `tests/synthetic_msg.py` writes a real `files/msg/UK/items.txt`
+in the game's own `key\0value\0` format, and `conftest.py` points
+`BLECK_BASE_DIR` at it. D194 forbids shipping *Nintendo's* words, not all
+words. The **keys are read from the committed catalog** at write time, so the
+fixture cannot go stale the way the `fire_burst` check did; only the invented
+words are literals.
+
+✅ `msg_unknown_item` is the key of **18 of the 538 rows**, so one invented word
+reproduces the 18-way ambiguity `test_a_long_ambiguity_is_summarised` needs —
+the ambiguity comes from the game's table, not from the fixture staging one.
+
+⚠️ **A test was passing on a string the error message supplied.**
+`test_an_unknown_name_suggests_a_near_one` asserted that `fire_burst` appeared
+in the output — which it did, because the *hint text* named it as an example.
+Nothing was resolving. The hint itself was also wrong: it advertised an English
+name that stopped working at D194, so the program suggested something that
+could not succeed. Both fixed.
+
+🔶 **Adjacent fragility, not fixed:** `TestAgainstTheDisc` in
+`test_model_export.py` and `test_export_layout.py` gate on the hard-coded
+`work/extracted/eu0` path but read the base through `BLECK_BASE_DIR`, so they
+*fail* rather than skip when the two disagree.
+
+### D242 — `doorcatalog.json` shipped in no binary ✅ (2026-07-31)
+
+Five catalogs are loaded with `Path(__file__).with_name(...)`; `bleck.spec`
+bundled four. **`bleck/backends/doorcatalog.json` was bundled by nothing**, so
+every released binary answered `bleck doors` with "no door catalog shipped with
+this build" — indistinguishable from a corrupt install.
+
+✅ Fixed, and guarded structurally: a test scans `bleck/**/*.py` for
+`with_name("*.json")` and requires each hit to appear in `bleck.spec`. Negative
+control against the previous spec reports exactly the one missing file.
+
+⚠️ `smoke_binary.py` had asserted on the item `fire_burst`, an **English-tier**
+alias deleted by D194 — so it failed on every disc-less runner. Each check now
+reads the catalog it tests and asserts on **that catalog's own first row**,
+comparing whitespace-separated columns rather than substrings (`ITEM_ID_NULL`
+contains `NULL`). `npccatalog.json` is bundled but still untested: its only CLI
+surface needs a real setup file.

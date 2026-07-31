@@ -17,6 +17,7 @@ from bleck.mods import code
 from bleck.mods import manifest as mod_manifest
 from bleck.mods.registry import Mod
 from bleck.script import compile_source, emit
+from tests.synthetic_msg import BLASTER, BLASTER_WRITTEN, SPARE_WRITTEN
 
 PATCH = emit.ScriptPatch(
     kind=emit.PatchKind.MAP, target="he1_01", at=0, expect=0x00010072, call="on_map_init"
@@ -213,12 +214,17 @@ class TestMerging:
         assert "bleck_apply_patches" not in out
 
 
+@pytest.mark.usefixtures("invented_item_names")
 class TestPatchKind:
     """The kind is half of a wire string -- `map:he1_01` -- so the enum has to
-    survive a round trip through `mod.json` without leaking its member name."""
+    survive a round trip through `mod.json` without leaking its member name.
+
+    An English spelling is among them, so the invented table stands in for the
+    disc `bleck` would otherwise need to resolve one (D194)."""
 
     @pytest.mark.parametrize(
-        "selector", ["map:he1_01", "item:0x41", "item:65", "item:fire_burst"]
+        "selector",
+        ["map:he1_01", "item:0x41", "item:65", f"item:{BLASTER_WRITTEN}"],
     )
     def test_a_selector_round_trips_as_written(self, selector):
         expect = "USER_FUNC 4" if selector.startswith("item") else "DEBUG_PUT_MSG"
@@ -229,7 +235,7 @@ class TestPatchKind:
     @pytest.mark.parametrize(
         ("selector", "expected"),
         [
-            ("item:fire_burst", "item:fire_burst (65)"),
+            (f"item:{BLASTER_WRITTEN}", f"item:{BLASTER_WRITTEN} (65)"),
             ("item:0x41", "item:0x41 (65)"),
             ("item:65", "item:65"),
         ],
@@ -487,11 +493,17 @@ class TestManifest:
 
 
 @pytest.mark.skipif(not items.ITEM_CATALOG.is_file(), reason="no item catalog")
+@pytest.mark.usefixtures("invented_item_names")
 class TestItemNames:
-    """`item:fire_burst` where `item:0x41` was the only spelling (D114).
+    """A name where `item:0x41` was the only spelling (D114).
 
     The id path is untouched by design, so it is checked alongside every name
     form rather than trusted to have survived.
+
+    ⚠️ The English spellings are invented (`tests/synthetic_msg.py`). `bleck`
+    ships each item's message key and nothing else, so the words a real disc
+    would supply are not available to a test -- and pinning one would put back
+    exactly what D194 removed.
     """
 
     def patch(self, target: str):
@@ -508,9 +520,9 @@ class TestItemNames:
             "honoo_sakuretu",
             "USE_HONOO_SAKURETU",
             "ITEM_ID_USE_HONOO_SAKURETU",
-            "fire_burst",
-            "FIRE-BURST",
-            "Fire Burst",
+            BLASTER_WRITTEN,
+            BLASTER.upper().replace(" ", "-"),
+            BLASTER,
         ],
     )
     def test_every_spelling_reaches_the_same_item(self, target):
@@ -518,20 +530,23 @@ class TestItemNames:
 
     def test_the_name_written_is_the_name_kept(self):
         """A manifest is a document an editor round-trips (`docs/vision.md`), so
-        resolving `fire_burst` to `0x41` in the file would erase what was said."""
-        parsed = self.patch("fire_burst")
-        assert parsed.target == "fire_burst"
-        assert parsed.selector == "item:fire_burst"
+        resolving a name to `0x41` in the file would erase what was said."""
+        parsed = self.patch(BLASTER_WRITTEN)
+        assert parsed.target == BLASTER_WRITTEN
+        assert parsed.selector == f"item:{BLASTER_WRITTEN}"
         written = manifest(
-            {**WHOLE, "script": "item:fire_burst", "expect": "USER_FUNC 4"}
+            {**WHOLE, "script": f"item:{BLASTER_WRITTEN}", "expect": "USER_FUNC 4"}
         ).to_json()
-        assert '"script": "item:fire_burst"' in written
+        assert f'"script": "item:{BLASTER_WRITTEN}"' in written
 
     def test_an_unknown_name_suggests_a_near_one(self):
+        """⚠️ The suggestion has to come from the tier tables. It used to be
+        satisfied by the error message's own example name, so it passed with
+        nothing resolving at all."""
         with pytest.raises(mod_manifest.ManifestError) as caught:
-            self.patch("fire_blast")
+            self.patch("widget_blastre")
         assert "Did you mean" in str(caught.value)
-        assert "fire_burst" in str(caught.value)
+        assert BLASTER_WRITTEN in str(caught.value)
 
     def test_a_shared_name_is_ambiguous_rather_than_guessed(self):
         """`MARIO` is both the character item and its card. Picking one would
@@ -544,9 +559,10 @@ class TestItemNames:
         assert "ITEM_ID_CARD_MARIO" in message
 
     def test_a_long_ambiguity_is_summarised(self):
-        """`Unavailable Item` is the English name of eighteen ids."""
+        """Eighteen ids share one message key, so one English name means all
+        eighteen -- the ambiguity is the game's, not the fixture's."""
         with pytest.raises(mod_manifest.ManifestError) as caught:
-            self.patch("unavailable_item")
+            self.patch(SPARE_WRITTEN)
         assert "and 12 more" in str(caught.value)
 
 

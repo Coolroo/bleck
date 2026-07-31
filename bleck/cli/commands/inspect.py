@@ -97,9 +97,12 @@ def cmd_maps(args) -> int:
 def cmd_items(args) -> int:
     """List the game's items — the names an `item:` selector accepts.
 
-    The sibling of `cmd_maps`, with one difference worth stating: this reads
-    **no disc**. Names and ids are both shipped with `bleck` (D114, D119), so
-    it answers on a machine that has never seen the game.
+    The sibling of `cmd_maps`, with one difference worth stating: every id and
+    every internal name ships with `bleck` (D114, D119), so it answers on a
+    machine that has never seen the game. Only the English column needs one --
+    those words are the game's own and are read from `files/msg` under
+    `BLECK_BASE_DIR` at run time (D194), so without a disc that column falls
+    back to the internal name.
     """
     catalog = items.catalog()
     total = len(catalog.known)

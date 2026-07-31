@@ -6,9 +6,13 @@ game data is absent from a fresh clone, so tests needing it skip cleanly.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from bleck.formats import items
+from tests import synthetic_msg
 
 REPO = Path(__file__).resolve().parent.parent
 GAME_DATA = REPO / "work" / "extracted" / "eu0" / "files"
@@ -33,6 +37,37 @@ def isolated_build_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root.mkdir()
     monkeypatch.setenv("BLECK_BUILD_DIR", str(root))
     return root
+
+
+@pytest.fixture(scope="session", name="invented_base")
+def _invented_base(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """A base build carrying nothing but the invented message table.
+
+    Session-scoped: the table is the same for every test that wants it, and
+    writing it reads the 78 KB catalog once rather than once per test.
+    """
+    return synthetic_msg.write(tmp_path_factory.mktemp("invented-msg"))
+
+
+@pytest.fixture(name="invented_item_names")
+def _invented_item_names(
+    invented_base: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Path]:
+    """Resolve English item names against invented words, on any machine.
+
+    ⚠️ **Set, never inherited.** An item's English name is looked up at run time
+    in `files/msg/<lang>/` under `BLECK_BASE_DIR` (D194), so a developer with a
+    disc extracted would otherwise test against different words from CI -- and
+    CI, having no disc, against none at all. Pointing both at one synthetic
+    table is what makes the English tier testable everywhere.
+
+    ⚠️ `items.catalog` is `lru_cache`d, so the cache is cleared on the way in
+    *and* on the way out: a table read under this fixture must not survive it.
+    """
+    monkeypatch.setenv("BLECK_BASE_DIR", str(invented_base))
+    items.catalog.cache_clear()
+    yield invented_base
+    items.catalog.cache_clear()
 
 
 @pytest.fixture(scope="session")

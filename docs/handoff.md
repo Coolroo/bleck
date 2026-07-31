@@ -545,11 +545,20 @@ commit their `scripts/*.evt` source and `bleck mod build` regenerates `mod.rel`.
 - ⚠️ **The cache flush is necessary, not decorative** (D94). Two identical
   patches differing only in `dcbst`/`sync`/`icbi`/`isync` read back the same word
   and behaved differently.
-- **The four JSON catalogs are found with `Path(__file__).with_name()`**, so
+- **The five JSON catalogs are found with `Path(__file__).with_name()`**, so
   PyInstaller must bundle them at paths mirroring the package — get it wrong and
   the binary starts happily and reports an *empty* catalog. **`__main__.py` must
   use an absolute import.** `scripts/smoke_binary.py` is the step that catches
   both; a build that merely *builds* proves almost nothing.
+  ⚠️ **`doorcatalog.json` was loaded by `bleck doors` and bundled by nothing**,
+  so every release told the user "no door catalog shipped with this build".
+  `tests/test_smoke_binary.py` now derives the list from the source rather than
+  trusting `bleck.spec`'s comment, which said four.
+- ⚠️ **A smoke check must not name a catalog row.** It asked for the item
+  `fire_burst` and the English name `Fire Burst`; D194 moved English text off
+  the catalog and onto the user's own disc, and all three platform jobs then
+  failed the same assertion. Expectations are read out of the committed catalog
+  now, and `tests/test_smoke_binary.py` holds them to what the CLI prints.
 - ⚠️ **`scripts/keys.py` synthesises input and must stay out of the `bleck`
   package** — `tests/test_boundaries.py` enforces it.
 - **Two runtime dependencies, each argued**: `pyyaml` for `bleck.yml`, `pydantic`

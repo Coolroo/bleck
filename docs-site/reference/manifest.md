@@ -256,10 +256,12 @@ Every mod has a `mod.json` at its root.
                 that means two items — `mario` is a character item *and* a
                 card — is refused with the candidates listed.
 
-                Ids and `ITEM_ID_*` constants are built into `bleck`;
-                English names come from a data file shipped beside it. If
-                that file is missing, only the English spelling stops
-                resolving, and it says so.
+                Ids, `ITEM_ID_*` constants and internal names are built into
+                `bleck`. **English names are not**: they are the game's own
+                text, so `bleck` carries each item's message key and reads the
+                words behind it from `files/msg` on the disc you extracted.
+                Without one — or with `BLECK_BASE_DIR` unset — only the
+                English spelling stops resolving, and it says so.
 
                 [`bleck items`](cli.md#bleck-items) lists all 538 with
                 every spelling each one accepts, so you need not guess:

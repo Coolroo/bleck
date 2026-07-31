@@ -14,6 +14,7 @@ from bleck.mods.errors import ManifestError
 from bleck.mods.manifest.codespec import _parse_code as parse_code
 from bleck.mods.manifest.replacements import ScriptReplacement, build_replacement
 from bleck.script import emit
+from tests.synthetic_msg import BLASTER_WRITTEN
 
 
 def parse(replace: list[dict]) -> list[ScriptReplacement]:
@@ -73,7 +74,14 @@ class TestTheGuard:
             parse([{"script": "door:he1_01:0", "with": "s", "expect": 12}])
 
 
+@pytest.mark.usefixtures("invented_item_names")
 class TestWhatItRefuses:
+    """⚠️ The item selectors here are written as English names on purpose: a
+    refusal must come from the *kind* of script, after the name resolved. With
+    nothing to resolve against, an unknown-name error stood in for it and the
+    refusal itself went untested (D194). The names are invented -- see
+    `tests/synthetic_msg.py`."""
+
     def test_a_map_init_script_is_refused_with_the_measurement(self):
         """⛔ D51 swapped exactly this and the map froze mid-load. The message
         has to say so, or someone will try it again."""
@@ -84,7 +92,7 @@ class TestWhatItRefuses:
 
     def test_an_item_script_is_refused_as_unproven(self):
         with pytest.raises(ManifestError) as exc:
-            parse([{"script": "item:fire_burst", "with": "s"}])
+            parse([{"script": f"item:{BLASTER_WRITTEN}", "with": "s"}])
         assert "SHARED" in str(exc.value)
 
     def test_an_npc_script_is_refused_as_unproven(self):
@@ -94,7 +102,7 @@ class TestWhatItRefuses:
 
     def test_every_refusal_names_an_alternative(self):
         """A refusal that does not say what to do instead is a dead end."""
-        for selector in ("map:he1_01", "item:fire_burst", "npcdrv:2:onhit"):
+        for selector in ("map:he1_01", f"item:{BLASTER_WRITTEN}", "npcdrv:2:onhit"):
             with pytest.raises(ManifestError) as exc:
                 parse([{"script": selector, "with": "s"}])
             assert "code.patches" in str(exc.value) or "code.maps" in str(exc.value)

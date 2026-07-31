@@ -19,6 +19,7 @@ import pytest
 
 from bleck.formats import itemgen, items
 from bleck.formats.itemids import ItemId
+from tests.synthetic_msg import BLASTER, BLASTER_ID, BLASTER_WRITTEN
 
 #: The generated module itself, so the drift guard can compare its text.
 ITEM_IDS = Path(items.__file__).with_name("itemids.py")
@@ -356,9 +357,15 @@ class TestGenerationRefuses:
 
 
 @pytest.mark.skipif(not items.ITEM_CATALOG.is_file(), reason="no item catalog")
+@pytest.mark.usefixtures("invented_item_names")
 class TestTheCommittedItemCatalog:
     """⚠️ ITEM_ID_MAX is 538 and every row is named -- both checked, because a
-    catalog that silently lost its tail would still resolve `fire_burst`."""
+    catalog that silently lost its tail would still resolve every constant.
+
+    The English tier needs words to resolve against and the catalog no longer
+    ships any (D194), so these run against `tests/synthetic_msg.py`: invented
+    names in a real `files/msg/UK` table, which is why they pass on a machine
+    that has never seen the game."""
 
     def test_it_covers_every_id(self):
         names = items.load_items()
@@ -379,11 +386,13 @@ class TestTheCommittedItemCatalog:
         the constant out of spm-headers. `ITEM_ID_USE_HONOO_SAKURETU` sitting
         at the id whose `itemName` is `HONOO_SAKURETU` is what says the stride
         and the base address are right."""
-        found = items.load_items().lookup(0x41)
+        found = items.load_items().lookup(BLASTER_ID)
         assert found.name == "HONOO_SAKURETU"
         assert found.enum is ItemId.USE_HONOO_SAKURETU
         assert found.constant == "ITEM_ID_USE_HONOO_SAKURETU"
-        assert found.english == "Fire Burst"
+        assert found.english == BLASTER
 
-    def test_fire_burst_resolves(self):
-        assert items.load_items().resolve("fire_burst").item.id == 0x41
+    def test_an_english_name_resolves(self):
+        """The whole runtime path in one line: the catalog's message key, the
+        table under `BLECK_BASE_DIR`, and the tier that joins them."""
+        assert items.load_items().resolve(BLASTER_WRITTEN).item.id == BLASTER_ID

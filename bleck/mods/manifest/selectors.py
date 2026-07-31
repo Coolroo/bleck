@@ -70,8 +70,9 @@ def parse_selector(raw: str, where: str) -> _Selector:
             f"{where}: 'script' is {raw!r}, which names no script bleck can "
             f"reach.\n  Supported selectors: {emit.SUPPORTED_SELECTORS}.\n"
             f"  'map:he1_01' patches that map's init script; 'item:0x41' (or "
-            f"'item:fire_burst') patches that item's use script; 'door:he1_01:0' "
-            f"patches the interact script of that map's first door."
+            f"'item:HONOO_SAKURETU') patches that item's use script; "
+            f"'door:he1_01:0' patches the interact script of that map's "
+            f"first door."
         )
     if kind is PatchKind.ITEM:
         return _parse_item_target(target, where)
@@ -220,15 +221,17 @@ def _resolve_item(raw: str, where: str) -> int:
 
     ⚠️ Resolution runs **before** the catalog is checked for: since `ItemId` is
     a module, an `ITEM_ID_*` constant resolves with no JSON on disk and only the
-    English name needs one (D119). Asking first is what tells the two apart.
+    English name needs one (D119) -- and an extracted disc besides, since the
+    words themselves are read from `files/msg` (D194). Asking first is what
+    tells them apart.
     """
     known = items.catalog()
     match = known.resolve(raw)
     if match.item is not None:
         return match.item.id
     if match.ambiguous:
-        # Capped: `unavailable_item` is the English name of eighteen ids, and a
-        # wall of them buries the sentence that says what to do about it.
+        # Capped: eighteen ids share one message key, so one English name means
+        # all of them, and a wall of ids buries the sentence saying what to do.
         shown = match.ambiguous[:AMBIGUOUS_SHOWN]
         # ⚠️ `constant`, never `enum`: an `ItemId` is an int and formats as one.
         listed = "\n".join(
@@ -258,8 +261,10 @@ def _resolve_item(raw: str, where: str) -> int:
     raise ManifestError(
         f"{where}: {raw!r} is neither an item id nor an item bleck knows.{hint}\n"
         f"  An item is written as a number -- 'item:65', 'item:0x41' -- or as a "
-        f"name: its internal name ('HONOO_SAKURETU'), its constant "
-        f"('ITEM_ID_USE_HONOO_SAKURETU'), or its English name ('fire_burst').\n"
+        f"name: its internal name ('HONOO_SAKURETU') or its constant "
+        f"('ITEM_ID_USE_HONOO_SAKURETU'). An English name works too, but only "
+        f"where BLECK_BASE_DIR points at an extracted disc: bleck carries each "
+        f"item's message key and reads the words behind it from files/msg.\n"
         f"  All {len(known)} names are in {items.ITEM_CATALOG.name}; "
         f"`bleck items` lists them."
     )
