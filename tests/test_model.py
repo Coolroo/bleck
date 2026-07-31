@@ -369,3 +369,131 @@ class TestTheFaceList:
             pytest.skip(f"no {path}")
         for face in model.mesh(path.read_bytes()).faces:
             assert face.corners >= 3, face
+
+
+def _planarity(points) -> float | None:
+    """How far the fourth corner sits out of the plane of the first three,
+    as a fraction of the first edge's length."""
+
+    def sub(a, b):
+        return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+    def dot(a, b):
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+    edge, other = sub(points[1], points[0]), sub(points[2], points[0])
+    normal = (
+        edge[1] * other[2] - edge[2] * other[1],
+        edge[2] * other[0] - edge[0] * other[2],
+        edge[0] * other[1] - edge[1] * other[0],
+    )
+    scale = dot(normal, normal) ** 0.5
+    if scale < 1e-9:
+        return None
+    normal = tuple(c / scale for c in normal)
+    return abs(dot(sub(points[3], points[0]), normal)) / max(dot(edge, edge) ** 0.5, 1e-9)
+
+
+class TestTheFacesAreRealGeometry:
+    """⛔ The test that made the mesh trustworthy, and the reason `is_drawable`
+    is allowed to be True at all.
+
+    A 4-corner face of a real mesh is **planar**. Shuffled indices are not.
+    Measured across 125 genuinely three-dimensional shapes, real faces are 98%
+    planar against 16% for a per-model random control -- and the control
+    matters, because the first shape tried was itself flat, so every random
+    quad passed and the result looked like a confirmation (D209).
+    """
+
+    def test_real_faces_are_far_more_planar_than_shuffled_ones(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        import random  # pylint: disable=import-outside-toplevel
+
+        random.seed(7)
+        real_rates, control_rates = [], []
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            spread = [
+                max(p[i] for p in found.positions) - min(p[i] for p in found.positions)
+                for i in range(3)
+            ]
+            if min(spread) < 5:
+                continue
+            real, control = [], []
+            for face in found.faces:
+                if face.corners != 4:
+                    continue
+                corners = found.corner_positions[face.first : face.first + 4]
+                value = _planarity([found.positions[c] for c in corners])
+                if value is not None:
+                    real.append(value)
+                shuffled = [
+                    found.positions[random.randrange(len(found.positions))]
+                    for _ in range(4)
+                ]
+                value = _planarity(shuffled)
+                if value is not None:
+                    control.append(value)
+            if len(real) < 10:
+                continue
+            real_rates.append(sum(1 for v in real if v < 0.05) / len(real))
+            control_rates.append(sum(1 for v in control if v < 0.05) / len(control))
+
+        assert len(real_rates) > 50, f"only {len(real_rates)} 3D shapes; test is weak"
+        real_rates.sort()
+        control_rates.sort()
+        real_median = real_rates[len(real_rates) // 2]
+        control_median = control_rates[len(control_rates) // 2]
+        assert real_median > 0.85, real_median
+        assert control_median < 0.40, control_median
+        assert real_median > control_median * 2
+
+
+class TestDrawing:
+    def test_every_readable_model_is_drawable(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        read = drawable = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            read += 1
+            drawable += 1 if found.is_drawable else 0
+        assert read > 800
+        assert drawable == read, f"{read - drawable} readable models cannot be drawn"
+
+    def test_triangles_index_real_positions(self):
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        assert found.triangles()
+        for triangle in found.triangles():
+            for index in triangle:
+                assert 0 <= index < len(found.positions)
+
+    def test_a_face_off_the_end_is_not_drawable(self):
+        """⚠️ `is_drawable` has to be able to say no, or it says nothing."""
+        broken = model.Mesh(
+            name="x",
+            positions=[(0.0, 0.0, 0.0)],
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 99],
+        )
+        assert not broken.is_drawable

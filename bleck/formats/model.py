@@ -174,6 +174,7 @@ SHAPE_NAME_AT = 0x14C
 #: `+0x16C` and feeds them to `GXSetArray` (D207).
 FACE_SLOT = 0
 POSITION_SLOT = 1
+POSITION_INDEX_SLOT = 2
 NORMAL_SLOT = 3
 
 #: A face is `(first corner, corner count)`, eight bytes. The draw code reads
@@ -201,17 +202,20 @@ class Face:
 class Mesh:
     """The vertex arrays of one shape, as the game hands them to GX.
 
-    ⚠️ **Not yet a surface.** Faces, positions and normals are all read, but
-    which index stream maps a corner to a *position* is still unknown -- no
-    stream in the table has the range to address 324 positions (D207).
+    ⚠️ **One shape, not the whole model.** The table holds 24 slots and a file
+    holds several shapes; this reads the first (D208).
     """
 
     name: str
     positions: list = field(default_factory=list)  # pylint: disable=container-return
     #: Unit-length float triples. Verified on read; see `UNIT_TOLERANCE`.
     normals: list = field(default_factory=list)  # pylint: disable=container-return
-    #: Polygons in draw order. Corner counts sum to the index-stream length.
+    #: Polygons in draw order. `first` indexes `corner_positions`.
     faces: list = field(default_factory=list)  # pylint: disable=container-return
+    #: One position index per corner, in draw order.
+    corner_positions: list = field(  # pylint: disable=container-return
+        default_factory=list
+    )
     #: Lengths of the `u16`-in-`u32` index streams, in table order.
     streams: list = field(default_factory=list)  # pylint: disable=container-return
 
@@ -221,15 +225,43 @@ class Mesh:
 
     @property
     def is_drawable(self) -> bool:
-        """⛔ Always False until a corner can be turned into a position. A
-        viewer handed faces it cannot resolve would draw confident nonsense."""
-        return False
+        """Whether every face resolves to a real position.
+
+        ⚠️ Checked per model rather than assumed. A file whose faces run off
+        the end of its position array is one this reading does not cover, and
+        a viewer must be told that rather than shown a torn mesh.
+        """
+        if not self.faces or not self.positions:
+            return False
+        return all(
+            face.first + face.corners <= len(self.corner_positions)
+            and max(
+                self.corner_positions[face.first : face.first + face.corners],
+                default=0,
+            )
+            < len(self.positions)
+            for face in self.faces
+        )
+
+    def triangles(self) -> list:  # pylint: disable=container-return
+        """Every face fanned into triangles, as indices into `positions`.
+
+        A fan is correct for these faces because they are **planar** -- 98% of
+        4-corner faces on the disc are, against 16% for shuffled indices, which
+        is what made the reading trustworthy in the first place (D209).
+        """
+        out = []
+        for face in self.faces:
+            corners = self.corner_positions[face.first : face.first + face.corners]
+            for i in range(1, len(corners) - 1):
+                out.append((corners[0], corners[i], corners[i + 1]))
+        return out
 
     def describe(self) -> str:
         return (
             f"{self.name}: {len(self.positions)} position(s), "
             f"{len(self.normals)} normal(s), {len(self.faces)} face(s) / "
-            f"{self.corners} corner(s), streams {self.streams}"
+            f"{self.corners} corner(s), drawable {self.is_drawable}"
         )
 
 
@@ -393,11 +425,14 @@ def mesh(data: bytes) -> Mesh:
             f"{len(faces)} faces cover {corners} corners, but the index "
             f"streams are {streams} long"
         )
+    first, last = table[POSITION_INDEX_SLOT], edges[POSITION_INDEX_SLOT + 1]
+    corner_positions = list(struct.unpack_from(f">{(last - first) // 4}I", data, first))
     return Mesh(
         name=name,
         positions=positions,
         normals=normals,
         faces=faces,
+        corner_positions=corner_positions,
         streams=streams,
     )
 

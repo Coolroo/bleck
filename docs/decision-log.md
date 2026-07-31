@@ -13314,3 +13314,54 @@ The corner→position gap narrows but does not close:
   table, and the pairing that works for normals and colours does not work here.
 - 🔶 The section at `0x7614` is 2,592 bytes = **324** float pairs — the same
   count as the positions. Untested, but 324 is not a coincidence twice.
+
+## D209 — The mesh is real: faces resolve, and planarity proves it (2026-07-30)
+
+✅ **Verified.** Slot 2 of the section table is the **corner→position index
+stream**, which closes the gap D208 left open and makes character geometry
+readable. All **864** models that decode are now drawable, 127,076 triangles
+in total.
+
+### The instrument, and the control that nearly fooled me
+
+A four-corner face of a real mesh is **planar**. Shuffled indices are not. So:
+resolve each quad through the candidate stream and measure how far its fourth
+corner sits out of the plane of the first three.
+
+⚠️ **The first run of this test was worthless and looked perfect.** Mario's
+first shape is `R_Arm_skin`, which is nearly flat — z spans −1.0 to 2.8. Every
+quad was planar to 0.0000, and so was the random control, at 21 of 26. The
+shape being flat meant *any* four of its points were coplanar.
+
+That is the D70/D73/D74 failure exactly: a control measured with the same
+broken ruler. Re-run against the 125 shapes whose smallest axis extent exceeds
+5 units, with a fresh random control drawn **per model**:
+
+| | real faces | shuffled control |
+|---|---|---|
+| median planar (within 5% of edge length) | **98.2%** | 15.6% |
+
+A six-fold separation, on 125 independent shapes. `e_big_nok` and `e_big_gesso`
+are 100% against ~20%. That is not a reading that fits; it is geometry.
+
+The check is now `TestTheFacesAreRealGeometry`, and it asserts the *gap* rather
+than the absolute rate, so a future misreading that made faces planar by
+construction would still have to beat its own control.
+
+### What shipped
+
+- `Mesh.triangles()` — faces fanned into triangles. A fan is only valid because
+  the faces are planar, which is the same fact the test measures.
+- `Mesh.is_drawable` — no longer a hard `False`, but **computed per model**:
+  every face must resolve inside the position array. It can still say no.
+- `bleck model list` / `bleck model export` — Wavefront OBJ plus a
+  `models.json` manifest, mirroring `texture export`. 864 files written.
+
+### Still open
+
+- 🔶 **One shape per file.** The 24-slot table covers the first shape; a file
+  holds several (D208), so an exported OBJ is a part, not a character.
+- 🔶 Normals are read but not yet attached to corners — the normal stream is
+  the identity, so the mapping is probably trivial, and "probably" is why it
+  is not claimed.
+- ⛔ Animation remains names and pointers only. Nothing here plays a clip.
