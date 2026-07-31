@@ -197,6 +197,11 @@ UV_PAIR = 8
 #: for both positions and normals, so a triple is three big-endian floats.
 TRIPLE = 12
 
+#: Below this a triangle covers no pixels. Dropping them costs nothing and
+#: saves a depth test each; `e_genjin_b` alone carries 18 of 104.
+AREA_EPSILON = 1e-9
+
+
 #: A normal is unit length. This is the property that *proves* slot 3 rather
 #: than suggesting it, so it is checked rather than assumed.
 UNIT_TOLERANCE = 0.02
@@ -326,9 +331,96 @@ class Mesh:
                 Corner(position=p, normal=normals[i] if i < len(normals) else None)
                 for i, p in enumerate(positions)
             ]
-            for i in range(1, len(corners) - 1):
-                out.append((corners[0], corners[i], corners[i + 1]))
+            out += self._cut(corners)
         return out
+
+    def _cut(self, corners: list) -> list:  # pylint: disable=container-return
+        """One polygon into triangles, without fanning across a reflex corner.
+
+        ⛔ **A fan is only correct for a convex polygon**, and 14% of the disc's
+        4-corner faces are not convex — 182 models carry at least one. Fanning
+        one produces a bow-tie: two corners open into a triangle that crosses
+        the middle of the shape and drags the texture with it, which is exactly
+        how it was reported (D223).
+
+        Ear clipping instead: repeatedly take a corner whose triangle stays
+        inside the polygon. ⚠️ Zero-area triangles are dropped as they appear —
+        18 of `e_genjin_b`'s 104 were degenerate, and they render nothing while
+        still costing a depth test.
+        """
+        if len(corners) < 3:
+            return []
+        plane = self._plane(corners)
+        pool = list(corners)
+        out = []
+        guard = len(pool) * len(pool)
+        while len(pool) > 3 and guard > 0:
+            guard -= 1
+            for i, _ in enumerate(pool):
+                # ⚠️ Negative indices are deliberate: `i - 2` and `i - 1` wrap
+                # to the end of the list, so the corner before the first one is
+                # the last one, as a closed polygon requires.
+                trio = (pool[i - 2], pool[i - 1], pool[i])
+                if self._is_ear(pool, trio, plane):
+                    if self._area(trio) > AREA_EPSILON:
+                        out.append(trio)
+                    pool.pop(i - 1)
+                    break
+            else:
+                # ⚠️ No ear found: the polygon is degenerate or self-crossing,
+                # so fall back to a fan rather than dropping it silently.
+                break
+        for i in range(1, len(pool) - 1):
+            trio = (pool[0], pool[i], pool[i + 1])
+            if self._area(trio) > AREA_EPSILON:
+                out.append(trio)
+        return out
+
+    def _plane(self, corners: list) -> tuple:  # pylint: disable=container-return
+        """A normal for the polygon, summed over its corners so that one
+        degenerate triple cannot decide the winding for the whole face."""
+        total = (0.0, 0.0, 0.0)
+        points = [self.positions[c.position] for c in corners]
+        for i, point in enumerate(points):
+            nxt = points[(i + 1) % len(points)]
+            total = (
+                total[0] + (point[1] - nxt[1]) * (point[2] + nxt[2]),
+                total[1] + (point[2] - nxt[2]) * (point[0] + nxt[0]),
+                total[2] + (point[0] - nxt[0]) * (point[1] + nxt[1]),
+            )
+        return total
+
+    def _area(self, trio: tuple) -> float:
+        a, b, c = (self.positions[corner.position] for corner in trio)
+        edge = [b[i] - a[i] for i in range(3)]
+        other = [c[i] - a[i] for i in range(3)]
+        cross = (
+            edge[1] * other[2] - edge[2] * other[1],
+            edge[2] * other[0] - edge[0] * other[2],
+            edge[0] * other[1] - edge[1] * other[0],
+        )
+        return sum(v * v for v in cross) ** 0.5
+
+    def _is_ear(self, pool: list, trio: tuple, plane: tuple) -> bool:
+        """Whether the corner turns the same way as the polygon and encloses
+        no other corner."""
+        a, b, c = (self.positions[corner.position] for corner in trio)
+        edge = [b[i] - a[i] for i in range(3)]
+        other = [c[i] - b[i] for i in range(3)]
+        cross = (
+            edge[1] * other[2] - edge[2] * other[1],
+            edge[2] * other[0] - edge[0] * other[2],
+            edge[0] * other[1] - edge[1] * other[0],
+        )
+        if sum(cross[i] * plane[i] for i in range(3)) < 0:
+            return False
+        inside = {corner.position for corner in trio}
+        for corner in pool:
+            if corner.position in inside:
+                continue
+            if _within(self.positions[corner.position], a, b, c, plane):
+                return False
+        return True
 
     def describe(self) -> str:
         return (
@@ -435,6 +527,25 @@ def _bounds(data: bytes) -> Bounds:
 
 
 _ANY_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9_.]{1,31}\x00")
+
+
+def _within(point: tuple, a: tuple, b: tuple, c: tuple, plane: tuple) -> bool:
+    """Whether a point falls inside a triangle, measured in the face's plane.
+
+    Barycentric sign tests against the polygon's own normal, so a face lying in
+    any orientation is handled without projecting to a chosen axis pair.
+    """
+    for start, end in ((a, b), (b, c), (c, a)):
+        edge = [end[i] - start[i] for i in range(3)]
+        arm = [point[i] - start[i] for i in range(3)]
+        cross = (
+            edge[1] * arm[2] - edge[2] * arm[1],
+            edge[2] * arm[0] - edge[0] * arm[2],
+            edge[0] * arm[1] - edge[1] * arm[0],
+        )
+        if sum(cross[i] * plane[i] for i in range(3)) < 0:
+            return False
+    return True
 
 
 def _triples(data: bytes, start: int, stop: int) -> list:

@@ -666,3 +666,105 @@ class TestTheCurveEncoding:
 
     def test_a_clip_pointing_past_the_file_yields_nothing(self):
         assert not model.curves(bytes(64), model.Clip(name="x", offset=0x9999))
+
+
+class TestTriangulation:
+    """⛔ A fan is only correct for a convex polygon.
+
+    14% of the disc's 4-corner faces are not convex, and fanning one produces a
+    bow-tie: two corners open into a triangle crossing the middle of the shape,
+    dragging the texture with it. That is how it was reported from the window
+    (D223), which is the only way it could have been — the arithmetic all
+    checked out.
+    """
+
+    def a_concave_quad(self) -> model.Mesh:
+        """A dart whose reflex corner is at index **1**.
+
+        ⚠️ The index matters, and getting it wrong makes this test pass
+        against a plain fan. A quad has only two diagonals; fanning from
+        corner 0 always uses 0-2, which is a *valid* cut whenever the reflex
+        corner is 0 or 2. Only a reflex corner at 1 or 3 forces the other
+        diagonal, and only then does a fan produce the bow-tie.
+        """
+        return model.Mesh(
+            name="dart",
+            positions=[
+                (-2.0, -1.0, 0.0),
+                (0.0, 0.0, 0.0),
+                (2.0, -1.0, 0.0),
+                (0.0, 4.0, 0.0),
+            ],
+            faces=[model.Face(first=0, corners=4)],
+            corner_positions=[0, 1, 2, 3],
+            corner_normals=[0, 1, 2, 3],
+        )
+
+    def test_a_concave_quad_is_not_fanned_across_its_notch(self):
+        found = self.a_concave_quad().triangles()
+        assert len(found) == 2
+        # ⚠️ The fan would give (0,1,2) and (0,2,3). Both contain corner 0 and
+        # corner 2, the diagonal that leaves the shape.
+        assert not all({0, 2} <= set(t) for t in found), found
+
+    def test_every_triangle_keeps_the_polygon_winding(self):
+        mesh = self.a_concave_quad()
+        for a, b, c in mesh.triangles():
+            first, second, third = (mesh.positions[i] for i in (a, b, c))
+            edge = [second[i] - first[i] for i in range(3)]
+            other = [third[i] - second[i] for i in range(3)]
+            assert edge[0] * other[1] - edge[1] * other[0] > 0, (a, b, c)
+
+    def test_a_convex_quad_still_makes_two_triangles(self):
+        mesh = model.Mesh(
+            name="square",
+            positions=[
+                (0.0, 0.0, 0.0),
+                (1.0, 0.0, 0.0),
+                (1.0, 1.0, 0.0),
+                (0.0, 1.0, 0.0),
+            ],
+            faces=[model.Face(first=0, corners=4)],
+            corner_positions=[0, 1, 2, 3],
+            corner_normals=[0, 1, 2, 3],
+        )
+        assert len(mesh.triangles()) == 2
+
+    def test_a_zero_area_face_produces_nothing(self):
+        """⚠️ 18 of `e_genjin_b`'s 104 triangles were degenerate. They draw no
+        pixels and still cost a depth test each."""
+        mesh = model.Mesh(
+            name="flat",
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 1],
+            corner_normals=[0, 0, 0],
+        )
+        assert mesh.triangles() == []
+
+    def test_no_model_on_the_disc_emits_a_zero_area_triangle(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        checked = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                mesh = model.mesh(data)
+            except model.ModelError:
+                continue
+            checked += 1
+            for a, b, c in mesh.triangles():
+                first, second, third = (mesh.positions[i] for i in (a, b, c))
+                edge = [second[i] - first[i] for i in range(3)]
+                other = [third[i] - first[i] for i in range(3)]
+                cross = (
+                    edge[1] * other[2] - edge[2] * other[1],
+                    edge[2] * other[0] - edge[0] * other[2],
+                    edge[0] * other[1] - edge[1] * other[0],
+                )
+                assert sum(v * v for v in cross) > 0.0, path.name
+        assert checked > 800

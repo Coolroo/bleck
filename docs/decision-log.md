@@ -14104,3 +14104,51 @@ close enough that the next addition there should split rather than squeeze.
 ⚠️ **A PNG that fails to decode yields an untextured mesh, not an error** — one
 bad image must not take an export down — but it is silent. The facts strip
 showing `texture: none` is the visible symptom.
+
+## D223 — A fan is wrong for 14% of faces, and only the window could say so (2026-07-30)
+
+⛔ **Reported from the window, not found by any measurement.** `e_genjin_b`
+rendered as a recognisable Cragnon with "two bottom corners open up to a
+triangle in the middle and stretch its base texture".
+
+`Mesh.triangles()` fanned every polygon from corner 0. **A fan is only valid
+for a convex polygon**, and **7,206 of the disc's 48,338 four-corner faces
+(14%) are not convex**, across **182 models**. Fanning one produces a bow-tie:
+the diagonal leaves the shape, and the texture stretches across the gap.
+
+⚠️ **D209 justified the fan with planarity, which was true and insufficient** —
+planar does not mean convex. The measurement was right and the inference from
+it was not.
+
+### Replaced with ear clipping
+
+Repeatedly take a corner whose triangle turns the same way as the polygon and
+encloses no other corner. Zero-area triangles are dropped as they appear:
+**e_genjin_b went from 104 triangles to 86**, and across the disc
+**117,010 triangles now contain no degenerate one at all**, down from
+thousands.
+
+⚠️ There is a fallback to a fan when no ear can be found, for faces that are
+self-crossing or non-planar. Silently dropping them would lose geometry.
+
+### The test fixture was wrong first, in a way that passed
+
+⛔ The first concave-quad fixture put its reflex corner at index 0 — and the
+test **passed against a plain fan**. A quad has only two diagonals; fanning
+from corner 0 always cuts 0-2, which is *valid* whenever the reflex corner is
+0 or 2. Only a reflex corner at **1 or 3** forces the other diagonal.
+
+Mutation-checked after fixing it: restoring the fan fails **4 of 5** tests.
+
+### ⛔ What this does not fix
+
+`e_genjin_b` has **no** non-convex faces. Its problem is separate and
+unsolved: 144 positions, and its faces reach **11 of them**. Coverage is not a
+triangulation bug.
+
+**And the search for the missing geometry came up empty.** Scanning
+`p_wii_mario`'s whole front region finds exactly **one** section table; no slot
+reads as a second face list; and **no index stream anywhere in the file
+addresses a vertex above 22**, against 324 positions. So nothing in the file,
+as currently read, can reach the rest — the positions are there and the
+references are not.
