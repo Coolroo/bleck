@@ -14326,3 +14326,36 @@ it may be pointing at a real defect the ear is hearing.
 
 **Next:** three copies of one jingle at different rates went to the listener.
 Whichever sounds right gives the exact factor, and the factor names the bug.
+
+### D226 addendum — the ADPC table is 1,792 samples apart, and still does not match (2026-07-31)
+
+✅ The seek granularity is now known. The chunk holds **404 real entries** (8
+trailing zero bytes), and 404 ÷ 2 channels = **202** = `ceil(361318 / 1792)`.
+So an entry covers **1,792 samples** — one eighth of a 14,336-sample audio
+block, or 1,024 bytes.
+
+⛔ **And the decode still does not match it.** Entry 2 is `(921, 1344)`; the
+decoded samples at 1791/1790 are `(2558, 2140)`, and neither value occurs
+adjacent to the other anywhere in the first 120,000 samples.
+
+Eight decoder variants were tried against that one reference value — rounding
+`+1024` or none, high nibble first or low, predictor index masked to 3 bits or
+4. **None matched**, and the two nibble orders differ enough to rule out a
+coin-flip:
+
+| variant | sample 1791/1790 |
+|---|---|
+| round 1024, high nibble first | (2558, 2140) |
+| round 0, high nibble first | (2542, 2124) |
+| low nibble first | (4600, 5892) |
+
+⚠️ **So one of two things is true, and this cannot yet say which.** Either the
+decoder is wrong in a way that still produces recognisable music with 0.9+
+adjacent correlation and plausible 60–187 BPM tempos, or the ADPC table means
+something other than "the two samples before this point". The listener's
+"definitely sped up" is the only evidence pointing at the first.
+
+**Not guessed at further.** Three copies of one jingle at different rates are
+with the listener; the factor that sounds right will name the bug, and picking
+a variant that happens to match one 16-bit value would be exactly the
+coincidence-driven reading this project keeps having to undo.
