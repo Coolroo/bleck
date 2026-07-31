@@ -165,12 +165,21 @@ can never match is an error rather than a silent no-op at run time.
 
 ```bash
 bleck model list [--search <text>] [--limit <n>]
-bleck model export [--out <dir>] [--search <text>]
+bleck model export [--out <dir>] [--search <text>] [--min-coverage <pct>]
+                   [--no-textures] [--no-animation]
 ```
 
 The game's character geometry. `list` shows every model whose mesh can be read;
-`export` writes each as a Wavefront OBJ, plus a `models.json` manifest that
+`export` writes each as **glTF 2.0** (`.glb`) with its texture and animation
+embedded, plus a `models.json` manifest that
 [Dimentio](#dimentio-and-the-manifests) reads.
+
+!!! tip "A `.glb` opens in software you already have"
+
+    Double-click it in **Windows 3D Viewer**, or import it into **Blender** or
+    any browser-based viewer. ⚠️ Blender opens in **Solid** viewport shading,
+    which renders flat grey — switch to **Material Preview** (press `Z`) to see
+    textures.
 
 ```
 $ bleck model list --search mario --limit 3
@@ -182,14 +191,27 @@ triangles, with occasional n-gons — fanned into triangles on export. **864** o
 the disc's models read; the six that fail a consistency check are skipped rather
 than exported as noise.
 
-!!! danger "These are fragments, not characters"
+!!! danger "Most are fragments, and a fragment renders as stretched geometry"
 
     One shape record is read per file, and a character file names dozens.
-    **Median coverage is 13.6%** of a file's vertices — `p_big_kuppa` exports
-    three of its 3,401. Every command prints the coverage and the manifest
-    carries `"fragment": true`.
+    **Median coverage is 13.6%** of a file's vertices — `p_big_kuppa` reaches
+    three of its 3,401, and looks like a stretched mess. Every command prints
+    the coverage and the manifest carries `"fragment": true`.
 
-    Animation is not decoded at all — the clips have names and nothing to play.
+    **Pass `--min-coverage 95`** for the **132 models known to render
+    correctly**.
+
+#### Animation
+
+Animation in this game is **per-vertex morphing**, not skeletal — the engine
+adds per-vertex offsets to a copy of the position array. That maps onto glTF
+**morph targets**, so an exported `.glb` plays in any viewer with no skeleton
+involved. In Blender the poses also appear as **Shape Keys**.
+
+One clip per file is written; extra clips are another full set of dense targets.
+Textures come from image 0 of the bank beside each model — ⚠️ **which image a
+shape actually uses is not decoded**, so a bank holding several may pair the
+wrong one.
 
 ### `bleck effect`
 
@@ -212,7 +234,9 @@ chaos  (4 part(s))
 ```
 
 The fourth column is a **duration in frames** at 60 Hz, counted inclusively —
-181 is three seconds, 61 is one.
+181 is three seconds, 61 is one, and **1 is zero**. Five effects are entirely
+single-frame, so a viewer treating the end as exclusive shows nothing at all
+for them.
 
 !!! warning "Which image a part draws is not known"
 
