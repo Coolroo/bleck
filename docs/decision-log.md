@@ -13931,3 +13931,46 @@ for indices reaching 238 but untested. The base is loaded from a runtime struct
 
 ⚠️ Until that is settled, **nothing pairs a part with an image**, and Dimentio
 shows the 219 effect images as the effect system's bank rather than per part.
+
+## D219 — Effects are displayable, and a part's last frame is inclusive (2026-07-30)
+
+✅ **Verified.** Dimentio gains an Effects tab: the 139 effects, each with its
+parts, their durations in frames and seconds, its transform rows, a playback
+scrubber, and the effect image bank.
+
+### The boundary is forced by the data, not chosen
+
+A part is active from 0 **to and including** its own duration. That is not a
+taste call:
+
+- `frames = 1` gives `seconds = 0.0`, because the count is inclusive (D210).
+- **Five effects are entirely single-frame** — `system`, `map_bubble`,
+  `event_fire`, `map_shadowflare`, `ddtas_block`.
+
+⛔ An exclusive end makes every one of those **invisible at every time**. The
+test `a_single_frame_part_is_active_only_at_the_start` is what pins it.
+
+⚠️ A zero-length effect is the crash risk, because a slider needs a range. The
+timeline short-circuits to "one frame — nothing to play".
+
+### ⛔ Still no part-to-image pairing, and the UI says so
+
+The 219 images from `files/eff/effdata.tpl` are shown as **the effect system's
+bank**, in their own panel, selected by disc file — never indexed by a part's
+index or anything else. A standing label says the binding is not decoded.
+
+This matters more than the feature. D218 established the reference is one hop
+further out than anything read so far, and a viewer that quietly showed a part
+beside the wrong image would look entirely correct.
+
+### What is unverified
+
+⚠️ **Nobody has looked at the window.** A headless test lays out every effect
+panel through a real `egui::Context::run`, but with no image loaders installed
+there, **the bank strip's thumbnails are never decoded in the test** — which is
+the exact failure the `file`/`image` feature bug already demonstrated once
+(D215 addendum). Also unproven: whether 219 thumbnails in one un-virtualised
+row scroll comfortably, and whether the strip crowds the detail panel.
+
+⚠️ The instrument was checked against a break: deleting the zero-length guard
+makes the layout test fail, so the test can see that class of fault.

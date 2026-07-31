@@ -9,7 +9,7 @@ Named for the jester who steps sideways out of the world to watch it.
 cargo run -- ../work/export        # a folder bleck exported into
 ```
 
-Two modes over the same folder: **Textures** and **Models**.
+Three modes over the same folder: **Textures**, **Models** and **Effects**.
 
 ## ⛔ This program reads no game formats, and never should
 
@@ -22,7 +22,7 @@ So `bleck` exports PNG and JSON; this renders them. The viewer improves for
 free as `bleck` learns more formats, and a format bug has exactly one place to
 be fixed. The full reasoning is in [`docs/plan-dimentio.md`](../docs/plan-dimentio.md).
 
-## State: stages 1 and 2
+## State: stages 1, 2 and 3
 
 **Textures** — a virtualised grid, search, a format filter, and a detail panel
 showing size, format, source disc file and archive member.
@@ -46,9 +46,28 @@ texture. That is what makes it testable: `cargo test` asserts on the pixels.
 culling opens holes in them; hidden surfaces are removed by the depth buffer
 alone and every face is lit from whichever side is visible.
 
+**Effects** — the 139 effects from `effects.json`: a searchable list, each
+effect's parts and transform rows, and a timeline that plays and scrubs over
+the effect's own duration, marking which parts are still running.
+
+⚠️ **Durations are frames at 60 Hz, counted inclusively** — 61 frames is one
+second, so a 1-frame part lasts zero and the timeline's end is inclusive. An
+exclusive end would make every single-frame part invisible at every time.
+
+⛔ **Nothing is simulated.** The timeline plays the durations the exported data
+records and says which parts are running; an effect's behaviour is compiled
+PowerPC, and an approximation of an emitter would look plausible and be wrong.
+
+⛔ **Which image a part draws is not decoded**, and the window must never
+imply that it is. Six candidate fields have been refuted (`docs/decision-log.md`
+D210), so the 219 images from `files/eff/effdata.tpl` are shown as the effect
+system's bank as a whole — separate from the part list, selected by disc file,
+and labelled with that limit. Pairing a part with an image would look exactly
+like a decoded fact.
+
 ### What has been checked, and how
 
-`cargo test` — 36 tests, no display required. The renderer's evidence is a
+`cargo test` — 51 tests, no display required. The renderer's evidence is a
 rendered cube covering **29.1%** of a 200×200 frame in exactly **4 colours**
 (background plus the three faces a cube shows from a general direction), a
 centroid at 97.4, 102.6 against a centre of 99.5, and corners left untouched.
@@ -74,11 +93,21 @@ The suite was checked against five deliberate breakages, each caught:
 | Camera fit margin wrong | `a_fitted_model_never_reaches_the_corners`, and two more |
 | Near-plane cull removed | `geometry_behind_the_camera_is_dropped` |
 
+Against the real export the effect loader reads **139 effects, 704 parts and
+4,048 transform rows**, and the bank filter picks **219 of 21,780** catalog
+images — every one of them from `files/eff/effdata.tpl`.
+
+The effect panels are laid out in a real egui frame with no window at all
+(`the_effect_panels_lay_out_and_play_without_a_window`), which is what covers
+the two cases a screenshot would have had to catch: playback advancing on a
+drawn frame, and a zero-length effect, whose scrubber would otherwise be a
+slider over an empty range. Deleting that guard fails the test.
+
 🔶 **Still not confirmed by eye.** The window opens, holds, and responds — but
 the machine this was written on cannot capture its own interactive desktop, so
-nobody has *looked* at either mode. What the pixel tests cannot cover is
-whether the drag direction feels right and whether the panels are laid out
-sensibly.
+nobody has *looked* at any mode. What the tests cannot cover is whether the
+drag direction feels right, whether playback looks smooth, and whether the
+panels are laid out sensibly.
 
 ## Why Rust, and what that must not cost
 
