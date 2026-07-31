@@ -12354,3 +12354,70 @@ property a tile-order bug reliably fails.
 still goes through the CMPR endpoint domain (D187). If a build decoded and
 re-encoded, every rebuild would cost a generation of quality — the exact thing
 the endpoint trick exists to avoid.
+
+---
+
+## D190 — `effdata.dat` opens up, and confirms D172 from the other side (2026-07-30)
+
+✅ **Two of sixteen sections decoded**, and they are the two that matter for
+naming. `bleck/formats/effdata.py` reads them.
+
+```
+0x00  16 x u32   section offsets
+0x40  "EFDT"     then "Tue Jan 1 10:43:27   2002"
+```
+
+| Section | Size | |
+|---|---|---|
+| 0 | 6,176 | ✅ **139 effect records**, 44 bytes: name(32) + first_part + count + a third index |
+| 1 | 14,080 | ✅ **704 part records**, 20 bytes: name(16) + two u16 |
+| 2-15 | ~1.3 MB | 🔶 binary, no strings, nothing established |
+
+### Why this is a reading and not a guess
+
+Two arithmetics agree, and neither was assumed:
+
+1. For **138 of 138** consecutive effect records, `first_part + count` lands
+   exactly on the next record's `first_part`.
+2. The total that implies — 704 — is precisely `section 1 size / 20`.
+
+A wrong stride breaks both. Breaking them consistently would take a
+coincidence.
+
+### 🟢 It confirms D172 independently
+
+D172 found that the Chaos Heart's effect name is **assembled at runtime**: the
+DOL string table at `0x803293B0` holds `pure_heart`, `chaos`, and the bare
+letters `A` `B` `C` `D` `E`, which is why no whole name appears on the disc and
+why every asset search for one failed.
+
+Those letters are these **part names**:
+
+```
+pure_heart -> A B C D E     chaos -> A C D E
+```
+
+✅ And `pure_heart`'s DOL entry reads `0x80094E44` — the exact address D172
+reached from the opposite direction, by disassembling. A finding derived from
+code, met by a finding derived from data.
+
+⚠️ `chaos` skips `B`. Whatever that part is, this effect does not use it.
+
+### What is known about the name sets
+
+- **139** effects here; **165** entry points in the DOL (`dump_effects.py`).
+- **93** match case-insensitively. So neither is a superset: `robo_beam` has an
+  entry and no record here, and 46 records have no entry point.
+
+### 🔶 The texture link is still missing, and one guess is now refuted
+
+⛔ **The u16 at part+18 is not a texture index.** It was the obvious candidate
+and it reaches **621** against `effdata.tpl`'s **219** images. Pinned as a test
+so the wrong guess stays refuted rather than being re-made.
+
+⛔ **Sections 2-15 hold no strings at all**, so there is no texture *name*
+table; the link is numeric. The third field of each effect record indexes into
+that region and is the thread to pull next.
+
+⚠️ So the viewer can currently say what an effect is *made of*, and not what it
+looks like. That is a smaller gap than it was this morning and it is not closed.
