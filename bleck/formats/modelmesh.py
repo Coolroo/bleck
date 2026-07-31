@@ -1,19 +1,18 @@
-"""A character model's geometry: one shape record, read the way GX reads it.
+"""A character model's geometry: the vertex arrays, read the way GX reads it.
 
 Split out of `model`, which decodes the *container* -- the model's name, its
 bounding box, the section table and the name blocks. This decodes the vertex
-arrays a shape record points at. Neither half needs the other, which is the
+arrays the section table points at. Neither half needs the other, which is the
 seam: a caller that only wants to know what a file is never pays for the
 geometry, and the two were found by different means at different times.
+
+`modelrebase` is the other half of the geometry: it decides which slice of these
+arrays each shape indexes into.
 
 ✅ **The slot meanings are read off the draw code, not guessed** (D207). The
 function at `0x80048520` loads the equivalent runtime pointers from
 `+0x158`/`+0x160`/`+0x168`/`+0x16C` and feeds them to `GXSetArray`, so what
 each section holds is stated by the game rather than inferred from the bytes.
-
-⛔ **What comes back is a fragment.** A shape record describes one shape and a
-character file holds dozens; median coverage across the disc is 13.6% (D211).
-`Mesh.coverage` is the number to read before drawing anything.
 """
 
 from __future__ import annotations
@@ -21,13 +20,56 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 
-from bleck.formats.modelbase import FIELD, ModelError, text
+from bleck.formats.modelbase import (
+    FIELD,
+    SHAPE_SECTIONS,
+    SHAPE_SECTIONS_AT,
+    Face,
+    ModelError,
+    Shape,
+    text,
+)
+from bleck.formats.modelrebase import (
+    GROUP_STRIDE,
+    GROUP_TABLE_AT,
+    SHAPE_RECORD_STRIDE,
+    Group,
+    Held,
+    Plan,
+    Slice,
+    batches,
+    group_table,
+    rebase,
+    spans,
+)
 
-#: A shape record lists eight data sections here, as file-absolute offsets,
-#: and names itself through the word just before them.
-SHAPE_SECTIONS_AT = 0x150
-SHAPE_SECTIONS = 8
-SHAPE_NAME_AT = 0x14C
+__all__ = [
+    "AREA_EPSILON",
+    "FACE_SLOT",
+    "FACE_STRIDE",
+    "FULL_SECTIONS",
+    "GROUP_STRIDE",
+    "GROUP_TABLE_AT",
+    "NORMAL_INDEX_SLOT",
+    "NORMAL_SLOT",
+    "POSITION_INDEX_SLOT",
+    "POSITION_SLOT",
+    "SHAPE_RECORD_STRIDE",
+    "SHAPE_SECTIONS",
+    "SHAPE_SECTIONS_AT",
+    "TEXCOORD_INDEX_SLOT",
+    "TEXCOORD_SLOT",
+    "TRIPLE",
+    "UNIT_TOLERANCE",
+    "UV_PAIR",
+    "Corner",
+    "Face",
+    "Group",
+    "Mesh",
+    "Shape",
+    "Slice",
+    "mesh",
+]
 
 #: Which slot holds what. Named from the draw code at `0x80048520`, which
 #: loads the equivalent runtime pointers from `+0x158`/`+0x160`/`+0x168`/
@@ -73,27 +115,6 @@ UNIT_TOLERANCE = 0.02
 
 
 @dataclass(frozen=True)
-class Face:
-    """One polygon: where its corners start, and how many it has."""
-
-    first: int
-    corners: int
-
-
-@dataclass(frozen=True)
-class Shape:
-    """One shape's faces, as a span of the mesh's face list.
-
-    ⚠️ **The span, not the shape's name.** A file's Maya shape names are read
-    elsewhere and which name goes with which face group is not decoded, so a
-    span identifies itself by where it sits and nothing else (D236).
-    """
-
-    first: int
-    count: int
-
-
-@dataclass(frozen=True)
 class Corner:
     """One corner of a face: which position it uses, which normal, which UV."""
 
@@ -106,12 +127,15 @@ class Corner:
 
 @dataclass(frozen=True)
 class Mesh:
-    """The vertex arrays of one shape, as the game hands them to GX.
+    """The vertex arrays of a whole model, as the game hands them to GX.
 
-    ⛔ **A fragment, not a model.** The table holds 24 slots describing one
-    shape, and a character file names dozens; `p_wii_mario` carries 88 shape
-    names and 200 KB of data this record does not reach. Median coverage across
-    the disc is **13.6%** (D211). Check `coverage` before drawing anything.
+    ✅ **Every shape in the file, not a fragment.** Median coverage across the
+    disc is 100% and the mean 99.8%; `groups` says where each shape's faces sit
+    and `shapes` how many there are (D224, D240).
+
+    ⛔ D211 called this a fragment at 13.6% median coverage and is superseded —
+    that was the per-shape rebasing missing, not the file holding less than it
+    looked like.
     """
 
     name: str
@@ -157,7 +181,18 @@ class Mesh:
 
     @property
     def is_textured(self) -> bool:
-        """Whether every corner a face draws resolves to a real UV.
+        """Whether every corner in the whole mesh resolves to a real UV.
+
+        ⚠️ **Usually the wrong question** (D240). A shape carries texture
+        coordinates or it does not, and 269 models mix the two — asking about
+        the whole mesh throws the texture away from the shapes that have one.
+        Ask `textured` per shape instead; this stays for callers that really do
+        mean the whole thing.
+        """
+        return self.textured()
+
+    def textured(self, faces: list | None = None) -> bool:
+        """Whether every corner these faces draw resolves to a real UV.
 
         ⚠️ **Not a count comparison.** UVs are indexed per corner and there are
         more of them than positions on 26% of the disc — `e_bara_tib_p` has 64
@@ -168,7 +203,7 @@ class Mesh:
             return False
         return all(
             corner.uv is not None and corner.uv < len(self.uvs)
-            for triangle in self.corner_triangles()
+            for triangle in self.corner_triangles(faces)
             for corner in triangle
         )
 
@@ -180,13 +215,13 @@ class Mesh:
     def coverage(self) -> float:
         """The fraction of `positions` any face actually reaches.
 
-        ⛔ **Usually small, and that is the honest headline.** The median across
-        the disc is 13.6%: `p_big_kuppa` has 3,401 positions and its faces touch
-        three of them. A shape record describes one shape, and a character file
-        holds many, so what this reads is a *fragment* (D211).
+        ✅ **Usually 100%**, and short of it for a real reason: a file may carry
+        points no face draws. The median across the disc is 100% and the mean
+        99.8% (D240).
 
         Read this before trusting a mesh. `is_drawable` only says the indices
-        resolve; this says how much of the model they resolve *to*.
+        resolve; this says how much of the model they resolve *to*, so a fall
+        back to the older base-counting reading shows up here as a drop.
         """
         if not self.positions:
             return 0.0
@@ -230,11 +265,12 @@ class Mesh:
 
     def triangles(self, faces: list | None = None) -> list:
         # pylint: disable=container-return
-        """Every face fanned into triangles, as indices into `positions`.
+        """Every face cut into triangles, as indices into `positions`.
 
-        A fan is correct for these faces because they are **planar** -- 98% of
-        4-corner faces on the disc are, against 16% for shuffled indices, which
-        is what made the reading trustworthy in the first place (D209).
+        ⚠️ **Ear clipping, not a fan.** 14% of the disc's 4-corner faces are not
+        convex and a fan turns one into a bow-tie (D223); see `_cut`. The faces
+        are **planar** -- 98% of 4-corner ones are, against 16% for shuffled
+        indices -- which is what made the reading trustworthy (D209).
         """
         return [tuple(c.position for c in tri) for tri in self.corner_triangles(faces)]
 
@@ -415,42 +451,31 @@ def mesh(data: bytes) -> Mesh:
     if list(table) != sorted(table) or not all(0 < at < len(data) for at in table):
         raise ModelError(f"the words at {SHAPE_SECTIONS_AT:#x} are not a section table")
 
-    name_at = struct.unpack_from(">I", data, SHAPE_NAME_AT)[0]
+    name_at = struct.unpack_from(">I", data, GROUP_TABLE_AT)[0]
     name = text(data[name_at : name_at + FIELD]) if name_at < len(data) else ""
 
     edges = [*table, len(data)]
     positions = _triples(data, table[POSITION_SLOT], edges[POSITION_SLOT + 1])
-    normals = _triples(data, table[NORMAL_SLOT], edges[NORMAL_SLOT + 1])
-
-    stray = [n for n in normals if abs(_length(n) - 1.0) > UNIT_TOLERANCE]
-    if stray:
-        raise ModelError(
-            f"slot {NORMAL_SLOT} at {table[NORMAL_SLOT]:#x} is not a normal array: "
-            f"{len(stray)} of {len(normals)} triples are not unit length"
-        )
-
+    normals = _checked_normals(data, table, edges)
     streams = [
         (edges[i + 1] - at) // 4
         for i, at in enumerate(table)
         if _is_index_stream(data, at, edges[i + 1])
     ]
-    faces = _faces(data, table[FACE_SLOT], edges[FACE_SLOT + 1])
-    corners = sum(face.corners for face in faces)
-    if streams and corners not in streams:
-        raise ModelError(
-            f"slot {FACE_SLOT} at {table[FACE_SLOT]:#x} is not a face list: "
-            f"{len(faces)} faces cover {corners} corners, but the index "
-            f"streams are {streams} long"
-        )
-
-    shapes = len(_groups(faces))
-    rebased = _rebase(
-        faces,
+    faces = _checked_faces(data, table, edges, streams)
+    split = batches(data, faces)
+    shapes = len(split)
+    uvs = _uvs(data)
+    rebased = rebase(
+        split,
         _stream(data, table, edges, POSITION_INDEX_SLOT),
         _uv_indices(data),
+        Plan(
+            groups=group_table(data, shapes),
+            held=Held(positions=len(positions), uvs=len(uvs)),
+        ),
     )
     corner_positions = rebased.positions
-    uvs = _uvs(data)
     # ⚠️ 22 faces across the disc rebase past the end, against 1,250 for a
     # shuffled control -- so the bases are right and these few are not. Dropped
     # rather than clamped, since a clamped face stretches to the last vertex.
@@ -462,7 +487,7 @@ def mesh(data: bytes) -> Mesh:
         < len(positions)
     ]
     faces = [face for face, _ in kept]
-    groups = _spans([owner for _, owner in kept])
+    groups = spans([owner for _, owner in kept], rebased.names)
     corner_uvs = _corner_uvs(
         rebased.uvs,
         corner_positions,
@@ -481,6 +506,41 @@ def mesh(data: bytes) -> Mesh:
         shapes=shapes,
         groups=groups,
     )
+
+
+def _checked_normals(data: bytes, table: tuple, edges: list) -> list:
+    # pylint: disable=container-return
+    """Slot 3, refused unless every triple is unit length.
+
+    Six files on the disc fail this, and a reader that shrugged would hand a
+    viewer numbers that look like data.
+    """
+    found = _triples(data, table[NORMAL_SLOT], edges[NORMAL_SLOT + 1])
+    stray = [n for n in found if abs(_length(n) - 1.0) > UNIT_TOLERANCE]
+    if stray:
+        raise ModelError(
+            f"slot {NORMAL_SLOT} at {table[NORMAL_SLOT]:#x} is not a normal array: "
+            f"{len(stray)} of {len(found)} triples are not unit length"
+        )
+    return found
+
+
+def _checked_faces(data: bytes, table: tuple, edges: list, streams: list) -> list:
+    # pylint: disable=container-return
+    """Slot 0, refused unless its corner counts sum to an index stream's length.
+
+    That sum is what makes the face list a reading rather than a shape that
+    fits: a wrong stride or a wrong slot gives a total that misses.
+    """
+    found = _faces(data, table[FACE_SLOT], edges[FACE_SLOT + 1])
+    corners = sum(face.corners for face in found)
+    if streams and corners not in streams:
+        raise ModelError(
+            f"slot {FACE_SLOT} at {table[FACE_SLOT]:#x} is not a face list: "
+            f"{len(found)} faces cover {corners} corners, but the index "
+            f"streams are {streams} long"
+        )
+    return found
 
 
 def _reach(faces: list) -> int:
@@ -506,7 +566,8 @@ def _corner_uvs(stream: list, corner_positions: list, extent: Extent) -> list:
     ⛔ The rest resolve no UV at all. Guessing one would smear the bank across
     the model, which reads as a broken renderer rather than as missing data.
     """
-    if stream and len(stream) >= extent.corners:
+    reached = stream[: extent.corners]
+    if reached and any(at is not None for at in reached):
         return stream
     if extent.uvs and extent.uvs == extent.positions:
         return list(corner_positions)
@@ -559,94 +620,6 @@ class Extent:
     uvs: int
     positions: int
     corners: int
-
-
-@dataclass(frozen=True)
-class Rebased:
-    """A file's faces and index streams, made absolute together.
-
-    They travel as one value because a stream is only meaningful beside the
-    faces it was rebased against — the corner base that moved a face is the
-    same one that found the entries to shift.
-    """
-
-    faces: list = field(default_factory=list)  # pylint: disable=container-return
-    positions: list = field(default_factory=list)  # pylint: disable=container-return
-    uvs: list = field(default_factory=list)  # pylint: disable=container-return
-    #: Which shape each face came from, parallel to `faces`. ⚠️ The only place
-    #: the boundaries are still visible -- rebasing makes every `first`
-    #: absolute, so nothing downstream can tell where one shape ended.
-    groups: list = field(default_factory=list)  # pylint: disable=container-return
-
-
-def _rebase(faces: list, positions: list, uvs: list) -> Rebased:
-    """Fold each shape's corner, position and UV bases into absolute values.
-
-    ✅ **This is what takes coverage from 13% to 100%** (D224). A file's faces
-    are grouped by shape, and a group restarts its `first` at zero — so the
-    corner offset *and* every index it reaches are relative to the shape, not
-    the file. The draw code says so outright: `GXSetArray` is handed
-    `add r16, r4, r0`, a position array **plus a per-shape offset**, which is
-    why the index stream never exceeds 22 while the array holds 324 points.
-
-    ⚠️ The UV stream is rebased the same way and needs its own base, since a
-    shape rarely uses as many UVs as points: `e_bara_tib_p` spends 96 UVs on 64
-    positions, and its slot-7 values top out at 63 because each shape restarts.
-
-    Every base accumulates: corners by the span a group covers, positions and
-    UVs by how many distinct entries the group used.
-    """
-    position_stream = list(positions)
-    uv_stream = list(uvs)
-    out: list[Face] = []
-    owners: list[int] = []
-    corner_base = 0
-    position_base = 0
-    uv_base = 0
-    for index, group in enumerate(_groups(faces)):
-        span = max((f.first + f.corners for f in group), default=0)
-        seen_positions: set[int] = set()
-        seen_uvs: set[int] = set()
-        for face in group:
-            low = corner_base + face.first
-            for at in range(low, min(low + face.corners, len(position_stream))):
-                seen_positions.add(position_stream[at])
-                position_stream[at] += position_base
-            for at in range(low, min(low + face.corners, len(uv_stream))):
-                seen_uvs.add(uv_stream[at])
-                uv_stream[at] += uv_base
-            out.append(Face(first=low, corners=face.corners))
-            owners.append(index)
-        corner_base += span
-        position_base += len(seen_positions)
-        uv_base += len(seen_uvs)
-    return Rebased(faces=out, positions=position_stream, uvs=uv_stream, groups=owners)
-
-
-def _spans(owners: list) -> list:  # pylint: disable=container-return
-    """Runs of one shape id, as spans of the face list they cover."""
-    found: list[Shape] = []
-    start = 0
-    for index in range(1, len(owners) + 1):
-        if index == len(owners) or owners[index] != owners[start]:
-            found.append(Shape(first=start, count=index - start))
-            start = index
-    return found
-
-
-def _groups(faces: list) -> list:  # pylint: disable=container-return
-    """Faces split where `first` restarts at zero, which is where one shape
-    ends and the next begins."""
-    found: list[list] = []
-    current: list = []
-    for face in faces:
-        if face.first == 0 and current:
-            found.append(current)
-            current = []
-        current.append(face)
-    if current:
-        found.append(current)
-    return found
 
 
 def _stream(data: bytes, table: tuple, edges: list, slot: int) -> list:

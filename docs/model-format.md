@@ -13,7 +13,9 @@ Read alongside:
 | | |
 |---|---|
 | `bleck/formats/model.py` | the container — name, bounds, name blocks, section table |
-| `bleck/formats/modelmesh.py` | the shape record at `0x150` and its vertex arrays |
+| `bleck/formats/modelmesh.py` | the section table at `0x150` and its vertex arrays |
+| `bleck/formats/modelrebase.py` | the group and shape records — which slice of those arrays each shape indexes |
+| `bleck/formats/modelbase.py` | `Face`, `Shape`, the error type and the name field |
 | `bleck/formats/modelanim.py` | the clip table, its curves and its morph poses |
 | `bleck/formats/gltf.py` | the `.glb` writer |
 | `scripts/modelscan.py` | `survey`, `header`, `offsets`, `at`, `strings`, `chain` |
@@ -86,9 +88,13 @@ someone re-measures.
 
 ## The section table at `0x150`
 
-✅ **A shape record lists its data sections here**, as file-absolute offsets,
-and names itself through the word at `0x14C` — `R_Arm_skinShape` in
-`p_wii_mario` (D207).
+✅ **A shape record lists its data sections here**, as file-absolute offsets.
+
+⛔ **The word at `0x14C` is not a name pointer.** It points at the **group
+table** — 168-byte records that state where each shape's indices start (D240).
+Reading its first record's `char name[0x40]` field is why it looked like one, and
+why `mesh()` still reports `R_Arm_skinShape` for `p_wii_mario`: that is group 0's
+Maya name, not the model's.
 
 `modelmesh.py` reads **24 entries** (`FULL_SECTIONS`) from `SHAPE_SECTIONS_AT =
 0x150`, and validates the first eight as strictly ascending offsets inside the
@@ -117,7 +123,15 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 6 | `0x168` | 490 entries | 🔶 an index stream; D208's addendum reads the colour index here | 🔶 D207, D208 |
 | 7 | `0x16C` | 153 entries, 23 distinct | **corner → UV index**, one per corner | ✅ D234 |
 | 8..15 | `0x170`+ | one offset, repeated | **eight texture-coordinate channels**; slot 8 is channel 0 | ✅ D208 addendum |
-| 16..23 | `0x190`+ | — | ⛔ **unread.** Slot 17 was tested as a shape→texture map and refuted | ⛔ D229 addendum |
+| 16..18 | `0x190`+ | — | ⛔ **unread** | — |
+| 19 | `0x19C` | 108 bytes × shapes | **shape records** — first face, face count, and the corner offset of each index stream | ✅ D240 |
+| 20..23 | `0x1A0`+ | — | ⛔ **unread.** Slot 17 was tested as a shape→texture map and refuted | ⛔ D229 addendum |
+
+⚠️ **The draw code loads slots 8–15 as *index* streams, not channel data.**
+`lwzx r0, r24, r5` picks `0x16C + channel × 4`, so `0x16C`…`0x188` are eight
+per-channel UV index streams and `0x18C` is the coordinate array itself. `_uvs()`
+reads from `table[8]` to the next *different* entry and lands on the right bytes
+anyway, because an unused channel's start equals the array's start (D240).
 
 ⚠️ **Slots 5 and 6 are read by nothing in `bleck`.** They are listed because
 D207 measured them, not because their meaning is settled — and D207's 490
@@ -194,15 +208,21 @@ So these are **polygons, not strips**, which is why `GXBegin` is reached with
 grouped by shape, a group restarts its `first` at zero, and **both the corner
 offset and every index it reaches are relative to the shape, not the file.**
 
-| | before | after |
-|---|---|---|
-| median coverage | 13.7% | **100.0%** |
-| mean coverage | — | 98.6% |
-| models at 95%+ | 132 | **801** |
-| models under 50% | 661 | **1** |
-| models with playable animation | 12 | **202** |
+| | before | after (D224) | after (D240) |
+|---|---|---|---|
+| median coverage | 13.7% | **100.0%** | 100.0% |
+| mean coverage | — | 98.6% | **99.8%** |
+| models at 95%+ | 132 | 801 | **860** |
+| models under 50% | 661 | **1** | 1 |
+| models with playable animation | 12 | **202** | 218 |
+| faces dropped past the array | — | 4,902 | **0** |
+| mean per-model normal-agreement angle | — | 3.487° | **0.269°** |
 
 `p_big_kuppa` went from **3 of 3,401** vertices to 99.9%.
+
+⚠️ **D224 got the idea right and the arithmetic wrong.** Rebasing per shape is
+what took coverage to 100%; *how far to advance* stayed wrong for another day and
+is D240 below.
 
 ### The draw code said so and it was read past
 
@@ -211,20 +231,46 @@ offset off the stack** (D207). That single `add` is why the index stream never
 exceeds 22 while the array holds 324 points. It was in the disassembly for two
 sessions.
 
-### How `_rebase` does it
+### ⛔ The bases were counted, and that was wrong — the file states them
 
-Groups are found where `Face.first` restarts at zero. Then, per group:
+D224's `_rebase` found groups where `Face.first` restarts at zero, then advanced
+the position base by the number of **distinct** indices each group used. Both
+halves of that are wrong (D240):
 
-- the **corner** base advances by the span the group covers;
-- the **position** base advances by the number of *distinct* position indices
-  the group used;
-- the **UV** base advances the same way, independently — a shape rarely uses as
-  many UVs as points (`e_bara_tib_p` spends 96 UVs on 64 positions, and its
-  slot-7 values top out at 63 because each shape restarts).
+- a block is as long as its **largest index plus one**, not as long as the
+  indices used — the two differ on any shape that skips a point;
+- **consecutive shapes can share one block**, so the base must not advance at
+  all between them.
 
-⚠️ **22 faces across the disc still rebase past the end**, against 1,250 for a
-shuffled control. They are **dropped, not clamped**: a clamped face stretches to
-whatever vertex happened to be last, which is the artefact D223 removed.
+It cost **4,902 of the disc's 67,280 faces**, dropped for indices past the end of
+the position array, and left `e_lui_robo` at 90° to its own normals.
+
+### ✅ How `_rebase` does it now
+
+`bleck/formats/modelrebase.py` reads two tables the draw code reads:
+
+| what | where | fields |
+|---|---|---|
+| **group records** | the word at `0x14C`, 168 bytes each, running to `table[0]` | `char name[0x40]`; `(base, count)` for positions `0x40`, normals `0x48`, colours `0x50`, eight UV channels `0x58`…`0x94`; first shape `0x98`; shape count `0x9C` |
+| **shape records** | slot 19, 108 bytes each | textured flag `0x00`; first face `0x38`; face count `0x3C`; corner offsets for the position `0x40`, normal `0x44` and colour `0x48` index streams; eight UV corner offsets `0x4C`…`0x68` |
+
+- the **face list is split by the shape records**, not by `first` restarting at
+  zero. The two disagree on **51 models** — a shape whose first face does not
+  start at corner zero was merged into the one before it;
+- the **position base** is its group's `0x40`, shared by every shape the group
+  owns;
+- the **UV base** is its group's `0x58`, and the UV *corner* offset is the shape
+  record's `0x4C` — **a different word from the position corner offset**, which
+  only advances for shapes that carry coordinates.
+
+✅ **The invariant that says this was read right: the group slices tile the
+position array exactly**, first base 0 and last `base + count` equal to the
+array's length. It holds on **863 of the 864 readable models**, and `_bases()`
+checks it before using the table — a model that fails falls back to the counting
+reading rather than indexing into the wrong points.
+
+⛔ **Zero faces now rebase past the end**, on any model. Anything above zero
+means the group table stopped being read.
 
 ### ⛔ Why the earlier refutation was wrong, and what instrument caught it
 
@@ -257,8 +303,23 @@ have passed forever while the reader was wrong, and **failed the fix**.
 
 ## Texture coordinates
 
-✅ **UVs are indexed per corner, from slot 7** (D234), with their own
-accumulating per-shape base — exactly like positions and normals.
+✅ **UVs are indexed per corner, from slot 7** (D234), with their own per-shape
+base — exactly like positions and normals.
+
+⛔ **They have their own *corner* offset too, and it is not the position one**
+(D240). The shape record holds the position corner offset at `+0x40` and the
+first UV channel's at `+0x4C`, and the UV one only advances for shapes whose
+`+0x00` is 1 — the flag the draw code tests before setting up texture
+coordinates at all. `e_lui_robo_hige` reaches corner 368 with 136 UV corners
+behind it. Reading the UV stream at the position offset gives **wrong but
+in-range** indices, so nothing complains and the art comes out smeared;
+`_shift_uvs()` re-packs the stream into position-corner order with `None` where a
+shape carries none.
+
+⛔ **"Is it textured" is a per-shape question.** 269 models mix textured and
+untextured shapes, and asking `Mesh.is_textured` once for the whole mesh answered
+no and threw the coordinates away from every shape in all of them. `gltf._weld`
+asks `Mesh.textured(faces)` per primitive (D240).
 
 ⚠️ **It only reads as a stream against the 24-entry table.** With the 8-entry
 shape record, slot 7's stop edge is the end of the file and the run does not look
@@ -280,6 +341,20 @@ instrument reused unchanged:
 
 The baseline reproduced D224's 0.0626 exactly, so it is the same ruler.
 
+✅ **D240 sharpened it again**, by reading each shape's own UV corner offset and
+asking per shape rather than per model:
+
+| | D234 (whole mesh) | D240 (per shape) |
+|---|---|---|
+| median UV triangle area | 0.0474 | **0.0326** |
+| shuffled control | 0.1342 | 0.1174 |
+| triangles measured | 18,362 | **54,613** |
+| fully textured | 770 models | 574 models, **4,720 shapes** |
+
+⚠️ **The model count went down and that is the honest number.** Of the 770,
+around 196 contained untextured shapes that were reading the previous shape's
+coordinates; they are now reported as partly textured instead of wrongly whole.
+
 ⚠️ **A deliberate fallback.** 258 models carry a slot-7 stream shorter than their
 corners; **175 of those hold exactly one UV per position** — `e_2D_manera` and
 the paper sprites — and keep the older position pairing. Without it the net would
@@ -294,8 +369,11 @@ asserted, which is the honest position when the measure is blind.
 values above 1 are texture **tiling**, not a misread (D215). After D234, 76.2% of
 textured models keep every UV inside `[0,1]` (D234).
 
-🔶 `EFF_koopa` is the one model whose rebased UV index overflows — 198 against
-191 UVs, on 1 face of 67 — and exports untextured. Not investigated.
+⛔ **`EFF_koopa`'s UV overflow is gone** (D240). D234 recorded it as the one
+model whose rebased UV index ran past the array — 198 against 191, on 1 face of
+67. Splitting its faces where `first` restarts at zero was the fault: the shape
+records give it 7 spans and 91 faces, all seven textured. The overflow was the
+split, not the model.
 
 ---
 
@@ -551,11 +629,13 @@ untextured geometry is genuinely hard.
 
 ⚠️ **The per-shape split (D237) is this binding's prerequisite, not its answer.**
 
-### ⛔ Which Maya shape name goes with which primitive
+### ✅ Which Maya shape name goes with which primitive — SOLVED
 
-`Model.shapes` reads the names in file order; the face groups are found by
-`first` restarting at zero. **Nothing binds one to the other**, so a primitive is
-labelled `shape <index>` and nothing claims more (D237).
+⛔ **This was an open question and is not one any more** (D240). The group record
+carries the name *and* the run of shapes it owns, so `Shape.name` is read rather
+than guessed: `e_lui_robo`'s 92 spans come out as `marioShape`, `wallShape`,
+`agoShape`, `L_eye|eye|eyeShape` and so on. D237's `shape <index>` labelling and
+D236's "nothing binds one to the other" are both superseded.
 
 ⚠️ The shape-name counts in the log disagree and are counting different things:
 29 names for Mario (D202), 88 (D211), 90 face groups (D237). The regex improved
@@ -585,11 +665,23 @@ bytes = 888 records of 20, which is large enough and untested.
 See above. It is an inference from `effdata`'s frame counts, not a measurement of
 the model clip table. Nothing has timed a clip against the running game.
 
-### 🔶 Slots 5, 6 and 16–23
+### 🔶 Slots 5, 6, 16–18 and 20–23
 
 Vertex colours and their index stream are read by nobody, and the counts D207
-measured do not pair cleanly. Slots 16–23 are unread apart from slot 17, tested
-and refuted above.
+measured do not pair cleanly. ✅ Slot 19 is decoded (D240). The rest are unread
+apart from slot 17, tested and refuted above.
+
+### 🔶 Group record `+0xA0` and `+0xA4`
+
+Undecoded. `0xA4` is 3 on every group measured; `0xA0` is 0 except on
+`e_lui_robo`'s `glassShape`, where it is 3. A blend or render-pass mode is the
+obvious guess and is untested (D240).
+
+### 🔶 `OFF_hei_01b` — the one model whose group table does not read
+
+Its `0x14C`-to-`table[0]` span is 520 bytes, not a multiple of 168. It falls back
+to the counting reading. One model of 864, and nothing else about it is unusual
+(D240).
 
 ---
 
@@ -599,11 +691,13 @@ and refuted above.
 code change and this is a doc task. Each is a real contradiction between a
 docstring and a later decision-log entry.
 
+✅ **The first three rows are fixed** (D240) — the coverage claim in
+`modelmesh.py`'s module, `Mesh` and `Mesh.coverage` docstrings, the same claim in
+`bleck/cli/commands/model.py`, and `Mesh.triangles()` documenting a fan where
+`_cut` ear-clips. The rest stand.
+
 | file | says | but |
 |---|---|---|
-| `modelmesh.py` module docstring, `Mesh` docstring, `Mesh.coverage` | "a fragment… median coverage across the disc is **13.6%** (D211)" | **D224 took the median to 100%** and `test_coverage_is_low_and_says_so` was inverted for it |
-| `bleck/cli/commands/model.py` module docstring | "Median coverage is **13.6%** — `p_big_kuppa` exports three of its 3,401 vertices" | same; D224 puts `p_big_kuppa` at 99.9% |
-| `Mesh.triangles()` docstring | "Every face **fanned** into triangles… a fan is correct because they are planar (D209)" | `_cut` does **ear clipping**, because a fan is wrong for 14% of quads (D223) |
 | `Curve.mark` docstring | "Ascends across a clip's tracks, so it is a **position on the timeline** rather than a duration" | **D216's addendum reverses this**: it is each channel's own duration and the tracks are sorted by it |
 | `model.py` module docstring table | "⛔ vertices, indices, weights — **not decoded**" and "⛔ animation keyframes — not decoded" | D207/D209/D224 decode the geometry and D216/D217 the keyframes; `Model.has_geometry` and `Model.can_animate` are still hard `False` |
 | `model.py` module docstring | "bounding box — read, and sane — **Mario is 58.7 units tall**" | 58.7 is Mario's **max Y**; his height is 73.4 (D202, D212), since min Y is −14.68 |
@@ -629,6 +723,12 @@ person with eyes on the artifact**:
 | ⛔ `e_genjin_b` bow-ties | D223 — the report that killed the fan |
 | ⛔ `e_2D_manera6` "a bunch of small mimis on a big mimi" | D229 — the report that killed one-image-per-model |
 | ✅ third-party rips of Brobot, as ground truth | D236 — max Y matches to the hundredth, 100.83 both ways |
+
+⚠️ **The oracle that closed D240 needed no human and no reference**: the angle
+between a face's own normal and the mean of the normals its corners name. The
+stored normals are not rebased, so they are an independent witness — ~0° when the
+bases are right, ~90° when they are not, and 88° for a random control. That is
+what let all 864 models be checked rather than the six a rip existed for.
 
 ⚠️ **`work/reference/` is a permanent instrument.** Reference bounds turn "the
 verts look wrong" into a number, and the Brobot comparison took minutes where

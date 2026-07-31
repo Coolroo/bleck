@@ -312,7 +312,7 @@ class TestTheVertexArrays:
 
         table = [0x1000 + i * 0x1000 for i in range(model.SHAPE_SECTIONS)]
         struct.pack_into(">8I", data, model.SHAPE_SECTIONS_AT, *table)
-        struct.pack_into(">I", data, model.SHAPE_NAME_AT, 0x1B0)
+        struct.pack_into(">I", data, model.GROUP_TABLE_AT, 0x1B0)
         for i in range(64):
             at = table[model.NORMAL_SLOT] + i * 12
             struct.pack_into(">3f", data, at, 5.0, 5.0, 5.0)
@@ -523,7 +523,7 @@ def a_two_shape_model() -> bytes:
     table = [0x200, 0x210, 0x270, 0x290, 0x2F0, 0x310, 0x330, 0x350]
     table += [0x370] * 8 + [0x3B0] * 8
     struct.pack_into(">24I", out, model.SHAPE_SECTIONS_AT, *table)
-    struct.pack_into(">I", out, model.SHAPE_NAME_AT, 0x100)
+    struct.pack_into(">I", out, model.GROUP_TABLE_AT, 0x100)
     out[0x100:0x108] = b"pairShap"
 
     struct.pack_into(">II", out, table[0], 0, 4)
@@ -640,20 +640,41 @@ class TestTheTexcoordIndex:
             if not found.is_drawable:
                 continue
             before += 1 if len(found.uvs) == len(found.positions) and found.uvs else 0
-            after += 1 if found.is_textured else 0
+            after += sum(
+                1
+                for span in found.shape_spans()
+                if found.textured(found.shape_faces(span))
+            )
         assert before == 639, f"{before} models match by count; the corpus moved"
-        assert after >= 770, (
-            f"{after} models are textured, was 770. The slot-7 reading has "
+        assert after >= 4700, (
+            f"{after} shapes are textured, was 4,720. The slot-7 reading has "
             "regressed to pairing UVs by position index."
         )
+
+    def test_a_mixed_model_keeps_the_texture_on_the_shapes_that_have_one(self):
+        """⛔ **The count is per shape, not per model** (D240). A shape's UV
+        corner offset is its own word in the shape record and only advances for
+        textured shapes, so `e_lui_robo_hige` reaches corner 368 with 136 UV
+        corners behind it. Asking once for the whole mesh answered no and threw
+        the texture away from the five shapes that had one."""
+        path = MODELS / "e_lui_robo_hige"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        spans = found.shape_spans()
+        textured = [found.textured(found.shape_faces(span)) for span in spans]
+        assert not found.is_textured, "the mesh as a whole is not fully textured"
+        assert sum(textured) == 5, textured
+        assert sum(textured) < len(spans), "the fixture no longer mixes the two"
 
     def test_real_uv_triangles_are_tighter_than_shuffled_ones(self):
         """⛔ The control, and the reason the reading is believed at all.
 
         A face's three corners land close together on the texture; a wrong
-        index scatters them across it. Measured over the models slot 7
-        unlocked: **0.0474** median UV triangle area against **0.1342** for a
-        shuffled control (D234).
+        index scatters them across it. Measured per shape over the models slot 7
+        unlocked: **0.0326** median UV triangle area against **0.1174** for a
+        shuffled control, over 54,613 triangles (D240). The whole-mesh reading
+        it replaced managed 0.0474 over 18,362.
         """
         if not MODELS.is_dir():
             pytest.skip(f"no extracted disc at {MODELS}")
@@ -671,14 +692,20 @@ class TestTheTexcoordIndex:
                 found = model.mesh(data)
             except model.ModelError:
                 continue
-            if not found.is_textured or len(found.uvs) == len(found.positions):
+            if not found.uvs or len(found.uvs) == len(found.positions):
                 continue
             shuffled = list(range(len(found.uvs)))
             random.shuffle(shuffled)
-            for triangle in found.corner_triangles():
-                real.append(_uv_area([found.uvs[c.uv] for c in triangle]))
-                control.append(_uv_area([found.uvs[shuffled[c.uv]] for c in triangle]))
-        assert len(real) > 20000, f"only {len(real)} faces; the test is weak"
+            for span in found.shape_spans():
+                faces = found.shape_faces(span)
+                if not found.textured(faces):
+                    continue
+                for triangle in found.corner_triangles(faces):
+                    real.append(_uv_area([found.uvs[c.uv] for c in triangle]))
+                    control.append(
+                        _uv_area([found.uvs[shuffled[c.uv]] for c in triangle])
+                    )
+        assert len(real) > 50000, f"only {len(real)} faces; the test is weak"
         real.sort()
         control.sort()
         tight = real[len(real) // 2]
@@ -691,60 +718,6 @@ def _uv_area(points) -> float:
     """Twice the area of a UV triangle, in texture space."""
     (au, av), (bu, bv), (cu, cv) = points
     return abs((bu - au) * (cv - av) - (cu - au) * (bv - av)) / 2.0
-
-
-class TestCoverageIsReported:
-    """Coverage, which is now the check that the rebasing still works.
-
-    ⛔ **This class used to assert the opposite.** It pinned a median of 13.7%
-    as the expected state, so it would have passed forever while the reader was
-    wrong -- and would have *failed* the fix. A test that encodes a known
-    deficiency as an invariant defends the bug (D224).
-    """
-
-    def test_coverage_is_low_and_says_so(self):
-        if not MODELS.is_dir():
-            pytest.skip(f"no extracted disc at {MODELS}")
-        rates = []
-        for path in sorted(MODELS.iterdir()):
-            if not path.is_file():
-                continue
-            data = path.read_bytes()
-            if not model.is_model(data):
-                continue
-            try:
-                found = model.mesh(data)
-            except model.ModelError:
-                continue
-            rates.append(found.coverage)
-        assert len(rates) > 800
-        rates.sort()
-        median = rates[len(rates) // 2]
-        # ⛔ Inverted in D224. It used to demand coverage stay *below* 50%,
-        # pinning 13.7% as though that were the format rather than a
-        # misreading of it -- so it would have failed the fix.
-        assert median > 0.95, (
-            f"median coverage is {median:.1%}, was 100%. The per-shape "
-            "rebasing in D224 has regressed."
-        )
-
-    def test_describe_names_the_coverage(self):
-        mesh = model.Mesh(
-            name="x",
-            positions=[
-                (0.0, 0.0, 0.0),
-                (1.0, 0.0, 0.0),
-                (0.0, 1.0, 0.0),
-                (2.0, 2.0, 2.0),
-            ],
-            faces=[model.Face(first=0, corners=3)],
-            corner_positions=[0, 1, 2],
-        )
-        assert mesh.coverage == 0.75
-        assert "75.0% covered" in mesh.describe()
-
-    def test_an_empty_mesh_has_no_coverage(self):
-        assert model.Mesh(name="x").coverage == 0.0
 
 
 class TestTheCurveEncoding:

@@ -174,11 +174,16 @@ class Part:
 
 
 def _weld(mesh, faces: list | None) -> Part:
-    """Corners collapsed to unique (position, normal, uv) vertices."""
+    """Corners collapsed to unique (position, normal, uv) vertices.
+
+    ⚠️ **Whether there is a texture is asked per shape** (D240). 269 models mix
+    textured and untextured shapes, and asking once for the whole mesh dropped
+    the coordinates from every shape in all of them.
+    """
     order: dict[Vertex, int] = {}
     vertices: list[Vertex] = []
     indices: list[int] = []
-    textured = mesh.is_textured
+    textured = mesh.textured(faces)
     for triangle in mesh.corner_triangles(faces):
         for corner in triangle:
             vertex = Vertex(

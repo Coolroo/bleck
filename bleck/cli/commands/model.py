@@ -14,11 +14,13 @@ how many faces it had, or what it measures.
 The `.glb` files go under `models/`, mirroring the disc — see
 `bleck/common/exportlayout.py` for why every kind gets its own subtree.
 
-⛔ **What this exports is a fragment, and it says so.** One shape record is
-read per file; a character file names dozens. Median coverage is **13.6%** —
-`p_big_kuppa` exports three of its 3,401 vertices. Every command here prints the
-coverage, and the manifest carries it, so nothing downstream can mistake a
-fragment for a character (D211).
+✅ **What this exports is the whole model.** Median coverage across the disc is
+100% and the mean 99.8%, and every shape in a file comes out as its own
+primitive (D224, D240). Every command here still prints the coverage, and the
+manifest carries it — it is the number that would fall if the per-shape bases
+stopped being read, so it stays in front of the user.
+
+⛔ D211 described this as a fragment at 13.6% coverage and is superseded.
 """
 
 from __future__ import annotations

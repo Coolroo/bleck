@@ -15288,3 +15288,377 @@ reason once fixed.** It compared two moments of the first clip; most first clips
 in the export hold a single keyframe, so `span / 2.0` is 0.0 twice and the two
 pictures are the same picture by construction — 1 of 15 models "changed". The
 rest pose is the control it needed.
+
+## D239 — macOS on Apple Silicon: what is already proven, and the two commands that gate the rest (2026-07-31)
+
+Researched from Windows, with **no Mac available**, so this entry is mostly a
+map of what is unknown and where the evidence for each claim came from.
+[`macos.md`](./macos.md) is rewritten as the working document; this records what
+was established and what was ruled out.
+
+⚠️ **D30 said "never run on macOS" and that is still true.** What changed is that
+two things previously assumed are now *measured*, and several things previously
+written down turned out to be wrong.
+
+### ✅ Both programs already build and run on arm64 macOS — in our own CI
+
+`macos-latest` is macOS 15 / arm64 / 3 cores
+(<https://docs.github.com/en/actions/reference/runners/github-hosted-runners>),
+and both workflows have used it for some time without anyone reading the logs
+for this question.
+
+- **`bleck`**: run `30660950660`, job `macos-arm64` (`91256777974`). PyInstaller
+  `Build` passes; the artifact then prints `ok starts at all`,
+  `ok builtin catalog is bundled`, `ok map catalog is bundled`.
+- **`dimentio`**: run `30599074613`, job `build (macos-latest)` (`91057678385`) —
+  `cargo fmt --check`, `clippy --all-targets -D warnings`, `cargo test` and
+  `cargo build --release` all green.
+
+⚠️ **`build.yml` is red on all three platforms right now and it is not macOS.**
+`smoke_binary.py` searches for item `fire_burst`, which the catalog no longer
+holds; Linux, Windows and macOS fail the identical assertion
+(`nothing matching 'fire_burst' in 538 items`). Reading the red tick as "macOS is
+broken" would have been the obvious wrong inference — the per-step log said
+otherwise.
+
+⛔ **This proves nothing about the parts that matter most.** A runner has no
+display, no audio device, no `wit`, no Dolphin, no devkitPPC. The window, the
+speaker and every external tool remain untested.
+
+### ⚠️ Three things this repo had written down are wrong
+
+1. ⛔ **"`DolphinTool` inside `Dolphin.app` on macOS"** (`CLAUDE.md`,
+   `docs-site/install/macos.md`, the old `macos.md`). Dolphin's own
+   `Source/Core/DolphinTool/CMakeLists.txt` names the target `dolphin-tool` and
+   applies `OUTPUT_NAME DolphinTool` **inside `if (WIN32)` only**; Dolphin's
+   macOS build page gives `Dolphin.app/Contents/MacOS/dolphin-tool`.
+   ✅ `macos.py` is unaffected — it lists `dolphin-tool` first — so this is a
+   documentation fault, not a lookup fault.
+2. ⛔ **The macOS devkitPPC instructions install the Debian package manager.**
+   Both doc trees give
+   `curl -L https://apt.devkitpro.org/install-devkitpro-pacman`. macOS uses the
+   `.pkg` from <https://github.com/devkitPro/pacman/releases/latest> — latest
+   **v6.0.2, 2023-04-05**, single asset `devkitpro-pacman-installer.pkg`.
+3. ⛔ **`bleck toolchain install` is not a command.** All three platform
+   profiles and `toolchain.py:100` tell the user to run it; `bleck --help` lists
+   no `toolchain` subcommand. It hurts macOS most: Linux's hint offers
+   `apt install gcc-powerpc-linux-gnu` as an alternative and Windows names a real
+   installer, while the macOS hint offers **only** the command that does not
+   exist.
+
+### ✅ The architecture split is clean, and it is not where it was assumed
+
+| Tool | arm64 macOS | Source |
+|---|---|---|
+| `wit` | **yes, v3.05a only** | wit.wiimm.de/download.html — `wit-v3.05a-r8638-mac.tar.gz`, "universal binaries (x86_64 and arm64)", 2022-08-27 |
+| `wstrt` | ⛔ **no** | szs.wiimm.de/download.html — every macOS asset is `mac64`, "Mac OS x86_64 binaries", latest v2.42a 2024-03-26 |
+| devkitPPC | ⛔ **no** | "Linux (x86_64), macOS (x86_64)" — switchbrew.org/wiki/Setting_up_Development_Environment |
+| Dolphin | **yes, universal** | the `dolphin` cask, `depends_on macos >= 11` |
+| any other PowerPC gcc | ⛔ **none packaged** | `formulae.brew.sh/api/formula/powerpc-elf-gcc.json` → 404; no homebrew-core formula has `powerpc` in its name |
+
+⛔ **D26's fallback does not exist on macOS.** On Debian `bleck` can use
+`gcc-powerpc-linux-gnu` with `-fno-pic -fno-PIE` when devkitPPC is unobtainable.
+Homebrew has no equivalent and `messense/homebrew-macos-cross-toolchains` ships
+only `x86_64-`/`aarch64-unknown-linux-gnu`, so **devkitPPC is the only packaged
+path on a Mac** — and it is x86_64.
+
+⚠️ **Which puts the whole code-mod path on a clock.** Apple, WWDC 2025: Rosetta
+will be available "for the next two major macOS releases — through macOS 27 — as
+a general-purpose tool for Intel apps", after which only a narrow game-focused
+subset survives. Asset work is unaffected; `wstrt` and devkitPPC are not.
+
+### 🔶 The likeliest first failure is `wit` being killed, not anything we wrote
+
+Apple Silicon refuses to execute native arm64 code without at least an ad-hoc
+signature — the failure is `SIGKILL`, not a dialog.
+[Wiimm/wiimms-iso-tools#18](https://github.com/Wiimm/wiimms-iso-tools/issues/18)
+is **still open** (2022-08-22, 27 comments) with reports from 2024-12-01 and
+2025-02-09 that `wit` from the v3.05a universal tarball dies with `Killed: 9`
+until re-signed:
+
+```bash
+sudo codesign --sign - --force \
+  --preserve-metadata=entitlements,requirements,flags,runtime /usr/local/bin/wit
+```
+
+⚠️ It must be applied **after** `install.sh` and `load-titles.sh`, which
+overwrite the signed binaries, and to every binary in `bin/`.
+
+⚠️ **`bleck` would report this as an empty error.** `disc._run` builds its
+message from `stderr or stdout`; a `SIGKILL` produces neither, so the user sees
+`wit failed:` and one blank line. That is worse than the underlying problem.
+
+🔶 **Unverified** — third-party reports on an open issue, from a machine that
+cannot run the binary. It is ranked first anyway because it fits the signing rule
+exactly and `wit` gates `extract` and `build`.
+
+### 🔶 `dolphin-tool` may not be in the shipped bundle at all
+
+`macos.py` looks in `/Applications/Dolphin.app/Contents/MacOS`. Dolphin's docs
+give that path from the **build tree** (`./Binaries/Dolphin.app/…`), and
+`Source/Core/DolphinQt/CMakeLists.txt` has no rule copying `dolphin-tool` into
+the bundle — only `qt.conf`, the icon, the Qt plugins and MoltenVK.
+
+⛔ If it is absent then **RVZ cannot be read on macOS at all**: `wit` cannot read
+RVZ and `dolphin-tool` is the only alternative. The mitigation already exists —
+share `.wbfs` (D24).
+
+**One `ls` settles it**, which is why it and the `wit` check are steps 0–1 of the
+checklist rather than buried in a table.
+
+### ✅ Dimentio is OpenGL on macOS, not Metal — and the premise that it was Metal was wrong
+
+eframe 0.29.1's default features are `accesskit, default_fonts, glow, wayland,
+web_screen_reader, x11` (docs.rs) — **`glow` is the renderer**. `wgpu` and
+`metal 0.29.0` appear in `Cargo.lock` because `eframe` depends on `egui-wgpu`
+unconditionally in its manifest, not because the feature is on. So egui paints
+through macOS's deprecated-but-present OpenGL, and the model viewport is a
+software rasteriser regardless (D213).
+
+- ✅ `rodio`'s `playback` feature does reach CoreAudio: `Cargo.lock` resolves
+  `cpal 0.17.3` and `coreaudio-rs 0.14.2`, and `cargo build --release` linked
+  them on the macOS runner. The MPL-2.0 Symphonia exclusion (D227) costs nothing
+  here — `bleck` exports 16-bit PCM and no decoder is needed.
+- ✅ Clipboard is `arboard 3.6.1` on `objc2-app-kit`, native.
+- ✅ **No `rfd`**: Dimentio takes its export root as an argv path, so there is no
+  native file-dialog surface to port.
+- 🔶 A Cocoa app invoked as a bare executable from a terminal runs in the
+  background and may not take focus. eframe sets an activation policy, so this
+  may simply work; ⛔ CI cannot see it, because the rasteriser's tests assert on
+  a `Vec<u8>` and need no display.
+
+### ✅ The in-game rig needs Dolphin itself re-signed
+
+`dolphin-memory-engine` 1.3.1 ships a `macosx_11_0_arm64` wheel, so
+`uv sync --extra dev` installs cleanly. But its README requires "a custom code
+signature", and upstream's *macOS code signing* section says the **Dolphin
+executable** must be signed with a self-signed certificate and debugging
+entitlements before it can be attached to — and re-signed after every Dolphin
+update.
+
+⚠️ `scripts/ingame.py` has settled nine questions on Windows. On macOS it needs a
+Keychain certificate first, and its failure mode is "cannot attach", which reads
+like a bug in the rig rather than a missing entitlement.
+
+### Packaging: what was rejected
+
+- ⛔ **`target_arch="universal2"` in `bleck.spec` — rejected, untested.**
+  PyInstaller warns that "even with a `universal2` python environment, some
+  packages may end up providing only single-arch binaries, making it impossible
+  to create a functional `universal2` frozen application", aborting with
+  `IncompatibleBinaryArchError`; `pyyaml` and `pydantic` both ship compiled
+  wheels. The runner's interpreter is `Python 3.13.14 (v3.13.14:fd17997c386, …)`
+  — a python.org tagged build, which is universal2, so CI *might* manage it —
+  but uv's managed Python on a developer's Mac is thin `aarch64-apple-darwin`.
+  Changing the spec would alter every platform's build to satisfy a case nobody
+  has reproduced.
+- ⛔ **Notarization — rejected for now.** It needs an Apple Developer Program
+  membership at **$99/year**, which is what gates Developer ID certificates and
+  notarization at all, plus `codesign`/`notarytool` in CI with a certificate in a
+  secret and a rotation story.
+- ✅ **The cheap fix instead**: document `curl` + command-line `tar` as the macOS
+  install path. Archive Utility propagates `com.apple.quarantine` to everything it
+  extracts; command-line `tar` does not, and `curl` never sets it. That removes
+  the common Gatekeeper failure for nothing. PyInstaller already ad-hoc signs by
+  default, so the *arm64 execution* requirement is separately satisfied.
+- ⚠️ **CI cost is zero today** — standard GitHub-hosted runners are free and
+  unlimited on public repositories. Were this repo private, macOS bills at
+  roughly **10×** Linux against the included allowance, so budget from the
+  multiplier and not the wall clock.
+- ⛔ **No Intel-Mac artifact exists.** `macos-latest` is arm64; the matrix has one
+  macOS entry.
+
+### ⛔ `bleck/platforms/macos.py` was deliberately not changed
+
+Every candidate edit depends on something only a Mac can answer — whether
+`dolphin-tool` is in the bundle, whether `wit` needs a re-sign. Writing those in
+now would put unverifiable guesses into shipping code, which is the failure this
+log exists to prevent. The four fixes that are *already* verifiable (the
+nonexistent `toolchain install` command in three profiles and `toolchain.py`) are
+recorded in [`macos.md`](./macos.md) as owed corrections rather than made here,
+because they are not macOS-specific and touch files another change is likelier to
+conflict with.
+
+🔶 **If the re-sign turns out to be required, it is data, not a conditional** — a
+field on `ToolLocation`, or a richer hint. Never an `if platform.system()`.
+
+### The nine things a Mac must answer
+
+1. Does `wit` v3.05a run unmodified? 2. Is `dolphin-tool` in the released
+`Dolphin.app`? 3. Does devkitPPC under Rosetta produce a REL that loads?
+4. Does Dimentio's window open, focus, render textures and play audio?
+5. Does the release tarball trip Gatekeeper? 6. Is a `universal2` build
+achievable with our dependencies? 7. Does the Finder-clutter filter work against
+a real Finder? 8. Can `ingame.py` attach after Dolphin is re-signed? 9. Does
+Dolphin's macOS cheat configuration behave as D86's Windows path does?
+
+⚠️ **1 and 2 are two commands and gate the rest.** The ordered checklist is in
+[`macos.md`](./macos.md), written so the scarcest resource — an hour of a Mac
+owner's attention — retires the most 🔶s first.
+
+## D240 — The position base was never derivable: the file states it (2026-07-31)
+
+`e_lui_robo` exported at **90.000°** on the normal-agreement oracle with ~50% of
+its faces inverted, and 120 of its 1,877 faces were dropped for indices past the
+end of the position array. Across the disc that was **4,902 of 67,280 faces**
+over 98 models. The fault was in `_rebase`, in the *position* base only.
+
+### The oracle, and why it could be trusted
+
+✅ **`angle(face normal, mean of its three stored vertex normals)`** — near 0°
+when the geometry is right, near 90° when it is not. It is **reference-free**:
+the normals come from slot 3 and are *not* rebased, so they are an independent
+witness. `Brobot.obj`, the only reference model available, sits at 0.002°; the
+control (random bases) sits at 88°. That let the whole 864-model corpus be
+measured, not just the six files a reference existed for.
+
+### What was wrong ⛔
+
+Two defects, both in the same line:
+
+1. **`position_base += len(seen_positions)`** — the base advanced by the count of
+   *distinct* indices a shape touched. A block is as long as its **largest index
+   plus one**; the two differ on any shape that skips a point.
+2. **It advanced for every shape.** Consecutive shapes can share one block —
+   `e_lui_robo_hand`'s shapes 0 and 1 do, `_missile`'s 5–8 do.
+
+### What is true ✅ — read off the draw code, not fitted
+
+Four failed attempts at pattern-matching the file preceded this. What worked is
+the standing rule: **when a format will not yield, find the code that reads it.**
+`dolscan.py dis 0x80047f00` and `0x800484a0` state the whole layout:
+
+```
+mulli r0, r14, 168      ; group index * 168
+lwz   r3, 332(r4)       ; +0x14C -> the group table
+lwz   r15, 64(r14)      ; group +0x40 = position base
+mulli r0, r15, 12       ; * 12 bytes -> GXSetArray's offset
+lwz   r4, 412(r4)       ; +0x19C (slot 19) -> 108-byte shape records
+lwz   r3, 56(r29)       ; shape +0x38 = first face
+lwz   r0, 60(r29)       ; shape +0x3C = face count
+lwz   r14, 64(r29)      ; shape +0x40 = position-index corner offset
+addi  r24, r29, 76      ; shape +0x4C.. = eight UV corner offsets
+```
+
+- **`0x14C` is not a name pointer.** It points at a table of **168-byte group
+  records**: `char name[0x40]`, then `(base, count)` pairs for positions
+  (`0x40`), normals (`0x48`), colours (`0x50`) and eight UV channels
+  (`0x58`…`0x94`), then `first shape` (`0x98`) and `shape count` (`0x9C`). The
+  reader used to read the first record's name field and call it the model's
+  name, which is why it looked like one.
+- **The group table runs from `0x14C`'s target to `table[0]`.** Exact multiple of
+  168 on 863 of 864 models; `OFF_hei_01b` is the exception and falls back.
+- **Slot 19 is a 108-byte per-shape record**, as the earlier probe had already
+  established: `+0x38`/`+0x3C` first face and face count, `+0x40`/`+0x44`/`+0x48`
+  the corner offsets for the position, normal and colour index streams (all three
+  equal on every model measured), `+0x4C`…`+0x68` the eight UV corner offsets,
+  `+0x00` a flag that is 1 when the shape draws with texture coordinates.
+
+### The invariant that says it was read right ✅
+
+**The group slices tile the position array exactly** — first base 0, each
+`base + count` equal to the next base, the last ending at the array's length.
+This holds on **863 of the 864 readable models**, and it is what `_bases` checks
+before using the table. A model that fails it falls back to the old
+count-the-distinct-indices reading rather than indexing into the wrong points.
+
+### Measured, before and after (whole corpus, 864 models)
+
+| | before | after |
+|---|---|---|
+| mean of per-model median angles | 3.487° | **0.269°** |
+| models with median ≥ 80° | 24 | **0** |
+| models with median ≥ 45° | 32 | **0** |
+| models with median < 0.5° | 790 | **824** |
+| faces dropped for out-of-range indices | 4,902 (98 models) | **0** |
+| mean coverage | 98.6% | **99.8%** |
+| `e_lui_robo` median | 90.000°, 120 faces dropped | **0.000°, none dropped** |
+| `e_lui_robo_hand` median | 78.930°, 228 dropped | **0.000°, none dropped** |
+
+The positive controls held: `_hige` 0.103° before and after, `_foot` 1.386° →
+2.939° — the rise is 64 previously-dropped faces coming back, not a regression;
+its coverage went 94.7% → 100%.
+
+### `_hand` is solved, and so is the share flag ✅
+
+Both were open when this started. `_hand` has 64 shapes in **31 groups** —
+`enjinShape3` owns shapes 0–1, `enjinShape2` owns 2–3, and so on — and its slices
+tile 480 exactly. The "share flag" was never a flag: it is `first shape` /
+`shape count` in the group record, which is why searching the *shape* records for
+it found nothing.
+
+### Refuted, and recorded so nobody re-runs them ⛔
+
+- No slot-19 word holds a position base; none equals the base sequence, `base×12`,
+  or "repeats where the block is shared".
+- The high 16 bits of the face record's second word are all zero.
+- Per-shape fitted offsets found by brute force: the four "repairs" all had ≤6
+  triangles and were search noise.
+- Greedy left-to-right block extension under the tiling constraint: it gets
+  `_hige`, `_missile` and `_antena` but overshoots `_hand` (499 against 480) and
+  undershoots `_foot` (166 against 169). It would have been a fitted hack even
+  where it worked.
+
+### Two things that fell out of it
+
+- **`_groups()` — splitting the face list where `first` restarts at zero —
+  disagrees with the shape records on 51 models.** A shape whose first face does
+  not start at corner zero was merged into the one before it. The records are now
+  the reading and `_groups` is the fallback. ⛔ This supersedes the assumption
+  that the restart rule was exact.
+- **The UV corner offset is a *different word* from the position corner offset**
+  (`+0x4C` against `+0x40`) and only advances for shapes that carry texture
+  coordinates. `e_lui_robo_hige` reaches corner 368 with 136 UV corners behind
+  it. Reading the UV stream at the position corner offset gave **wrong but
+  in-range** indices, so `is_textured` said yes and the model exported with its
+  art smeared. Re-packing the UV stream into position-corner order, with `None`
+  where a shape has none, fixes it:
+
+  | | before | after |
+  |---|---|---|
+  | median UV triangle area | 0.0474 | **0.0326** |
+  | shuffled control | 0.1342 | 0.1174 |
+  | triangles measured | 18,362 | **54,613** |
+
+  ⛔ **"Is it textured" is a per-shape question, not a per-model one.** 269 models
+  mix textured and untextured shapes; asking once for the whole mesh threw the
+  coordinates away from every shape in all of them. `Mesh.textured(faces)` is the
+  form to use, and `gltf._weld` now asks per primitive.
+
+### ⛔ D236 is superseded on shape names
+
+D236 said which Maya name went with which face group was not decoded. The group
+record carries both: the name and the run of shapes it owns. `Shape.name` now
+carries it — `e_lui_robo`'s 92 shapes come out as `marioShape`, `wallShape`,
+`agoShape`, `L_eye|eye|eyeShape` and so on.
+
+### ⛔ D211 is superseded on coverage
+
+D211 recorded a 13.6% median coverage and called a decoded mesh "a fragment".
+That was the missing per-shape rebasing, not the file. Median coverage is now
+**100%** and the mean 99.8%; four models of 864 are still under 95%, and those
+carry points no face draws. The stale claim survived in three module docstrings
+and the `model export` help text and has been corrected in all of them.
+
+### What is still unknown 🔶
+
+- `OFF_hei_01b` — the one model whose group table is not a multiple of 168 from
+  `0x14C` to `table[0]`. It falls back and reads as it did before.
+- Group record `+0xA0` and `+0xA4` (observed 0 and 3 almost everywhere, `0xA0 = 3`
+  on `e_lui_robo`'s `glassShape`) are undecoded. A blend or render-pass mode is
+  the obvious guess and is untested.
+- Which texture goes with which shape is **still** not decoded (D229). Nothing
+  here bears on it: the group record names the shape, not its image.
+- The worst model left on the oracle is `e_DmenL_k` at 27.8°, then
+  `e_medama_biimu` at 22.1° and nine `MOBJ_*Block` files at 11.0°. All are small,
+  flat, or single-quad; none drops a face. Whether that is a real defect or the
+  oracle being noisy on near-degenerate geometry has not been checked.
+
+### Where it lives
+
+`bleck/formats/modelrebase.py`, split out of `modelmesh.py` when the module hit
+the 1,000-line ceiling. `Face` and `Shape` moved down to `modelbase.py` so both
+halves can see them without importing each other. Tests are
+`tests/test_model_geometry.py`, which pins the *invariants* — the slices tile,
+nothing falls off the end, the positive controls stay under 5° — rather than the
+counts, because the counts in this area have already been rewritten three times.

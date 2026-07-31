@@ -87,6 +87,15 @@ English name; and the game's own `ITEM_ID_*` constant. Any of the three — plus
 the internal romaji name, here `HONOO_SAKURETU` — can be written as the
 selector.
 
+!!! note
+
+    The **English column comes from your extracted disc**, read from
+    `files/msg` under [`BLECK_BASE_DIR`](environment.md). `bleck` ships each
+    item's message key rather than the game's own words, so with no disc
+    extracted that column shows the internal name instead — and an English
+    spelling like `fire_burst` matches nothing until one is. Ids, constants
+    and internal names never need a disc.
+
 `--search` matches on a substring of any of them, so a family comes back
 together:
 
@@ -187,19 +196,19 @@ p_wii_mario              R_Arm_skinShape                     324 verts     96 fa
 ```
 
 Positions and normals are float32, and faces are polygons — mostly quads and
-triangles, with occasional n-gons — fanned into triangles on export. **864** of
+triangles, with occasional n-gons — cut into triangles on export. **864** of
 the disc's models read; the six that fail a consistency check are skipped rather
 than exported as noise.
 
-!!! danger "Most are fragments, and a fragment renders as stretched geometry"
+!!! success "Whole models, and the coverage number that says so"
 
-    One shape record is read per file, and a character file names dozens.
-    **Median coverage is 13.6%** of a file's vertices — `p_big_kuppa` reaches
-    three of its 3,401, and looks like a stretched mess. Every command prints
-    the coverage and the manifest carries `"fragment": true`.
+    Every shape in a file is exported, each indexing the slice of the vertex
+    arrays the file says it does. **Median coverage is 100%** of a file's
+    vertices and the mean 99.8%; `p_big_kuppa` reaches 99.9% of its 3,401.
 
-    **Pass `--min-coverage 95`** for the **132 models known to render
-    correctly**.
+    Every command prints the coverage and the manifest carries `"fragment":
+    true` for the **4 models** still under 95% — those carry points no face
+    draws. **Pass `--min-coverage 95`** to skip them.
 
 #### One primitive per shape
 
