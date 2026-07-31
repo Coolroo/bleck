@@ -13053,3 +13053,54 @@ its docstring that the count is not to be trusted.
 Vertices, indices, weights, and what a clip's pointer actually addresses.
 `has_geometry` and `can_animate` are both hard `False`; names and pointers are
 not keyframes, and a viewer handed them would have nothing to draw.
+
+---
+
+## D204 — The character mesh is not where it looked, and the format is recursive (2026-07-30)
+
+Chasing model geometry so Dimentio can draw something. Two findings, one of
+which invalidates the reading in D203.
+
+### ⛔ `p_wii_mario` has no float vertex buffer at all
+
+Every section is now accounted for: 90 node records of 0xA8 bytes, materials,
+9,720 bytes of index/flag data, 8,064 bytes of texture paths, and **1,408 vec3
+of joint transforms — exactly 176 joints x 8**, which independently confirms the
+joint count.
+
+⚠️ **The longest run of plausible float position triples in the whole file is
+647**, and it sits in the material region. A skinned character needs thousands.
+The mesh is not stored as float32 anywhere in this file.
+
+⛔ And it is not in a sibling: `files/a/` holds **815 TPL banks, 870 model files
+and 2 `.bin`** — nothing else. Room geometry lives in `map.dat` inside the map
+archives (680 KB for `he1_01`), but that is a different container (D167).
+
+### 🟢 It is s16, and the format is recursive
+
+GX positions are usually **s16 with a scale exponent**, which a float search
+cannot see. Looking for s16 triples instead: a run of **2,438** at `0x1a15a`,
+which is mesh-scale.
+
+⚠️ **That is inside the region D203 called animation clip data**, and the clip
+records are not what that entry assumed. `mario_S_1`'s record at `0x15FFC` opens
+with `0x5C, 0x68, 0xB10, 0x1D10, ...` — **its own section table**, the same
+shape as the file's own header at `0x148`.
+
+🔶 So the container nests: a model record contains model records, and the
+"clips" are sub-models rather than curves. Their names being `mario_W_1`,
+`mario_R_1` may mean each pose ships its own geometry, or the naming is
+inherited from the export. **Not established**, and D203's description of that
+region as clip data should be read with this attached.
+
+### What this changes
+
+⛔ **`has_geometry` stays False.** A run of s16 triples is a location, not a
+mesh: the vertex format, stride, scale exponent, index lists and which shape
+owns which range are all unread. Rendering from a guessed stride would produce
+a convincing-looking wrong shape, which is worse than nothing.
+
+⚠️ **`scripts/modelscan.py` gained the searches that found this** — a float
+scan alone was misleading, and the s16 scan is what corrected it. The tool is
+the point: this is the third time a reading has been overturned here, and each
+overturn came from running one more search rather than thinking harder.

@@ -35,6 +35,10 @@ Paths are relative to the extracted disc, so `files/a/x` works from anywhere.
   indices and the texture path list.
 - **at** -- dump one place three ways at once. A region that looks like noise as
   hex is often obvious as floats, and vice versa.
+- **vectors** -- the longest run of plausible position triples, as float32 *and*
+  as s16. ⚠️ This is the one that mattered: searching only for floats said
+  `p_wii_mario` has no mesh, and the s16 pass found a 2,438-long run (D204). GX
+  quantises positions, so a float-only search is blind to most geometry.
 """
 
 from __future__ import annotations
@@ -224,6 +228,47 @@ def cmd_at(args: argparse.Namespace) -> int:
     return 0
 
 
+def longest_run(data: bytes, start: int, reader, step: int, limit: float) -> tuple:
+    # pylint: disable=container-return
+    """The longest run of triples that all look like positions."""
+    best = (0, 0)
+    run = 0
+    begin = 0
+    for at in range(start, len(data) - step * 3, step):
+        try:
+            values = reader(data, at)
+        except struct.error:
+            break
+        ok = all(abs(v) < limit for v in values) and any(v != 0 for v in values)
+        if not ok:
+            run = 0
+            continue
+        if run == 0:
+            begin = at
+        run += 1
+        if run > best[1]:
+            best = (begin, run)
+    return best
+
+
+def cmd_vectors(args: argparse.Namespace) -> int:
+    """⚠️ Both encodings, always. Reporting one is how D204 nearly concluded a
+    character file holds no mesh."""
+    data = resolve(args.file).read_bytes()
+    start = int(args.start, 0) if args.start else 0
+
+    as_float = longest_run(
+        data, start, lambda d, a: struct.unpack_from(">3f", d, a), 4, 1e4
+    )
+    as_s16 = longest_run(
+        data, start, lambda d, a: struct.unpack_from(">3h", d, a), 2, 3e4
+    )
+    print(f"from {start:#x}, longest run of position-like triples:")
+    print(f"  float32  {as_float[1]:>8,} at {as_float[0]:#08x}")
+    print(f"  s16      {as_s16[1]:>8,} at {as_s16[0]:#08x}")
+    return 0
+
+
 def cmd_strings(args: argparse.Namespace) -> int:
     data = resolve(args.file).read_bytes()
     pattern = rb"[ -~]{%d,}" % args.min
@@ -267,6 +312,11 @@ def main(argv: list[str]) -> int:
     strings_p.add_argument("--min", type=int, default=4)
     strings_p.add_argument("--search")
     strings_p.set_defaults(func=cmd_strings)
+
+    vectors_p = sub.add_parser("vectors", help="longest position-like run, float and s16")
+    vectors_p.add_argument("file")
+    vectors_p.add_argument("--start", help="begin here, e.g. 0x15f5c")
+    vectors_p.set_defaults(func=cmd_vectors)
 
     args = parser.parse_args(argv)
     return args.func(args)
