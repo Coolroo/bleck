@@ -9,12 +9,18 @@ and `model export`. Its images are the 219 in `files/eff/effdata.tpl`, which
 `texture export` already writes out — so a viewer has the effect structure from
 here and the pixels from there.
 
-⛔ **No part-to-image binding.** `Part.first` looked like the answer and is not:
-part names carry *sequential* values across an effect (`B1_100` -> 1,
-`B2_100` -> 2), which is a running index into an undecoded section, not an
-image. 14 of 704 parts also exceed the 219 images outright. Six candidates have
-now been refuted; `docs/decision-log.md` D210 lists them so the seventh does not
-repeat one.
+⛔ **No part-to-image binding.** `Part.first` looked like the answer twice and
+is not one: its values run *sequentially* across an effect's parts, and 14 of
+704 exceed the 219 images outright.
+
+🔶 **What it actually is** (D218, read off the draw code at `0x8005f920`): a
+**signed** index, with `0xFFFF` as a null, into a *second* array of 20-byte
+records. The fields that drive drawing live in that record, at `+0x08`,
+`+0x0A`, `+0x0E`, `+0x0F` and `+0x12` — so the image reference is one hop
+further than anything decoded here.
+
+Six candidates are refuted in `docs/decision-log.md` D210, so the seventh does
+not repeat one.
 """
 
 from __future__ import annotations
