@@ -19,7 +19,18 @@ be fixed. The full reasoning is in [`docs/plan-viewer.md`](../docs/plan-viewer.m
 
 ## State: stage 1 of 5
 
-A texture browser. **There is deliberately no 3D viewport yet** — the model
+A texture browser: a virtualised grid, search, a format filter, and a detail
+panel showing size, format, source disc file and archive member.
+
+⚠️ **Rows are virtualised deliberately.** The disc holds 21,780 textures and
+egui uploads every image it draws to the GPU and keeps it, so drawing them all
+exhausts texture memory within seconds of scrolling. `show_rows` only calls
+back for what is on screen.
+
+🔶 **Not yet confirmed by eye.** It compiles, passes `clippy -D warnings`,
+launches, and holds a live window at 126 MB — but the machine this was written
+on could not screenshot its own desktop, so nobody has actually *looked* at it.
+That is the one check left. **There is deliberately no 3D viewport yet** — the model
 container is not decoded (only its string table is readable), so a camera
 orbiting an empty scene would prove nothing and could not be validated. Stage 2
 starts when there is geometry to show.

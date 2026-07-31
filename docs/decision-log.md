@@ -12471,3 +12471,43 @@ read as being enormous.
 
 ⛔ **The texture link is still missing.** Section 6 says where things go, not
 what they look like. Nine sections remain, none with any strings.
+
+---
+
+## D192 — The viewer browses textures, and could not be checked by eye here (2026-07-30)
+
+✅ **Stage 1 built**: a virtualised grid, search, a format filter offering only
+formats actually present, and a detail panel with size, format, source disc file
+and archive member. Reads `textures.json` and nothing else — no game format is
+parsed in Rust (D188).
+
+⚠️ **Rows are virtualised because they have to be.** egui uploads every image it
+draws to the GPU and keeps it, and the disc holds 21,780 textures; drawing them
+all exhausts texture memory within seconds of scrolling. `ScrollArea::show_rows`
+only calls back for visible rows.
+
+### 🔶 What was verified, and what was not
+
+| | |
+|---|---|
+| Compiles, `clippy -D warnings`, `cargo fmt` | ✅ |
+| Launches and holds a live window | ✅ pid alive, title `bleck viewer`, 126 MB |
+| Parses a 714-entry manifest without panicking | ✅ |
+| **Looks right** | 🔶 **unverified** |
+
+⛔ **Screen capture from this session does not see the interactive desktop.**
+Two `CopyFromScreen` captures returned pixel-identical wallpaper with no window
+in either, while `Get-Process` simultaneously reported a live window handle and
+the correct title. The window exists; the camera is pointed somewhere else.
+
+⚠️ That is an instrument failure, not a result, and it is worth recording as
+such — "the screenshot was empty" would have read as "the viewer draws nothing",
+which is a different and much worse conclusion. Same shape as D70/D73/D74.
+
+So the same gap as the banner (D181): the machine can build the thing and cannot
+look at it. `uv run bleck texture export --out work/export` then
+`cargo run -- ../work/export` from `viewer/` is the check, and it needs a human.
+
+⚠️ Note the export is a *prerequisite*, not a suggestion — the viewer opens on a
+message saying exactly that when handed a folder with no manifest, because
+"nothing here" would send someone looking in the wrong place.
