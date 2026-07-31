@@ -286,13 +286,70 @@ impl Mesh {
         self.faces.is_empty()
     }
 
+    /// Read a mesh, in whichever of the two shapes the exporter wrote.
+    ///
+    /// ⚠️ **Sniffed by content, not by extension.** `bleck` moved from OBJ to
+    /// glTF and a reader that trusted the suffix would have to be changed again
+    /// next time; the first four bytes are decisive and cost nothing.
+    ///
+    /// ⛔ A `.glb` is **binary**, so it must not go through `read_to_string`.
+    /// It did, once: the UTF-8 failure surfaced as `NoMesh` and every model in
+    /// the folder reported "Mesh file is missing" while sitting on disk.
     pub fn load(path: &Path) -> Result<Self, Problem> {
-        let text =
-            std::fs::read_to_string(path).map_err(|_| Problem::NoMesh(path.to_path_buf()))?;
+        let raw = std::fs::read(path).map_err(|_| Problem::NoMesh(path.to_path_buf()))?;
+        if raw.starts_with(GLB_MAGIC) {
+            return Self::parse_glb(&raw).map_err(|why| Problem::BadMesh {
+                file: path.to_path_buf(),
+                line: 0,
+                why,
+            });
+        }
+        let text = String::from_utf8(raw).map_err(|_| Problem::BadMesh {
+            file: path.to_path_buf(),
+            line: 0,
+            why: "not glTF, and not text either".into(),
+        })?;
         Self::parse(&text).map_err(|flaw| Problem::BadMesh {
             file: path.to_path_buf(),
             line: flaw.line,
             why: flaw.why,
+        })
+    }
+
+    /// Read a binary glTF: the JSON chunk describes accessors, the BIN chunk
+    /// holds them.
+    ///
+    /// Only `POSITION` and the index accessor are read. Normals, UVs, materials
+    /// and morph targets are all present in the file and all ignored here —
+    /// the rasteriser shades from face normals and samples no texture, so
+    /// reading them would cost memory for nothing.
+    pub fn parse_glb(raw: &[u8]) -> Result<Self, String> {
+        let (document, bin) = split_chunks(raw)?;
+        let json: serde_json::Value =
+            serde_json::from_slice(document).map_err(|e| format!("glTF JSON: {e}"))?;
+
+        let primitive = json["meshes"][0]["primitives"][0].clone();
+        let position = primitive["attributes"]["POSITION"]
+            .as_u64()
+            .ok_or("no POSITION attribute")? as usize;
+        let indices = primitive["indices"].as_u64().ok_or("no indices")? as usize;
+
+        let positions = read_vec3(&json, bin, position)?;
+        let corners = read_indices(&json, bin, indices)?;
+        let faces = corners
+            .chunks_exact(3)
+            .map(|c| Face {
+                a: c[0],
+                b: c[1],
+                c: c[2],
+            })
+            .collect::<Vec<_>>();
+
+        let bounds = Bounds::around(&positions, &faces);
+        Ok(Self {
+            positions,
+            faces,
+            bounds,
         })
     }
 
@@ -328,6 +385,111 @@ impl Mesh {
             bounds,
         })
     }
+}
+
+/// The four bytes every binary glTF opens with.
+const GLB_MAGIC: &[u8] = b"glTF";
+
+/// glTF component types, for the index accessor. Indices are written as
+/// `UNSIGNED_INT`, but a reader that only understood one would break on any
+/// other exporter's file for no reason.
+const UNSIGNED_BYTE: u64 = 5121;
+const UNSIGNED_SHORT: u64 = 5123;
+const UNSIGNED_INT: u64 = 5125;
+
+/// Split a `.glb` into its JSON and binary chunks.
+///
+/// ⚠️ Each chunk is padded to four bytes and the header length **includes**
+/// the padding, so the next chunk starts at the declared length, not at the
+/// end of the meaningful data.
+fn split_chunks(raw: &[u8]) -> Result<(&[u8], &[u8]), String> {
+    if raw.len() < 20 {
+        return Err("too short to be a glTF".into());
+    }
+    let mut at = 12;
+    let mut json: &[u8] = &[];
+    let mut bin: &[u8] = &[];
+    while at + 8 <= raw.len() {
+        let length = u32::from_le_bytes(raw[at..at + 4].try_into().unwrap()) as usize;
+        let kind = &raw[at + 4..at + 8];
+        let start = at + 8;
+        let stop = start.saturating_add(length).min(raw.len());
+        match kind {
+            b"JSON" => json = &raw[start..stop],
+            b"BIN\0" => bin = &raw[start..stop],
+            _ => {}
+        }
+        at = start + length;
+    }
+    if json.is_empty() {
+        return Err("glTF has no JSON chunk".into());
+    }
+    Ok((json, bin))
+}
+
+/// The bytes one accessor covers, following it through its buffer view.
+fn accessor_bytes<'a>(
+    json: &serde_json::Value,
+    bin: &'a [u8],
+    index: usize,
+) -> Result<(&'a [u8], usize), String> {
+    let accessor = &json["accessors"][index];
+    let count = accessor["count"].as_u64().ok_or("accessor has no count")? as usize;
+    let view = accessor["bufferView"]
+        .as_u64()
+        .ok_or("accessor has no bufferView")? as usize;
+    let view = &json["bufferViews"][view];
+    let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize
+        + accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
+    let length = view["byteLength"]
+        .as_u64()
+        .ok_or("view has no byteLength")? as usize;
+    if offset + length > bin.len() {
+        return Err("a buffer view runs past the binary chunk".into());
+    }
+    Ok((&bin[offset..offset + length], count))
+}
+
+fn read_vec3(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<Vec3>, String> {
+    let (bytes, count) = accessor_bytes(json, bin, index)?;
+    if bytes.len() < count * 12 {
+        return Err("POSITION accessor is shorter than its count".into());
+    }
+    Ok((0..count)
+        .map(|i| {
+            let at = i * 12;
+            let f = |k: usize| {
+                f32::from_le_bytes(bytes[at + k * 4..at + k * 4 + 4].try_into().unwrap())
+            };
+            Vec3::new(f(0), f(1), f(2))
+        })
+        .collect())
+}
+
+fn read_indices(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<usize>, String> {
+    let kind = json["accessors"][index]["componentType"]
+        .as_u64()
+        .ok_or("index accessor has no componentType")?;
+    let (bytes, count) = accessor_bytes(json, bin, index)?;
+    let width = match kind {
+        UNSIGNED_BYTE => 1,
+        UNSIGNED_SHORT => 2,
+        UNSIGNED_INT => 4,
+        other => return Err(format!("index componentType {other} is not an integer")),
+    };
+    if bytes.len() < count * width {
+        return Err("index accessor is shorter than its count".into());
+    }
+    Ok((0..count)
+        .map(|i| {
+            let at = i * width;
+            match width {
+                1 => bytes[at] as usize,
+                2 => u16::from_le_bytes(bytes[at..at + 2].try_into().unwrap()) as usize,
+                _ => u32::from_le_bytes(bytes[at..at + 4].try_into().unwrap()) as usize,
+            }
+        })
+        .collect())
 }
 
 fn read_position<'a>(words: impl Iterator<Item = &'a str>, line: usize) -> Result<Vec3, Flaw> {
@@ -566,12 +728,12 @@ mod tests {
 
     /// A directory of our own under the system temp dir, removed on drop, so
     /// the manifest tests touch the real filesystem without a dev-dependency.
-    struct Scratch {
-        path: PathBuf,
+    pub(super) struct Scratch {
+        pub(super) path: PathBuf,
     }
 
     impl Scratch {
-        fn new(tag: &str) -> Self {
+        pub(super) fn new(tag: &str) -> Self {
             static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let path =
@@ -738,5 +900,156 @@ mod tests {
         assert_eq!(library.matching("MARIO"), vec![0]);
         assert_eq!(library.matching("r_arm"), vec![0]);
         assert!(library.matching("luigi").is_empty());
+    }
+}
+
+#[cfg(test)]
+mod glb_tests {
+    use super::tests::Scratch;
+    use super::*;
+
+    /// ⛔ The regression that prompted this reader. A `.glb` is binary, and
+    /// reading it as UTF-8 text fails in a way that looked like the file was
+    /// absent — every model in the folder reported "Mesh file is missing"
+    /// while sitting on disk.
+    #[test]
+    fn a_binary_gltf_is_not_reported_as_a_missing_file() {
+        let scratch = Scratch::new("glb-missing");
+        let path = scratch.path.join("cube.glb");
+        std::fs::write(&path, a_glb()).expect("scratch glb");
+        let mesh = Mesh::load(&path).expect("a glb should load");
+        assert_eq!(mesh.positions().len(), 3);
+        assert_eq!(mesh.faces().len(), 1);
+    }
+
+    #[test]
+    fn the_format_is_sniffed_by_content_not_by_extension() {
+        let scratch = Scratch::new("glb-sniff");
+        let path = scratch.path.join("actually_gltf.obj");
+        std::fs::write(&path, a_glb()).expect("scratch glb");
+        assert!(Mesh::load(&path).is_ok(), "extension should not decide");
+    }
+
+    #[test]
+    fn obj_still_loads_alongside_it() {
+        let scratch = Scratch::new("glb-obj");
+        let path = scratch.path.join("plain.obj");
+        std::fs::write(&path, "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n").expect("scratch obj");
+        assert_eq!(Mesh::load(&path).expect("obj").faces().len(), 1);
+    }
+
+    #[test]
+    fn a_truncated_glb_is_refused_rather_than_panicking() {
+        let mut raw = a_glb();
+        raw.truncate(40);
+        assert!(Mesh::parse_glb(&raw).is_err());
+    }
+
+    #[test]
+    fn something_that_is_neither_gltf_nor_text_is_named_as_such() {
+        let scratch = Scratch::new("glb-junk");
+        let path = scratch.path.join("junk.glb");
+        std::fs::write(&path, [0xFF_u8, 0xFE, 0x00, 0x01, 0x02]).expect("scratch junk");
+        let problem = Mesh::load(&path).expect_err("junk should not load");
+        assert!(format!("{problem:?}").contains("text"), "{problem:?}");
+    }
+
+    /// One triangle, written the way `bleck.formats.gltf` writes one.
+    fn a_glb() -> Vec<u8> {
+        let positions: [f32; 9] = [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+        let indices: [u32; 3] = [0, 1, 2];
+        let mut bin = Vec::new();
+        for value in positions {
+            bin.extend_from_slice(&value.to_le_bytes());
+        }
+        for value in indices {
+            bin.extend_from_slice(&value.to_le_bytes());
+        }
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0"}},"meshes":[{{"primitives":[{{"attributes":{{"POSITION":0}},"indices":1}}]}}],
+                "accessors":[{{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}},
+                             {{"bufferView":1,"componentType":5125,"count":3,"type":"SCALAR"}}],
+                "bufferViews":[{{"buffer":0,"byteOffset":0,"byteLength":36}},
+                               {{"buffer":0,"byteOffset":36,"byteLength":12}}],
+                "buffers":[{{"byteLength":{}}}]}}"#,
+            bin.len()
+        );
+        let mut text = json.into_bytes();
+        while text.len() % 4 != 0 {
+            text.push(b' ');
+        }
+        let mut out = Vec::new();
+        out.extend_from_slice(GLB_MAGIC);
+        out.extend_from_slice(&2u32.to_le_bytes());
+        let total = 12 + 8 + text.len() + 8 + bin.len();
+        out.extend_from_slice(&(total as u32).to_le_bytes());
+        out.extend_from_slice(&(text.len() as u32).to_le_bytes());
+        out.extend_from_slice(b"JSON");
+        out.extend_from_slice(&text);
+        out.extend_from_slice(&(bin.len() as u32).to_le_bytes());
+        out.extend_from_slice(b"BIN\0");
+        out.extend_from_slice(&bin);
+        out
+    }
+}
+
+/// Loading the real export, when one happens to be on this machine.
+///
+/// ⚠️ `work/` is git-ignored, so these skip rather than fail on a fresh clone
+/// or in CI. They exist because the fixture above is one triangle written by
+/// this file's own test — it cannot catch a disagreement between what
+/// `bleck.formats.gltf` writes and what this reads, and that disagreement is
+/// exactly what shipped once.
+#[cfg(test)]
+mod real_export_tests {
+    use super::*;
+
+    fn export() -> Option<PathBuf> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()?
+            .join("work")
+            .join("export");
+        root.join(MANIFEST).is_file().then_some(root)
+    }
+
+    #[test]
+    fn every_mesh_the_manifest_names_actually_loads() {
+        let Some(root) = export() else {
+            eprintln!("no work/export on this machine; skipped");
+            return;
+        };
+        let library = Library::load(&root);
+        let entries = library.entries();
+        assert!(!entries.is_empty(), "the manifest named nothing");
+
+        let mut loaded = 0;
+        let mut failed = Vec::new();
+        for entry in entries {
+            match Mesh::load(&entry.path) {
+                Ok(mesh) if !mesh.is_empty() => loaded += 1,
+                Ok(_) => failed.push(format!("{}: no triangles", entry.name)),
+                Err(problem) => failed.push(format!("{}: {}", entry.name, problem.describe())),
+            }
+        }
+        assert!(failed.is_empty(), "{} failed, e.g. {:?}", failed.len(), &failed[..failed.len().min(3)]);
+        assert_eq!(loaded, entries.len());
+    }
+
+    #[test]
+    fn a_real_mesh_carries_the_triangles_the_manifest_promised() {
+        let Some(root) = export() else {
+            eprintln!("no work/export on this machine; skipped");
+            return;
+        };
+        let library = Library::load(&root);
+        for entry in library.entries().iter().take(20) {
+            let mesh = Mesh::load(&entry.path).expect("mesh");
+            assert_eq!(
+                mesh.faces().len(),
+                entry.triangles,
+                "{} disagrees with its manifest",
+                entry.name
+            );
+        }
     }
 }

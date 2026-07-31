@@ -14014,3 +14014,40 @@ paired with a part" sits on the panel that draws it.
 ⛔ **No `⚠️`/`⛔` note was lost** — 39 survive across 11 modules, including the
 one that matters most: which image an effect part draws is still not decoded
 (D210, D218), and both layers say so.
+
+## D221 — A binary read as text reports itself as a missing file (2026-07-30)
+
+⛔ **Shipped bug, found by a person running the app.** After the export moved
+from OBJ to glTF (D215), every model in Dimentio reported
+**"Mesh file is missing"** — while sitting on disk, correctly named in the
+manifest, and loading fine in Blender.
+
+`Mesh::load` did `std::fs::read_to_string`. A `.glb` is **binary**, so that
+fails on invalid UTF-8, and the error was mapped to `Problem::NoMesh` — the
+"missing file" case. ⚠️ **The message named the wrong cause with total
+confidence**, which is worse than a crash: it sent the reader to check the
+filesystem, where everything was fine.
+
+### What was wrong beyond the read
+
+`data/mesh.rs` only ever parsed Wavefront OBJ. The Python side moved to glTF
+and nothing on the Rust side knew — no test caught it because every mesh test
+built its own OBJ fixture, so the suite proved the parser worked and said
+nothing about whether the exporter still wrote that format.
+
+### The fix, and the tests that would have caught it
+
+- `Mesh::load` now **sniffs the first four bytes** rather than trusting the
+  extension. `bleck` changed format once and may again; `glTF` is decisive and
+  free to check.
+- A `.glb` reader: chunk split, then the `POSITION` and index accessors.
+  Normals, UVs, materials and morph targets are deliberately ignored — the
+  rasteriser shades from face normals and samples no texture.
+- Something neither glTF nor UTF-8 now says so, instead of claiming absence.
+- ✅ **Two tests load the real export**: all **864** `.glb` files parse, and
+  their triangle counts match what the manifest promised. They skip when
+  `work/` is absent, so a fresh clone still passes.
+
+**That last pair is the actual lesson.** A fixture written by the test that
+reads it cannot detect a disagreement between two programs. The suite needed
+one foot in the real output.
