@@ -551,8 +551,8 @@ record of what was finished and why.
 4. ⛔ **The model container is unidentified.** `a/p_wii_mario` announces a Jan
    2007 Maya export and skinned shape names and decodes to nothing; `map.dat`
    names its sections (`mesh`, `animation_table`, `vcd_table`). A string table
-   is not a mesh. This blocks the viewer's 3D stages
-   ([`plan-viewer.md`](./plan-viewer.md)).
+   is not a mesh. This blocks Dimentio's 3D stages
+   ([`plan-dimentio.md`](./plan-dimentio.md)).
 
 ### The language
 
@@ -589,7 +589,7 @@ record of what was finished and why.
 14. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is
     the route; extend it to the next safe batch. ⛔ `evt_pouch_check_have_item`
     never returns and nobody knows why.
-15. 🔶 **The viewer has never been looked at** (D192). It builds, passes clippy, and holds a live window; this machine cannot screenshot its own desktop. `cd viewer && cargo run -- ../work/export`.
+15. 🔶 **Dimentio has never been looked at** (D192). It builds, passes clippy, and holds a live window; this machine cannot screenshot its own desktop. `cd dimentio && cargo run -- ../work/export`.
 16. 🔶 **The banner has never been seen on screen** since it gained the version
     and the purple loader line (D181). Both strings are confirmed in the
     module; the title screen is unreachable unattended and the rig reads

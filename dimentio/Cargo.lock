@@ -438,16 +438,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
 
 [[package]]
-name = "bleck-viewer"
-version = "0.1.0"
-dependencies = [
- "eframe",
- "egui_extras",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -769,6 +759,16 @@ checksum = "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
 dependencies = [
  "block-buffer",
  "crypto-common",
+]
+
+[[package]]
+name = "dimentio"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui_extras",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,17 +1,17 @@
-# The viewer is built and linted on its own, never as part of `bleck`'s CI.
+# Dimentio is built and linted on its own, never as part of `bleck`'s CI.
 # A contributor with no interest in it must not need a Rust toolchain, and the
-# Python suite must keep passing on a machine that has none (docs/plan-viewer.md).
-name: viewer
+# Python suite must keep passing on a machine that has none (docs/plan-dimentio.md).
+name: dimentio
 
 on:
   push:
     paths:
-      - "viewer/**"
-      - ".github/workflows/viewer.yml"
+      - "dimentio/**"
+      - ".github/workflows/dimentio.yml"
   pull_request:
     paths:
-      - "viewer/**"
-      - ".github/workflows/viewer.yml"
+      - "dimentio/**"
+      - ".github/workflows/dimentio.yml"
 
 jobs:
   build:
@@ -22,13 +22,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     defaults:
       run:
-        working-directory: viewer
+        working-directory: dimentio
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: viewer
+          workspaces: dimentio
 
       # eframe needs X11/Wayland development headers on Linux; the other two
       # platforms ship their graphics stack.

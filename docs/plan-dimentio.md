@@ -1,6 +1,6 @@
-# An asset viewer: textures, models, animations
+# Dimentio: an asset viewer for textures, models, effects and animations
 
-**What it should be.** A window with a 3D viewport — orbit the camera, pick a
+**What it should be.** `dimentio` — a window with a 3D viewport — orbit the camera, pick a
 background, load a sprite or a model, and play the animations the game
 associates with it. Cross-platform: Windows, Linux, macOS.
 
@@ -13,7 +13,7 @@ that into a keystroke.
 
 ## ⛔ Read this before planning any of it
 
-The three things the viewer shows are in **completely different states**, and
+The three things Dimentio shows are in **completely different states**, and
 treating them as one project would mean building a 3D viewport with nothing to
 put in it.
 
@@ -61,16 +61,16 @@ build this in, and none of it can be validated until geometry exists.
 
 ---
 
-## Architecture: `bleck` exports, the viewer renders
+## Architecture: `bleck` exports, Dimentio renders
 
 The one decision that matters, because getting it wrong is expensive and quiet.
 
-⛔ **The viewer must not parse a single game format.** If it re-implements TPL,
+⛔ **Dimentio must not parse a single game format.** If it re-implements TPL,
 U8 or LZ77 in Rust, there are immediately two implementations of each, they
 drift, and a texture that builds correctly displays wrongly — or worse, the
 reverse. `bleck` already owns these and is tested against the real disc.
 
-✅ So `bleck` **exports to standard formats** and the viewer consumes those:
+✅ So `bleck` **exports to standard formats** and Dimentio consumes those:
 
 ```
 bleck texture export <disc-path> --out art/      ->  PNG
@@ -83,11 +83,11 @@ and what `vision.md` means by "a GUI over the API, any language".
 
 What it buys:
 
-- The viewer works on any asset `bleck` can decode, and **improves for free**
+- Dimentio works on any asset `bleck` can decode, and **improves for free**
   as `bleck` learns more formats.
 - Format bugs have exactly one place to be fixed, with the existing test suite
   around them.
-- The viewer stays a *renderer*, which is a much smaller and more fun program.
+- Dimentio stays a *renderer*, which is a much smaller and more fun program.
 - Anyone can point another tool at the same exports — Blender opens glTF.
 
 ⚠️ The cost is a file-format hop and an export step. Acceptable: assets are
@@ -113,15 +113,15 @@ keyed on the source file's hash makes it a once-per-asset cost.
    condition; the rest are hygiene.
 2. **A separate crate directory and a separate CI job.** `bleck`'s own build,
    test and lint must not depend on a Rust toolchain being present, or a
-   contributor with no interest in the viewer pays for it on every commit.
-3. **The viewer may not become the only way to do something.** It is a lens on
+   contributor with no interest in Dimentio pays for it on every commit.
+3. **Dimentio may not become the only way to do something.** It is a lens on
    the CLI, not a replacement for it — a headless machine has to stay fully
    capable.
 
 ⛔ **Rejected: Python + Qt or moderngl.** One language is a real advantage and
 it was weighed. But `bleck` ships as a *frozen PyInstaller binary with two
 runtime dependencies*, and adding a GUI toolkit plus a GL binding to that is a
-significant weight on every user who will never open the viewer — including CI.
+significant weight on every user who will never open Dimentio — including CI.
 A separate binary keeps the CLI exactly as light as it is now. The JSON-API
 boundary already exists precisely so a GUI need not be Python.
 
@@ -206,5 +206,5 @@ Only once Stage 4 has keyframes.
 - [ ] Every one of the 9,403 images exports without an error
 - [ ] A texture's PNG round-trips: import it back and the CMPR data is unchanged
       for an identity edit (the same acceptance test as `plan-textures.md`)
-- [ ] The viewer opens on Windows, Linux and macOS from a single `cargo build`
+- [ ] Dimentio opens on Windows, Linux and macOS from a single `cargo build`
 - [ ] `bleck`'s own test suite still runs with no Rust toolchain installed

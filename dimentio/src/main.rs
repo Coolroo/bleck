@@ -1,4 +1,7 @@
-//! Look at Super Paper Mario's assets without building a 460 MB disc first.
+//! Dimentio — look at Super Paper Mario's assets without building a disc.
+//!
+//! Named for the jester who steps sideways out of the world to watch it: this
+//! is the window onto the game's art that does not require booting the game.
 //!
 //! # What this program is not
 //!
@@ -8,9 +11,9 @@
 //! would be a texture that builds correctly and displays wrongly, or worse the
 //! reverse.
 //!
-//! So `bleck` exports PNG and JSON, and this renders them. The viewer improves
+//! So `bleck` exports PNG and JSON, and this renders them. Dimentio improves
 //! for free as `bleck` learns more formats, and format bugs have exactly one
-//! place to be fixed. See `docs/plan-viewer.md`.
+//! place to be fixed. See `docs/plan-dimentio.md`.
 //!
 //! ```text
 //! uv run bleck texture export --out work/export
@@ -39,11 +42,11 @@ fn main() -> eframe::Result<()> {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1180.0, 760.0])
             .with_min_inner_size([720.0, 420.0])
-            .with_title("bleck viewer"),
+            .with_title("Dimentio"),
         ..Default::default()
     };
     eframe::run_native(
-        "bleck-viewer",
+        "Dimentio",
         options,
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
@@ -106,7 +109,7 @@ impl eframe::App for Viewer {
 const WELCOME: &str = "\
 No export folder given.
 
-This viewer renders what bleck exports, and reads no game formats itself.
+Dimentio renders what bleck exports, and reads no game formats itself.
 
     uv run bleck texture export --out work/export
     cargo run -- ../work/export";

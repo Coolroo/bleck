@@ -1,6 +1,9 @@
-# bleck-viewer
+# Dimentio
 
-Look at Super Paper Mario's assets without building a 460 MB disc first.
+**The window onto Super Paper Mario's art**, without building a 460 MB disc
+first.
+
+Named for the jester who steps sideways out of the world to watch it.
 
 ```bash
 cargo run -- ../work/export        # a folder bleck exported into
@@ -15,7 +18,7 @@ correctly but displays wrongly, or the reverse.
 
 So `bleck` exports PNG and JSON; this renders them. The viewer improves for
 free as `bleck` learns more formats, and a format bug has exactly one place to
-be fixed. The full reasoning is in [`docs/plan-viewer.md`](../docs/plan-viewer.md).
+be fixed. The full reasoning is in [`docs/plan-dimentio.md`](../docs/plan-dimentio.md).
 
 ## State: stage 1 of 5
 
@@ -45,7 +48,7 @@ single static binary per platform with no runtime to install.
 1. **No game-format parsing here** — the rule above.
 2. **`bleck`'s own build, test and lint never require a Rust toolchain.** This
    crate has its own CI job for that reason.
-3. **The viewer is a lens on the CLI, never the only way to do something.** A
+3. **Dimentio is a lens on the CLI, never the only way to do something.** A
    headless machine stays fully capable.
 
 ## Building

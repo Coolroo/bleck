@@ -12943,3 +12943,60 @@ have been aimed at, and it names the structure outright.
 
 ⚠️ Same shape as D128 and D136 — the game's own code is the specification, and
 it is on the disc.
+
+---
+
+## D202 — Character models open up, and the viewer becomes Dimentio (2026-07-30)
+
+### The app has a name
+
+✅ `viewer/` is now **`dimentio/`** — crate, binary, window title and CI job.
+Named for the jester who steps sideways out of the world to watch it, which is
+what a preview tool does.
+
+### ✅ `bleck/formats/model.py` reads the character files
+
+**869 of 872** files in `files/a/` read cleanly. The two refusals are `.bin`
+files that happen to share the directory, and refusing them is correct.
+
+| | |
+|---|---|
+| ✅ name, Maya build stamp | `p_wii_mario`, `Mon Jan 29 10:30:46 2007` |
+| ✅ bounding box | Mario is 73.4 units tall |
+| ✅ shape names | 29 for Mario — `zentaiShape`, `R_Arm_skinShape` |
+| ✅ texture references | 126, as original TGA source paths |
+| ⛔ vertices, joints, weights, animations | **not decoded** |
+
+⛔ **It is not `map.dat`'s format.** None of that container's structural markers
+(`mesh`, `material_name_table`, `animation_table`) appears in a character file.
+Two formats, decoded separately.
+
+### 🟢 The texture link, and the invariant that makes it one
+
+A model names its textures by **original source path** —
+`ara/playar/mario/w_tex/R_arem.1.tga` — and the `-` file beside it is a TPL
+bank. Across all 787 pairs:
+
+| | |
+|---|---|
+| references == bank images | 773 |
+| references < bank images | 14 |
+| **references > bank images** | **0** |
+
+⛔ **The zero is the finding.** A bank may hold images nothing references; a
+model never names one its bank lacks. Without that direction being clean the
+pairing would be a coincidence of counts.
+
+⚠️ Measured twice. The first version deduplicated the paths, which would have
+hidden a model that legitimately reuses a texture, and the counts were re-taken
+without it.
+
+### ⛔ A bounding box read from the wrong record
+
+The first `_bounds` scanned the opening record for six plausible floats and
+found some: Mario came out **17.9** units tall. The real box is at +0x44 of the
+record the file's *leading word* points at, and gives **73.4**.
+
+⚠️ Six individually reasonable numbers is exactly what a wrong offset produces
+here. The test asserts a height known independently rather than merely a
+positive one, which is the only reason the error surfaced rather than shipping.

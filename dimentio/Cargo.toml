@@ -1,8 +1,8 @@
 [package]
-name = "bleck-viewer"
+name = "dimentio"
 version = "0.1.0"
 edition = "2021"
-description = "Look at Super Paper Mario's assets without building a disc"
+description = "Dimentio: look at Super Paper Mario's assets without building a disc"
 license = "MIT"
 
 # ⛔ No game-format crates here, and there must never be any. `bleck` owns
