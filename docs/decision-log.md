@@ -12567,3 +12567,55 @@ from the first.
 
 ⚠️ The build also **reports** each texture it rewrites. A generated file nobody
 is told about is indistinguishable from one that was not generated (D126).
+
+---
+
+## D194 — 538 strings of Nintendo's text were shipping in the binary (2026-07-30)
+
+⛔ **`itemcatalog.json` carried an `english` field for all 538 items**, and
+`bleck.spec` bundles that file into the PyInstaller binary. Those strings come
+from `files/msg/UK` — the game's own message files — so every shipped copy of
+`bleck` contained Nintendo's localised display text.
+
+The rule at the top of `CLAUDE.md` says addresses and struct offsets are facts
+and fine to record. **Prose is not a fact.**
+
+✅ Fixed: the catalog ships each item's **message key** (`in_stg3_key_01`) and
+`bleck/formats/msg.py` resolves the words at runtime from whatever disc the
+*user* extracted. Verified to reproduce the stripped values exactly —
+`msg_unknown_item` -> `Unavailable Item`. No disc means no English names, which
+costs prettiness and nothing else.
+
+### ⚠️ The distinction that made this surgical
+
+The NPC catalog also has 423 `english` values and they **stay**. They come from
+spm-headers' `NPCTribeId` enum members — `NPC_FLIP_GOOMBA` becomes "Flip
+Goomba" — which is MIT-licensed *source code*, already attributed. Deleting them
+would have thrown away data this project is entitled to ship.
+
+⛔ So "strip every English name" would have been wrong. The question is not
+whether a string is English, it is **where it came from**.
+
+### Three places it could come back
+
+1. `tests/test_no_game_text.py` fails if any bundled catalog has a row with both
+   a `msg` key and `english` text.
+2. `scripts/dump_items.py` still *prints* how many names it resolved — useful —
+   but pops the field immediately before serialising.
+3. The attribution string in the catalog now says so in as many words.
+
+### ⚠️ An import cycle, caught only by `--full`
+
+Resolving at runtime needed the base directory, and reaching for
+`registry.base_root()` imported `mods` from `formats` and closed a cycle.
+`lint.sh --fix` checks the branch diff and saw nothing; `--full` caught it — the
+exact scenario `CLAUDE.md` warns about. Fixed by reading `env.BASE_DIR`
+directly, `env` being a leaf.
+
+### 🔶 What this does not cover
+
+Only the *shipped binary and repository* were audited. A `.bleck` a user packs
+may contain whatever they like — that is their distribution decision, not this
+project's. The pack-side change in D193 stands, but for a different reason than
+stated there: a generated texture is excluded because it is **regenerable**,
+exactly like `mod.rel` and setup files, not because of licensing.

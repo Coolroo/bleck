@@ -86,7 +86,12 @@ class ItemInfo:
     """`nameMsg`: a key into `files/msg/<language>`, not text."""
 
     english: str = ""
-    """What `msg` resolves to in `files/msg/UK`, e.g. `Fire Burst`."""
+    """What `msg` resolves to in `files/msg/UK`, e.g. `Fire Burst`.
+
+    ⛔ **Never shipped.** These are the game's own words, so the catalog carries
+    only the `msg` key and this is filled in at load time from the user's own
+    extracted disc (D194). Empty when there is no disc, which costs prettiness
+    and nothing else."""
 
     def describe(self) -> str:
         if self.english and self.name:
@@ -334,14 +339,36 @@ def _bare(info: ItemInfo) -> str:
     return short.split("_", 1)[1] if "_" in short else ""
 
 
-def load_items(path: Path | None = None) -> ItemNames:
+def load_items(path: Path | None = None, base: Path | None = None) -> ItemNames:
     """Read the committed item catalog. Absent is not an error: names are a
-    convenience, and every id works without them."""
+    convenience, and every id works without them.
+
+    ⛔ English names come from the *user's* disc, never from this repository.
+    The catalog ships each item's message key; `base` supplies the text behind
+    it (D194).
+    """
     source = path or ITEM_CATALOG
     if not source.is_file():
         return ItemNames()
     body = json.loads(source.read_text(encoding="utf-8"))
-    return ItemNames(body.get("items"))
+    return ItemNames(_with_english(body.get("items") or [], base))
+
+
+def _with_english(rows: list, base: Path | None) -> list:
+    # pylint: disable=container-return
+    """Fill each row's `english` from the disc's message files, if there is one."""
+    # ⚠️ `env`, not `registry.base_root()`. That would import `mods` from
+    # `formats` and close an import cycle -- caught by `lint.sh --full`, which
+    # a per-file check cannot see.
+    from bleck.common import env  # pylint: disable=import-outside-toplevel
+    from bleck.formats import msg  # pylint: disable=import-outside-toplevel
+
+    if base is None:
+        base = Path(env.text(env.BASE_DIR))
+    table = msg.english(base)
+    if table is None:
+        return rows
+    return [dict(row, english=table.get(str(row.get("msg", "")))) for row in rows]
 
 
 @lru_cache(maxsize=1)

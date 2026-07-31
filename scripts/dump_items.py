@@ -331,16 +331,26 @@ def main() -> int:
     if messages.is_dir():
         text = message_names(messages)
         for item in tables["items"]:
-            item["english"] = text.get(item["msg"], "")
-        found = sum(1 for i in tables["items"] if i["english"])
+            # ⛔ Printed, never written into the catalog. These are the
+            # game's own words and `bleck` ships none (D194); the catalog
+            # carries `msg` and the text is resolved from the user's disc.
+            item["_english_preview"] = text.get(item["msg"], "")
+        found = sum(1 for i in tables["items"] if i["_english_preview"])
         print(f"merged {found} English names from {messages.as_posix()}")
     else:
         print(f"no messages at {messages}; the catalog will carry no English names")
 
+    # ⛔ The last thing before serialising, so no path can leak game text into
+    # the shipped catalog. `tests/test_no_game_text.py` fails if one does.
+    for item in tables["items"]:
+        item.pop("_english_preview", None)
+
     tables["attribution"] = (
         "Table address and field offsets from SeekyCt/spm-headers "
-        "(item_data.h, item_data_ids.h), MIT licensed. Values read out of the "
-        f"game ({source}); regenerate with scripts/dump_items.py."
+        "(item_data.h, item_data_ids.h), MIT licensed. Ids, internal names and "
+        f"message KEYS read out of the game ({source}); regenerate with "
+        "scripts/dump_items.py. NO game text: an item's English name is "
+        "resolved at runtime from the user's own files/msg/ (D194)."
     )
     body = json.dumps(tables, indent=1, ensure_ascii=False)
     if args.out:

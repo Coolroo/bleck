@@ -4,3768 +4,3230 @@
    "id": 0,
    "name": "NULL",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_NULL",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_NULL"
   },
   {
    "id": 1,
    "name": "COIN",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_COIN",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_COIN"
   },
   {
    "id": 2,
    "name": "COIN_x3",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_COIN_x3",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_COIN_x3"
   },
   {
    "id": 3,
    "name": "SPEED_FLOWER",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_SPEED_FLOWER",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_SPEED_FLOWER"
   },
   {
    "id": 4,
    "name": "SLOW_FLOWER",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_SLOW_FLOWER",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_SLOW_FLOWER"
   },
   {
    "id": 5,
    "name": "HAPPY_FLOWER",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_HAPPY_FLOWER",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_HAPPY_FLOWER"
   },
   {
    "id": 6,
    "name": "KINOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_KINOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_KINOKO"
   },
   {
    "id": 7,
    "name": "SUPER_KINOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_SUPER_KINOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_SUPER_KINOKO"
   },
   {
    "id": 8,
    "name": "ULTRA_KINOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_ULTRA_KINOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_ULTRA_KINOKO"
   },
   {
    "id": 9,
    "name": "BUNSHIN_KINOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_BUNSHIN_KINOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_BUNSHIN_KINOKO"
   },
   {
    "id": 10,
    "name": "DOT_STAR",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_DOT_STAR",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_DOT_STAR"
   },
   {
    "id": 11,
    "name": "SPEED_CHOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_SPEED_CHOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_SPEED_CHOKO"
   },
   {
    "id": 12,
    "name": "POWERUP_CHOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_POWERUP_CHOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_POWERUP_CHOKO"
   },
   {
    "id": 13,
    "name": "MISSILE_CHOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_MISSILE_CHOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_MISSILE_CHOKO"
   },
   {
    "id": 14,
    "name": "BUNSHIN_CHOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_BUNSHIN_CHOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_BUNSHIN_CHOKO"
   },
   {
    "id": 15,
    "name": "BARRIER_CHOKO",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_WORLD_BARRIER_CHOKO",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_WORLD_BARRIER_CHOKO"
   },
   {
    "id": 16,
    "name": "STG1_KEY_00",
    "msg": "in_stg1_key_00",
-   "enum": "ITEM_ID_KEY_STG1_KEY_00",
-   "english": "Ruins Key"
+   "enum": "ITEM_ID_KEY_STG1_KEY_00"
   },
   {
    "id": 17,
    "name": "STG2_KEY_00",
    "msg": "in_stg2_key_00",
-   "enum": "ITEM_ID_KEY_STG2_KEY_00",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG2_KEY_00"
   },
   {
    "id": 18,
    "name": "STG2_KEY_01",
    "msg": "in_stg2_key_01",
-   "enum": "ITEM_ID_KEY_STG2_KEY_01",
-   "english": "House Key"
+   "enum": "ITEM_ID_KEY_STG2_KEY_01"
   },
   {
    "id": 19,
    "name": "STG3_KEY_00",
    "msg": "in_stg3_key_00",
-   "enum": "ITEM_ID_KEY_STG3_KEY_00",
-   "english": "Fort Key"
+   "enum": "ITEM_ID_KEY_STG3_KEY_00"
   },
   {
    "id": 20,
    "name": "STG3_KEY_01",
    "msg": "in_stg3_key_01",
-   "enum": "ITEM_ID_KEY_STG3_KEY_01",
-   "english": "Fort Key"
+   "enum": "ITEM_ID_KEY_STG3_KEY_01"
   },
   {
    "id": 21,
    "name": "STG3_KEY_02",
    "msg": "in_stg3_key_02",
-   "enum": "ITEM_ID_KEY_STG3_KEY_02",
-   "english": "Fort Key"
+   "enum": "ITEM_ID_KEY_STG3_KEY_02"
   },
   {
    "id": 22,
    "name": "STG4_KINGYO",
    "msg": "in_stg4 bowl_00",
-   "enum": "ITEM_ID_KEY_STG4_KINGYO",
-   "english": "Goldfish Bowl"
+   "enum": "ITEM_ID_KEY_STG4_KINGYO"
   },
   {
    "id": 23,
    "name": "STG4_KINGYO2",
    "msg": "in_stg4 bowl_01",
-   "enum": "ITEM_ID_KEY_STG4_KINGYO2",
-   "english": "Goldfish Bowl"
+   "enum": "ITEM_ID_KEY_STG4_KINGYO2"
   },
   {
    "id": 24,
    "name": "STG4_HELMET",
    "msg": "in_stg4_helmet",
-   "enum": "ITEM_ID_KEY_STG4_HELMET",
-   "english": "Helmet"
+   "enum": "ITEM_ID_KEY_STG4_HELMET"
   },
   {
    "id": 25,
    "name": "STG4_KOMONJYO",
    "msg": "in_stg4_komonjyo",
-   "enum": "ITEM_ID_KEY_STG4_KOMONJYO",
-   "english": "Ancient Clue"
+   "enum": "ITEM_ID_KEY_STG4_KOMONJYO"
   },
   {
    "id": 26,
    "name": "STG4_KEY_00",
    "msg": "in_stg4_key_00",
-   "enum": "ITEM_ID_KEY_STG4_KEY_00",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG4_KEY_00"
   },
   {
    "id": 27,
    "name": "STG4_KEY_01",
    "msg": "in_stg4_key_01",
-   "enum": "ITEM_ID_KEY_STG4_KEY_01",
-   "english": "Dimension Key"
+   "enum": "ITEM_ID_KEY_STG4_KEY_01"
   },
   {
    "id": 28,
    "name": "STG4_KEY_02",
    "msg": "in_stg4_key_02",
-   "enum": "ITEM_ID_KEY_STG4_KEY_02",
-   "english": "Dimension Key"
+   "enum": "ITEM_ID_KEY_STG4_KEY_02"
   },
   {
    "id": 29,
    "name": "STG4_KEY_03",
    "msg": "in_stg4_key_03",
-   "enum": "ITEM_ID_KEY_STG4_KEY_03",
-   "english": "Dimension Key"
+   "enum": "ITEM_ID_KEY_STG4_KEY_03"
   },
   {
    "id": 30,
    "name": "STG5_SEKIBAN1",
    "msg": "in_stg5_sekiban_03",
-   "enum": "ITEM_ID_KEY_STG5_SEKIBAN1",
-   "english": "Water Tablet"
+   "enum": "ITEM_ID_KEY_STG5_SEKIBAN1"
   },
   {
    "id": 31,
    "name": "STG5_SEKIBAN2",
    "msg": "in_stg5_sekiban_02",
-   "enum": "ITEM_ID_KEY_STG5_SEKIBAN2",
-   "english": "Stone Tablet"
+   "enum": "ITEM_ID_KEY_STG5_SEKIBAN2"
   },
   {
    "id": 32,
    "name": "STG5_SEKIBAN3",
    "msg": "in_stg5_sekiban_01",
-   "enum": "ITEM_ID_KEY_STG5_SEKIBAN3",
-   "english": "Fire Tablet"
+   "enum": "ITEM_ID_KEY_STG5_SEKIBAN3"
   },
   {
    "id": 33,
    "name": "STG5_JEWEL",
    "msg": "in_stg5_key_00",
-   "enum": "ITEM_ID_KEY_STG5_JEWEL",
-   "english": "Cave Key"
+   "enum": "ITEM_ID_KEY_STG5_JEWEL"
   },
   {
    "id": 34,
    "name": "STG5_KEY_00",
    "msg": "in_stg5_key_00",
-   "enum": "ITEM_ID_KEY_STG5_KEY_00",
-   "english": "Cave Key"
+   "enum": "ITEM_ID_KEY_STG5_KEY_00"
   },
   {
    "id": 35,
    "name": "STG5_KEY_01",
    "msg": "in_stg5_key_01",
-   "enum": "ITEM_ID_KEY_STG5_KEY_01",
-   "english": "Card Key"
+   "enum": "ITEM_ID_KEY_STG5_KEY_01"
   },
   {
    "id": 36,
    "name": "STG5_ME",
    "msg": "in_stg5_me",
-   "enum": "ITEM_ID_KEY_STG5_ME",
-   "english": "Floro Sprout"
+   "enum": "ITEM_ID_KEY_STG5_ME"
   },
   {
    "id": 37,
    "name": "STG7_KEY_00",
    "msg": "in_stg7_key_00",
-   "enum": "ITEM_ID_KEY_STG7_KEY_00",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG7_KEY_00"
   },
   {
    "id": 38,
    "name": "STG7_KEY_01",
    "msg": "in_stg7_key_01",
-   "enum": "ITEM_ID_KEY_STG7_KEY_01",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG7_KEY_01"
   },
   {
    "id": 39,
    "name": "STG7_DIETBOOK",
    "msg": "in_stg7_diet_book",
-   "enum": "ITEM_ID_KEY_STG7_DIETBOOK",
-   "english": "Diet Book"
+   "enum": "ITEM_ID_KEY_STG7_DIETBOOK"
   },
   {
    "id": 40,
    "name": "STG7_KEY_HEAVEN",
    "msg": "in_stg7_heaven_key",
-   "enum": "ITEM_ID_KEY_STG7_KEY_HEAVEN",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG7_KEY_HEAVEN"
   },
   {
    "id": 41,
    "name": "STG7_BLUE_BALL",
    "msg": "in_stg7_blue_ball",
-   "enum": "ITEM_ID_KEY_STG7_BLUE_BALL",
-   "english": "Blue Orb"
+   "enum": "ITEM_ID_KEY_STG7_BLUE_BALL"
   },
   {
    "id": 42,
    "name": "STG7_YELLOW_BALL",
    "msg": "in_stg7_yellow_ball",
-   "enum": "ITEM_ID_KEY_STG7_YELLOW_BALL",
-   "english": "Yellow Orb"
+   "enum": "ITEM_ID_KEY_STG7_YELLOW_BALL"
   },
   {
    "id": 43,
    "name": "STG7_RED_BALL",
    "msg": "in_stg7_red_ball",
-   "enum": "ITEM_ID_KEY_STG7_RED_BALL",
-   "english": "Red Orb"
+   "enum": "ITEM_ID_KEY_STG7_RED_BALL"
   },
   {
    "id": 44,
    "name": "URA_DAN_KEY",
    "msg": "in_100kai_key_00",
-   "enum": "ITEM_ID_KEY_URA_DAN_KEY",
-   "english": "Pit Key"
+   "enum": "ITEM_ID_KEY_URA_DAN_KEY"
   },
   {
    "id": 45,
    "name": "STG7_PEACH",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_KEY_STG7_PEACH",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_KEY_STG7_PEACH"
   },
   {
    "id": 46,
    "name": "STG8_KEY_CASTLE",
    "msg": "in_stg8_key_00",
-   "enum": "ITEM_ID_KEY_STG8_KEY_CASTLE",
-   "english": "Castle Bleck Key"
+   "enum": "ITEM_ID_KEY_STG8_KEY_CASTLE"
   },
   {
    "id": 47,
    "name": "MAC_KEY_00",
    "msg": "in_town_key_00",
-   "enum": "ITEM_ID_KEY_MAC_KEY_00",
-   "english": "Old Key"
+   "enum": "ITEM_ID_KEY_MAC_KEY_00"
   },
   {
    "id": 48,
    "name": "DAN_KEY",
    "msg": "in_100kai_key_00",
-   "enum": "ITEM_ID_KEY_DAN_KEY",
-   "english": "Pit Key"
+   "enum": "ITEM_ID_KEY_DAN_KEY"
   },
   {
    "id": 49,
    "name": "STG7_WATER_KEY",
    "msg": "in_stg7_key_02",
-   "enum": "ITEM_ID_KEY_STG7_WATER_KEY",
-   "english": "Door Key"
+   "enum": "ITEM_ID_KEY_STG7_WATER_KEY"
   },
   {
    "id": 50,
    "name": "POCKET_DOKAN",
    "msg": "in_pocket_dokan",
-   "enum": "ITEM_ID_KEY_POCKET_DOKAN",
-   "english": "Return Pipe"
+   "enum": "ITEM_ID_KEY_POCKET_DOKAN"
   },
   {
    "id": 51,
    "name": "CRYSTAL_BALL",
    "msg": "in_crystalball",
-   "enum": "ITEM_ID_KEY_CRYSTAL_BALL",
-   "english": "Crystal Ball"
+   "enum": "ITEM_ID_KEY_CRYSTAL_BALL"
   },
   {
    "id": 52,
    "name": "TRAINING_MACHINE",
    "msg": "in_training_machine",
-   "enum": "ITEM_ID_KEY_TRAINING_MACHINE",
-   "english": "Training Machine"
+   "enum": "ITEM_ID_KEY_TRAINING_MACHINE"
   },
   {
    "id": 53,
    "name": "REINOMONO",
    "msg": "in_reinomono",
-   "enum": "ITEM_ID_KEY_REINOMONO",
-   "english": "You-Know-What"
+   "enum": "ITEM_ID_KEY_REINOMONO"
   },
   {
    "id": 54,
    "name": "PAPERBOARD",
    "msg": "in_paperboard",
-   "enum": "ITEM_ID_KEY_PAPERBOARD",
-   "english": "Paper"
+   "enum": "ITEM_ID_KEY_PAPERBOARD"
   },
   {
    "id": 55,
    "name": "SIGNED_PAPERBOARD",
    "msg": "in_signed_paperboard",
-   "enum": "ITEM_ID_KEY_SIGNED_PAPERBOARD",
-   "english": "Autograph"
+   "enum": "ITEM_ID_KEY_SIGNED_PAPERBOARD"
   },
   {
    "id": 56,
    "name": "MAC_KEY_HOUSE",
    "msg": "in_town_key_house",
-   "enum": "ITEM_ID_KEY_MAC_KEY_HOUSE",
-   "english": "Random House Key"
+   "enum": "ITEM_ID_KEY_MAC_KEY_HOUSE"
   },
   {
    "id": 57,
    "name": "DISK_R",
    "msg": "in_disk_r",
-   "enum": "ITEM_ID_KEY_DISK_R",
-   "english": "Cooking Disk 2"
+   "enum": "ITEM_ID_KEY_DISK_R"
   },
   {
    "id": 58,
    "name": "DISK_W",
    "msg": "in_disk_w",
-   "enum": "ITEM_ID_KEY_DISK_W",
-   "english": "Cooking Disk 3"
+   "enum": "ITEM_ID_KEY_DISK_W"
   },
   {
    "id": 59,
    "name": "DISK_Y",
    "msg": "in_disk_y",
-   "enum": "ITEM_ID_KEY_DISK_Y",
-   "english": "Cooking Disk 4"
+   "enum": "ITEM_ID_KEY_DISK_Y"
   },
   {
    "id": 60,
    "name": "DISK_B",
    "msg": "in_disk_b",
-   "enum": "ITEM_ID_KEY_DISK_B",
-   "english": "Cooking Disk 5"
+   "enum": "ITEM_ID_KEY_DISK_B"
   },
   {
    "id": 61,
    "name": "DISK_G",
    "msg": "in_disk_g",
-   "enum": "ITEM_ID_KEY_DISK_G",
-   "english": "Cooking Disk 6"
+   "enum": "ITEM_ID_KEY_DISK_G"
   },
   {
    "id": 62,
    "name": "DISK_PU",
    "msg": "in_disk_pu",
-   "enum": "ITEM_ID_KEY_DISK_PU",
-   "english": "Cooking Disk 7"
+   "enum": "ITEM_ID_KEY_DISK_PU"
   },
   {
    "id": 63,
    "name": "DISK_PI",
    "msg": "in_disk_pi",
-   "enum": "ITEM_ID_KEY_DISK_PI",
-   "english": "Cooking Disk 1"
+   "enum": "ITEM_ID_KEY_DISK_PI"
   },
   {
    "id": 64,
    "name": "GOLD_CARD",
    "msg": "in_gold_card",
-   "enum": "ITEM_ID_KEY_GOLD_CARD",
-   "english": "Golden Card"
+   "enum": "ITEM_ID_KEY_GOLD_CARD"
   },
   {
    "id": 65,
    "name": "HONOO_SAKURETU",
    "msg": "in_honoo_sakuretsu",
-   "enum": "ITEM_ID_USE_HONOO_SAKURETU",
-   "english": "Fire Burst"
+   "enum": "ITEM_ID_USE_HONOO_SAKURETU"
   },
   {
    "id": 66,
    "name": "KOORI_NO_IBUKI",
    "msg": "in_koori_no_ibuki",
-   "enum": "ITEM_ID_USE_KOORI_NO_IBUKI",
-   "english": "Ice Storm"
+   "enum": "ITEM_ID_USE_KOORI_NO_IBUKI"
   },
   {
    "id": 67,
    "name": "KAMINARI_DOKKAN",
    "msg": "in_kaminari_dokkan",
-   "enum": "ITEM_ID_USE_KAMINARI_DOKKAN",
-   "english": "Thunder Rage"
+   "enum": "ITEM_ID_USE_KAMINARI_DOKKAN"
   },
   {
    "id": 68,
    "name": "KIRAKIRA_OTOSHI",
    "msg": "in_kirakira_otoshi",
-   "enum": "ITEM_ID_USE_KIRAKIRA_OTOSHI",
-   "english": "Shooting Star"
+   "enum": "ITEM_ID_USE_KIRAKIRA_OTOSHI"
   },
   {
    "id": 69,
    "name": "POW_BLOCK",
    "msg": "in_pow_block",
-   "enum": "ITEM_ID_USE_POW_BLOCK",
-   "english": "POW Block"
+   "enum": "ITEM_ID_USE_POW_BLOCK"
   },
   {
    "id": 70,
    "name": "KOURA_DE_PON",
    "msg": "in_koura_de_pon",
-   "enum": "ITEM_ID_USE_KOURA_DE_PON",
-   "english": "Shell Shock"
+   "enum": "ITEM_ID_USE_KOURA_DE_PON"
   },
   {
    "id": 71,
    "name": "KINKAI_100",
    "msg": "in_kinkai_100",
-   "enum": "ITEM_ID_USE_KINKAI_100",
-   "english": "Gold Bar"
+   "enum": "ITEM_ID_USE_KINKAI_100"
   },
   {
    "id": 72,
    "name": "KINKAI_300",
    "msg": "in_kinkai_300",
-   "enum": "ITEM_ID_USE_KINKAI_300",
-   "english": "Gold Bar x3"
+   "enum": "ITEM_ID_USE_KINKAI_300"
   },
   {
    "id": 73,
    "name": "BARIA_FRAME",
    "msg": "in_barrier_frame",
-   "enum": "ITEM_ID_USE_BARIA_FRAME",
-   "english": "Block Block"
+   "enum": "ITEM_ID_USE_BARIA_FRAME"
   },
   {
    "id": 74,
    "name": "KACHIKACHI_KOURA",
    "msg": "in_kachikachi_koura",
-   "enum": "ITEM_ID_USE_KACHIKACHI_KOURA",
-   "english": "Courage Shell"
+   "enum": "ITEM_ID_USE_KACHIKACHI_KOURA"
   },
   {
    "id": 75,
    "name": "TUYOTUYO_DRINK",
    "msg": "in_tuyotuyo_drink",
-   "enum": "ITEM_ID_USE_TUYOTUYO_DRINK",
-   "english": "Mighty Tonic"
+   "enum": "ITEM_ID_USE_TUYOTUYO_DRINK"
   },
   {
    "id": 76,
    "name": "BIRIBIRI_KINOKO",
    "msg": "in_biribiri_kinoko",
-   "enum": "ITEM_ID_USE_BIRIBIRI_KINOKO",
-   "english": "Volt Shroom"
+   "enum": "ITEM_ID_USE_BIRIBIRI_KINOKO"
   },
   {
    "id": 77,
    "name": "OBAKE_KINOKO",
    "msg": "in_obake_kinoko",
-   "enum": "ITEM_ID_USE_OBAKE_KINOKO",
-   "english": "Ghost Shroom"
+   "enum": "ITEM_ID_USE_OBAKE_KINOKO"
   },
   {
    "id": 78,
    "name": "NEMURE_YOIKO",
    "msg": "in_nemure_yoikoyo",
-   "enum": "ITEM_ID_USE_NEMURE_YOIKO",
-   "english": "Sleepy Sheep"
+   "enum": "ITEM_ID_USE_NEMURE_YOIKO"
   },
   {
    "id": 79,
    "name": "STOPWATCH",
    "msg": "in_stop_watch",
-   "enum": "ITEM_ID_USE_STOPWATCH",
-   "english": "Stop Watch"
+   "enum": "ITEM_ID_USE_STOPWATCH"
   },
   {
    "id": 80,
    "name": "KINOKO_DRINK",
    "msg": "in_kinoko_drink",
-   "enum": "ITEM_ID_USE_KINOKO_DRINK",
-   "english": "Shroom Shake"
+   "enum": "ITEM_ID_USE_KINOKO_DRINK"
   },
   {
    "id": 81,
    "name": "SUPER_DRINK",
    "msg": "in_super_drink",
-   "enum": "ITEM_ID_USE_SUPER_DRINK",
-   "english": "Super Shroom Shake"
+   "enum": "ITEM_ID_USE_SUPER_DRINK"
   },
   {
    "id": 82,
    "name": "ULTRA_DRINK",
    "msg": "in_ultra_drink",
-   "enum": "ITEM_ID_USE_ULTRA_DRINK",
-   "english": "Ultra Shroom Shake"
+   "enum": "ITEM_ID_USE_ULTRA_DRINK"
   },
   {
    "id": 83,
    "name": "SHINABITA_KINOKO",
    "msg": "in_sinabita_kinoko",
-   "enum": "ITEM_ID_USE_SHINABITA_KINOKO",
-   "english": "Dried Shroom"
+   "enum": "ITEM_ID_USE_SHINABITA_KINOKO"
   },
   {
    "id": 84,
    "name": "KINKYU_KINOKO",
    "msg": "in_kinkyu_kinoko",
-   "enum": "ITEM_ID_USE_KINKYU_KINOKO",
-   "english": "Life Shroom"
+   "enum": "ITEM_ID_USE_KINKYU_KINOKO"
   },
   {
    "id": 85,
    "name": "JIWAJIWA_DRINK",
    "msg": "in_jiwajiwa_kinoko",
-   "enum": "ITEM_ID_USE_JIWAJIWA_DRINK",
-   "english": "Long-Last Shake"
+   "enum": "ITEM_ID_USE_JIWAJIWA_DRINK"
   },
   {
    "id": 86,
    "name": "NANIGA_OKORUKANA",
    "msg": "in_naniga_okorukana",
-   "enum": "ITEM_ID_USE_NANIGA_OKORUKANA",
-   "english": "Mystery Box"
+   "enum": "ITEM_ID_USE_NANIGA_OKORUKANA"
   },
   {
    "id": 87,
    "name": "BLANK_KUN",
    "msg": "in_blank_kun",
-   "enum": "ITEM_ID_USE_BLANK_KUN",
-   "english": "Catch Card"
+   "enum": "ITEM_ID_USE_BLANK_KUN"
   },
   {
    "id": 88,
    "name": "SUPER_BLANK_KUN",
    "msg": "in_superblank_kun",
-   "enum": "ITEM_ID_USE_SUPER_BLANK_KUN",
-   "english": "Catch Card SP"
+   "enum": "ITEM_ID_USE_SUPER_BLANK_KUN"
   },
   {
    "id": 89,
    "name": "HEART_FUERU",
    "msg": "in_heart_fueru",
-   "enum": "ITEM_ID_USE_HEART_FUERU",
-   "english": "HP Plus"
+   "enum": "ITEM_ID_USE_HEART_FUERU"
   },
   {
    "id": 90,
    "name": "POWER_PLUS",
    "msg": "in_power_plus",
-   "enum": "ITEM_ID_USE_POWER_PLUS",
-   "english": "Power Plus"
+   "enum": "ITEM_ID_USE_POWER_PLUS"
   },
   {
    "id": 91,
    "name": "STG7_BLUE_FRUITS",
    "msg": "in_stg7_blue_berry",
-   "enum": "ITEM_ID_USE_STG7_BLUE_FRUITS",
-   "english": "Blue Apple"
+   "enum": "ITEM_ID_USE_STG7_BLUE_FRUITS"
   },
   {
    "id": 92,
    "name": "STG7_ORANGE_FRUITS",
    "msg": "in_stg7_orange_berry",
-   "enum": "ITEM_ID_USE_STG7_ORANGE_FRUITS",
-   "english": "Orange Apple"
+   "enum": "ITEM_ID_USE_STG7_ORANGE_FRUITS"
   },
   {
    "id": 93,
    "name": "STG7_RED_FRUITS",
    "msg": "in_stg7_red_berry",
-   "enum": "ITEM_ID_USE_STG7_RED_FRUITS",
-   "english": "Red Apple"
+   "enum": "ITEM_ID_USE_STG7_RED_FRUITS"
   },
   {
    "id": 94,
    "name": "STG7_PINK_FRUITS",
    "msg": "in_stg7_pink_berry",
-   "enum": "ITEM_ID_USE_STG7_PINK_FRUITS",
-   "english": "Pink Apple"
+   "enum": "ITEM_ID_USE_STG7_PINK_FRUITS"
   },
   {
    "id": 95,
    "name": "STG7_BLACK_FRUITS",
    "msg": "in_stg7_black_berry",
-   "enum": "ITEM_ID_USE_STG7_BLACK_FRUITS",
-   "english": "Black Apple"
+   "enum": "ITEM_ID_USE_STG7_BLACK_FRUITS"
   },
   {
    "id": 96,
    "name": "STAR_MEDAL",
    "msg": "in_star_medal",
-   "enum": "ITEM_ID_USE_STAR_MEDAL",
-   "english": "Star Medal"
+   "enum": "ITEM_ID_USE_STAR_MEDAL"
   },
   {
    "id": 97,
    "name": "GOLD_MEDAL",
    "msg": "in_gold_medal",
-   "enum": "ITEM_ID_USE_GOLD_MEDAL",
-   "english": "Gold Medal"
+   "enum": "ITEM_ID_USE_GOLD_MEDAL"
   },
   {
    "id": 98,
    "name": "DOKU_KINOKO",
    "msg": "in_poisoned_kinoko",
-   "enum": "ITEM_ID_USE_DOKU_KINOKO",
-   "english": "Poison Shroom"
+   "enum": "ITEM_ID_USE_DOKU_KINOKO"
   },
   {
    "id": 99,
    "name": "NURU_KINOKO",
    "msg": "in_nurunuru_kinoko",
-   "enum": "ITEM_ID_USE_NURU_KINOKO",
-   "english": "Slimy Shroom"
+   "enum": "ITEM_ID_USE_NURU_KINOKO"
   },
   {
    "id": 100,
    "name": "PICHI_PEACH",
    "msg": "in_fresh_peach",
-   "enum": "ITEM_ID_USE_PICHI_PEACH",
-   "english": "Peachy Peach"
+   "enum": "ITEM_ID_USE_PICHI_PEACH"
   },
   {
    "id": 101,
    "name": "TOROPICO_MANGO",
    "msg": "in_tropical_mango",
-   "enum": "ITEM_ID_USE_TOROPICO_MANGO",
-   "english": "Keel Mango"
+   "enum": "ITEM_ID_USE_TOROPICO_MANGO"
   },
   {
    "id": 102,
    "name": "PRIMITIVENUT",
    "msg": "in_primitive_nut",
-   "enum": "ITEM_ID_USE_PRIMITIVENUT",
-   "english": "Primordial Fruit"
+   "enum": "ITEM_ID_USE_PRIMITIVENUT"
   },
   {
    "id": 103,
    "name": "GOLD_LEAF",
    "msg": "in_golden_leaf",
-   "enum": "ITEM_ID_USE_GOLD_LEAF",
-   "english": "Golden Leaf"
+   "enum": "ITEM_ID_USE_GOLD_LEAF"
   },
   {
    "id": 104,
    "name": "KAME_LEAF",
    "msg": "in_kamekame_leaf",
-   "enum": "ITEM_ID_USE_KAME_LEAF",
-   "english": "Turtley Leaf"
+   "enum": "ITEM_ID_USE_KAME_LEAF"
   },
   {
    "id": 105,
    "name": "INGREDIENTS_OF_SWEET",
    "msg": "in_base_of_sweets",
-   "enum": "ITEM_ID_USE_INGREDIENTS_OF_SWEET",
-   "english": "Cake Mix"
+   "enum": "ITEM_ID_USE_INGREDIENTS_OF_SWEET"
   },
   {
    "id": 106,
    "name": "TANKOBU",
    "msg": "in_tankobu",
-   "enum": "ITEM_ID_USE_TANKOBU",
-   "english": "Whacka Bump"
+   "enum": "ITEM_ID_USE_TANKOBU"
   },
   {
    "id": 107,
    "name": "TUKUSHINBO",
    "msg": "in_horsetail",
-   "enum": "ITEM_ID_USE_TUKUSHINBO",
-   "english": "Horsetail"
+   "enum": "ITEM_ID_USE_TUKUSHINBO"
   },
   {
    "id": 108,
    "name": "ROW_PASTA",
    "msg": "in_uncooked_pasta",
-   "enum": "ITEM_ID_USE_ROW_PASTA",
-   "english": "Fresh Pasta Bunch"
+   "enum": "ITEM_ID_USE_ROW_PASTA"
   },
   {
    "id": 109,
    "name": "RED_CHILI_PEPPER",
    "msg": "in_red_kararin",
-   "enum": "ITEM_ID_USE_RED_CHILI_PEPPER",
-   "english": "Hot Sauce"
+   "enum": "ITEM_ID_USE_RED_CHILI_PEPPER"
   },
   {
    "id": 110,
    "name": "SUMI_SOUP",
    "msg": "in_sumi_soup",
-   "enum": "ITEM_ID_USE_SUMI_SOUP",
-   "english": "Inky Sauce"
+   "enum": "ITEM_ID_USE_SUMI_SOUP"
   },
   {
    "id": 111,
    "name": "PANSY_TEARS",
    "msg": "in_pansy_tears",
-   "enum": "ITEM_ID_USE_PANSY_TEARS",
-   "english": "Dayzee Tear"
+   "enum": "ITEM_ID_USE_PANSY_TEARS"
   },
   {
    "id": 112,
    "name": "HANA_SOUP",
    "msg": "in_hana_soup",
-   "enum": "ITEM_ID_USE_HANA_SOUP",
-   "english": "Sap Soup"
+   "enum": "ITEM_ID_USE_HANA_SOUP"
   },
   {
    "id": 113,
    "name": "MEET",
    "msg": "in_meat",
-   "enum": "ITEM_ID_USE_MEET",
-   "english": "Bone-In Cut"
+   "enum": "ITEM_ID_USE_MEET"
   },
   {
    "id": 114,
    "name": "VEGETABLES",
    "msg": "in_vegetables",
-   "enum": "ITEM_ID_USE_VEGETABLES",
-   "english": "Fresh Veggie"
+   "enum": "ITEM_ID_USE_VEGETABLES"
   },
   {
    "id": 115,
    "name": "HERB",
    "msg": "in_herb",
-   "enum": "ITEM_ID_USE_HERB",
-   "english": "Smelly Herb"
+   "enum": "ITEM_ID_USE_HERB"
   },
   {
    "id": 116,
    "name": "HACHIMITU",
    "msg": "in_hachimitu",
-   "enum": "ITEM_ID_USE_HACHIMITU",
-   "english": "Honey Jar"
+   "enum": "ITEM_ID_USE_HACHIMITU"
   },
   {
    "id": 117,
    "name": "POWERFUL_MEET",
    "msg": "in_powerful_meet",
-   "enum": "ITEM_ID_USE_POWERFUL_MEET",
-   "english": "Power Steak"
+   "enum": "ITEM_ID_USE_POWERFUL_MEET"
   },
   {
    "id": 118,
    "name": "BIG_EGG",
    "msg": "in_big_egg",
-   "enum": "ITEM_ID_USE_BIG_EGG",
-   "english": "Big Egg"
+   "enum": "ITEM_ID_USE_BIG_EGG"
   },
   {
    "id": 119,
    "name": "MILD_CACAO",
    "msg": "in_mild_cacao",
-   "enum": "ITEM_ID_USE_MILD_CACAO",
-   "english": "Mild Cocoa Bean"
+   "enum": "ITEM_ID_USE_MILD_CACAO"
   },
   {
    "id": 120,
    "name": "SWEET_CHOKO",
    "msg": "in_sweet_chokobar",
-   "enum": "ITEM_ID_COOK_SWEET_CHOKO",
-   "english": "Sweet Choco-bar"
+   "enum": "ITEM_ID_COOK_SWEET_CHOKO"
   },
   {
    "id": 121,
    "name": "KINOKO_CHOKO",
    "msg": "in_kinoko_chokobar",
-   "enum": "ITEM_ID_COOK_KINOKO_CHOKO",
-   "english": "Shroom Choco-bar"
+   "enum": "ITEM_ID_COOK_KINOKO_CHOKO"
   },
   {
    "id": 122,
    "name": "GOLD_CHOKO",
    "msg": "in_gold_chokobar",
-   "enum": "ITEM_ID_COOK_GOLD_CHOKO",
-   "english": "Golden Choco-bar"
+   "enum": "ITEM_ID_COOK_GOLD_CHOKO"
   },
   {
    "id": 123,
    "name": "JIWA_SYRUP",
    "msg": "in_jiwajiwa_sirup",
-   "enum": "ITEM_ID_COOK_JIWA_SYRUP",
-   "english": "Gradual Syrup"
+   "enum": "ITEM_ID_COOK_JIWA_SYRUP"
   },
   {
    "id": 124,
    "name": "PANSY_SYRUP",
    "msg": "in_pansy_sirup",
-   "enum": "ITEM_ID_COOK_PANSY_SYRUP",
-   "english": "Dayzee Syrup"
+   "enum": "ITEM_ID_COOK_PANSY_SYRUP"
   },
   {
    "id": 125,
    "name": "NURU_ESSENCE",
    "msg": "in_nurunuru_essence",
-   "enum": "ITEM_ID_COOK_NURU_ESSENCE",
-   "english": "Slimy Extract"
+   "enum": "ITEM_ID_COOK_NURU_ESSENCE"
   },
   {
    "id": 126,
    "name": "KINOKO_FRY",
    "msg": "in_kinoko_itame",
-   "enum": "ITEM_ID_COOK_KINOKO_FRY",
-   "english": "Fried Shroom Plate"
+   "enum": "ITEM_ID_COOK_KINOKO_FRY"
   },
   {
    "id": 127,
    "name": "KINOKO_HOILE_FRY",
    "msg": "in_kinoko_foil_yaki",
-   "enum": "ITEM_ID_COOK_KINOKO_HOILE_FRY",
-   "english": "Roast Shroom Dish"
+   "enum": "ITEM_ID_COOK_KINOKO_HOILE_FRY"
   },
   {
    "id": 128,
    "name": "KINOKO_STEAK",
    "msg": "in_kinoko_steak",
-   "enum": "ITEM_ID_COOK_KINOKO_STEAK",
-   "english": "Shroom Steak"
+   "enum": "ITEM_ID_COOK_KINOKO_STEAK"
   },
   {
    "id": 129,
    "name": "HUNNY_KINOKO",
    "msg": "in_honey_kinoko",
-   "enum": "ITEM_ID_COOK_HUNNY_KINOKO",
-   "english": "Honey Shroom"
+   "enum": "ITEM_ID_COOK_HUNNY_KINOKO"
   },
   {
    "id": 130,
    "name": "HUNNY_KINOKO_S",
    "msg": "in_honey_kinokoS",
-   "enum": "ITEM_ID_COOK_HUNNY_KINOKO_S",
-   "english": "Honey Super"
+   "enum": "ITEM_ID_COOK_HUNNY_KINOKO_S"
   },
   {
    "id": 131,
    "name": "TEA_KINOKO",
    "msg": "in_tea_kinoko",
-   "enum": "ITEM_ID_COOK_TEA_KINOKO",
-   "english": "Shroom Broth"
+   "enum": "ITEM_ID_COOK_TEA_KINOKO"
   },
   {
    "id": 132,
    "name": "KINOKO_CREPE",
    "msg": "in_kinoko_crape",
-   "enum": "ITEM_ID_COOK_KINOKO_CREPE",
-   "english": "Mushroom Crepe"
+   "enum": "ITEM_ID_COOK_KINOKO_CREPE"
   },
   {
    "id": 133,
    "name": "KINOKO_CAKE",
    "msg": "in_kinoko_cake",
-   "enum": "ITEM_ID_COOK_KINOKO_CAKE",
-   "english": "Shroom Cake"
+   "enum": "ITEM_ID_COOK_KINOKO_CAKE"
   },
   {
    "id": 134,
    "name": "CHOCOLA_CAKE",
    "msg": "in_chocolat_cake",
-   "enum": "ITEM_ID_COOK_CHOCOLA_CAKE",
-   "english": "Chocolate Cake"
+   "enum": "ITEM_ID_COOK_CHOCOLA_CAKE"
   },
   {
    "id": 135,
    "name": "MERO_CAKE",
    "msg": "in_meromero_cake",
-   "enum": "ITEM_ID_COOK_MERO_CAKE",
-   "english": "Heartful Cake"
+   "enum": "ITEM_ID_COOK_MERO_CAKE"
   },
   {
    "id": 136,
    "name": "MOUSSE_CAKE",
    "msg": "in_mousse_cake",
-   "enum": "ITEM_ID_COOK_MOUSSE_CAKE",
-   "english": "Mousse"
+   "enum": "ITEM_ID_COOK_MOUSSE_CAKE"
   },
   {
    "id": 137,
    "name": "PEACH_TART",
    "msg": "in_peach_talt",
-   "enum": "ITEM_ID_COOK_PEACH_TART",
-   "english": "Peach Tart"
+   "enum": "ITEM_ID_COOK_PEACH_TART"
   },
   {
    "id": 138,
    "name": "TUKUSHI_TART",
    "msg": "in_horsetail_talt",
-   "enum": "ITEM_ID_COOK_TUKUSHI_TART",
-   "english": "Horsetail Tart"
+   "enum": "ITEM_ID_COOK_TUKUSHI_TART"
   },
   {
    "id": 139,
    "name": "SWEET_COOKIE",
    "msg": "in_sweet_cookie",
-   "enum": "ITEM_ID_COOK_SWEET_COOKIE",
-   "english": "Sweet Cookie Snack"
+   "enum": "ITEM_ID_COOK_SWEET_COOKIE"
   },
   {
    "id": 140,
    "name": "KAME_MAN",
    "msg": "in_kame_man",
-   "enum": "ITEM_ID_COOK_KAME_MAN",
-   "english": "Koopa Dumpling"
+   "enum": "ITEM_ID_COOK_KAME_MAN"
   },
   {
    "id": 141,
    "name": "HANA_DANGO",
    "msg": "in_hana_dango",
-   "enum": "ITEM_ID_COOK_HANA_DANGO",
-   "english": "Sap Muffin"
+   "enum": "ITEM_ID_COOK_HANA_DANGO"
   },
   {
    "id": 142,
    "name": "PRIMITIVE_SPECIAL",
    "msg": "in_primitive_special",
-   "enum": "ITEM_ID_COOK_PRIMITIVE_SPECIAL",
-   "english": "Town Special"
+   "enum": "ITEM_ID_COOK_PRIMITIVE_SPECIAL"
   },
   {
    "id": 143,
    "name": "MANGO_PUDDING",
    "msg": "in_mango_pudding",
-   "enum": "ITEM_ID_COOK_MANGO_PUDDING",
-   "english": "Mango Pudding"
+   "enum": "ITEM_ID_COOK_MANGO_PUDDING"
   },
   {
    "id": 144,
    "name": "LOVE_PUDDING",
    "msg": "in_first_love_pudding",
-   "enum": "ITEM_ID_COOK_LOVE_PUDDING",
-   "english": "Love Pudding"
+   "enum": "ITEM_ID_COOK_LOVE_PUDDING"
   },
   {
    "id": 145,
    "name": "FOREVER",
    "msg": "in_forever_two",
-   "enum": "ITEM_ID_COOK_FOREVER",
-   "english": "Couple's Cake"
+   "enum": "ITEM_ID_COOK_FOREVER"
   },
   {
    "id": 146,
    "name": "FRUITS_PARFAIT",
    "msg": "in_fruit_parfait",
-   "enum": "ITEM_ID_COOK_FRUITS_PARFAIT",
-   "english": "Fruit Parfait"
+   "enum": "ITEM_ID_COOK_FRUITS_PARFAIT"
   },
   {
    "id": 147,
    "name": "FRAPPE",
    "msg": "in_frappe",
-   "enum": "ITEM_ID_COOK_FRAPPE",
-   "english": "Snow Cone"
+   "enum": "ITEM_ID_COOK_FRAPPE"
   },
   {
    "id": 148,
    "name": "SNOW_RABBIT",
    "msg": "in_snow_rabbit",
-   "enum": "ITEM_ID_COOK_SNOW_RABBIT",
-   "english": "Snow Bunny"
+   "enum": "ITEM_ID_COOK_SNOW_RABBIT"
   },
   {
    "id": 149,
    "name": "ICHIGO_RABBIT",
    "msg": "in_strawberry_snow_rabbit",
-   "enum": "ITEM_ID_COOK_ICHIGO_RABBIT",
-   "english": "Berry Snow Bunny"
+   "enum": "ITEM_ID_COOK_ICHIGO_RABBIT"
   },
   {
    "id": 150,
    "name": "HUNNY_CANDY",
    "msg": "in_honey_candy",
-   "enum": "ITEM_ID_COOK_HUNNY_CANDY",
-   "english": "Honey Candy"
+   "enum": "ITEM_ID_COOK_HUNNY_CANDY"
   },
   {
    "id": 151,
    "name": "BIRI_CANDY",
    "msg": "in_biribiri_candy",
-   "enum": "ITEM_ID_COOK_BIRI_CANDY",
-   "english": "Electro Pop"
+   "enum": "ITEM_ID_COOK_BIRI_CANDY"
   },
   {
    "id": 152,
    "name": "HERB_TEA",
    "msg": "in_herb_tea",
-   "enum": "ITEM_ID_COOK_HERB_TEA",
-   "english": "Herb Tea"
+   "enum": "ITEM_ID_COOK_HERB_TEA"
   },
   {
    "id": 153,
    "name": "KAME_TEA",
    "msg": "in_kamekame_tea",
-   "enum": "ITEM_ID_COOK_KAME_TEA",
-   "english": "Koopa Tea"
+   "enum": "ITEM_ID_COOK_KAME_TEA"
   },
   {
    "id": 154,
    "name": "SPAGHETTI",
    "msg": "in_spaghetti",
-   "enum": "ITEM_ID_COOK_SPAGHETTI",
-   "english": "Spaghetti Plate"
+   "enum": "ITEM_ID_COOK_SPAGHETTI"
   },
   {
    "id": 155,
    "name": "KARAI_PASTA",
    "msg": "in_kararina_pasta",
-   "enum": "ITEM_ID_COOK_KARAI_PASTA",
-   "english": "Spicy Pasta Dish"
+   "enum": "ITEM_ID_COOK_KARAI_PASTA"
   },
   {
    "id": 156,
    "name": "IKASUMI_PASTA",
    "msg": "in_ikasumi_pasta",
-   "enum": "ITEM_ID_COOK_IKASUMI_PASTA",
-   "english": "Ink Pasta Dish"
+   "enum": "ITEM_ID_COOK_IKASUMI_PASTA"
   },
   {
    "id": 157,
    "name": "KAME_SPA",
    "msg": "in_kame_spaghetti",
-   "enum": "ITEM_ID_COOK_KAME_SPA",
-   "english": "Koopasta Dish"
+   "enum": "ITEM_ID_COOK_KAME_SPA"
   },
   {
    "id": 158,
    "name": "LOVE_NOODLE",
    "msg": "in_love_noodle",
-   "enum": "ITEM_ID_COOK_LOVE_NOODLE",
-   "english": "Love Noodle Dish"
+   "enum": "ITEM_ID_COOK_LOVE_NOODLE"
   },
   {
    "id": 159,
    "name": "SUNNY_SIDE_UP",
    "msg": "in_fried_egg",
-   "enum": "ITEM_ID_COOK_SUNNY_SIDE_UP",
-   "english": "Fried Egg"
+   "enum": "ITEM_ID_COOK_SUNNY_SIDE_UP"
   },
   {
    "id": 160,
    "name": "BOMB_EGG",
    "msg": "in_bomb_egg",
-   "enum": "ITEM_ID_COOK_BOMB_EGG",
-   "english": "Egg Bomb"
+   "enum": "ITEM_ID_COOK_BOMB_EGG"
   },
   {
    "id": 161,
    "name": "DOROCY_DYNAMITE",
    "msg": "in_dorothy_dynamite",
-   "enum": "ITEM_ID_COOK_DOROCY_DYNAMITE",
-   "english": "Dyllis Dynamite"
+   "enum": "ITEM_ID_COOK_DOROCY_DYNAMITE"
   },
   {
    "id": 162,
    "name": "BARBECUE",
    "msg": "in_barbecue",
-   "enum": "ITEM_ID_COOK_BARBECUE",
-   "english": "Roast Meat"
+   "enum": "ITEM_ID_COOK_BARBECUE"
   },
   {
    "id": 163,
    "name": "DINNER",
    "msg": "in_starry_dinner",
-   "enum": "ITEM_ID_COOK_DINNER",
-   "english": "Meteor Meal"
+   "enum": "ITEM_ID_COOK_DINNER"
   },
   {
    "id": 164,
    "name": "OMELET",
    "msg": "in_sesonal_omelet",
-   "enum": "ITEM_ID_COOK_OMELET",
-   "english": "Omelette Plate"
+   "enum": "ITEM_ID_COOK_OMELET"
   },
   {
    "id": 165,
    "name": "HOT_SOUP",
    "msg": "in_hot_soup",
-   "enum": "ITEM_ID_COOK_HOT_SOUP",
-   "english": "Spicy Soup"
+   "enum": "ITEM_ID_COOK_HOT_SOUP"
   },
   {
    "id": 166,
    "name": "HOTDOG",
    "msg": "in_hotdog",
-   "enum": "ITEM_ID_COOK_HOTDOG",
-   "english": "Hot Dog"
+   "enum": "ITEM_ID_COOK_HOTDOG"
   },
   {
    "id": 167,
    "name": "HEALTHY_SALAD",
    "msg": "in_healthy_salad",
-   "enum": "ITEM_ID_COOK_HEALTHY_SALAD",
-   "english": "Healthy Salad"
+   "enum": "ITEM_ID_COOK_HEALTHY_SALAD"
   },
   {
    "id": 168,
    "name": "DOROCY_DINNER",
    "msg": "in_dorothy_dinner",
-   "enum": "ITEM_ID_COOK_DOROCY_DINNER",
-   "english": "Dyllis Dinner"
+   "enum": "ITEM_ID_COOK_DOROCY_DINNER"
   },
   {
    "id": 169,
    "name": "DOROCY_SPECIAL",
    "msg": "in_dorothy_special",
-   "enum": "ITEM_ID_COOK_DOROCY_SPECIAL",
-   "english": "Dyllis Special"
+   "enum": "ITEM_ID_COOK_DOROCY_SPECIAL"
   },
   {
    "id": 170,
    "name": "DOROCY_DELUX",
    "msg": "in_dorothy_delux",
-   "enum": "ITEM_ID_COOK_DOROCY_DELUX",
-   "english": "Dyllis Deluxe"
+   "enum": "ITEM_ID_COOK_DOROCY_DELUX"
   },
   {
    "id": 171,
    "name": "SPACE_MEAL",
    "msg": "in_space_food",
-   "enum": "ITEM_ID_COOK_SPACE_MEAL",
-   "english": "Space Food"
+   "enum": "ITEM_ID_COOK_SPACE_MEAL"
   },
   {
    "id": 172,
    "name": "EMERGENCY_MEAL",
    "msg": "in_emergency provisions",
-   "enum": "ITEM_ID_COOK_EMERGENCY_MEAL",
-   "english": "Emergency Ration"
+   "enum": "ITEM_ID_COOK_EMERGENCY_MEAL"
   },
   {
    "id": 173,
    "name": "DANGEROUS_COOKING",
    "msg": "in_dangerous_dish",
-   "enum": "ITEM_ID_COOK_DANGEROUS_COOKING",
-   "english": "Dangerous Delight"
+   "enum": "ITEM_ID_COOK_DANGEROUS_COOKING"
   },
   {
    "id": 174,
    "name": "TRIAL_PAN",
    "msg": "in_last_dinner",
-   "enum": "ITEM_ID_COOK_TRIAL_PAN",
-   "english": "Trial Stew"
+   "enum": "ITEM_ID_COOK_TRIAL_PAN"
   },
   {
    "id": 175,
    "name": "FAIL_COOKING1",
    "msg": "in_getemono_cook1",
-   "enum": "ITEM_ID_COOK_FAIL_COOKING1",
-   "english": "Mistake"
+   "enum": "ITEM_ID_COOK_FAIL_COOKING1"
   },
   {
    "id": 176,
    "name": "FAIL_COOKING2",
    "msg": "in_getemono_cook2",
-   "enum": "ITEM_ID_COOK_FAIL_COOKING2",
-   "english": "Mistake"
+   "enum": "ITEM_ID_COOK_FAIL_COOKING2"
   },
   {
    "id": 177,
    "name": "HOT_COCOA",
    "msg": "in_hot_cocoa",
-   "enum": "ITEM_ID_COOK_HOT_COCOA",
-   "english": "Warm Cocoa"
+   "enum": "ITEM_ID_COOK_HOT_COCOA"
   },
   {
    "id": 178,
    "name": "DOUBTFUL_DINNER",
    "msg": "in_doubtful_dinner",
-   "enum": "ITEM_ID_COOK_DOUBTFUL_DINNER",
-   "english": "Odd Dinner"
+   "enum": "ITEM_ID_COOK_DOUBTFUL_DINNER"
   },
   {
    "id": 179,
    "name": "IKASUMI_SOUP",
    "msg": "in_ikasumi_soup",
-   "enum": "ITEM_ID_COOK_IKASUMI_SOUP",
-   "english": "Inky Soup"
+   "enum": "ITEM_ID_COOK_IKASUMI_SOUP"
   },
   {
    "id": 180,
    "name": "SUGER_HOUSE",
    "msg": "in_suger_house",
-   "enum": "ITEM_ID_COOK_SUGER_HOUSE",
-   "english": "Gingerbread House"
+   "enum": "ITEM_ID_COOK_SUGER_HOUSE"
   },
   {
    "id": 181,
    "name": "VOLCANO_KINOKO",
    "msg": "in_volcano_kinoko",
-   "enum": "ITEM_ID_COOK_VOLCANO_KINOKO",
-   "english": "Volcano Shroom"
+   "enum": "ITEM_ID_COOK_VOLCANO_KINOKO"
   },
   {
    "id": 182,
    "name": "KAMEKAME_RICE",
    "msg": "in_kamekame_rice",
-   "enum": "ITEM_ID_COOK_KAMEKAME_RICE",
-   "english": "Koopa Pilaf"
+   "enum": "ITEM_ID_COOK_KAMEKAME_RICE"
   },
   {
    "id": 183,
    "name": "KARAKARA_COOK",
    "msg": "in_karakara_cook",
-   "enum": "ITEM_ID_COOK_KARAKARA_COOK",
-   "english": "Spicy Dinner"
+   "enum": "ITEM_ID_COOK_KARAKARA_COOK"
   },
   {
    "id": 184,
    "name": "KINOKO_PUDDING",
    "msg": "in_kinoko_pudding",
-   "enum": "ITEM_ID_COOK_KINOKO_PUDDING",
-   "english": "Shroom Pudding"
+   "enum": "ITEM_ID_COOK_KINOKO_PUDDING"
   },
   {
    "id": 185,
    "name": "GERORIN_FOOD",
    "msg": "in_gerorin_food",
-   "enum": "ITEM_ID_COOK_GERORIN_FOOD",
-   "english": "Heavy Meal"
+   "enum": "ITEM_ID_COOK_GERORIN_FOOD"
   },
   {
    "id": 186,
    "name": "RPIMITIVE_COOK",
    "msg": "in_primitive_cook",
-   "enum": "ITEM_ID_COOK_RPIMITIVE_COOK",
-   "english": "Primordial Dinner"
+   "enum": "ITEM_ID_COOK_RPIMITIVE_COOK"
   },
   {
    "id": 187,
    "name": "GORGEOUS_STEAK",
    "msg": "in_gorgeous_steak",
-   "enum": "ITEM_ID_COOK_GORGEOUS_STEAK",
-   "english": "Gorgeous Steak"
+   "enum": "ITEM_ID_COOK_GORGEOUS_STEAK"
   },
   {
    "id": 188,
    "name": "GOLDEN_FOOD",
    "msg": "in_golden_food",
-   "enum": "ITEM_ID_COOK_GOLDEN_FOOD",
-   "english": "Golden Meal"
+   "enum": "ITEM_ID_COOK_GOLDEN_FOOD"
   },
   {
    "id": 189,
    "name": "GOTTUAN_SET",
    "msg": "in_gottuan_set",
-   "enum": "ITEM_ID_COOK_GOTTUAN_SET",
-   "english": "Luxurious Set"
+   "enum": "ITEM_ID_COOK_GOTTUAN_SET"
   },
   {
    "id": 190,
    "name": "KOBUYAKI",
    "msg": "in_kobuyaki",
-   "enum": "ITEM_ID_COOK_KOBUYAKI",
-   "english": "Roast Whacka Bump"
+   "enum": "ITEM_ID_COOK_KOBUYAKI"
   },
   {
    "id": 191,
    "name": "JESSY_MORNING",
    "msg": "in_jessy_morning",
-   "enum": "ITEM_ID_COOK_JESSY_MORNING",
-   "english": "Dyllis Breakfast"
+   "enum": "ITEM_ID_COOK_JESSY_MORNING"
   },
   {
    "id": 192,
    "name": "JESSY_LUNCH",
    "msg": "in_jessy_lunch",
-   "enum": "ITEM_ID_COOK_JESSY_LUNCH",
-   "english": "Dyllis Lunch"
+   "enum": "ITEM_ID_COOK_JESSY_LUNCH"
   },
   {
    "id": 193,
    "name": "SUIKA_JUICE",
    "msg": "in_suika_juice",
-   "enum": "ITEM_ID_COOK_SUIKA_JUICE",
-   "english": "Sky Juice"
+   "enum": "ITEM_ID_COOK_SUIKA_JUICE"
   },
   {
    "id": 194,
    "name": "SUTAMINA_JUICE",
    "msg": "in_stamina_juice",
-   "enum": "ITEM_ID_COOK_SUTAMINA_JUICE",
-   "english": "Stamina Juice"
+   "enum": "ITEM_ID_COOK_SUTAMINA_JUICE"
   },
   {
    "id": 195,
    "name": "CHOKO_PASTA",
    "msg": "in_choko_pasta",
-   "enum": "ITEM_ID_COOK_CHOKO_PASTA",
-   "english": "Choco Pasta Dish"
+   "enum": "ITEM_ID_COOK_CHOKO_PASTA"
   },
   {
    "id": 196,
    "name": "CHINMI_KINOKO",
    "msg": "in_chinmi_kinoko",
-   "enum": "ITEM_ID_COOK_CHINMI_KINOKO",
-   "english": "Shroom Delicacy"
+   "enum": "ITEM_ID_COOK_CHINMI_KINOKO"
   },
   {
    "id": 197,
    "name": "TUKUSHI_YAKI",
    "msg": "in_tukushi_yaki",
-   "enum": "ITEM_ID_COOK_TUKUSHI_YAKI",
-   "english": "Roast Horsetail"
+   "enum": "ITEM_ID_COOK_TUKUSHI_YAKI"
   },
   {
    "id": 198,
    "name": "HANAJIRU_SYRUP",
    "msg": "in_hanajiru_syrup",
-   "enum": "ITEM_ID_COOK_HANAJIRU_SYRUP",
-   "english": "Sap Syrup"
+   "enum": "ITEM_ID_COOK_HANAJIRU_SYRUP"
   },
   {
    "id": 199,
    "name": "HUMBURG",
    "msg": "in_humburg",
-   "enum": "ITEM_ID_COOK_HUMBURG",
-   "english": "Hamburger"
+   "enum": "ITEM_ID_COOK_HUMBURG"
   },
   {
    "id": 200,
    "name": "PEACH_JUICE",
    "msg": "in_peach_juice",
-   "enum": "ITEM_ID_COOK_PEACH_JUICE",
-   "english": "Peach Juice"
+   "enum": "ITEM_ID_COOK_PEACH_JUICE"
   },
   {
    "id": 201,
    "name": "NORMAL_CHOKO",
    "msg": "in_normal_choko",
-   "enum": "ITEM_ID_COOK_NORMAL_CHOKO",
-   "english": "Standard Chocolate"
+   "enum": "ITEM_ID_COOK_NORMAL_CHOKO"
   },
   {
    "id": 202,
    "name": "FRUITS_CAKE",
    "msg": "in_fruits_cake",
-   "enum": "ITEM_ID_COOK_FRUITS_CAKE",
-   "english": "Fruity Cake"
+   "enum": "ITEM_ID_COOK_FRUITS_CAKE"
   },
   {
    "id": 203,
    "name": "FRUITS_HUMBURG",
    "msg": "in_fruits_humburg",
-   "enum": "ITEM_ID_COOK_FRUITS_HUMBURG",
-   "english": "Fruity Hamburger"
+   "enum": "ITEM_ID_COOK_FRUITS_HUMBURG"
   },
   {
    "id": 204,
    "name": "FRUITS_PONCH",
    "msg": "in_fruits_ponch",
-   "enum": "ITEM_ID_COOK_FRUITS_PONCH",
-   "english": "Fruity Punch"
+   "enum": "ITEM_ID_COOK_FRUITS_PONCH"
   },
   {
    "id": 205,
    "name": "FRUITS_KINOKO",
    "msg": "in_fruits_kinoko",
-   "enum": "ITEM_ID_COOK_FRUITS_KINOKO",
-   "english": "Fruity Shroom"
+   "enum": "ITEM_ID_COOK_FRUITS_KINOKO"
   },
   {
    "id": 206,
    "name": "FRAME_FOOD",
    "msg": "in_frame_food",
-   "enum": "ITEM_ID_COOK_FRAME_FOOD",
-   "english": "Block Meal"
+   "enum": "ITEM_ID_COOK_FRAME_FOOD"
   },
   {
    "id": 207,
    "name": "VEGETABLES_SET",
    "msg": "in_vegetables_set",
-   "enum": "ITEM_ID_COOK_VEGETABLES_SET",
-   "english": "Veggie Set"
+   "enum": "ITEM_ID_COOK_VEGETABLES_SET"
   },
   {
    "id": 208,
    "name": "HENTEKO_EKIS",
    "msg": "in_henteko_ekis",
-   "enum": "ITEM_ID_COOK_HENTEKO_EKIS",
-   "english": "Weird Extract"
+   "enum": "ITEM_ID_COOK_HENTEKO_EKIS"
   },
   {
    "id": 209,
    "name": "HOGEHOGE_SNUCK",
    "msg": "in_hogehoge_snuck",
-   "enum": "ITEM_ID_COOK_HOGEHOGE_SNUCK",
-   "english": "Awesome Snack"
+   "enum": "ITEM_ID_COOK_HOGEHOGE_SNUCK"
   },
   {
    "id": 210,
    "name": "MANGO_JUICE",
    "msg": "in_mango_juice",
-   "enum": "ITEM_ID_COOK_MANGO_JUICE",
-   "english": "Mango Juice"
+   "enum": "ITEM_ID_COOK_MANGO_JUICE"
   },
   {
    "id": 211,
    "name": "MEET_PASTA",
    "msg": "in_meet_pasta",
-   "enum": "ITEM_ID_COOK_MEET_PASTA",
-   "english": "Meat Pasta Dish"
+   "enum": "ITEM_ID_COOK_MEET_PASTA"
   },
   {
    "id": 212,
    "name": "MIX_SHAKE",
    "msg": "in_mix_shake",
-   "enum": "ITEM_ID_COOK_MIX_SHAKE",
-   "english": "Mixed Shake"
+   "enum": "ITEM_ID_COOK_MIX_SHAKE"
   },
   {
    "id": 213,
    "name": "MIRACLE_COOK",
    "msg": "in_miracle_cook",
-   "enum": "ITEM_ID_COOK_MIRACLE_COOK",
-   "english": "Miracle Dinner"
+   "enum": "ITEM_ID_COOK_MIRACLE_COOK"
   },
   {
    "id": 214,
    "name": "MEGATON_DINNER",
    "msg": "in_megaton_dinner",
-   "enum": "ITEM_ID_COOK_MEGATON_DINNER",
-   "english": "Megaton Dinner"
+   "enum": "ITEM_ID_COOK_MEGATON_DINNER"
   },
   {
    "id": 215,
    "name": "LOVELY_CHOKO",
    "msg": "in_lovely_choko",
-   "enum": "ITEM_ID_COOK_LOVELY_CHOKO",
-   "english": "Lovely Chocolate"
+   "enum": "ITEM_ID_COOK_LOVELY_CHOKO"
   },
   {
    "id": 216,
    "name": "MARIO",
    "msg": "in_pc_mario",
-   "enum": "ITEM_ID_CHAR_MARIO",
-   "english": "Mario"
+   "enum": "ITEM_ID_CHAR_MARIO"
   },
   {
    "id": 217,
    "name": "PEACH",
    "msg": "in_pc_peach",
-   "enum": "ITEM_ID_CHAR_PEACH",
-   "english": "Peach"
+   "enum": "ITEM_ID_CHAR_PEACH"
   },
   {
    "id": 218,
    "name": "KOOPA",
    "msg": "in_pc_koopa",
-   "enum": "ITEM_ID_CHAR_KOOPA",
-   "english": "Bowser"
+   "enum": "ITEM_ID_CHAR_KOOPA"
   },
   {
    "id": 219,
    "name": "LUIGI",
    "msg": "in_pc_luigi",
-   "enum": "ITEM_ID_CHAR_LUIGI",
-   "english": "Luigi"
+   "enum": "ITEM_ID_CHAR_LUIGI"
   },
   {
    "id": 220,
    "name": "MONOSHIRI",
    "msg": "in_fairy_main",
-   "enum": "ITEM_ID_FAIRY_MONOSHIRI",
-   "english": "Tippi"
+   "enum": "ITEM_ID_FAIRY_MONOSHIRI"
   },
   {
    "id": 221,
    "name": "THROW",
    "msg": "in_fairy_throw",
-   "enum": "ITEM_ID_FAIRY_THROW",
-   "english": "Thoreau"
+   "enum": "ITEM_ID_FAIRY_THROW"
   },
   {
    "id": 222,
    "name": "BAKUDAN",
    "msg": "in_fairy_bomb",
-   "enum": "ITEM_ID_FAIRY_BAKUDAN",
-   "english": "Boomer"
+   "enum": "ITEM_ID_FAIRY_BAKUDAN"
   },
   {
    "id": 223,
    "name": "SLIT",
    "msg": "in_fairy_slit",
-   "enum": "ITEM_ID_FAIRY_SLIT",
-   "english": "Slim"
+   "enum": "ITEM_ID_FAIRY_SLIT"
   },
   {
    "id": 224,
    "name": "HIPATTACK",
    "msg": "in_fairy_hip",
-   "enum": "ITEM_ID_FAIRY_HIPATTACK",
-   "english": "Thudley"
+   "enum": "ITEM_ID_FAIRY_HIPATTACK"
   },
   {
    "id": 225,
    "name": "MOVE",
    "msg": "in_fairy_move",
-   "enum": "ITEM_ID_FAIRY_MOVE",
-   "english": "Carrie"
+   "enum": "ITEM_ID_FAIRY_MOVE"
   },
   {
    "id": 226,
    "name": "KUUKAN",
    "msg": "in_fairy_turn",
-   "enum": "ITEM_ID_FAIRY_KUUKAN",
-   "english": "Fleep"
+   "enum": "ITEM_ID_FAIRY_KUUKAN"
   },
   {
    "id": 227,
    "name": "HAMMER",
    "msg": "in_fairy_hammer",
-   "enum": "ITEM_ID_FAIRY_HAMMER",
-   "english": "Cudge"
+   "enum": "ITEM_ID_FAIRY_HAMMER"
   },
   {
    "id": 228,
    "name": "MINI_MINI",
    "msg": "in_fairy_mini",
-   "enum": "ITEM_ID_FAIRY_MINI_MINI",
-   "english": "Dottie"
+   "enum": "ITEM_ID_FAIRY_MINI_MINI"
   },
   {
    "id": 229,
    "name": "PIKKYORO_A",
    "msg": "in_fairy_sound",
-   "enum": "ITEM_ID_FAIRY_PIKKYORO_A",
-   "english": "Piccolo"
+   "enum": "ITEM_ID_FAIRY_PIKKYORO_A"
   },
   {
    "id": 230,
    "name": "COUNTER",
    "msg": "in_fairy_counter",
-   "enum": "ITEM_ID_FAIRY_COUNTER",
-   "english": "Barry"
+   "enum": "ITEM_ID_FAIRY_COUNTER"
   },
   {
    "id": 231,
    "name": "SPIN_DASH",
    "msg": "in_fairy_dush",
-   "enum": "ITEM_ID_FAIRY_SPIN_DASH",
-   "english": "Dashell"
+   "enum": "ITEM_ID_FAIRY_SPIN_DASH"
   },
   {
    "id": 232,
    "name": "ICON",
    "msg": "msg_unknown_item",
-   "enum": "ITEM_ID_SPECIAL_ICON",
-   "english": "Unavailable Item"
+   "enum": "ITEM_ID_SPECIAL_ICON"
   },
   {
    "id": 233,
    "name": "CARD_FUKURO",
    "msg": "cardshop_fukuro_01",
-   "enum": "ITEM_ID_SPECIAL_CARD_FUKURO",
-   "english": "Card Bag"
+   "enum": "ITEM_ID_SPECIAL_CARD_FUKURO"
   },
   {
    "id": 234,
    "name": "NO01",
    "msg": "mapshop_name_01",
-   "enum": "ITEM_ID_MAP_NO01",
-   "english": "Map 1"
+   "enum": "ITEM_ID_MAP_NO01"
   },
   {
    "id": 235,
    "name": "NO02",
    "msg": "mapshop_name_02",
-   "enum": "ITEM_ID_MAP_NO02",
-   "english": "Map 2"
+   "enum": "ITEM_ID_MAP_NO02"
   },
   {
    "id": 236,
    "name": "NO03",
    "msg": "mapshop_name_03",
-   "enum": "ITEM_ID_MAP_NO03",
-   "english": "Map 3"
+   "enum": "ITEM_ID_MAP_NO03"
   },
   {
    "id": 237,
    "name": "NO04",
    "msg": "mapshop_name_04",
-   "enum": "ITEM_ID_MAP_NO04",
-   "english": "Map 4"
+   "enum": "ITEM_ID_MAP_NO04"
   },
   {
    "id": 238,
    "name": "NO05",
    "msg": "mapshop_name_05",
-   "enum": "ITEM_ID_MAP_NO05",
-   "english": "Map 5"
+   "enum": "ITEM_ID_MAP_NO05"
   },
   {
    "id": 239,
    "name": "NO06",
    "msg": "mapshop_name_06",
-   "enum": "ITEM_ID_MAP_NO06",
-   "english": "Map 6"
+   "enum": "ITEM_ID_MAP_NO06"
   },
   {
    "id": 240,
    "name": "NO07",
    "msg": "mapshop_name_07",
-   "enum": "ITEM_ID_MAP_NO07",
-   "english": "Map 7"
+   "enum": "ITEM_ID_MAP_NO07"
   },
   {
    "id": 241,
    "name": "NO08",
    "msg": "mapshop_name_08",
-   "enum": "ITEM_ID_MAP_NO08",
-   "english": "Map 8"
+   "enum": "ITEM_ID_MAP_NO08"
   },
   {
    "id": 242,
    "name": "NO09",
    "msg": "mapshop_name_09",
-   "enum": "ITEM_ID_MAP_NO09",
-   "english": "Map 9"
+   "enum": "ITEM_ID_MAP_NO09"
   },
   {
    "id": 243,
    "name": "NO10",
    "msg": "mapshop_name_10",
-   "enum": "ITEM_ID_MAP_NO10",
-   "english": "Map 10"
+   "enum": "ITEM_ID_MAP_NO10"
   },
   {
    "id": 244,
    "name": "NO11",
    "msg": "mapshop_name_11",
-   "enum": "ITEM_ID_MAP_NO11",
-   "english": "Map 11"
+   "enum": "ITEM_ID_MAP_NO11"
   },
   {
    "id": 245,
    "name": "NO12",
    "msg": "mapshop_name_12",
-   "enum": "ITEM_ID_MAP_NO12",
-   "english": "Map 12"
+   "enum": "ITEM_ID_MAP_NO12"
   },
   {
    "id": 246,
    "name": "NO13",
    "msg": "mapshop_name_13",
-   "enum": "ITEM_ID_MAP_NO13",
-   "english": "Map 13"
+   "enum": "ITEM_ID_MAP_NO13"
   },
   {
    "id": 247,
    "name": "NO14",
    "msg": "mapshop_name_14",
-   "enum": "ITEM_ID_MAP_NO14",
-   "english": "Map 14"
+   "enum": "ITEM_ID_MAP_NO14"
   },
   {
    "id": 248,
    "name": "NO15",
    "msg": "mapshop_name_15",
-   "enum": "ITEM_ID_MAP_NO15",
-   "english": "Map 15"
+   "enum": "ITEM_ID_MAP_NO15"
   },
   {
    "id": 249,
    "name": "NO16",
    "msg": "mapshop_name_16",
-   "enum": "ITEM_ID_MAP_NO16",
-   "english": "Map 16"
+   "enum": "ITEM_ID_MAP_NO16"
   },
   {
    "id": 250,
    "name": "NO17",
    "msg": "mapshop_name_17",
-   "enum": "ITEM_ID_MAP_NO17",
-   "english": "Map 17"
+   "enum": "ITEM_ID_MAP_NO17"
   },
   {
    "id": 251,
    "name": "NO18",
    "msg": "mapshop_name_18",
-   "enum": "ITEM_ID_MAP_NO18",
-   "english": "Map 18"
+   "enum": "ITEM_ID_MAP_NO18"
   },
   {
    "id": 252,
    "name": "NO19",
    "msg": "mapshop_name_19",
-   "enum": "ITEM_ID_MAP_NO19",
-   "english": "Map 19"
+   "enum": "ITEM_ID_MAP_NO19"
   },
   {
    "id": 253,
    "name": "NO20",
    "msg": "mapshop_name_20",
-   "enum": "ITEM_ID_MAP_NO20",
-   "english": "Map 20"
+   "enum": "ITEM_ID_MAP_NO20"
   },
   {
    "id": 254,
    "name": "NO21",
    "msg": "mapshop_name_21",
-   "enum": "ITEM_ID_MAP_NO21",
-   "english": "Map 21"
+   "enum": "ITEM_ID_MAP_NO21"
   },
   {
    "id": 255,
    "name": "NO22",
    "msg": "mapshop_name_22",
-   "enum": "ITEM_ID_MAP_NO22",
-   "english": "Map 22"
+   "enum": "ITEM_ID_MAP_NO22"
   },
   {
    "id": 256,
    "name": "NO23",
    "msg": "mapshop_name_23",
-   "enum": "ITEM_ID_MAP_NO23",
-   "english": "Map 23"
+   "enum": "ITEM_ID_MAP_NO23"
   },
   {
    "id": 257,
    "name": "NO24",
    "msg": "mapshop_name_24",
-   "enum": "ITEM_ID_MAP_NO24",
-   "english": "Map 24"
+   "enum": "ITEM_ID_MAP_NO24"
   },
   {
    "id": 258,
    "name": "NO25",
    "msg": "mapshop_name_25",
-   "enum": "ITEM_ID_MAP_NO25",
-   "english": "Map 25"
+   "enum": "ITEM_ID_MAP_NO25"
   },
   {
    "id": 259,
    "name": "NO26",
    "msg": "mapshop_name_26",
-   "enum": "ITEM_ID_MAP_NO26",
-   "english": "Map 26"
+   "enum": "ITEM_ID_MAP_NO26"
   },
   {
    "id": 260,
    "name": "NO27",
    "msg": "mapshop_name_27",
-   "enum": "ITEM_ID_MAP_NO27",
-   "english": "Map 27"
+   "enum": "ITEM_ID_MAP_NO27"
   },
   {
    "id": 261,
    "name": "NO28",
    "msg": "mapshop_name_28",
-   "enum": "ITEM_ID_MAP_NO28",
-   "english": "Map 28"
+   "enum": "ITEM_ID_MAP_NO28"
   },
   {
    "id": 262,
    "name": "NO29",
    "msg": "mapshop_name_29",
-   "enum": "ITEM_ID_MAP_NO29",
-   "english": "Map 29"
+   "enum": "ITEM_ID_MAP_NO29"
   },
   {
    "id": 263,
    "name": "NO30",
    "msg": "mapshop_name_30",
-   "enum": "ITEM_ID_MAP_NO30",
-   "english": "Map 30"
+   "enum": "ITEM_ID_MAP_NO30"
   },
   {
    "id": 264,
    "name": "NO31",
    "msg": "mapshop_name_31",
-   "enum": "ITEM_ID_MAP_NO31",
-   "english": "Map 31"
+   "enum": "ITEM_ID_MAP_NO31"
   },
   {
    "id": 265,
    "name": "NO32",
    "msg": "mapshop_name_32",
-   "enum": "ITEM_ID_MAP_NO32",
-   "english": "Map 32"
+   "enum": "ITEM_ID_MAP_NO32"
   },
   {
    "id": 266,
    "name": "NO33",
    "msg": "mapshop_name_33",
-   "enum": "ITEM_ID_MAP_NO33",
-   "english": "Map 33"
+   "enum": "ITEM_ID_MAP_NO33"
   },
   {
    "id": 267,
    "name": "NO34",
    "msg": "mapshop_name_34",
-   "enum": "ITEM_ID_MAP_NO34",
-   "english": "Map 34"
+   "enum": "ITEM_ID_MAP_NO34"
   },
   {
    "id": 268,
    "name": "NO35",
    "msg": "mapshop_name_35",
-   "enum": "ITEM_ID_MAP_NO35",
-   "english": "Map 35"
+   "enum": "ITEM_ID_MAP_NO35"
   },
   {
    "id": 269,
    "name": "NO36",
    "msg": "mapshop_name_36",
-   "enum": "ITEM_ID_MAP_NO36",
-   "english": "Map 36"
+   "enum": "ITEM_ID_MAP_NO36"
   },
   {
    "id": 270,
    "name": "NO37",
    "msg": "mapshop_name_37",
-   "enum": "ITEM_ID_MAP_NO37",
-   "english": "Map 37"
+   "enum": "ITEM_ID_MAP_NO37"
   },
   {
    "id": 271,
    "name": "NO38",
    "msg": "mapshop_name_38",
-   "enum": "ITEM_ID_MAP_NO38",
-   "english": "Map 38"
+   "enum": "ITEM_ID_MAP_NO38"
   },
   {
    "id": 272,
    "name": "NO39",
    "msg": "mapshop_name_39",
-   "enum": "ITEM_ID_MAP_NO39",
-   "english": "Map 39"
+   "enum": "ITEM_ID_MAP_NO39"
   },
   {
    "id": 273,
    "name": "NO40",
    "msg": "mapshop_name_40",
-   "enum": "ITEM_ID_MAP_NO40",
-   "english": "Map 40"
+   "enum": "ITEM_ID_MAP_NO40"
   },
   {
    "id": 274,
    "name": "NO41",
    "msg": "mapshop_name_41",
-   "enum": "ITEM_ID_MAP_NO41",
-   "english": "Map 41"
+   "enum": "ITEM_ID_MAP_NO41"
   },
   {
    "id": 275,
    "name": "NO42",
    "msg": "mapshop_name_42",
-   "enum": "ITEM_ID_MAP_NO42",
-   "english": "Map 42"
+   "enum": "ITEM_ID_MAP_NO42"
   },
   {
    "id": 276,
    "name": "NO43",
    "msg": "mapshop_name_43",
-   "enum": "ITEM_ID_MAP_NO43",
-   "english": "Map 43"
+   "enum": "ITEM_ID_MAP_NO43"
   },
   {
    "id": 277,
    "name": "NO44",
    "msg": "mapshop_name_44",
-   "enum": "ITEM_ID_MAP_NO44",
-   "english": "Map 44"
+   "enum": "ITEM_ID_MAP_NO44"
   },
   {
    "id": 278,
    "name": "NO45",
    "msg": "mapshop_name_45",
-   "enum": "ITEM_ID_MAP_NO45",
-   "english": "Map 45"
+   "enum": "ITEM_ID_MAP_NO45"
   },
   {
    "id": 279,
    "name": "NO46",
    "msg": "mapshop_name_46",
-   "enum": "ITEM_ID_MAP_NO46",
-   "english": "Map 46"
+   "enum": "ITEM_ID_MAP_NO46"
   },
   {
    "id": 280,
    "name": "NO47",
    "msg": "mapshop_name_47",
-   "enum": "ITEM_ID_MAP_NO47",
-   "english": "Map 47"
+   "enum": "ITEM_ID_MAP_NO47"
   },
   {
    "id": 281,
    "name": "NO48",
    "msg": "mapshop_name_48",
-   "enum": "ITEM_ID_MAP_NO48",
-   "english": "Map 48"
+   "enum": "ITEM_ID_MAP_NO48"
   },
   {
    "id": 282,
    "name": "KURIBOO",
    "msg": "ename_000",
-   "enum": "ITEM_ID_CARD_KURIBOO",
-   "english": "Goomba"
+   "enum": "ITEM_ID_CARD_KURIBOO"
   },
   {
    "id": 283,
    "name": "TOGEKURI",
    "msg": "ename_001",
-   "enum": "ITEM_ID_CARD_TOGEKURI",
-   "english": "Spiked Goomba"
+   "enum": "ITEM_ID_CARD_TOGEKURI"
   },
   {
    "id": 284,
    "name": "TOGEKURI_BLK",
    "msg": "ename_292",
-   "enum": "ITEM_ID_CARD_TOGEKURI_BLK",
-   "english": "Dark Spiked Goomba"
+   "enum": "ITEM_ID_CARD_TOGEKURI_BLK"
   },
   {
    "id": 285,
    "name": "PATAKURI",
    "msg": "ename_003",
-   "enum": "ITEM_ID_CARD_PATAKURI",
-   "english": "Paragoomba"
+   "enum": "ITEM_ID_CARD_PATAKURI"
   },
   {
    "id": 286,
    "name": "MD_PATAKURI_BLK",
    "msg": "ename_293",
-   "enum": "ITEM_ID_CARD_MD_PATAKURI_BLK",
-   "english": "Dark Paragoomba"
+   "enum": "ITEM_ID_CARD_MD_PATAKURI_BLK"
   },
   {
    "id": 287,
    "name": "YAMI_KURIBOO",
    "msg": "ename_004",
-   "enum": "ITEM_ID_CARD_YAMI_KURIBOO",
-   "english": "Gloomba"
+   "enum": "ITEM_ID_CARD_YAMI_KURIBOO"
   },
   {
    "id": 288,
    "name": "ZUTSUKI_KURIBOO",
    "msg": "ename_005",
-   "enum": "ITEM_ID_CARD_ZUTSUKI_KURIBOO",
-   "english": "Headbonk Goomba"
+   "enum": "ITEM_ID_CARD_ZUTSUKI_KURIBOO"
   },
   {
    "id": 289,
    "name": "ZUTSUKI_KURIBOO_BLK",
    "msg": "ename_294",
-   "enum": "ITEM_ID_CARD_ZUTSUKI_KURIBOO_BLK",
-   "english": "Dark Headbonk Goomba"
+   "enum": "ITEM_ID_CARD_ZUTSUKI_KURIBOO_BLK"
   },
   {
    "id": 290,
    "name": "MD_KURIBOO_BLK",
    "msg": "ename_295",
-   "enum": "ITEM_ID_CARD_MD_KURIBOO_BLK",
-   "english": "Dark Goomba"
+   "enum": "ITEM_ID_CARD_MD_KURIBOO_BLK"
   },
   {
    "id": 291,
    "name": "NOKONOKO",
    "msg": "ename_008",
-   "enum": "ITEM_ID_CARD_NOKONOKO",
-   "english": "Koopa Troopa"
+   "enum": "ITEM_ID_CARD_NOKONOKO"
   },
   {
    "id": 292,
    "name": "TOGENOKO",
    "msg": "ename_012",
-   "enum": "ITEM_ID_CARD_TOGENOKO",
-   "english": "Koopatrol"
+   "enum": "ITEM_ID_CARD_TOGENOKO"
   },
   {
    "id": 293,
    "name": "MD_TOGENOKO_BLK",
    "msg": "ename_296",
-   "enum": "ITEM_ID_CARD_MD_TOGENOKO_BLK",
-   "english": "Dark Koopatrol"
+   "enum": "ITEM_ID_CARD_MD_TOGENOKO_BLK"
   },
   {
    "id": 294,
    "name": "MD_NOKONOKO_BLK",
    "msg": "ename_287",
-   "enum": "ITEM_ID_CARD_MD_NOKONOKO_BLK",
-   "english": "Dark Koopa"
+   "enum": "ITEM_ID_CARD_MD_NOKONOKO_BLK"
   },
   {
    "id": 295,
    "name": "BOSS_NOKONOKO",
    "msg": "ename_015",
-   "enum": "ITEM_ID_CARD_BOSS_NOKONOKO",
-   "english": "Mega Koopa"
+   "enum": "ITEM_ID_CARD_BOSS_NOKONOKO"
   },
   {
    "id": 296,
    "name": "PATAPATA",
    "msg": "ename_016",
-   "enum": "ITEM_ID_CARD_PATAPATA",
-   "english": "Paratroopa"
+   "enum": "ITEM_ID_CARD_PATAPATA"
   },
   {
    "id": 297,
    "name": "MD_PATAPATA_BLK",
    "msg": "ename_297",
-   "enum": "ITEM_ID_CARD_MD_PATAPATA_BLK",
-   "english": "Dark Paratroopa"
+   "enum": "ITEM_ID_CARD_MD_PATAPATA_BLK"
   },
   {
    "id": 298,
    "name": "MET",
    "msg": "ename_022",
-   "enum": "ITEM_ID_CARD_MET",
-   "english": "Buzzy Beetle"
+   "enum": "ITEM_ID_CARD_MET"
   },
   {
    "id": 299,
    "name": "TOGE_MET",
    "msg": "ename_024",
-   "enum": "ITEM_ID_CARD_TOGE_MET",
-   "english": "Spike Top"
+   "enum": "ITEM_ID_CARD_TOGE_MET"
   },
   {
    "id": 300,
    "name": "TOGE_MET_BLK",
    "msg": "ename_298",
-   "enum": "ITEM_ID_CARD_TOGE_MET_BLK",
-   "english": "Dark Spike Top"
+   "enum": "ITEM_ID_CARD_TOGE_MET_BLK"
   },
   {
    "id": 301,
    "name": "PATA_MET",
    "msg": "ename_028",
-   "enum": "ITEM_ID_CARD_PATA_MET",
-   "english": "Parabuzzy"
+   "enum": "ITEM_ID_CARD_PATA_MET"
   },
   {
    "id": 302,
    "name": "PATATOGE_MET",
    "msg": "ename_029",
-   "enum": "ITEM_ID_CARD_PATATOGE_MET",
-   "english": "Spiky Parabuzzy"
+   "enum": "ITEM_ID_CARD_PATATOGE_MET"
   },
   {
    "id": 303,
    "name": "STONE_MET",
    "msg": "ename_030",
-   "enum": "ITEM_ID_CARD_STONE_MET",
-   "english": "Stone Buzzy"
+   "enum": "ITEM_ID_CARD_STONE_MET"
   },
   {
    "id": 304,
    "name": "STONE_MET_BLK",
    "msg": "ename_299",
-   "enum": "ITEM_ID_CARD_STONE_MET_BLK",
-   "english": "Dark Stone Buzzy"
+   "enum": "ITEM_ID_CARD_STONE_MET_BLK"
   },
   {
    "id": 305,
    "name": "TOGEZO",
    "msg": "ename_031",
-   "enum": "ITEM_ID_CARD_TOGEZO",
-   "english": "Spiny"
+   "enum": "ITEM_ID_CARD_TOGEZO"
   },
   {
    "id": 306,
    "name": "MD_TOGEZO_BLK",
    "msg": "ename_300",
-   "enum": "ITEM_ID_CARD_MD_TOGEZO_BLK",
-   "english": "Dark Spiny"
+   "enum": "ITEM_ID_CARD_MD_TOGEZO_BLK"
   },
   {
    "id": 307,
    "name": "JUGEMU",
    "msg": "ename_034",
-   "enum": "ITEM_ID_CARD_JUGEMU",
-   "english": "Lakitu"
+   "enum": "ITEM_ID_CARD_JUGEMU"
   },
   {
    "id": 308,
    "name": "HONENOKO",
    "msg": "ename_036",
-   "enum": "ITEM_ID_CARD_HONENOKO",
-   "english": "Dull Bones"
+   "enum": "ITEM_ID_CARD_HONENOKO"
   },
   {
    "id": 309,
    "name": "HONENOKO_BLK",
    "msg": "ename_301",
-   "enum": "ITEM_ID_CARD_HONENOKO_BLK",
-   "english": "Dark Dull Bones"
+   "enum": "ITEM_ID_CARD_HONENOKO_BLK"
   },
   {
    "id": 310,
    "name": "KARON",
    "msg": "ename_038",
-   "enum": "ITEM_ID_CARD_KARON",
-   "english": "Dry Bones"
+   "enum": "ITEM_ID_CARD_KARON"
   },
   {
    "id": 311,
    "name": "HAMMER_BROS",
    "msg": "ename_040",
-   "enum": "ITEM_ID_CARD_HAMMER_BROS",
-   "english": "Hammer Bro"
+   "enum": "ITEM_ID_CARD_HAMMER_BROS"
   },
   {
    "id": 312,
    "name": "BOOM_BROS",
    "msg": "ename_042",
-   "enum": "ITEM_ID_CARD_BOOM_BROS",
-   "english": "Boomerang Bro"
+   "enum": "ITEM_ID_CARD_BOOM_BROS"
   },
   {
    "id": 313,
    "name": "FIRE_BROS",
    "msg": "ename_044",
-   "enum": "ITEM_ID_CARD_FIRE_BROS",
-   "english": "Fire Bro"
+   "enum": "ITEM_ID_CARD_FIRE_BROS"
   },
   {
    "id": 314,
    "name": "MD_HAMMER_BROS_BLK",
    "msg": "ename_302",
-   "enum": "ITEM_ID_CARD_MD_HAMMER_BROS_BLK",
-   "english": "Dark Hammer Bro"
+   "enum": "ITEM_ID_CARD_MD_HAMMER_BROS_BLK"
   },
   {
    "id": 315,
    "name": "MD_BOOM_BROS_BLK",
    "msg": "ename_303",
-   "enum": "ITEM_ID_CARD_MD_BOOM_BROS_BLK",
-   "english": "Dark Boomerang Bro"
+   "enum": "ITEM_ID_CARD_MD_BOOM_BROS_BLK"
   },
   {
    "id": 316,
    "name": "MD_FIRE_BROS_BLK",
    "msg": "ename_304",
-   "enum": "ITEM_ID_CARD_MD_FIRE_BROS_BLK",
-   "english": "Dark Fire Bro"
+   "enum": "ITEM_ID_CARD_MD_FIRE_BROS_BLK"
   },
   {
    "id": 317,
    "name": "KAMEC_B",
    "msg": "ename_052",
-   "enum": "ITEM_ID_CARD_KAMEC_B",
-   "english": "Magikoopa"
+   "enum": "ITEM_ID_CARD_KAMEC_B"
   },
   {
    "id": 318,
    "name": "KAMEC_R_BLK",
    "msg": "ename_305",
-   "enum": "ITEM_ID_CARD_KAMEC_R_BLK",
-   "english": "Dark Magikoopa"
+   "enum": "ITEM_ID_CARD_KAMEC_R_BLK"
   },
   {
    "id": 319,
    "name": "KOURA_SHOOTER",
    "msg": "ename_064",
-   "enum": "ITEM_ID_CARD_KOURA_SHOOTER",
-   "english": "Koopa Striker"
+   "enum": "ITEM_ID_CARD_KOURA_SHOOTER"
   },
   {
    "id": 320,
    "name": "KOURA_SHOOTER_M",
    "msg": "ename_066",
-   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_M",
-   "english": "Toopa Striker"
+   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_M"
   },
   {
    "id": 321,
    "name": "KOURA_SHOOTER_H",
    "msg": "ename_068",
-   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_H",
-   "english": "Soopa Striker"
+   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_H"
   },
   {
    "id": 322,
    "name": "KOURA_SHOOTER_H_BLK",
    "msg": "ename_306",
-   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_H_BLK",
-   "english": "Dark Striker"
+   "enum": "ITEM_ID_CARD_KOURA_SHOOTER_H_BLK"
   },
   {
    "id": 323,
    "name": "GABON",
    "msg": "ename_070",
-   "enum": "ITEM_ID_CARD_GABON",
-   "english": "Clubba"
+   "enum": "ITEM_ID_CARD_GABON"
   },
   {
    "id": 324,
    "name": "GABON_BLK",
    "msg": "ename_307",
-   "enum": "ITEM_ID_CARD_GABON_BLK",
-   "english": "Dark Clubba"
+   "enum": "ITEM_ID_CARD_GABON_BLK"
   },
   {
    "id": 325,
    "name": "PAKKUN_FLOWER",
    "msg": "ename_071",
-   "enum": "ITEM_ID_CARD_PAKKUN_FLOWER",
-   "english": "Piranha Plant"
+   "enum": "ITEM_ID_CARD_PAKKUN_FLOWER"
   },
   {
    "id": 326,
    "name": "POISON_PAKKUN",
    "msg": "ename_073",
-   "enum": "ITEM_ID_CARD_POISON_PAKKUN",
-   "english": "Putrid Piranha"
+   "enum": "ITEM_ID_CARD_POISON_PAKKUN"
   },
   {
    "id": 327,
    "name": "ICE_PAKKUN",
    "msg": "ename_076",
-   "enum": "ITEM_ID_CARD_ICE_PAKKUN",
-   "english": "Frost Piranha"
+   "enum": "ITEM_ID_CARD_ICE_PAKKUN"
   },
   {
    "id": 328,
    "name": "PANSY",
    "msg": "ename_079",
-   "enum": "ITEM_ID_CARD_PANSY",
-   "english": "Crazee Dayzee"
+   "enum": "ITEM_ID_CARD_PANSY"
   },
   {
    "id": 329,
    "name": "KIRA_PANSY",
    "msg": "ename_081",
-   "enum": "ITEM_ID_CARD_KIRA_PANSY",
-   "english": "Amazy Dayzee"
+   "enum": "ITEM_ID_CARD_KIRA_PANSY"
   },
   {
    "id": 330,
    "name": "KIRA_PANSY_BLK",
    "msg": "ename_308",
-   "enum": "ITEM_ID_CARD_KIRA_PANSY_BLK",
-   "english": "Dark Dayzee"
+   "enum": "ITEM_ID_CARD_KIRA_PANSY_BLK"
   },
   {
    "id": 331,
    "name": "CHOROBON",
    "msg": "ename_085",
-   "enum": "ITEM_ID_CARD_CHOROBON",
-   "english": "Fuzzy"
+   "enum": "ITEM_ID_CARD_CHOROBON"
   },
   {
    "id": 332,
    "name": "FLOWER_CHOROBON",
    "msg": "ename_086",
-   "enum": "ITEM_ID_CARD_FLOWER_CHOROBON",
-   "english": "Pink Fuzzy"
+   "enum": "ITEM_ID_CARD_FLOWER_CHOROBON"
   },
   {
    "id": 333,
    "name": "FLOWER_CHOROBON_BLK",
    "msg": "ename_309",
-   "enum": "ITEM_ID_CARD_FLOWER_CHOROBON_BLK",
-   "english": "Dark Fuzzy"
+   "enum": "ITEM_ID_CARD_FLOWER_CHOROBON_BLK"
   },
   {
    "id": 334,
    "name": "SAMBO",
    "msg": "ename_091",
-   "enum": "ITEM_ID_CARD_SAMBO",
-   "english": "Pokey"
+   "enum": "ITEM_ID_CARD_SAMBO"
   },
   {
    "id": 335,
    "name": "DOKU_SAMBO",
    "msg": "ename_093",
-   "enum": "ITEM_ID_CARD_DOKU_SAMBO",
-   "english": "Poison Pokey"
+   "enum": "ITEM_ID_CARD_DOKU_SAMBO"
   },
   {
    "id": 336,
    "name": "DOKU_SAMBO_BLK",
    "msg": "ename_310",
-   "enum": "ITEM_ID_CARD_DOKU_SAMBO_BLK",
-   "english": "Dark Pokey"
+   "enum": "ITEM_ID_CARD_DOKU_SAMBO_BLK"
   },
   {
    "id": 337,
    "name": "BASABASA",
    "msg": "ename_095",
-   "enum": "ITEM_ID_CARD_BASABASA",
-   "english": "Swooper"
+   "enum": "ITEM_ID_CARD_BASABASA"
   },
   {
    "id": 338,
    "name": "PUKUPUKU",
    "msg": "ename_097",
-   "enum": "ITEM_ID_CARD_PUKUPUKU",
-   "english": "Cheep Cheep"
+   "enum": "ITEM_ID_CARD_PUKUPUKU"
   },
   {
    "id": 339,
    "name": "GESSO",
    "msg": "ename_100",
-   "enum": "ITEM_ID_CARD_GESSO",
-   "english": "Blooper"
+   "enum": "ITEM_ID_CARD_GESSO"
   },
   {
    "id": 340,
    "name": "FUGUMODOKI",
    "msg": "ename_102",
-   "enum": "ITEM_ID_CARD_FUGUMODOKI",
-   "english": "Bittacuda"
+   "enum": "ITEM_ID_CARD_FUGUMODOKI"
   },
   {
    "id": 341,
    "name": "KUROKUMORN",
    "msg": "ename_103",
-   "enum": "ITEM_ID_CARD_KUROKUMORN",
-   "english": "Ruff Puff"
+   "enum": "ITEM_ID_CARD_KUROKUMORN"
   },
   {
    "id": 342,
    "name": "KUROKUMORN_BLK",
    "msg": "ename_311",
-   "enum": "ITEM_ID_CARD_KUROKUMORN_BLK",
-   "english": "Dark Ruff Puff"
+   "enum": "ITEM_ID_CARD_KUROKUMORN_BLK"
   },
   {
    "id": 343,
    "name": "HANNYA",
    "msg": "ename_108",
-   "enum": "ITEM_ID_CARD_HANNYA",
-   "english": "Spania"
+   "enum": "ITEM_ID_CARD_HANNYA"
   },
   {
    "id": 344,
    "name": "HENNYA_BLK",
    "msg": "ename_312",
-   "enum": "ITEM_ID_CARD_HENNYA_BLK",
-   "english": "Dark Spania"
+   "enum": "ITEM_ID_CARD_HENNYA_BLK"
   },
   {
    "id": 345,
    "name": "NOROINOROI",
    "msg": "ename_110",
-   "enum": "ITEM_ID_CARD_NOROINOROI",
-   "english": "Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI"
   },
   {
    "id": 346,
    "name": "NOROINOROI_M",
    "msg": "ename_111",
-   "enum": "ITEM_ID_CARD_NOROINOROI_M",
-   "english": "Back Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_M"
   },
   {
    "id": 347,
    "name": "NOROINOROI_P",
    "msg": "ename_112",
-   "enum": "ITEM_ID_CARD_NOROINOROI_P",
-   "english": "Tech Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_P"
   },
   {
    "id": 348,
    "name": "NOROINOROI_R",
    "msg": "ename_113",
-   "enum": "ITEM_ID_CARD_NOROINOROI_R",
-   "english": "Heavy Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_R"
   },
   {
    "id": 349,
    "name": "NOROINOROI_Y",
    "msg": "ename_114",
-   "enum": "ITEM_ID_CARD_NOROINOROI_Y",
-   "english": "Reversya Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_Y"
   },
   {
    "id": 350,
    "name": "NOROINOROI_BLK",
    "msg": "ename_313",
-   "enum": "ITEM_ID_CARD_NOROINOROI_BLK",
-   "english": "Dark Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_BLK"
   },
   {
    "id": 351,
    "name": "NOROINOROI_P_BLK",
    "msg": "ename_315",
-   "enum": "ITEM_ID_CARD_NOROINOROI_P_BLK",
-   "english": "Dark Tech Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_P_BLK"
   },
   {
    "id": 352,
    "name": "NOROINOROI_R_BLK",
    "msg": "ename_316",
-   "enum": "ITEM_ID_CARD_NOROINOROI_R_BLK",
-   "english": "Dark Heavy Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_R_BLK"
   },
   {
    "id": 353,
    "name": "NOROINOROI_Y_BLK",
    "msg": "ename_317",
-   "enum": "ITEM_ID_CARD_NOROINOROI_Y_BLK",
-   "english": "Dark Reversya Cursya"
+   "enum": "ITEM_ID_CARD_NOROINOROI_Y_BLK"
   },
   {
    "id": 354,
    "name": "TERESA",
    "msg": "ename_115",
-   "enum": "ITEM_ID_CARD_TERESA",
-   "english": "Boo"
+   "enum": "ITEM_ID_CARD_TERESA"
   },
   {
    "id": 355,
    "name": "DARK_TERESA",
    "msg": "ename_116",
-   "enum": "ITEM_ID_CARD_DARK_TERESA",
-   "english": "Dark Boo"
+   "enum": "ITEM_ID_CARD_DARK_TERESA"
   },
   {
    "id": 356,
    "name": "DARK_TERESA_BLK",
    "msg": "ename_318",
-   "enum": "ITEM_ID_CARD_DARK_TERESA_BLK",
-   "english": "Dark Dark Boo"
+   "enum": "ITEM_ID_CARD_DARK_TERESA_BLK"
   },
   {
    "id": 357,
    "name": "BUBBLE",
    "msg": "ename_119",
-   "enum": "ITEM_ID_CARD_BUBBLE",
-   "english": "Lava Bubble"
+   "enum": "ITEM_ID_CARD_BUBBLE"
   },
   {
    "id": 358,
    "name": "WANWAN",
    "msg": "ename_120",
-   "enum": "ITEM_ID_CARD_WANWAN",
-   "english": "Chain Chomp"
+   "enum": "ITEM_ID_CARD_WANWAN"
   },
   {
    "id": 359,
    "name": "WANWAN_BLK",
    "msg": "ename_319",
-   "enum": "ITEM_ID_CARD_WANWAN_BLK",
-   "english": "Dark Chomp"
+   "enum": "ITEM_ID_CARD_WANWAN_BLK"
   },
   {
    "id": 360,
    "name": "RED_WANWAN",
    "msg": "ename_121",
-   "enum": "ITEM_ID_CARD_RED_WANWAN",
-   "english": "Red Chomp"
+   "enum": "ITEM_ID_CARD_RED_WANWAN"
   },
   {
    "id": 361,
    "name": "WANGWANG_X3",
    "msg": "ename_122",
-   "enum": "ITEM_ID_CARD_WANGWANG_X3",
-   "english": "The Underchomp"
+   "enum": "ITEM_ID_CARD_WANGWANG_X3"
   },
   {
    "id": 362,
    "name": "SHINNOSUKE",
    "msg": "ename_128",
-   "enum": "ITEM_ID_CARD_SHINNOSUKE",
-   "english": "Bald Cleft"
+   "enum": "ITEM_ID_CARD_SHINNOSUKE"
   },
   {
    "id": 363,
    "name": "SHINEMON",
    "msg": "ename_129",
-   "enum": "ITEM_ID_CARD_SHINEMON",
-   "english": "Moon Cleft"
+   "enum": "ITEM_ID_CARD_SHINEMON"
   },
   {
    "id": 364,
    "name": "SHINEMON_BLK",
    "msg": "ename_320",
-   "enum": "ITEM_ID_CARD_SHINEMON_BLK",
-   "english": "Dark Cleft"
+   "enum": "ITEM_ID_CARD_SHINEMON_BLK"
   },
   {
    "id": 365,
    "name": "DODON",
    "msg": "ename_130",
-   "enum": "ITEM_ID_CARD_DODON",
-   "english": "Shlurp"
+   "enum": "ITEM_ID_CARD_DODON"
   },
   {
    "id": 366,
    "name": "DODON_H",
    "msg": "ename_131",
-   "enum": "ITEM_ID_CARD_DODON_H",
-   "english": "Shlorp"
+   "enum": "ITEM_ID_CARD_DODON_H"
   },
   {
    "id": 367,
    "name": "DODON_H_BLK",
    "msg": "ename_321",
-   "enum": "ITEM_ID_CARD_DODON_H_BLK",
-   "english": "Dark Shlurp"
+   "enum": "ITEM_ID_CARD_DODON_H_BLK"
   },
   {
    "id": 368,
    "name": "DOSSUN",
    "msg": "ename_132",
-   "enum": "ITEM_ID_CARD_DOSSUN",
-   "english": "Thwomp"
+   "enum": "ITEM_ID_CARD_DOSSUN"
   },
   {
    "id": 369,
    "name": "GORON",
    "msg": "ename_133",
-   "enum": "ITEM_ID_CARD_GORON",
-   "english": "Spiny Tromp"
+   "enum": "ITEM_ID_CARD_GORON"
   },
   {
    "id": 370,
    "name": "KORON",
    "msg": "ename_134",
-   "enum": "ITEM_ID_CARD_KORON",
-   "english": "Spiky Tromp"
+   "enum": "ITEM_ID_CARD_KORON"
   },
   {
    "id": 371,
    "name": "KILLER",
    "msg": "ename_135",
-   "enum": "ITEM_ID_CARD_KILLER",
-   "english": "Bullet Bill"
+   "enum": "ITEM_ID_CARD_KILLER"
   },
   {
    "id": 372,
    "name": "KILLER_CANON",
    "msg": "ename_136",
-   "enum": "ITEM_ID_CARD_KILLER_CANON",
-   "english": "Bill Blaster"
+   "enum": "ITEM_ID_CARD_KILLER_CANON"
   },
   {
    "id": 373,
    "name": "OCTARO_R",
    "msg": "ename_139",
-   "enum": "ITEM_ID_CARD_OCTARO_R",
-   "english": "Squiglet"
+   "enum": "ITEM_ID_CARD_OCTARO_R"
   },
   {
    "id": 374,
    "name": "OCTARO",
    "msg": "ename_140",
-   "enum": "ITEM_ID_CARD_OCTARO",
-   "english": "Squig"
+   "enum": "ITEM_ID_CARD_OCTARO"
   },
   {
    "id": 375,
    "name": "OCTARO_G",
    "msg": "ename_142",
-   "enum": "ITEM_ID_CARD_OCTARO_G",
-   "english": "Squog"
+   "enum": "ITEM_ID_CARD_OCTARO_G"
   },
   {
    "id": 376,
    "name": "OCTARO_G_BLK",
    "msg": "ename_322",
-   "enum": "ITEM_ID_CARD_OCTARO_G_BLK",
-   "english": "Dark Squiglet"
+   "enum": "ITEM_ID_CARD_OCTARO_G_BLK"
   },
   {
    "id": 377,
    "name": "OCTARO_W",
    "msg": "ename_144",
-   "enum": "ITEM_ID_CARD_OCTARO_W",
-   "english": "Squoinker"
+   "enum": "ITEM_ID_CARD_OCTARO_W"
   },
   {
    "id": 378,
    "name": "TECKTIE",
    "msg": "ename_146",
-   "enum": "ITEM_ID_CARD_TECKTIE",
-   "english": "Sproing-Oing"
+   "enum": "ITEM_ID_CARD_TECKTIE"
   },
   {
    "id": 379,
    "name": "TECKTIE_M",
    "msg": "ename_148",
-   "enum": "ITEM_ID_CARD_TECKTIE_M",
-   "english": "Boing-Oing"
+   "enum": "ITEM_ID_CARD_TECKTIE_M"
   },
   {
    "id": 380,
    "name": "TECKTIE_H",
    "msg": "ename_150",
-   "enum": "ITEM_ID_CARD_TECKTIE_H",
-   "english": "Zoing-Oing"
+   "enum": "ITEM_ID_CARD_TECKTIE_H"
   },
   {
    "id": 381,
    "name": "TECKTIE_H_BLK",
    "msg": "ename_323",
-   "enum": "ITEM_ID_CARD_TECKTIE_H_BLK",
-   "english": "Dark Sproing-Oing"
+   "enum": "ITEM_ID_CARD_TECKTIE_H_BLK"
   },
   {
    "id": 382,
    "name": "BOROVOY",
    "msg": "ename_152",
-   "enum": "ITEM_ID_CARD_BOROVOY",
-   "english": "Boomboxer"
+   "enum": "ITEM_ID_CARD_BOROVOY"
   },
   {
    "id": 383,
    "name": "BOROVOY_M",
    "msg": "ename_154",
-   "enum": "ITEM_ID_CARD_BOROVOY_M",
-   "english": "Beepboxer"
+   "enum": "ITEM_ID_CARD_BOROVOY_M"
   },
   {
    "id": 384,
    "name": "BOROVOY_H_BLK",
    "msg": "ename_325",
-   "enum": "ITEM_ID_CARD_BOROVOY_H_BLK",
-   "english": "Dark Boomboxer"
+   "enum": "ITEM_ID_CARD_BOROVOY_H_BLK"
   },
   {
    "id": 385,
    "name": "BOROVOY_W",
    "msg": "ename_158",
-   "enum": "ITEM_ID_CARD_BOROVOY_W",
-   "english": "Blastboxer"
+   "enum": "ITEM_ID_CARD_BOROVOY_W"
   },
   {
    "id": 386,
    "name": "JYAMAZO",
    "msg": "ename_160",
-   "enum": "ITEM_ID_CARD_JYAMAZO",
-   "english": "Jawbus"
+   "enum": "ITEM_ID_CARD_JYAMAZO"
   },
   {
    "id": 387,
    "name": "JYAMAZO_H",
    "msg": "ename_161",
-   "enum": "ITEM_ID_CARD_JYAMAZO_H",
-   "english": "Rawbus"
+   "enum": "ITEM_ID_CARD_JYAMAZO_H"
   },
   {
    "id": 388,
    "name": "JYAMAZO_H_BLK",
    "msg": "ename_326",
-   "enum": "ITEM_ID_CARD_JYAMAZO_H_BLK",
-   "english": "Dark Jawbus"
+   "enum": "ITEM_ID_CARD_JYAMAZO_H_BLK"
   },
   {
    "id": 389,
    "name": "JYAMAZO_W",
    "msg": "ename_162",
-   "enum": "ITEM_ID_CARD_JYAMAZO_W",
-   "english": "Gawbus"
+   "enum": "ITEM_ID_CARD_JYAMAZO_W"
   },
   {
    "id": 390,
    "name": "BANKEN",
    "msg": "ename_163",
-   "enum": "ITEM_ID_CARD_BANKEN",
-   "english": "Howl"
+   "enum": "ITEM_ID_CARD_BANKEN"
   },
   {
    "id": 391,
    "name": "DEKA_BANKEN",
    "msg": "ename_164",
-   "enum": "ITEM_ID_CARD_DEKA_BANKEN",
-   "english": "Growl"
+   "enum": "ITEM_ID_CARD_DEKA_BANKEN"
   },
   {
    "id": 392,
    "name": "BIG_EYE",
    "msg": "ename_165",
-   "enum": "ITEM_ID_CARD_BIG_EYE",
-   "english": "Mister I"
+   "enum": "ITEM_ID_CARD_BIG_EYE"
   },
   {
    "id": 393,
    "name": "BIG_EYE_H",
    "msg": "ename_167",
-   "enum": "ITEM_ID_CARD_BIG_EYE_H",
-   "english": "Red I"
+   "enum": "ITEM_ID_CARD_BIG_EYE_H"
   },
   {
    "id": 394,
    "name": "GUY",
    "msg": "ename_169",
-   "enum": "ITEM_ID_CARD_GUY",
-   "english": "Growmeba"
+   "enum": "ITEM_ID_CARD_GUY"
   },
   {
    "id": 395,
    "name": "GUY_M",
    "msg": "ename_170",
-   "enum": "ITEM_ID_CARD_GUY_M",
-   "english": "Blomeba"
+   "enum": "ITEM_ID_CARD_GUY_M"
   },
   {
    "id": 396,
    "name": "GUY_H",
    "msg": "ename_171",
-   "enum": "ITEM_ID_CARD_GUY_H",
-   "english": "Chromeba"
+   "enum": "ITEM_ID_CARD_GUY_H"
   },
   {
    "id": 397,
    "name": "GUY_H_BLK",
    "msg": "ename_328",
-   "enum": "ITEM_ID_CARD_GUY_H_BLK",
-   "english": "Dark Growmeba"
+   "enum": "ITEM_ID_CARD_GUY_H_BLK"
   },
   {
    "id": 398,
    "name": "NANOTILE_G",
    "msg": "ename_172",
-   "enum": "ITEM_ID_CARD_NANOTILE_G",
-   "english": "Tileoid G"
+   "enum": "ITEM_ID_CARD_NANOTILE_G"
   },
   {
    "id": 399,
    "name": "NANOTILE_B",
    "msg": "ename_173",
-   "enum": "ITEM_ID_CARD_NANOTILE_B",
-   "english": "Tileoid B"
+   "enum": "ITEM_ID_CARD_NANOTILE_B"
   },
   {
    "id": 400,
    "name": "NANOTILE_R",
    "msg": "ename_174",
-   "enum": "ITEM_ID_CARD_NANOTILE_R",
-   "english": "Tileoid R"
+   "enum": "ITEM_ID_CARD_NANOTILE_R"
   },
   {
    "id": 401,
    "name": "NANOTILE_Y",
    "msg": "ename_175",
-   "enum": "ITEM_ID_CARD_NANOTILE_Y",
-   "english": "Tileoid Y"
+   "enum": "ITEM_ID_CARD_NANOTILE_Y"
   },
   {
    "id": 402,
    "name": "NANOTILE_Y_BLK",
    "msg": "ename_329",
-   "enum": "ITEM_ID_CARD_NANOTILE_Y_BLK",
-   "english": "Dark Tileoid"
+   "enum": "ITEM_ID_CARD_NANOTILE_Y_BLK"
   },
   {
    "id": 403,
    "name": "KAMEREBOMB",
    "msg": "ename_176",
-   "enum": "ITEM_ID_CARD_KAMEREBOMB",
-   "english": "Meowbomb"
+   "enum": "ITEM_ID_CARD_KAMEREBOMB"
   },
   {
    "id": 404,
    "name": "PATONYAN",
    "msg": "ename_289",
-   "enum": "ITEM_ID_CARD_PATONYAN",
-   "english": "PatrolMeow"
+   "enum": "ITEM_ID_CARD_PATONYAN"
   },
   {
    "id": 405,
    "name": "FLYNYAN",
    "msg": "ename_290",
-   "enum": "ITEM_ID_CARD_FLYNYAN",
-   "english": "AirMeow"
+   "enum": "ITEM_ID_CARD_FLYNYAN"
   },
   {
    "id": 406,
    "name": "DOMNYAN",
    "msg": "ename_177",
-   "enum": "ITEM_ID_CARD_DOMNYAN",
-   "english": "SurpriseMeow"
+   "enum": "ITEM_ID_CARD_DOMNYAN"
   },
   {
    "id": 407,
    "name": "DEKUNYAN",
    "msg": "ename_178",
-   "enum": "ITEM_ID_CARD_DEKUNYAN",
-   "english": "BigMeow"
+   "enum": "ITEM_ID_CARD_DEKUNYAN"
   },
   {
    "id": 408,
    "name": "UCHU_KURAGE",
    "msg": "ename_179",
-   "enum": "ITEM_ID_CARD_UCHU_KURAGE",
-   "english": "Jellien"
+   "enum": "ITEM_ID_CARD_UCHU_KURAGE"
   },
   {
    "id": 409,
    "name": "PHOTON",
    "msg": "ename_180",
-   "enum": "ITEM_ID_CARD_PHOTON",
-   "english": "Foton"
+   "enum": "ITEM_ID_CARD_PHOTON"
   },
   {
    "id": 410,
    "name": "WARPWARP",
    "msg": "ename_182",
-   "enum": "ITEM_ID_CARD_WARPWARP",
-   "english": "Warpid"
+   "enum": "ITEM_ID_CARD_WARPWARP"
   },
   {
    "id": 411,
    "name": "FRAGON",
    "msg": "ename_183",
-   "enum": "ITEM_ID_CARD_FRAGON",
-   "english": "Eeligon"
+   "enum": "ITEM_ID_CARD_FRAGON"
   },
   {
    "id": 412,
    "name": "FRAGON_G",
    "msg": "ename_185",
-   "enum": "ITEM_ID_CARD_FRAGON_G",
-   "english": "Hooligon"
+   "enum": "ITEM_ID_CARD_FRAGON_G"
   },
   {
    "id": 413,
    "name": "FRAGON_G_BLK",
    "msg": "ename_330",
-   "enum": "ITEM_ID_CARD_FRAGON_G_BLK",
-   "english": "Dark Eeligon"
+   "enum": "ITEM_ID_CARD_FRAGON_G_BLK"
   },
   {
    "id": 414,
    "name": "KAKKUN",
    "msg": "ename_187",
-   "enum": "ITEM_ID_CARD_KAKKUN",
-   "english": "Longator"
+   "enum": "ITEM_ID_CARD_KAKKUN"
   },
   {
    "id": 415,
    "name": "KAKKUN_H",
    "msg": "ename_188",
-   "enum": "ITEM_ID_CARD_KAKKUN_H",
-   "english": "Longadile"
+   "enum": "ITEM_ID_CARD_KAKKUN_H"
   },
   {
    "id": 416,
    "name": "KAKKUN_H_BLK",
    "msg": "ename_331",
-   "enum": "ITEM_ID_CARD_KAKKUN_H_BLK",
-   "english": "Dark Longator"
+   "enum": "ITEM_ID_CARD_KAKKUN_H_BLK"
   },
   {
    "id": 417,
    "name": "BARRIER_MAN",
    "msg": "ename_189",
-   "enum": "ITEM_ID_CARD_BARRIER_MAN",
-   "english": "Barribad"
+   "enum": "ITEM_ID_CARD_BARRIER_MAN"
   },
   {
    "id": 418,
    "name": "BARRIER_MAN_H",
    "msg": "ename_191",
-   "enum": "ITEM_ID_CARD_BARRIER_MAN_H",
-   "english": "Sobarribad"
+   "enum": "ITEM_ID_CARD_BARRIER_MAN_H"
   },
   {
    "id": 419,
    "name": "BARRIER_MAN_H_BLK",
    "msg": "ename_332",
-   "enum": "ITEM_ID_CARD_BARRIER_MAN_H_BLK",
-   "english": "Dark Barribad"
+   "enum": "ITEM_ID_CARD_BARRIER_MAN_H_BLK"
   },
   {
    "id": 420,
    "name": "MATRYOSHKA",
    "msg": "ename_193",
-   "enum": "ITEM_ID_CARD_MATRYOSHKA",
-   "english": "Pigarithm"
+   "enum": "ITEM_ID_CARD_MATRYOSHKA"
   },
   {
    "id": 421,
    "name": "MATRYOSHKA_H",
    "msg": "ename_194",
-   "enum": "ITEM_ID_CARD_MATRYOSHKA_H",
-   "english": "Hogarithm"
+   "enum": "ITEM_ID_CARD_MATRYOSHKA_H"
   },
   {
    "id": 422,
    "name": "MATRYOSHKA_H_BLK",
    "msg": "ename_333",
-   "enum": "ITEM_ID_CARD_MATRYOSHKA_H_BLK",
-   "english": "Dark Pigarithm"
+   "enum": "ITEM_ID_CARD_MATRYOSHKA_H_BLK"
   },
   {
    "id": 423,
    "name": "LEEPAT",
    "msg": "ename_195",
-   "enum": "ITEM_ID_CARD_LEEPAT",
-   "english": "Choppa"
+   "enum": "ITEM_ID_CARD_LEEPAT"
   },
   {
    "id": 424,
    "name": "LEEPAT_H",
    "msg": "ename_196",
-   "enum": "ITEM_ID_CARD_LEEPAT_H",
-   "english": "Copta"
+   "enum": "ITEM_ID_CARD_LEEPAT_H"
   },
   {
    "id": 425,
    "name": "LEEPAT_H_BLK",
    "msg": "ename_334",
-   "enum": "ITEM_ID_CARD_LEEPAT_H_BLK",
-   "english": "Dark Choppa"
+   "enum": "ITEM_ID_CARD_LEEPAT_H_BLK"
   },
   {
    "id": 426,
    "name": "MONMOUTH",
    "msg": "ename_197",
-   "enum": "ITEM_ID_CARD_MONMOUTH",
-   "english": "Muth"
+   "enum": "ITEM_ID_CARD_MONMOUTH"
   },
   {
    "id": 427,
    "name": "MONMOUTH_H_BLK",
    "msg": "ename_335",
-   "enum": "ITEM_ID_CARD_MONMOUTH_H_BLK",
-   "english": "Dark Muth"
+   "enum": "ITEM_ID_CARD_MONMOUTH_H_BLK"
   },
   {
    "id": 428,
    "name": "MONMOUTH_W",
    "msg": "ename_199",
-   "enum": "ITEM_ID_CARD_MONMOUTH_W",
-   "english": "Mega Muth"
+   "enum": "ITEM_ID_CARD_MONMOUTH_W"
   },
   {
    "id": 429,
    "name": "HANAZOKU",
    "msg": "ename_201",
-   "enum": "ITEM_ID_CARD_HANAZOKU",
-   "english": "Floro Sapien"
+   "enum": "ITEM_ID_CARD_HANAZOKU"
   },
   {
    "id": 430,
    "name": "PRIMITIVE_MAN",
    "msg": "ename_207",
-   "enum": "ITEM_ID_CARD_PRIMITIVE_MAN",
-   "english": "Floro Cragnien"
+   "enum": "ITEM_ID_CARD_PRIMITIVE_MAN"
   },
   {
    "id": 431,
    "name": "NINJYA",
    "msg": "ename_209",
-   "enum": "ITEM_ID_CARD_NINJYA",
-   "english": "Ninjoe"
+   "enum": "ITEM_ID_CARD_NINJYA"
   },
   {
    "id": 432,
    "name": "NINJYA_M",
    "msg": "ename_212",
-   "enum": "ITEM_ID_CARD_NINJYA_M",
-   "english": "Ninjohn"
+   "enum": "ITEM_ID_CARD_NINJYA_M"
   },
   {
    "id": 433,
    "name": "NINJYA_H",
    "msg": "ename_215",
-   "enum": "ITEM_ID_CARD_NINJYA_H",
-   "english": "Ninjerry"
+   "enum": "ITEM_ID_CARD_NINJYA_H"
   },
   {
    "id": 434,
    "name": "NINJYA_H_BLK",
    "msg": "ename_336",
-   "enum": "ITEM_ID_CARD_NINJYA_H_BLK",
-   "english": "Dark Ninjoe"
+   "enum": "ITEM_ID_CARD_NINJYA_H_BLK"
   },
   {
    "id": 435,
    "name": "HAND_1",
    "msg": "ename_218",
-   "enum": "ITEM_ID_CARD_HAND_1",
-   "english": "Underhand"
+   "enum": "ITEM_ID_CARD_HAND_1"
   },
   {
    "id": 436,
    "name": "SHINIGAMIN_ALPHA",
    "msg": "ename_221",
-   "enum": "ITEM_ID_CARD_SHINIGAMIN_ALPHA",
-   "english": "Skellobit"
+   "enum": "ITEM_ID_CARD_SHINIGAMIN_ALPHA"
   },
   {
    "id": 437,
    "name": "SHINIGAMIN_BETA",
    "msg": "ename_222",
-   "enum": "ITEM_ID_CARD_SHINIGAMIN_BETA",
-   "english": "Spiky Skellobit"
+   "enum": "ITEM_ID_CARD_SHINIGAMIN_BETA"
   },
   {
    "id": 438,
    "name": "MD_SHINIGAMIN_ALPHA_BLK",
    "msg": "ename_337",
-   "enum": "ITEM_ID_CARD_MD_SHINIGAMIN_ALPHA_BLK",
-   "english": "Dark Skellobit"
+   "enum": "ITEM_ID_CARD_MD_SHINIGAMIN_ALPHA_BLK"
   },
   {
    "id": 439,
    "name": "MD_SHINIGAMIN_BETA_BLK",
    "msg": "ename_338",
-   "enum": "ITEM_ID_CARD_MD_SHINIGAMIN_BETA_BLK",
-   "english": "Dark Spiky Skellobit"
+   "enum": "ITEM_ID_CARD_MD_SHINIGAMIN_BETA_BLK"
   },
   {
    "id": 440,
    "name": "SHINIGAMIN_SKY",
    "msg": "ename_225",
-   "enum": "ITEM_ID_CARD_SHINIGAMIN_SKY",
-   "english": "Skellobomber"
+   "enum": "ITEM_ID_CARD_SHINIGAMIN_SKY"
   },
   {
    "id": 441,
    "name": "SHINIGAMIN_TAKO_A",
    "msg": "ename_230",
-   "enum": "ITEM_ID_CARD_SHINIGAMIN_TAKO_A",
-   "english": "Skellobait"
+   "enum": "ITEM_ID_CARD_SHINIGAMIN_TAKO_A"
   },
   {
    "id": 442,
    "name": "SHINIGAMIN_TAKO_B",
    "msg": "ename_231",
-   "enum": "ITEM_ID_CARD_SHINIGAMIN_TAKO_B",
-   "english": "Spiky Skellobait"
+   "enum": "ITEM_ID_CARD_SHINIGAMIN_TAKO_B"
   },
   {
    "id": 443,
    "name": "DEATHDEATH",
    "msg": "ename_233",
-   "enum": "ITEM_ID_CARD_DEATHDEATH",
-   "english": "Megabite"
+   "enum": "ITEM_ID_CARD_DEATHDEATH"
   },
   {
    "id": 444,
    "name": "DEATHDEATH_2",
    "msg": "ename_234",
-   "enum": "ITEM_ID_CARD_DEATHDEATH_2",
-   "english": "Gigabite"
+   "enum": "ITEM_ID_CARD_DEATHDEATH_2"
   },
   {
    "id": 445,
    "name": "DEATHDEATH_2_BLK",
    "msg": "ename_404",
-   "enum": "ITEM_ID_CARD_DEATHDEATH_2_BLK",
-   "english": "Dark Megabite"
+   "enum": "ITEM_ID_CARD_DEATHDEATH_2_BLK"
   },
   {
    "id": 446,
    "name": "MAGE_RED",
    "msg": "ename_235",
-   "enum": "ITEM_ID_CARD_MAGE_RED",
-   "english": "Red Magiblot"
+   "enum": "ITEM_ID_CARD_MAGE_RED"
   },
   {
    "id": 447,
    "name": "MAGE_BLUE",
    "msg": "ename_237",
-   "enum": "ITEM_ID_CARD_MAGE_BLUE",
-   "english": "Blue Magiblot"
+   "enum": "ITEM_ID_CARD_MAGE_BLUE"
   },
   {
    "id": 448,
    "name": "MAGE_YELLOW",
    "msg": "ename_239",
-   "enum": "ITEM_ID_CARD_MAGE_YELLOW",
-   "english": "Yellow Magiblot"
+   "enum": "ITEM_ID_CARD_MAGE_YELLOW"
   },
   {
    "id": 449,
    "name": "MAGE_YELLOW_BLK",
    "msg": "ename_405",
-   "enum": "ITEM_ID_CARD_MAGE_YELLOW_BLK",
-   "english": "Dark Magiblot"
+   "enum": "ITEM_ID_CARD_MAGE_YELLOW_BLK"
   },
   {
    "id": 450,
    "name": "SAMURAI",
    "msg": "ename_288",
-   "enum": "ITEM_ID_CARD_SAMURAI",
-   "english": "Sammer Guy"
+   "enum": "ITEM_ID_CARD_SAMURAI"
   },
   {
    "id": 451,
    "name": "KILLER_KINOKO",
    "msg": "ename_283",
-   "enum": "ITEM_ID_CARD_KILLER_KINOKO",
-   "english": "Zombie Shroom"
+   "enum": "ITEM_ID_CARD_KILLER_KINOKO"
   },
   {
    "id": 452,
    "name": "KILLER_KINOKO_H",
    "msg": "ename_284",
-   "enum": "ITEM_ID_CARD_KILLER_KINOKO_H",
-   "english": "Ghoul Shroom"
+   "enum": "ITEM_ID_CARD_KILLER_KINOKO_H"
   },
   {
    "id": 453,
    "name": "DODONTUS",
    "msg": "ename_241",
-   "enum": "ITEM_ID_CARD_DODONTUS",
-   "english": "O'Chunks"
+   "enum": "ITEM_ID_CARD_DODONTUS"
   },
   {
    "id": 454,
    "name": "DIMEEN",
    "msg": "ename_247",
-   "enum": "ITEM_ID_CARD_DIMEEN",
-   "english": "Dimentio"
+   "enum": "ITEM_ID_CARD_DIMEEN"
   },
   {
    "id": 455,
    "name": "MANERA",
    "msg": "ename_251",
-   "enum": "ITEM_ID_CARD_MANERA",
-   "english": "Mimi"
+   "enum": "ITEM_ID_CARD_MANERA"
   },
   {
    "id": 456,
    "name": "BOSS_ZUNBABA",
    "msg": "ename_254",
-   "enum": "ITEM_ID_CARD_BOSS_ZUNBABA",
-   "english": "Fracktail"
+   "enum": "ITEM_ID_CARD_BOSS_ZUNBABA"
   },
   {
    "id": 457,
    "name": "BOSS_ZUNBABA_WHITE",
    "msg": "ename_255",
-   "enum": "ITEM_ID_CARD_BOSS_ZUNBABA_WHITE",
-   "english": "Wracktail"
+   "enum": "ITEM_ID_CARD_BOSS_ZUNBABA_WHITE"
   },
   {
    "id": 458,
    "name": "KOOPA",
    "msg": "ename_256",
-   "enum": "ITEM_ID_CARD_KOOPA",
-   "english": "Bowser (1)"
+   "enum": "ITEM_ID_CARD_KOOPA"
   },
   {
    "id": 459,
    "name": "BLACK_KOOPA",
    "msg": "ename_259",
-   "enum": "ITEM_ID_CARD_BLACK_KOOPA",
-   "english": "Dark Bowser"
+   "enum": "ITEM_ID_CARD_BLACK_KOOPA"
   },
   {
    "id": 460,
    "name": "BLACK_LUIGI",
    "msg": "ename_258",
-   "enum": "ITEM_ID_CARD_BLACK_LUIGI",
-   "english": "Dark Luigi"
+   "enum": "ITEM_ID_CARD_BLACK_LUIGI"
   },
   {
    "id": 461,
    "name": "BLACK_MARIO",
    "msg": "ename_257",
-   "enum": "ITEM_ID_CARD_BLACK_MARIO",
-   "english": "Dark Mario"
+   "enum": "ITEM_ID_CARD_BLACK_MARIO"
   },
   {
    "id": 462,
    "name": "BLACK_PEACH",
    "msg": "ename_260",
-   "enum": "ITEM_ID_CARD_BLACK_PEACH",
-   "english": "Dark Peach"
+   "enum": "ITEM_ID_CARD_BLACK_PEACH"
   },
   {
    "id": 463,
    "name": "GESO",
    "msg": "ename_261",
-   "enum": "ITEM_ID_CARD_GESO",
-   "english": "Big Blooper"
+   "enum": "ITEM_ID_CARD_GESO"
   },
   {
    "id": 464,
    "name": "KAMEREKING",
    "msg": "ename_262",
-   "enum": "ITEM_ID_CARD_KAMEREKING",
-   "english": "Francis"
+   "enum": "ITEM_ID_CARD_KAMEREKING"
   },
   {
    "id": 465,
    "name": "ROSE",
    "msg": "ename_263",
-   "enum": "ITEM_ID_CARD_ROSE",
-   "english": "King Croacus"
+   "enum": "ITEM_ID_CARD_ROSE"
   },
   {
    "id": 466,
    "name": "LUIGI_L",
    "msg": "ename_268",
-   "enum": "ITEM_ID_CARD_LUIGI_L",
-   "english": "Mr. L"
+   "enum": "ITEM_ID_CARD_LUIGI_L"
   },
   {
    "id": 467,
    "name": "LUIGI_ROBO",
    "msg": "ename_269",
-   "enum": "ITEM_ID_CARD_LUIGI_ROBO",
-   "english": "Brobot"
+   "enum": "ITEM_ID_CARD_LUIGI_ROBO"
   },
   {
    "id": 468,
    "name": "LUIGI_ROBO_II",
    "msg": "ename_272",
-   "enum": "ITEM_ID_CARD_LUIGI_ROBO_II",
-   "english": "Brobot L-type"
+   "enum": "ITEM_ID_CARD_LUIGI_ROBO_II"
   },
   {
    "id": 469,
    "name": "SHINIGAMI",
    "msg": "ename_273",
-   "enum": "ITEM_ID_CARD_SHINIGAMI",
-   "english": "Bonechill"
+   "enum": "ITEM_ID_CARD_SHINIGAMI"
   },
   {
    "id": 470,
    "name": "EARL_DIMENSION",
    "msg": "ename_276",
-   "enum": "ITEM_ID_CARD_EARL_DIMENSION",
-   "english": "Count Bleck"
+   "enum": "ITEM_ID_CARD_EARL_DIMENSION"
   },
   {
    "id": 471,
    "name": "EARL_ADJUTANT",
    "msg": "ename_280",
-   "enum": "ITEM_ID_CARD_EARL_ADJUTANT",
-   "english": "Nastasia"
+   "enum": "ITEM_ID_CARD_EARL_ADJUTANT"
   },
   {
    "id": 472,
    "name": "DIMEEN_L",
    "msg": "ename_281",
-   "enum": "ITEM_ID_CARD_DIMEEN_L",
-   "english": "Super Dimentio"
+   "enum": "ITEM_ID_CARD_DIMEEN_L"
   },
   {
    "id": 473,
    "name": "W_KOOPA",
    "msg": "ename_339",
-   "enum": "ITEM_ID_CARD_W_KOOPA",
-   "english": "Bowser (2)"
+   "enum": "ITEM_ID_CARD_W_KOOPA"
   },
   {
    "id": 474,
    "name": "W_PEACH",
    "msg": "ename_340",
-   "enum": "ITEM_ID_CARD_W_PEACH",
-   "english": "Peach (2)"
+   "enum": "ITEM_ID_CARD_W_PEACH"
   },
   {
    "id": 475,
    "name": "P_PEACH",
    "msg": "ename_341",
-   "enum": "ITEM_ID_CARD_P_PEACH",
-   "english": "Peach (3)"
+   "enum": "ITEM_ID_CARD_P_PEACH"
   },
   {
    "id": 476,
    "name": "ANNNA",
    "msg": "ename_342",
-   "enum": "ITEM_ID_CARD_ANNNA",
-   "english": "Tippi"
+   "enum": "ITEM_ID_CARD_ANNNA"
   },
   {
    "id": 477,
    "name": "FAIRY_CATCH",
    "msg": "ename_343",
-   "enum": "ITEM_ID_CARD_FAIRY_CATCH",
-   "english": "Thoreau"
+   "enum": "ITEM_ID_CARD_FAIRY_CATCH"
   },
   {
    "id": 478,
    "name": "FAIRY_BOMB",
    "msg": "ename_344",
-   "enum": "ITEM_ID_CARD_FAIRY_BOMB",
-   "english": "Boomer"
+   "enum": "ITEM_ID_CARD_FAIRY_BOMB"
   },
   {
    "id": 479,
    "name": "FAIRY_SLIT",
    "msg": "ename_345",
-   "enum": "ITEM_ID_CARD_FAIRY_SLIT",
-   "english": "Slim"
+   "enum": "ITEM_ID_CARD_FAIRY_SLIT"
   },
   {
    "id": 480,
    "name": "FAIRY__HIPATTACK",
    "msg": "ename_346",
-   "enum": "ITEM_ID_CARD_FAIRY__HIPATTACK",
-   "english": "Thudley"
+   "enum": "ITEM_ID_CARD_FAIRY__HIPATTACK"
   },
   {
    "id": 481,
    "name": "FAIRY_RIDE",
    "msg": "ename_347",
-   "enum": "ITEM_ID_CARD_FAIRY_RIDE",
-   "english": "Carrie"
+   "enum": "ITEM_ID_CARD_FAIRY_RIDE"
   },
   {
    "id": 482,
    "name": "FAIRY_REVERSE",
    "msg": "ename_348",
-   "enum": "ITEM_ID_CARD_FAIRY_REVERSE",
-   "english": "Fleep"
+   "enum": "ITEM_ID_CARD_FAIRY_REVERSE"
   },
   {
    "id": 483,
    "name": "FAIRY_HAMMER",
    "msg": "ename_349",
-   "enum": "ITEM_ID_CARD_FAIRY_HAMMER",
-   "english": "Cudge"
+   "enum": "ITEM_ID_CARD_FAIRY_HAMMER"
   },
   {
    "id": 484,
    "name": "FAIRY_MINI",
    "msg": "ename_350",
-   "enum": "ITEM_ID_CARD_FAIRY_MINI",
-   "english": "Dottie"
+   "enum": "ITEM_ID_CARD_FAIRY_MINI"
   },
   {
    "id": 485,
    "name": "FAIRY_SOUND",
    "msg": "ename_351",
-   "enum": "ITEM_ID_CARD_FAIRY_SOUND",
-   "english": "Piccolo"
+   "enum": "ITEM_ID_CARD_FAIRY_SOUND"
   },
   {
    "id": 486,
    "name": "FAIRY_COUNTER",
    "msg": "ename_352",
-   "enum": "ITEM_ID_CARD_FAIRY_COUNTER",
-   "english": "Barry"
+   "enum": "ITEM_ID_CARD_FAIRY_COUNTER"
   },
   {
    "id": 487,
    "name": "FAIRY_DASH",
    "msg": "ename_353",
-   "enum": "ITEM_ID_CARD_FAIRY_DASH",
-   "english": "Dashell"
+   "enum": "ITEM_ID_CARD_FAIRY_DASH"
   },
   {
    "id": 488,
    "name": "SMRPG64_KURIO",
    "msg": "ename_354",
-   "enum": "ITEM_ID_CARD_SMRPG64_KURIO",
-   "english": "Goombario"
+   "enum": "ITEM_ID_CARD_SMRPG64_KURIO"
   },
   {
    "id": 489,
    "name": "SMRPG64_KAMEKI",
    "msg": "ename_355",
-   "enum": "ITEM_ID_CARD_SMRPG64_KAMEKI",
-   "english": "Kooper"
+   "enum": "ITEM_ID_CARD_SMRPG64_KAMEKI"
   },
   {
    "id": 490,
    "name": "SMRPG64_PINKY",
    "msg": "ename_356",
-   "enum": "ITEM_ID_CARD_SMRPG64_PINKY",
-   "english": "Bombette"
+   "enum": "ITEM_ID_CARD_SMRPG64_PINKY"
   },
   {
    "id": 491,
    "name": "SMRPG64_PALETTA",
    "msg": "ename_357",
-   "enum": "ITEM_ID_CARD_SMRPG64_PALETTA",
-   "english": "Parakarry"
+   "enum": "ITEM_ID_CARD_SMRPG64_PALETTA"
   },
   {
    "id": 492,
    "name": "SMRPG64_LESALESA",
    "msg": "ename_358",
-   "enum": "ITEM_ID_CARD_SMRPG64_LESALESA",
-   "english": "Bow"
+   "enum": "ITEM_ID_CARD_SMRPG64_LESALESA"
   },
   {
    "id": 493,
    "name": "SMRPG64_AKARIN",
    "msg": "ename_359",
-   "enum": "ITEM_ID_CARD_SMRPG64_AKARIN",
-   "english": "Watt"
+   "enum": "ITEM_ID_CARD_SMRPG64_AKARIN"
   },
   {
    "id": 494,
    "name": "SMRPG64_OPUKU",
    "msg": "ename_360",
-   "enum": "ITEM_ID_CARD_SMRPG64_OPUKU",
-   "english": "Sushie"
+   "enum": "ITEM_ID_CARD_SMRPG64_OPUKU"
   },
   {
    "id": 495,
    "name": "SMRPG64_POKOPI",
    "msg": "ename_361",
-   "enum": "ITEM_ID_CARD_SMRPG64_POKOPI",
-   "english": "Lakilester"
+   "enum": "ITEM_ID_CARD_SMRPG64_POKOPI"
   },
   {
    "id": 496,
    "name": "MARIOST_KURI",
    "msg": "ename_362",
-   "enum": "ITEM_ID_CARD_MARIOST_KURI",
-   "english": "Goombella"
+   "enum": "ITEM_ID_CARD_MARIOST_KURI"
   },
   {
    "id": 497,
    "name": "MARIOST_NOKO",
    "msg": "ename_363",
-   "enum": "ITEM_ID_CARD_MARIOST_NOKO",
-   "english": "Koops"
+   "enum": "ITEM_ID_CARD_MARIOST_NOKO"
   },
   {
    "id": 498,
    "name": "MARIOST_CLOUD",
    "msg": "ename_364",
-   "enum": "ITEM_ID_CARD_MARIOST_CLOUD",
-   "english": "Madame Flurrie"
+   "enum": "ITEM_ID_CARD_MARIOST_CLOUD"
   },
   {
    "id": 499,
    "name": "MARIOST_YOSHI",
    "msg": "ename_365",
-   "enum": "ITEM_ID_CARD_MARIOST_YOSHI",
-   "english": "Yoshi"
+   "enum": "ITEM_ID_CARD_MARIOST_YOSHI"
   },
   {
    "id": 500,
    "name": "MARIOST_VIVI",
    "msg": "ename_366",
-   "enum": "ITEM_ID_CARD_MARIOST_VIVI",
-   "english": "Vivian"
+   "enum": "ITEM_ID_CARD_MARIOST_VIVI"
   },
   {
    "id": 501,
    "name": "MARIOST_BARERU",
    "msg": "ename_367",
-   "enum": "ITEM_ID_CARD_MARIOST_BARERU",
-   "english": "Admiral Bobbery"
+   "enum": "ITEM_ID_CARD_MARIOST_BARERU"
   },
   {
    "id": 502,
    "name": "MARIOST_CHUCHU",
    "msg": "ename_368",
-   "enum": "ITEM_ID_CARD_MARIOST_CHUCHU",
-   "english": "Ms. Mowz"
+   "enum": "ITEM_ID_CARD_MARIOST_CHUCHU"
   },
   {
    "id": 503,
    "name": "MEIDO_NYAN",
    "msg": "ename_369",
-   "enum": "ITEM_ID_CARD_MEIDO_NYAN",
-   "english": "Meowmaid"
+   "enum": "ITEM_ID_CARD_MEIDO_NYAN"
   },
   {
    "id": 504,
    "name": "GUARD_NYAN",
    "msg": "ename_370",
-   "enum": "ITEM_ID_CARD_GUARD_NYAN",
-   "english": "SecuriMeow"
+   "enum": "ITEM_ID_CARD_GUARD_NYAN"
   },
   {
    "id": 505,
    "name": "DEARU",
    "msg": "ename_371",
-   "enum": "ITEM_ID_CARD_DEARU",
-   "english": "Merlon"
+   "enum": "ITEM_ID_CARD_DEARU"
   },
   {
    "id": 506,
    "name": "URA_DEARU",
    "msg": "ename_372",
-   "enum": "ITEM_ID_CARD_URA_DEARU",
-   "english": "Nolrem"
+   "enum": "ITEM_ID_CARD_URA_DEARU"
   },
   {
    "id": 507,
    "name": "MISUTERU",
    "msg": "ename_373",
-   "enum": "ITEM_ID_CARD_MISUTERU",
-   "english": "Merluvlee"
+   "enum": "ITEM_ID_CARD_MISUTERU"
   },
   {
    "id": 508,
    "name": "SANDERU",
    "msg": "ename_374",
-   "enum": "ITEM_ID_CARD_SANDERU",
-   "english": "Merlee"
+   "enum": "ITEM_ID_CARD_SANDERU"
   },
   {
    "id": 509,
    "name": "CRYSTALE",
    "msg": "ename_375",
-   "enum": "ITEM_ID_CARD_CRYSTALE",
-   "english": "Merlumina"
+   "enum": "ITEM_ID_CARD_CRYSTALE"
   },
   {
    "id": 510,
    "name": "AGERU",
    "msg": "ename_376",
-   "enum": "ITEM_ID_CARD_AGERU",
-   "english": "Bestovius"
+   "enum": "ITEM_ID_CARD_AGERU"
   },
   {
    "id": 511,
    "name": "MIHARU",
    "msg": "ename_377",
-   "enum": "ITEM_ID_CARD_MIHARU",
-   "english": "Watchitt"
+   "enum": "ITEM_ID_CARD_MIHARU"
   },
   {
    "id": 512,
    "name": "KOBURON",
    "msg": "ename_378",
-   "enum": "ITEM_ID_CARD_KOBURON",
-   "english": "Whacka"
+   "enum": "ITEM_ID_CARD_KOBURON"
   },
   {
    "id": 513,
    "name": "TAMARA",
    "msg": "ename_379",
-   "enum": "ITEM_ID_CARD_TAMARA",
-   "english": "Squirps"
+   "enum": "ITEM_ID_CARD_TAMARA"
   },
   {
    "id": 514,
    "name": "DAVID",
    "msg": "ename_380",
-   "enum": "ITEM_ID_CARD_DAVID",
-   "english": "Flint Cragley"
+   "enum": "ITEM_ID_CARD_DAVID"
   },
   {
    "id": 515,
    "name": "HENRY_STANLAY",
    "msg": "ename_381",
-   "enum": "ITEM_ID_CARD_HENRY_STANLAY",
-   "english": "Hornfels & Monzo"
+   "enum": "ITEM_ID_CARD_HENRY_STANLAY"
   },
   {
    "id": 516,
    "name": "TONO",
    "msg": "ename_382",
-   "enum": "ITEM_ID_CARD_TONO",
-   "english": "King Sammer"
+   "enum": "ITEM_ID_CARD_TONO"
   },
   {
    "id": 517,
    "name": "ANGEL",
    "msg": "ename_383",
-   "enum": "ITEM_ID_CARD_ANGEL",
-   "english": "Luvbi"
+   "enum": "ITEM_ID_CARD_ANGEL"
   },
   {
    "id": 518,
    "name": "ENNMA",
    "msg": "ename_384",
-   "enum": "ITEM_ID_CARD_ENNMA",
-   "english": "Jaydes"
+   "enum": "ITEM_ID_CARD_ENNMA"
   },
   {
    "id": 519,
    "name": "KAMISAMA",
    "msg": "ename_385",
-   "enum": "ITEM_ID_CARD_KAMISAMA",
-   "english": "Grambi"
+   "enum": "ITEM_ID_CARD_KAMISAMA"
   },
   {
    "id": 520,
    "name": "CUBY",
    "msg": "ename_386",
-   "enum": "ITEM_ID_CARD_CUBY",
-   "english": "The InterNed"
+   "enum": "ITEM_ID_CARD_CUBY"
   },
   {
    "id": 521,
    "name": "LUIGI",
    "msg": "ename_387",
-   "enum": "ITEM_ID_CARD_LUIGI",
-   "english": "Luigi"
+   "enum": "ITEM_ID_CARD_LUIGI"
   },
   {
    "id": 522,
    "name": "MARIO",
    "msg": "ename_388",
-   "enum": "ITEM_ID_CARD_MARIO",
-   "english": "Mario"
+   "enum": "ITEM_ID_CARD_MARIO"
   },
   {
    "id": 523,
    "name": "PEACH",
    "msg": "ename_389",
-   "enum": "ITEM_ID_CARD_PEACH",
-   "english": "Peach (1)"
+   "enum": "ITEM_ID_CARD_PEACH"
   },
   {
    "id": 524,
    "name": "RED_GURIN",
    "msg": "ename_402",
-   "enum": "ITEM_ID_CARD_RED_GURIN",
-   "english": "Red & Green"
+   "enum": "ITEM_ID_CARD_RED_GURIN"
   },
   {
    "id": 525,
    "name": "ATOMIC_TERESA",
    "msg": "ename_406",
-   "enum": "ITEM_ID_CARD_ATOMIC_TERESA",
-   "english": "Atomic Boo"
+   "enum": "ITEM_ID_CARD_ATOMIC_TERESA"
   },
   {
    "id": 526,
    "name": "MAME_BUBUDO",
    "msg": "ename_407",
-   "enum": "ITEM_ID_CARD_MAME_BUBUDO",
-   "english": "Small Sammer Guy"
+   "enum": "ITEM_ID_CARD_MAME_BUBUDO"
   },
   {
    "id": 527,
    "name": "DAI_BUBUDO",
    "msg": "ename_408",
-   "enum": "ITEM_ID_CARD_DAI_BUBUDO",
-   "english": "Big Sammer Guy"
+   "enum": "ITEM_ID_CARD_DAI_BUBUDO"
   },
   {
    "id": 528,
    "name": "CHERIRING",
    "msg": "ename_409",
-   "enum": "ITEM_ID_CARD_CHERIRING",
-   "english": "Cherbil"
+   "enum": "ITEM_ID_CARD_CHERIRING"
   },
   {
    "id": 529,
    "name": "ICE_CHERIRING",
    "msg": "ename_410",
-   "enum": "ITEM_ID_CARD_ICE_CHERIRING",
-   "english": "Ice Cherbil"
+   "enum": "ITEM_ID_CARD_ICE_CHERIRING"
   },
   {
    "id": 530,
    "name": "POISON_CHERIRING",
    "msg": "ename_411",
-   "enum": "ITEM_ID_CARD_POISON_CHERIRING",
-   "english": "Poison Cherbil"
+   "enum": "ITEM_ID_CARD_POISON_CHERIRING"
   },
   {
    "id": 531,
    "name": "KYORORU",
    "msg": "ename_412",
-   "enum": "ITEM_ID_CARD_KYORORU",
-   "english": "Frackle"
+   "enum": "ITEM_ID_CARD_KYORORU"
   },
   {
    "id": 532,
    "name": "ALPHA_KYORORU",
    "msg": "ename_413",
-   "enum": "ITEM_ID_CARD_ALPHA_KYORORU",
-   "english": "Wrackle"
+   "enum": "ITEM_ID_CARD_ALPHA_KYORORU"
   },
   {
    "id": 533,
    "name": "HORUHOLE",
    "msg": "ename_414",
-   "enum": "ITEM_ID_CARD_HORUHOLE",
-   "english": "Welderberg"
+   "enum": "ITEM_ID_CARD_HORUHOLE"
   },
   {
    "id": 534,
    "name": "CUBELIC",
    "msg": "ename_415",
-   "enum": "ITEM_ID_CARD_CUBELIC",
-   "english": "The InterChet"
+   "enum": "ITEM_ID_CARD_CUBELIC"
   },
   {
    "id": 535,
    "name": "KAGE_CHERIRING",
    "msg": "ename_416",
-   "enum": "ITEM_ID_CARD_KAGE_CHERIRING",
-   "english": "Dark Cherbil"
+   "enum": "ITEM_ID_CARD_KAGE_CHERIRING"
   },
   {
    "id": 536,
    "name": "JYASUMING_2SEI",
    "msg": "ename_417",
-   "enum": "ITEM_ID_CARD_JYASUMING_2SEI",
-   "english": "Tiptron"
+   "enum": "ITEM_ID_CARD_JYASUMING_2SEI"
   },
   {
    "id": 537,
    "name": "KINOPIO",
    "msg": "ename_418",
-   "enum": "ITEM_ID_CARD_KINOPIO",
-   "english": "Toad"
+   "enum": "ITEM_ID_CARD_KINOPIO"
   }
  ],
- "attribution": "Table address and field offsets from SeekyCt/spm-headers (item_data.h, item_data_ids.h), MIT licensed. Values read out of the game (work/extracted/eu0/sys/main.dol); regenerate with scripts/dump_items.py."
+ "attribution": "Table address and field offsets from SeekyCt/spm-headers (item_data.h, item_data_ids.h), MIT licensed. Ids, internal names and message KEYS read out of the game (sys/main.dol); regenerate with scripts/dump_items.py. NO game text: an item's English name is resolved at runtime from the user's own files/msg/ (D194)."
 }
