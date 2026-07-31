@@ -17,8 +17,10 @@ the rest are binary parameter data and are not.
 | 1 | 14,080 | ✅ **704 part records**, 20 bytes each |
 | 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats |
 | 6 | 64,768 | ✅ **4,048 transform rows**, four floats each |
+| 7 | 17,760 | ✅ **2,960 `(start, count, flags)`** records, 6 bytes each |
+| 8 | 23,680 | ✅ **2,960 records**, 8 bytes: index, type, kind, offset |
 | 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 |
-| 3-5, 7-9, 11-15 | ~700 KB | 🔶 binary; no structure established |
+| 3-5, 9, 11-15 | ~650 KB | 🔶 binary; no structure established |
 
 An **effect record** is a 32-byte name then three u32s: the index of its first
 part, how many parts it has, and a third running index into something in
@@ -69,7 +71,32 @@ which is one second at 60 fps. ⚠️ The leading `u32` is mostly ≡ 1 (mod 10)
 runs 1..621 with 53 distinct values, the same shape as a part record's second
 `u16`; a duration in some unit is the obvious reading and is **not** established.
 
-⛔ **The remaining sections.** ~700 KB, no strings.
+## Sections 7 and 8, which pair up
+
+Section 7 is 2,960 records of `(u16 start, u16 count, u16 flags)`, and the
+start/count chain the same way the effect records do: ✅ **2,958 of 2,959**
+consecutive pairs satisfy `start + count == next start`, for an implied total of
+2,960. Nearly every count is 1 — eight records break that, which is what makes
+the chain visible at all.
+
+Section 8 is **2,960 records of 8 bytes**, the exact count section 7 implies, as
+four `u16`:
+
+| field | range | |
+|---|---|---|
+| 0 | 0..522, 523 distinct | an index into something with 523 entries |
+| 1 | 9 distinct values | a type |
+| 2 | 0..5 | a small enum |
+| 3 | 0..64,960 | ⚠️ **always a multiple of 32** |
+
+⚠️ Field 3 being wholly divisible by 32 is what says it is a byte offset into a
+32-byte-strided table, using about 2,030 entries. 🔶 **Which section it targets
+is not settled** — 9, 11 and 13 would each be 86-90% filled by it, and none of
+those is the tight near-miss that settled section 2 (D195). Guessing between
+them on fill alone would be exactly the kind of plausible-and-unchecked
+inference this file has avoided so far.
+
+⛔ **The remaining sections.** ~650 KB, no strings.
 
 ⚠️ **What a transform row *means* is not established.** They are plainly
 geometry -- 42% are unit-length vectors, and `chaos` holds an exact 72-degree
@@ -328,3 +355,60 @@ def curve_at(data: bytes, offset: int) -> Curve:
         marker=marker,
         samples=struct.unpack_from(f">{count}f", data, at + CURVE_HEADER),
     )
+
+
+#: Sections 7 and 8, which pair: 7 groups 8's entries by start and count.
+GROUP_SECTION, GROUP_STRIDE = 7, 6
+ENTRY_SECTION, ENTRY_STRIDE = 8, 8
+
+
+@dataclass(frozen=True)
+class Group:
+    """A section 7 record: a run of section 8 entries, plus flags."""
+
+    index: int
+    start: int
+    count: int
+    flags: int
+
+
+@dataclass(frozen=True)
+class Entry:
+    """A section 8 record. Only its shape is established, not its meaning."""
+
+    index: int
+    reference: int
+    """0..522. Indexes something with 523 entries; which is unknown."""
+
+    kind: int
+    """One of nine values."""
+
+    variant: int
+    """0..5."""
+
+    offset: int
+    """⚠️ Always a multiple of 32, so a byte offset into a 32-byte-strided
+    table. 🔶 Which section holds that table is not established."""
+
+
+def _section(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
+    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
+    return offsets[index], offsets[index + 1]
+
+
+def groups(data: bytes) -> list[Group]:  # pylint: disable=container-return
+    """Section 7, in file order."""
+    start, end = _section(data, GROUP_SECTION)
+    return [
+        Group(index, *struct.unpack_from(">3H", data, at))
+        for index, at in enumerate(range(start, end - GROUP_STRIDE + 1, GROUP_STRIDE))
+    ]
+
+
+def entries(data: bytes) -> list[Entry]:  # pylint: disable=container-return
+    """Section 8, in file order. Section 7's start/count addresses these."""
+    start, end = _section(data, ENTRY_SECTION)
+    return [
+        Entry(index, *struct.unpack_from(">4H", data, at))
+        for index, at in enumerate(range(start, end - ENTRY_STRIDE + 1, ENTRY_STRIDE))
+    ]

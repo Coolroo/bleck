@@ -12666,3 +12666,46 @@ congruent to 1 mod 10. A duration in some unit is the obvious reading and is
 
 So `bleck` can now say what an effect is made of, where its pieces sit, and how
 they move — and still not what they look like. Ten sections remain.
+
+---
+
+## D196 — Two more `effdata.dat` sections, and a deliberate stop (2026-07-30)
+
+✅ **6 of 16 sections now have structure** — 0, 1, 2, 6, 7, 8, 10.
+
+Section 7 is 2,960 records of `(u16 start, u16 count, u16 flags)` and chains the
+way the effect records do: `start + count` lands on the next `start` for
+**2,958 of 2,959** pairs. Section 8 is **2,960 records of 8 bytes** — exactly the
+total section 7 implies — read as `(reference, kind, variant, offset)`.
+
+⚠️ **The exceptions are what make the chain a finding.** Nearly every count is 1,
+so a chain that held perfectly would be indistinguishable from a plain 0,1,2,3
+sequence. Eight records carry a count of 2, and those are the only reason the
+relation is visible at all. The test asserts the chain *and* relies on those
+eight, which is why it is not written as "field0 == index".
+
+### The one strong signal in section 8
+
+⚠️ **Every `offset` is a multiple of 32**, without exception across all 2,960.
+That is what says it is a byte offset into a 32-byte-strided table rather than
+an arbitrary number, and it uses about 2,030 entries of one.
+
+### ⛔ Where this stopped, and why
+
+Three sections would be filled 86-90% by that offset — 9, 11 and 13. **None is
+picked.** The reading that settled section 2 (D195) worked because its largest
+offset landed 72 bytes short of the section's end; 86% is not that, it is three
+plausible candidates and a coin toss.
+
+Guessing here would produce a decoder that works on the one file this project
+has and is wrong about the format. That is the shape of D70/D73/D74 — internally
+consistent, cleanly bisected, and false — so the ranges are pinned as tests and
+the question is left open.
+
+### 🔶 Still not found: the texture link
+
+Four candidate fields have now been checked and refuted against
+`effdata.tpl`'s 219 images: the part record's second `u16` (max 621, D190), the
+curve record's leading `u32` (max 621, D195), and section 8's `reference`
+(max 522) and `offset` (max 64,960). ⚠️ Recording the refutations matters as much
+as the findings — each is a search someone need not repeat.

@@ -205,3 +205,47 @@ class TestCurves:
             if b - a == effdata.CURVE_HEADER + 4 * len(effdata.curve_at(data, a).samples)
         )
         assert exact > 1000, f"only {exact} records matched their declared size"
+
+
+@pytest.mark.gamedata
+class TestGroupsAndEntries:
+    """Sections 7 and 8, which pair: 7 groups 8's records by start and count."""
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def test_the_group_chain_holds(self):
+        """Same start/count shape as the effect records. 2,958 of 2,959.
+
+        ⚠️ Not all of them, and the exceptions are the point: nearly every count
+        is 1, so a chain that held perfectly would be indistinguishable from a
+        plain sequence. Eight records with a count of 2 are what make it visible.
+        """
+        groups = effdata.groups(self._data())
+        chained = sum(
+            1 for a, b in itertools.pairwise(groups) if a.start + a.count == b.start
+        )
+        assert chained >= len(groups) - 2
+
+    def test_the_group_total_matches_the_entry_count(self):
+        """The independent check: what section 7 implies is what section 8 has."""
+        data = self._data()
+        groups, records = effdata.groups(data), effdata.entries(data)
+        last = groups[-1]
+        assert max(last.start + last.count, len(groups)) == len(records)
+
+    def test_every_entry_offset_is_a_multiple_of_32(self):
+        """⚠️ What says field 3 is a byte offset into a 32-byte-strided table
+        rather than an arbitrary number."""
+        assert all(e.offset % 32 == 0 for e in effdata.entries(self._data()))
+
+    def test_the_entry_fields_stay_in_their_measured_ranges(self):
+        """🔶 Shape only. None of these fields has an established meaning, and
+        pinning the ranges is what would make a future change visible."""
+        records = effdata.entries(self._data())
+        assert len(records) == 2960
+        assert max(e.reference for e in records) == 522
+        assert len({e.kind for e in records}) == 9
+        assert max(e.variant for e in records) == 5
