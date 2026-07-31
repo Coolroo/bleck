@@ -247,19 +247,46 @@ for them.
 
 ### Dimentio, and the manifests
 
-`texture export`, `model export` and `effect export` each write a JSON manifest
-beside their output. Point all three at one folder and Dimentio — the asset
-viewer that ships in this repo — can open it:
+`texture export`, `model export`, `sound export` and `effect export` each write
+a JSON manifest at the export root. Point them all at one folder and Dimentio —
+the asset viewer that ships in this repo — can open it:
 
 ```bash
 bleck texture export --out work/export
 bleck model export   --out work/export
+bleck sound export   --out work/export
 bleck effect export  --out work/export
 ```
 
-The manifest is the contract, not the directory listing: a filename cannot say
-which disc file an asset came from, which archive member, or what format it was
-stored in.
+Each kind gets its own subtree, and inside it the disc's own directory layout is
+mirrored, so an exported file sits where the file it came from does:
+
+```
+work/export/
+  textures.json  models.json  sounds.json  effects.json
+  textures/files/eff/effdata.tpl/0.png
+  textures/files/map/aa1_01.bin/aa1_01/tex/wall.tpl/0.png
+  models/files/a/p_wii_mario.glb
+  sounds/files/sound/sys_title1_44k_lp.wav
+```
+
+A TPL becomes a *directory* because it holds several images; the leaf is the
+image's index within it. A model or a stream is one file in and one file out, so
+it keeps its name.
+
+!!! note "Why not one folder"
+
+    A full export is about **22,800 files** — 21,780 PNGs alone. Flat, that is a
+    directory nothing opens usefully.
+
+Characters a path component cannot legally hold — `<>:"|?*`, a trailing dot, a
+reserved name like `nul` — are percent-escaped rather than dropped, so no two
+disc paths can land on the same file and nothing is written outside the export
+root.
+
+The manifest is still the contract, not the directory listing: a path cannot say
+what format an image was stored in, or how many faces a mesh had. Its `file`
+field is a path relative to the export root.
 
 ## Archives
 

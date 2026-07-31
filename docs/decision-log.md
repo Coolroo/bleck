@@ -14720,3 +14720,52 @@ whatever. Only 44100 is measured, so only 44100 is halved.
 ⚠️ `sys_title1_44k_lp` tests the *other* way on the interleave check —
 correlation rises 0.837 -> 0.879 when interleaved, the signature of mono. So
 "every track is stereo" may be another assumption that does not hold.
+
+## D233 — Exports go into directories that mirror the disc (2026-07-31)
+
+⛔ **Reported by a user:** *"bleck should not dump the entire export all in one
+folder."* A full export put **~22,800 files** side by side — 21,780 PNGs, 864
+`.glb`, 135 `.wav` and four manifests.
+
+Now grouped by kind, and within each kind mirroring the disc path the entry
+already carries:
+
+```
+export/
+  textures.json  models.json  sounds.json  effects.json
+  textures/files/eff/effdata.tpl/0.png
+  textures/files/map/aa1_01.bin/dvd/bg/aa1_01_00.tpl/0.png
+  models/files/a/p_wii_mario.glb
+  sounds/files/sound/sys_title1_44k_lp.wav
+```
+
+⚠️ **A TPL becomes a directory; a model or stream does not.** One TPL holds
+several images, so the file becomes a folder and the leaf is the image index.
+A `.glb` or `.wav` is one-in-one-out and keeps its name inside the disc's own
+directory.
+
+**The manifests stay at the root** — that is the contract Dimentio reads, and
+each `file` field became a posix-relative path. ✅ **Verified positively rather
+than by inspection**: the Rust readers all do `root.join(&entry.path)`, and a
+nested path was exported and read back through `cargo test real_export` before
+the change was trusted. No Rust change was needed.
+
+### The escaping rule, and why it is injective
+
+Texture names embed `/` for archive members and `#` for the image index, and
+Windows additionally forbids `<>:"|?*`. One shared helper percent-escapes per
+component — **`%` first**, then the forbidden set, control characters, a
+trailing dot or space, and reserved Windows stems (`nul.png` → `%6Eul.png`).
+
+⚠️ **Escaping `%` first is what makes it injective**, and injective is what
+rules out two different assets landing on one path. `..` becomes `.%2E`, so
+nothing can escape the export root — asserted by a test, not assumed.
+
+Mutation-tested: making the helper return a flat name fails **9 of 27** tests,
+including a shared checker asserting every manifest `file` resolves to a real
+file, stays inside the root, is posix, and is not flat.
+
+⚠️ **`bleck model export` still defaults to `--out work/models`** while the
+other three default to `work/export`. Harmless before, when one root meant one
+pile; now that kinds are separated, pointing all four at one root is the
+intended use.

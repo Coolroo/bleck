@@ -7,9 +7,12 @@ a mesh can be looked at, every claim about it is a claim about a hex dump.
 A model edit, when it arrives, will be declared as data against the user's own
 disc like every other edit (see `vision.md`), not shipped as baked geometry.
 
-The export writes `models.json` beside the OBJ files, and *that* is the
-contract Dimentio reads. A filename cannot say which shape inside a file it
-came from, how many faces it had, or what it measures.
+The export writes `models.json` at the export root, and *that* is the contract
+Dimentio reads. A filename cannot say which shape inside a file it came from,
+how many faces it had, or what it measures.
+
+The `.glb` files go under `models/`, mirroring the disc — see
+`bleck/common/exportlayout.py` for why every kind gets its own subtree.
 
 ⛔ **What this exports is a fragment, and it says so.** One shape record is
 read per file; a character file names dozens. Median coverage is **13.6%** —
@@ -23,17 +26,21 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from bleck.cli.types import AddCommand
+from bleck.common import exportlayout
 from bleck.common.errors import UserError
 from bleck.formats import gltf, model, png, texdecode, tpl
 from bleck.mods import registry
 
 CATEGORY = "inspection"
 
-#: Written beside the OBJ files. Dimentio reads this, not the directory listing.
+#: Written at the export root. Dimentio reads this, not the directory listing.
 MANIFEST = "models.json"
+
+#: The subtree the `.glb` files go under, keeping them clear of the other kinds.
+KIND = "models"
 
 #: Where character models live on the disc.
 MODEL_DIR = "files/a"
@@ -58,8 +65,14 @@ class Found:
         return Path(self.disc_path).name
 
     @property
-    def filename(self) -> str:
-        return f"{self.name}.glb"
+    def relative(self) -> str:
+        """Where the `.glb` lands, relative to the export root.
+
+        One file in, one file out, so it sits in the directory the disc file
+        sits in rather than in a directory named after it.
+        """
+        directory = PurePosixPath(self.disc_path).parent.as_posix()
+        return exportlayout.place(KIND, directory, f"{self.name}.glb")
 
 
 def _base() -> Path:
@@ -252,7 +265,7 @@ def _summarise(entries: list) -> None:
 
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    tree = exportlayout.Tree(out)
 
     base = _base()
     found = _above_coverage(_walk(base, args.search or ""), args.min_coverage)
@@ -267,9 +280,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         data = (base / entry.disc_path).read_bytes()
         clip = None if args.no_animation else _animation(data, entry.mesh)
         try:
-            (out / entry.filename).write_bytes(
-                gltf.write(entry.mesh, texture, entry.name, clip)
-            )
+            tree.write(entry.relative, gltf.write(entry.mesh, texture, entry.name, clip))
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
             continue
@@ -278,7 +289,7 @@ def cmd_export(args: argparse.Namespace) -> int:
             {
                 "name": entry.name,
                 "shape": entry.mesh.name,
-                "file": entry.filename,
+                "file": entry.relative,
                 "source": entry.disc_path,
                 "positions": len(entry.mesh.positions),
                 "faces": len(entry.mesh.faces),
@@ -306,7 +317,8 @@ def cmd_export(args: argparse.Namespace) -> int:
         json.dumps({"schema": 1, "models": entries}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote {len(entries)} .glb file(s) and {MANIFEST} to {out}")
+    print(f"wrote {len(entries)} .glb file(s) under {out / KIND}")
+    print(f"  and {MANIFEST} to {out}")
     _summarise(entries)
     if failed:
         print(f"\n{len(failed)} could not be written:")

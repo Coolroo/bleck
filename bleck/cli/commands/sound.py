@@ -1,15 +1,21 @@
 """`sound` commands: the game's music, out as WAV.
 
 `files/sound/` holds **135 BRSTM streams**, 162 MB of DSP-ADPCM. This decodes
-them to something every operating system plays, and writes `sounds.json` beside
-the output — the same contract shape as `texture`, `model` and `effect`.
+them to something every operating system plays, and writes `sounds.json` at the
+export root — the same contract shape as `texture`, `model` and `effect`. The
+WAVs themselves go under `sounds/`, mirroring the disc; see
+`bleck/common/exportlayout.py`.
 
 ⛔ **No audio ships with `bleck`.** These come off whatever disc the user
 extracted; `work/` is git-ignored and stays that way.
 
-⚠️ **WAV is uncompressed, so the export is far larger than the input.** 162 MB
-of ADPCM becomes roughly 1.5 GB of 16-bit PCM. `--seconds` caps each track for
-a browsable set, and says in the manifest that it did.
+⚠️ **WAV is uncompressed**, so 162 MB of ADPCM becomes **566 MB** of 16-bit
+PCM. That is the whole disc's music and is the right default to export.
+
+⛔ **`--seconds` is for a quick look, not for browsing.** 103 of the 135 tracks
+run longer than 20 seconds and every one of them loops, so a cap truncates most
+of the library mid-phrase. It exists because an earlier export ran at double
+the rate (D232) and was heading for 1.5 GB; that is no longer the case.
 
 ⛔ **The 15 MB `BRSAR` is not touched.** It holds the sound *effects* in a
 nested archive format, and guessing at it would produce noise that plays.
@@ -20,17 +26,21 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from bleck.cli.types import AddCommand
+from bleck.common import exportlayout
 from bleck.common.errors import UserError
 from bleck.formats import brstm, wav
 from bleck.mods import registry
 
 CATEGORY = "inspection"
 
-#: Written beside the WAVs. Dimentio reads this, not the directory listing.
+#: Written at the export root. Dimentio reads this, not the directory listing.
 MANIFEST = "sounds.json"
+
+#: The subtree the WAVs go under, keeping them clear of the other kinds.
+KIND = "sounds"
 
 #: Where the streams live on the disc.
 SOUND_DIR = "files/sound"
@@ -48,8 +58,10 @@ class Found:
         return Path(self.disc_path).stem
 
     @property
-    def filename(self) -> str:
-        return f"{self.name}.wav"
+    def relative(self) -> str:
+        """Where the WAV lands, relative to the export root."""
+        directory = PurePosixPath(self.disc_path).parent.as_posix()
+        return exportlayout.place(KIND, directory, f"{self.name}.wav")
 
 
 def _base() -> Path:
@@ -127,7 +139,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    tree = exportlayout.Tree(out)
 
     found = _walk(_base(), args.search or "", args.seconds)
     entries: list[dict] = []
@@ -137,12 +149,12 @@ def cmd_export(args: argparse.Namespace) -> int:
             data = wav.write(entry.stream.playback_rate, entry.stream.pcm)
         except ValueError:
             continue
-        (out / entry.filename).write_bytes(data)
+        tree.write(entry.relative, data)
         written += len(data)
         entries.append(
             {
                 "name": entry.name,
-                "file": entry.filename,
+                "file": entry.relative,
                 "source": entry.disc_path,
                 "rate": entry.stream.playback_rate,
                 "header_rate": entry.stream.rate,
@@ -158,7 +170,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         json.dumps({"schema": 1, "sounds": entries}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote {len(entries)} WAV(s) and {MANIFEST} to {out}")
+    print(f"wrote {len(entries)} WAV(s) under {out / KIND} and {MANIFEST} to {out}")
     print(f"  {written / 1e6:.0f} MB of 16-bit PCM")
     if args.seconds:
         print(f"  ! each track capped at {args.seconds:g}s, and the manifest says so")
@@ -181,6 +193,6 @@ def register(add: AddCommand) -> None:
         "--seconds",
         type=float,
         default=0.0,
-        help="cap each track, for a browsable set instead of 1.5 GB",
+        help="cap each track for a quick look; the full 566 MB is the default",
     )
     export.set_defaults(func=cmd_export)

@@ -9,10 +9,13 @@ through the CMPR endpoint domain (D187), which is why it is lossless. If a
 build ever decoded and re-encoded, every rebuild would cost a generation of
 quality.
 
-The export writes `textures.json` beside the PNGs, and *that* is the contract
-the viewer reads (`docs/plan-viewer.md`) — a filename cannot carry which disc
-file an image came from, which container member, or what format it was stored
-in.
+The export writes `textures.json` at the export root, and *that* is the
+contract the viewer reads (`docs/plan-viewer.md`) — a filename cannot carry
+which disc file an image came from, which container member, or what format it
+was stored in.
+
+The PNGs themselves go under `textures/`, mirroring the disc (see
+`bleck/common/exportlayout.py`); 21,780 of them in one directory was unusable.
 """
 
 from __future__ import annotations
@@ -23,14 +26,18 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from bleck.cli.types import AddCommand
+from bleck.common import exportlayout
 from bleck.common.errors import UserError
 from bleck.formats import lz77, png, texdecode, tpl, u8
 from bleck.mods import registry
 
 CATEGORY = "inspection"
 
-#: Written beside the PNGs. The viewer reads this, not the directory listing.
+#: Written at the export root. The viewer reads this, not the directory listing.
 MANIFEST = "textures.json"
+
+#: The subtree the PNGs go under, keeping them clear of the other kinds.
+KIND = "textures"
 
 
 @dataclass(frozen=True)
@@ -50,9 +57,14 @@ class Found:
         return f"{self.disc_path}{inside}#{self.image.index}"
 
     @property
-    def filename(self) -> str:
-        stem = self.name.replace("/", "_").replace("#", "_")
-        return f"{stem}.png"
+    def relative(self) -> str:
+        """Where the PNG lands, relative to the export root.
+
+        The TPL becomes a *directory*: a container holds several images, and
+        what distinguishes them is the index, which is the leaf.
+        """
+        inside = f"{self.disc_path}/{self.member}" if self.member else self.disc_path
+        return exportlayout.place(KIND, inside, f"{self.image.index}.png")
 
 
 def _base() -> Path:
@@ -122,7 +134,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
+    tree = exportlayout.Tree(out)
 
     found = _walk(_base(), args.search or "")
     written = 0
@@ -138,12 +150,12 @@ def cmd_export(args: argparse.Namespace) -> int:
             # skipped images would read as "the disc has fewer textures".
             failed.append(f"{entry.name}: {exc}")
             continue
-        (out / entry.filename).write_bytes(data)
+        tree.write(entry.relative, data)
         written += 1
         entries.append(
             {
                 "name": entry.name,
-                "file": entry.filename,
+                "file": entry.relative,
                 "format": entry.image.format.name,
                 "width": entry.image.width,
                 "height": entry.image.height,
@@ -156,7 +168,7 @@ def cmd_export(args: argparse.Namespace) -> int:
         json.dumps({"schema": 1, "textures": entries}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote {written} PNG(s) and {MANIFEST} to {out}")
+    print(f"wrote {written} PNG(s) under {out / KIND} and {MANIFEST} to {out}")
     if failed:
         print(f"\n{len(failed)} image(s) could not be decoded:")
         for note in failed[:10]:
