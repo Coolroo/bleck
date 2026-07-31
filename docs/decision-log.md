@@ -14975,3 +14975,47 @@ Making `weights_at` ignore `time` and always return keyframe 0's weights fails
 `gltf::posing_a_loaded_mesh_moves_the_vertices_its_target_names` and
 `app::playing_advances_the_clip_and_displaces_the_mesh` — three of them on the
 pixel buffer, which is the only place a window nobody can look at is visible.
+
+## D236 — A reference model says the geometry is right and the *grouping* is wrong (2026-07-31)
+
+✅ **Ground truth arrived.** A user supplied third-party rips of Brobot,
+Brobot L-type and the missile as OBJ/DAE — the same service the pure-heart
+recording did for audio (D232).
+
+Comparing `Brobot.obj` against `e_lui_robo`:
+
+| axis | reference | bleck | bleck, minus 4 positions |
+|---|---|---|---|
+| x | −48.80 .. 45.89 | **−176.59** .. 33.70 | −45.89 .. 33.70 |
+| y | 0.02 .. 100.83 | −1.25 .. **100.83** | −1.25 .. 100.83 |
+| z | −50.81 .. 50.57 | −32.04 .. 32.04 | −32.04 .. 32.04 |
+
+⚠️ **Max Y matches to the hundredth — 100.83 in both.** Scale and origin are
+right, which is the thing a wrong reading almost never gets.
+
+### The reported "fucked up verts" are four vertices
+
+Exactly **4 of 2,086** positions fall outside the reference box, and they are
+indices **0, 1, 2 and 3** — one flat quad at x −176..−153, z 0.
+
+⛔ **They are not mis-read.** They belong to **group 0**, the first shape, whose
+position base is zero — so no rebasing touches them. They are read verbatim
+from the array. The file genuinely holds a quad there; the third-party rip
+simply did not export it.
+
+### So the defect is the merge, not the read
+
+`bleck` flattens a file's shapes into **one** glTF mesh. `e_lui_robo` has **92**;
+the reference keeps **112 separate groups**. One odd shape therefore reads as
+broken geometry welded to the character, with no way to hide it.
+
+🔶 **The fix is one glTF node or primitive per shape**, which would also
+dissolve two older complaints: the "small mimis on a big mimi" (D229) was 31
+sprite quads merged into one object, and per-shape primitives are the
+prerequisite for ever binding a texture per shape.
+
+⚠️ **`work/reference/` is a permanent instrument now.** Reference bounds turn
+"the verts look wrong" into a number, and this comparison took minutes where
+four rounds of eyeballing had not converged.
+
+⛔ The rips are third-party assets: `work/` is git-ignored and stays that way.
