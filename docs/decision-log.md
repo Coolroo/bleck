@@ -13782,3 +13782,25 @@ must live in section 6 (613 packed records, sign bit in byte 0) or section 4
 translation, rotation or scale. Binding 62 curves to guessed joints would
 produce smooth, confident, wrong motion, which is the exact failure mode this
 project has already had to undo three times (D70/D73/D74, D209, D211).
+
+### D215 addendum — the texture path is confirmed by a person (2026-07-30)
+
+✅ `MOBJ_broken_heart.glb` opened in Blender and **rendered its texture**. With
+`e_3D_manera_ruby`'s geometry confirmed earlier, the whole export path is now
+verified by human eyes: mesh, UVs, embedded PNG and material.
+
+⚠️ **Two false alarms preceded it, both about viewers rather than data**:
+
+1. Blender opens in **Solid** viewport shading, which renders flat grey and
+   ignores textures entirely. The fix is Material Preview, or the Shading
+   workspace, not a change to the export.
+2. Dimentio's model viewport is a software rasteriser doing flat shading and
+   **does not sample textures at all** — so it can confirm geometry and never
+   texturing. Checking model textures there would have looked like a bug for as
+   long as anyone cared to look.
+
+Before doubting the file, the checks that settled it: the material carries
+`baseColorTexture`, the embedded PNG is 128×128 RGBA with **alpha 255 on all
+16,384 pixels** (so `alphaMode: MASK` discards nothing), and the UVs span 0..1
+with 73 distinct u and 45 distinct v. All three passed, which is what made
+"it is the viewer" the right diagnosis.
