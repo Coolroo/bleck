@@ -13290,3 +13290,27 @@ silently wrong topology, which is worse than nothing.
 **Rejected:** shipping it drawable with the identity stream and clamping
 out-of-range indices. It would draw something, and something is exactly what
 this project keeps mistaking for a result.
+
+### D208 addendum — the table is longer than eight slots (2026-07-30)
+
+✅ **Verified.** Reading past `+0x16C` shows the table continues to at least
+`+0x1A8`, and `+0x170` through `+0x188` all hold the **same** offset — seven
+empty sections, which is exactly GX's eight texture-coordinate channels with
+one in use. That confirms the D207 reading of `+0x16C` as an *array* of
+per-texcoord pointers rather than a single slot.
+
+Sections beyond it hold more float triples (216, 48, 672, 810, 1408), so a
+model file carries several shapes and the eight-slot record read by `mesh()` is
+only the first. ⚠️ This means `mesh()` currently reports **one shape of many**,
+and its name (`R_Arm_skinShape`) is that shape's, not the model's.
+
+The corner→position gap narrows but does not close:
+
+- `+0x164` is 336 entries of four bytes, not floats — **vertex colours**,
+  matching the identity index stream at `+0x168`. That pairing now reads
+  cleanly, as normals do.
+- `+0x154` is still 324 positions against 336 corners, and `+0x158` still
+  ranges 0..22. ⛔ So the position stream is *not* `+0x158` by position in the
+  table, and the pairing that works for normals and colours does not work here.
+- 🔶 The section at `0x7614` is 2,592 bytes = **324** float pairs — the same
+  count as the positions. Untested, but 324 is not a coincidence twice.
