@@ -59,6 +59,7 @@ class TestAgainstTheDisc:
             search="p_wii_mario",
             no_textures=False,
             no_animation=True,
+            guess_textures=False,
             min_coverage=0.0,
         )
         assert command.cmd_export(args) == 0
@@ -86,6 +87,7 @@ class TestAgainstTheDisc:
             search="p_wii_mario",
             no_textures=True,
             no_animation=True,
+            guess_textures=False,
             min_coverage=0.0,
         )
         assert command.cmd_export(args) == 0

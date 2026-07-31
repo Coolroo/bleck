@@ -155,7 +155,9 @@ def _animation(data: bytes, mesh: model.Mesh):
     return None
 
 
-def texture_for(base: Path, disc_path: str, shapes: int = 1) -> bytes:
+def texture_for(
+    base: Path, disc_path: str, shapes: int = 1, guess: bool = False
+) -> bytes:
     """Image 0 of the bank beside a model, when that is unambiguous.
 
     ⛔ **A model with more than one shape gets no texture** (D229). Every
@@ -168,8 +170,16 @@ def texture_for(base: Path, disc_path: str, shapes: int = 1) -> bytes:
     ⚠️ 109 of 870 models have a single shape. The other 761 export untextured
     until the binding is found, because wrong texturing looks like a broken
     renderer while no texturing looks like what it is.
+
+    ⛔ `guess=True` overrides that and gives every shape image 0 anyway. **It
+    is wrong for most models** and exists only because grey geometry is hard to
+    identify; the manifest marks each one `texture_guessed` so nothing
+    downstream mistakes it for a reading. Three mappings have been refuted:
+    shape *i* to texture *i* (31% vs a 24% shuffled control), the slot-17 table
+    (23% -- worse than shuffling), and a material index in the face record
+    (always zero). See D229.
     """
-    if shapes != 1:
+    if shapes != 1 and not guess:
         return b""
     bank = model.bank_for(base / disc_path)
     if not bank.is_file():
@@ -252,11 +262,19 @@ def _summarise(entries: list) -> None:
     animated = sum(1 for entry in entries if entry["animated"])
     clips = sum(len(entry["clips"]) for entry in entries)
     curves = sum(c["curves"] for entry in entries for c in entry["clips"])
+    guessed = sum(1 for entry in entries if entry["texture_guessed"])
     print(f"  {textured} carry an embedded texture")
-    if many:
+    if guessed:
+        print(
+            f"  ! {guessed} of those are GUESSED -- every shape got image 0,\n"
+            f"    which is wrong for most of them. The manifest marks each one\n"
+            f"    texture_guessed; the binding is not decoded (D229)."
+        )
+    elif many:
         print(
             f"  ! {many} have several shapes and export untextured: each shape\n"
-            f"    has its own image and the binding is not decoded (D229)"
+            f"    has its own image and the binding is not decoded (D229).\n"
+            f"    --guess-textures paints image 0 on them anyway."
         )
     print(f"  {animated} carry a playable morph animation")
     print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
@@ -275,7 +293,9 @@ def cmd_export(args: argparse.Namespace) -> int:
         texture = (
             b""
             if args.no_textures
-            else texture_for(base, entry.disc_path, entry.mesh.shapes)
+            else texture_for(
+                base, entry.disc_path, entry.mesh.shapes, args.guess_textures
+            )
         )
         data = (base / entry.disc_path).read_bytes()
         clip = None if args.no_animation else _animation(data, entry.mesh)
@@ -297,6 +317,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": entry.mesh.coverage < WHOLE,
                 "textured": entry.mesh.is_textured and bool(texture),
+                "texture_guessed": bool(texture) and entry.mesh.shapes > 1,
                 "shapes": entry.mesh.shapes,
                 "animated": bool(clip),
                 "clips": [
@@ -344,6 +365,12 @@ def register(add: AddCommand) -> None:
         "--no-textures", action="store_true", help="geometry only, smaller files"
     )
     export.add_argument("--no-animation", action="store_true", help="skip morph targets")
+    export.add_argument(
+        "--guess-textures",
+        action="store_true",
+        help="give multi-shape models image 0 anyway; wrong for most of them, "
+        "and the manifest marks each one guessed",
+    )
     export.add_argument(
         "--min-coverage",
         type=float,

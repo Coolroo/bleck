@@ -14769,3 +14769,33 @@ file, stays inside the root, is posix, and is not flat.
 other three default to `work/export`. Harmless before, when one root meant one
 pile; now that kinds are separated, pointing all four at one root is the
 intended use.
+
+### D229 addendum — a third mapping refuted, and an opt-in guess (2026-07-31)
+
+⛔ **Slot 17 is not the shape-to-texture map.** It looked right: for
+`e_2D_manera6` it holds **38 entries with a maximum of 31** against 32 bank
+images, paired with 38 triples in slot 16 — a 38-record material table.
+
+Aspect-ratio test over 60 models whose texture aspects genuinely vary:
+
+| mapping | within 15% |
+|---|---|
+| shape *i* -> texture *i* | 31% |
+| **shuffled control** | **24%** |
+| **slot 17** | **23%** |
+
+⛔ Slot 17 scores *below* shuffling. Three candidates are now dead: identity,
+slot 17, and a material index in the face record (always zero).
+
+### The compromise
+
+`--guess-textures` paints image 0 on every shape anyway. It is **wrong for most
+models** and exists because a user, looking at the window, said the grey ones
+"are clearly models that should probably have textures" — and identifying a
+character from untextured geometry is genuinely hard.
+
+⚠️ **It is opt-in, off by default, and marked.** The manifest carries
+`texture_guessed` per model, the export prints `684 of those are GUESSED` in
+capitals, and the docstring lists the three refuted mappings. A guess a viewer
+can distinguish from a reading is useful; one it cannot is the failure this
+project keeps undoing.
