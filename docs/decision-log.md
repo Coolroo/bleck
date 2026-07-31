@@ -13238,3 +13238,55 @@ aliasing artifact: the joint table has a stride of `0x58`, and 7 × 0x58 = 0x268
 so every seventh joint's inline name lands at `+0x14C`. The constant stride is
 what made it persuasive, and a constant stride is exactly what aliasing
 produces.
+
+## D208 — The face list, and what still blocks drawing a model (2026-07-30)
+
+✅ **Verified.** Slot 0 of the section table (D207) is the **face list**: pairs
+of `(first corner, corner count)`, eight bytes each, matching the draw code's
+`r23 = base + idx * 8` with `lwz 0(r23)` and `lwz 4(r23)`.
+
+`p_wii_mario` has 96 faces whose corner counts **sum to exactly 336** — the
+length of every index stream in the same record. That is the proof, and it is
+the same kind as the unit-length normals: a wrong stride or a wrong slot gives
+a sum that misses. It holds on all **864 models that decode**, so `mesh()`
+checks it and refuses otherwise.
+
+The counts are what a Maya polygon export looks like, across the whole disc:
+
+| corners | faces |
+|---|---|
+| 3 | 11,172 |
+| 4 | 54,403 |
+| 5 | 1,044 |
+| 6–32 | 587 |
+
+So these are **polygons, not strips**, which is why `GXBegin` is called with
+`GX_QUADS` (`li r3,160`) at `0x80048620` — one branch of several, since a
+3-corner or 11-corner face cannot be a quad.
+
+### ⛔ What still blocks drawing
+
+**A corner cannot yet be turned into a position.** `p_wii_mario` has 324
+positions and 336 corners, and none of the four index streams can address 324
+things: two are the identity over 0..335, and two range 0..22 (23 distinct,
+which looks like a joint index — the file has 23-ish skeleton nodes).
+
+So the missing piece is a corner→position map, and it is **not in the eight
+slots as currently read**. Candidates, none tested:
+
+- 🔶 The position array is not 324 entries; the slot may hold something else
+  after the positions, making the true count 336 and one identity stream the
+  answer.
+- 🔶 A ninth section exists beyond `+0x16C` — the runtime code indexes
+  `+0x16C` by a counter (`lwz 364(r5)`, `r5 = r19 + n*4`), so that slot is an
+  *array* of per-texcoord pointers and the table may be longer than eight.
+- 🔶 Positions are indexed indirectly through the joint stream, as a skinned
+  model would be.
+
+Until one of those is settled, `Mesh.is_drawable` stays a hard `False`. Faces
+resolved against the wrong array would render a recognisable-looking mesh with
+silently wrong topology, which is worse than nothing.
+
+**Rejected:** shipping it drawable with the identity stream and clamping
+out-of-range indices. It would draw something, and something is exactly what
+this project keeps mistaking for a result.

@@ -172,8 +172,13 @@ SHAPE_NAME_AT = 0x14C
 #: Which slot holds what. Named from the draw code at `0x80048520`, which
 #: loads the equivalent runtime pointers from `+0x158`/`+0x160`/`+0x168`/
 #: `+0x16C` and feeds them to `GXSetArray` (D207).
+FACE_SLOT = 0
 POSITION_SLOT = 1
 NORMAL_SLOT = 3
+
+#: A face is `(first corner, corner count)`, eight bytes. The draw code reads
+#: the pair as `lwz 0(r23)` and `lwz 4(r23)`, indexing `r23` by `idx * 8`.
+FACE_STRIDE = 8
 
 #: `GXSetVtxAttrFmt` is called with `GX_F32`, `GX_POS_XYZ` and a stride of 12
 #: for both positions and normals, so a triple is three big-endian floats.
@@ -185,31 +190,46 @@ UNIT_TOLERANCE = 0.02
 
 
 @dataclass(frozen=True)
+class Face:
+    """One polygon: where its corners start, and how many it has."""
+
+    first: int
+    corners: int
+
+
+@dataclass(frozen=True)
 class Mesh:
     """The vertex arrays of one shape, as the game hands them to GX.
 
-    ⚠️ **Vertices, not triangles.** The four parallel index streams are read
-    and counted, but which primitive they assemble into is not known, so
-    nothing here can be drawn as a surface yet (D207).
+    ⚠️ **Not yet a surface.** Faces, positions and normals are all read, but
+    which index stream maps a corner to a *position* is still unknown -- no
+    stream in the table has the range to address 324 positions (D207).
     """
 
     name: str
     positions: list = field(default_factory=list)  # pylint: disable=container-return
-    #: Unit-length float triples, one per normal index. Verified on read.
+    #: Unit-length float triples. Verified on read; see `UNIT_TOLERANCE`.
     normals: list = field(default_factory=list)  # pylint: disable=container-return
-    #: Lengths of the four `u16`-in-`u32` index streams, in table order.
+    #: Polygons in draw order. Corner counts sum to the index-stream length.
+    faces: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Lengths of the `u16`-in-`u32` index streams, in table order.
     streams: list = field(default_factory=list)  # pylint: disable=container-return
 
     @property
+    def corners(self) -> int:
+        return sum(face.corners for face in self.faces)
+
+    @property
     def is_drawable(self) -> bool:
-        """⛔ Always False, and deliberately. Positions exist; the triangle
-        list does not, and a viewer handed loose points would draw nothing."""
+        """⛔ Always False until a corner can be turned into a position. A
+        viewer handed faces it cannot resolve would draw confident nonsense."""
         return False
 
     def describe(self) -> str:
         return (
             f"{self.name}: {len(self.positions)} position(s), "
-            f"{len(self.normals)} normal(s), streams {self.streams}"
+            f"{len(self.normals)} normal(s), {len(self.faces)} face(s) / "
+            f"{self.corners} corner(s), streams {self.streams}"
         )
 
 
@@ -365,7 +385,36 @@ def mesh(data: bytes) -> Mesh:
         for i, at in enumerate(table)
         if _is_index_stream(data, at, edges[i + 1])
     ]
-    return Mesh(name=name, positions=positions, normals=normals, streams=streams)
+    faces = _faces(data, table[FACE_SLOT], edges[FACE_SLOT + 1])
+    corners = sum(face.corners for face in faces)
+    if streams and corners not in streams:
+        raise ModelError(
+            f"slot {FACE_SLOT} at {table[FACE_SLOT]:#x} is not a face list: "
+            f"{len(faces)} faces cover {corners} corners, but the index "
+            f"streams are {streams} long"
+        )
+    return Mesh(
+        name=name,
+        positions=positions,
+        normals=normals,
+        faces=faces,
+        streams=streams,
+    )
+
+
+def _faces(data: bytes, start: int, stop: int) -> list:
+    # pylint: disable=container-return
+    """The face list, trusted because its corner counts add up.
+
+    ⚠️ This is the check that makes the reading more than a shape that fits:
+    the counts sum to exactly the length of the index streams. A wrong stride
+    or a wrong slot gives a sum that misses, and `mesh` would rather refuse.
+    """
+    count = (stop - start) // FACE_STRIDE
+    pairs = [
+        struct.unpack_from(">II", data, start + i * FACE_STRIDE) for i in range(count)
+    ]
+    return [Face(first=first, corners=size & 0xFFFF) for first, size in pairs]
 
 
 def _length(triple: tuple) -> float:

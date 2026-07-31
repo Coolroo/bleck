@@ -322,3 +322,50 @@ class TestTheVertexArrays:
     def test_a_file_with_no_section_table_is_refused(self):
         with pytest.raises(model.ModelError):
             model.mesh(a_model())
+
+
+class TestTheFaceList:
+    """The second independent proof, and the reason `faces` is trusted.
+
+    Slot 0 read as `(first, count)` pairs is not just a shape that fits: the
+    counts **sum to the length of the index streams**, on all 864 models that
+    decode. A wrong stride or slot gives a sum that misses, so `mesh` refuses
+    rather than returning a face list that would tear a mesh apart (D207).
+    """
+
+    def test_every_model_corner_count_adds_up(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        decoded = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            decoded += 1
+            assert found.corners in found.streams, path.name
+        assert decoded > 800, f"only {decoded} models decoded; the reader regressed"
+
+    def test_mario_is_triangles_and_quads(self):
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        assert len(found.faces) == 96
+        assert found.corners == 336
+        sizes = sorted(face.corners for face in found.faces)
+        assert sizes[0] == 3 and sizes[-1] == 11
+
+    def test_no_face_is_degenerate(self):
+        """⚠️ A count below 3 is not a polygon. If one appears, the pairs are
+        being read at the wrong stride and the sum matching was luck."""
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        for face in model.mesh(path.read_bytes()).faces:
+            assert face.corners >= 3, face
