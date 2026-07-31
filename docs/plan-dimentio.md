@@ -55,6 +55,26 @@ so the vertex data is likely in GX display-list form). **No vertex, index,
 weight or keyframe has been located.** That is the work, and it is
 reverse-engineering measured in weeks, not an afternoon.
 
+✅ **Superseded — the geometry is decoded** (D207, D208, D209). The vertex
+format was not found by reading the file; it was read off the game's own draw
+code at `0x80048400`, which states it outright: positions and normals are
+big-endian float32 XYZ at stride 12, indexed by `u16`. The section table at file
+`+0x150` holds the face list, positions, normals, colours and their index
+streams, and the loader relocates it in place, so the runtime offsets *are* the
+file offsets.
+
+All **864** readable models are drawable — 127,076 triangles — and `bleck model
+export` writes them as OBJ plus a `models.json` manifest.
+
+⚠️ **Two things are still not decoded.** A file holds several shapes and only
+the first is read, so an exported OBJ is a part rather than a character; and
+animation is still names and pointers, so Stage 5 is unchanged.
+
+⛔ **The old warning below stood for months and was right at the time.** It is
+kept because it records what the estimate looked like from the other side of the
+problem — "weeks, not an afternoon" was the correct read until `dolscan callers`
+existed to ask the question a different way.
+
 ⛔ **So: do not start with the 3D viewport.** Camera controls and preset
 backgrounds around an empty scene is the most demoralising possible order to
 build this in, and none of it can be validated until geometry exists.
