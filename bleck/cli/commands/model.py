@@ -142,13 +142,22 @@ def _animation(data: bytes, mesh: model.Mesh):
     return None
 
 
-def texture_for(base: Path, disc_path: str) -> bytes:
-    """Image 0 of the bank beside a model, as PNG, or empty when there is none.
+def texture_for(base: Path, disc_path: str, shapes: int = 1) -> bytes:
+    """Image 0 of the bank beside a model, when that is unambiguous.
 
-    ⚠️ **Image 0, not the right image.** Which texture a shape draws with is not
-    decoded; the bank pairing is (D202), and most banks hold one image. A model
-    whose bank holds several may be textured with the wrong one.
+    ⛔ **A model with more than one shape gets no texture** (D229). Every
+    shape's UVs span the whole [0,1] square, so each has its *own* image rather
+    than a region of an atlas, and which image goes with which shape is not
+    decoded. Painting image 0 across all of them draws the whole sprite sheet
+    onto every limb -- `e_2D_manera6` rendered as a crowd of small Mimis on a
+    big one.
+
+    ⚠️ 109 of 870 models have a single shape. The other 761 export untextured
+    until the binding is found, because wrong texturing looks like a broken
+    renderer while no texturing looks like what it is.
     """
+    if shapes != 1:
+        return b""
     bank = model.bank_for(base / disc_path)
     if not bank.is_file():
         return b""
@@ -223,6 +232,24 @@ def _above_coverage(found: list, percent: float) -> list:
     return kept
 
 
+def _summarise(entries: list) -> None:
+    """What the export produced, in the terms that decide whether to trust it."""
+    textured = sum(1 for entry in entries if entry["textured"])
+    many = sum(1 for entry in entries if entry["shapes"] > 1)
+    animated = sum(1 for entry in entries if entry["animated"])
+    clips = sum(len(entry["clips"]) for entry in entries)
+    curves = sum(c["curves"] for entry in entries for c in entry["clips"])
+    print(f"  {textured} carry an embedded texture")
+    if many:
+        print(
+            f"  ! {many} have several shapes and export untextured: each shape\n"
+            f"    has its own image and the binding is not decoded (D229)"
+        )
+    print(f"  {animated} carry a playable morph animation")
+    print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
+    print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -232,7 +259,11 @@ def cmd_export(args: argparse.Namespace) -> int:
     entries: list[dict] = []
     failed: list[str] = []
     for entry in found:
-        texture = b"" if args.no_textures else texture_for(base, entry.disc_path)
+        texture = (
+            b""
+            if args.no_textures
+            else texture_for(base, entry.disc_path, entry.mesh.shapes)
+        )
         data = (base / entry.disc_path).read_bytes()
         clip = None if args.no_animation else _animation(data, entry.mesh)
         try:
@@ -255,6 +286,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": entry.mesh.coverage < WHOLE,
                 "textured": entry.mesh.is_textured and bool(texture),
+                "shapes": entry.mesh.shapes,
                 "animated": bool(clip),
                 "clips": [
                     {
@@ -274,15 +306,8 @@ def cmd_export(args: argparse.Namespace) -> int:
         json.dumps({"schema": 1, "models": entries}, indent=2) + "\n",
         encoding="utf-8",
     )
-    textured = sum(1 for entry in entries if entry["textured"])
-    clips = sum(len(entry["clips"]) for entry in entries)
-    curves = sum(c["curves"] for entry in entries for c in entry["clips"])
     print(f"wrote {len(entries)} .glb file(s) and {MANIFEST} to {out}")
-    print(f"  {textured} carry an embedded texture")
-    animated = sum(1 for entry in entries if entry["animated"])
-    print(f"  {animated} carry a playable morph animation")
-    print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
-    print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
+    _summarise(entries)
     if failed:
         print(f"\n{len(failed)} could not be written:")
         for note in failed[:5]:

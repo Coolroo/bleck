@@ -14475,3 +14475,45 @@ like evidence in a way that agreement does not.
 **Rule for next time:** when a single unexplained measurement contradicts
 several understood ones, suspect the measurement. And when the proposed fix is
 "vary the working code until it matches", stop — that is fitting, not decoding.
+
+## D229 — Each shape has its own texture, so one image cannot cover a model (2026-07-31)
+
+⛔ **Reported from the window:** `e_2D_manera6` rendered as "a bunch of small
+mimis on a big mimi". D224 raised coverage to 100%, which meant every shape in
+a file now drew — and `texture_for` was painting **image 0 of the bank onto all
+of them**.
+
+`e_2D_manera6` is a paper sprite built from **31 flat quads**: one whole-body
+quad spanning x −8..8, and 30 smaller parts. Giving each the full sprite sheet
+draws a complete Mimi on every limb.
+
+### The measurement that settled it
+
+**All 31 groups span the full [0,1] UV square.** So a shape is not a *region*
+of an atlas — each has its **own image**. That is why one texture cannot serve
+a model, and it also explains why the texture link works perfectly for
+single-shape models like `MOBJ_broken_heart`, which a person confirmed.
+
+### ⛔ Two candidate bindings, both refuted
+
+| candidate | result |
+|---|---|
+| shape *i* uses texture *i* | quad aspect vs texture aspect: **30% within 15%, against 21% shuffled** |
+| a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked |
+
+The aspect test was sharpened to only models whose texture aspects genuinely
+vary, and still gave 30/21. That is not a binding, and adopting it would put
+the wrong art on 761 models while looking authoritative.
+
+### What shipped instead
+
+**A model with more than one shape exports untextured**, and says so. 109 of
+870 models have a single shape and keep their texture; the other 761 draw as
+geometry until the binding is found.
+
+⚠️ That is a deliberate loss — 587 models were textured before, 71 are now. It
+is the right trade: **wrong texturing reads as a broken renderer, and no
+texturing reads as what it is.** The artifact was the more misleading state.
+
+`Mesh.shapes` now carries the count, and the manifest carries it per model, so
+a viewer can say why something is bare.

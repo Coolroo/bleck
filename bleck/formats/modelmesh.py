@@ -114,6 +114,14 @@ class Mesh:
     uvs: list = field(default_factory=list)  # pylint: disable=container-return
     #: Lengths of the `u16`-in-`u32` index streams, in table order.
     streams: list = field(default_factory=list)  # pylint: disable=container-return
+    #: How many separate shapes the face list describes.
+    #:
+    #: ⛔ **A model with more than one cannot be textured** (D229). Each shape
+    #: has its own image -- every group's UVs span the whole [0,1] square, so
+    #: they are not regions of one atlas -- and which image goes with which
+    #: shape is not decoded. Painting image 0 across all of them draws the
+    #: whole sprite sheet onto every limb.
+    shapes: int = 1
 
     @property
     def is_textured(self) -> bool:
@@ -371,6 +379,7 @@ def mesh(data: bytes) -> Mesh:
             f"streams are {streams} long"
         )
 
+    shapes = len(_groups(faces))
     faces, corner_positions = _rebase(
         faces, _stream(data, table, edges, POSITION_INDEX_SLOT)
     )
@@ -393,6 +402,7 @@ def mesh(data: bytes) -> Mesh:
         normals=normals,
         faces=faces,
         streams=streams,
+        shapes=shapes,
     )
 
 
