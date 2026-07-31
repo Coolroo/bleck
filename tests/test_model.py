@@ -348,7 +348,9 @@ class TestTheFaceList:
             except model.ModelError:
                 continue
             decoded += 1
-            assert found.corners in found.streams, path.name
+            # ⚠️ Faces are rebased and the few that land outside are dropped
+            # (D224), so the sum is a ceiling now rather than an equality.
+            assert found.corners <= max(found.streams), path.name
         assert decoded > 800, f"only {decoded} models decoded; the reader regressed"
 
     def test_mario_is_triangles_and_quads(self):
@@ -509,11 +511,12 @@ class TestDrawing:
 
 
 class TestCoverageIsReported:
-    """⛔ The check that stops a fragment reading as a model.
+    """Coverage, which is now the check that the rebasing still works.
 
-    `is_drawable` passes on a mesh that reaches three of 3,401 vertices,
-    because it only bounds-checks indices. Coverage is the number that says
-    what was actually read, and it has to stay visible (D211).
+    ⛔ **This class used to assert the opposite.** It pinned a median of 13.7%
+    as the expected state, so it would have passed forever while the reader was
+    wrong -- and would have *failed* the fix. A test that encodes a known
+    deficiency as an invariant defends the bug (D224).
     """
 
     def test_coverage_is_low_and_says_so(self):
@@ -534,9 +537,12 @@ class TestCoverageIsReported:
         assert len(rates) > 800
         rates.sort()
         median = rates[len(rates) // 2]
-        assert 0.0 < median < 0.5, (
-            f"median coverage is {median:.1%}. If this rose above 50% the "
-            "reader improved and D211's warnings should be revisited."
+        # ⛔ Inverted in D224. It used to demand coverage stay *below* 50%,
+        # pinning 13.7% as though that were the format rather than a
+        # misreading of it -- so it would have failed the fix.
+        assert median > 0.95, (
+            f"median coverage is {median:.1%}, was 100%. The per-shape "
+            "rebasing in D224 has regressed."
         )
 
     def test_describe_names_the_coverage(self):

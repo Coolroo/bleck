@@ -14152,3 +14152,74 @@ reads as a second face list; and **no index stream anywhere in the file
 addresses a vertex above 22**, against 324 positions. So nothing in the file,
 as currently read, can reach the rest — the positions are there and the
 references are not.
+
+## D224 — Per-shape rebasing: coverage goes from 13.7% to 100% (2026-07-30)
+
+✅ **Solved.** D211 measured 13.7% median coverage and D214 wrongly ruled out
+the cause. Both the corner offset and the position index are **relative to the
+shape**, not the file, and folding in the accumulated bases takes the median to
+**100%**.
+
+| | before | after |
+|---|---|---|
+| median coverage | 13.7% | **100.0%** |
+| mean coverage | — | 98.6% |
+| models at 95%+ | 132 | **801** |
+| models under 50% | 661 | **1** |
+| models with playable animation | 12 | **202** |
+
+`p_big_kuppa` went from **3 of 3,401** vertices to 99.9%.
+
+### The draw code said so, and it was read past
+
+`GXSetArray` is handed `add r16, r4, r0` — a position array **plus a per-shape
+offset off the stack** (D207). That single `add` is why the index stream never
+exceeds 22 while the array holds 324 points: the indices are shape-local. It
+was in the disassembly the whole time.
+
+### ⛔ Why D214's refutation was wrong
+
+D214 tested the cumulative base by **shuffling the group bases** and comparing
+**planarity** — real 53.3% against shuffled 49.8% — and concluded no signal.
+
+That control was sound; **the instrument was not**. A model's vertices are
+locally clustered, so most quads come out planar however they are grouped.
+Planarity cannot see this.
+
+**UV coherence can.** A face's three corners should land close together on the
+texture, and a wrong base scatters them:
+
+| bases | median UV triangle area | coverage | out-of-range |
+|---|---|---|---|
+| **corner + position** | **0.0626** | **100.0%** | **22** |
+| position only | 0.0768 | 100.0% | 172 |
+| corner only | 0.1754 | 12.5% | 0 |
+| neither (shipped) | 0.1250 | 11.1% | 0 |
+| shuffled control | 0.2294 | 100.0% | 1,250 |
+
+The right reading wins on **every** column, and the shuffled control is 3.7×
+worse on UV area with 57× the out-of-range faces. ⚠️ Note that coverage alone
+would have accepted the shuffle — it reaches 100% too. It took two measures
+disagreeing to pick the answer.
+
+**The lesson, and it is the same one three times now:** a negative result is
+only as good as the instrument. D209 was fooled by degenerate faces, D216 by
+correlated bytes, D214 by clustered vertices. Before believing "no signal",
+ask what the measure *cannot* see.
+
+### One test was defending the bug
+
+⛔ `test_coverage_is_low_and_says_so` asserted the median stay **below 50%**,
+pinning 13.7% as though it were the format. It would have passed forever while
+the reader was wrong — and **failed the fix**. Now inverted.
+
+22 faces still rebase past the end, against 1,250 for the shuffled control.
+They are dropped rather than clamped: a clamped face stretches to whatever
+vertex happened to be last, which is the artefact D223 removed.
+
+### Layout
+
+`model.py` reached 1,018 lines, over the ceiling, so it split into `model.py`
+(the container, 410), `modelmesh.py` (493), `modelanim.py` (267) and
+`modelbase.py` (24, breaking the import cycle). The public API is re-exported
+whole; all 1,367 tests pass unchanged, which is the proof.
