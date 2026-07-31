@@ -13862,6 +13862,10 @@ models at 95%+ coverage, **12 carry one**.
 sparse support is patchy across readers, and a target that fails to load is
 worse than one that wastes a few kilobytes. `MAX_POSES` caps a clip at 64 so a
 large mesh does not produce a file dwarfed by its own animation.
+⛔ **Superseded by D238**, which writes a target sparse where that is smaller —
+the dense cost was dropping 823 clips, and a clip that is never written cannot
+load either. ⚠️ D238 also measures that "a pose touches a few dozen vertices"
+stops being true *per primitive* after the D237 split.
 
 ⚠️ **One clip per file.** glTF holds many; every extra is another full set of
 dense targets.
@@ -15088,6 +15092,9 @@ alone. Measured on the same four models:
 ~1.05 MB of dense targets; split with zero-sharing it is 961 KB, because the
 zeros the merged writer paid for in *binary* now cost one accessor. `MAX_TARGETS`
 and `MORPH_BUDGET` (D235) stand as measured.
+⛔ **Superseded by D238**, which re-prices the budget against a measured cost
+and drops no clip at all. The split has a second consequence recorded there: a
+primitive is one shape, so a pose that reaches it usually moves *all* of it.
 
 ### Verified against the reference rip
 
@@ -15142,3 +15149,142 @@ names in file order and the face groups are found by `first` restarting at zero;
 nothing has been measured that binds one to the other, so a primitive is labelled
 `shape <index>` and nothing claims more. The per-shape texture binding (D229) is
 unchanged too — the split is its prerequisite, not its answer.
+
+## D238 — Sparse morph targets, and the measurement that shrank the claim (2026-07-31)
+
+✅ **Built, and the premise it was built on turned out to be half wrong.** Morph
+targets can now be written as glTF **sparse accessors**; `bleck model export`
+writes **all 3,079 clips** where D235's budget wrote 2,256 and dropped 823. But
+sparse is *not* why, and the honest version of the finding is worth more than
+the feature.
+
+### D217's "dense, because sparse support is patchy" is overturned
+
+The old note said a target that fails to load is worse than one that wastes a
+few kilobytes. That reasoning is not withdrawn — it is outweighed. **A clip that
+was never written cannot load either**, and 823 of them were not being written.
+`--dense-morphs` restores the old shape and the old caps for a viewer that
+chokes on a sparse accessor, so the risk is opt-out rather than unavoidable.
+
+### ⛔ The per-shape split had already done most of the sparsifying
+
+A pose moves a few dozen of a **model's** vertices, which is what D217 recorded.
+But since D237 a primitive is one *shape*, and a pose that reaches a shape at
+all tends to move the whole shape. Measured across all 864 models:
+
+| moved / primitive vertices | touched primitive-poses | share |
+|---|---|---|
+| exactly 1.0 | 54,014 | **68.0%** |
+| 0.8 – 1.0 | 12,089 | 15.2% |
+| below 0.8 | 13,300 | 16.8% |
+
+Mean fill **0.811** over 79,403 touched primitive-poses. A sparse accessor costs
+~100 bytes more of JSON than a dense one (two buffer views and a nested `sparse`
+object against one view) and saves only on what it leaves out, so on 68% of
+targets it is *larger*.
+
+⛔ **Writing every target sparse was therefore rejected**, after being built and
+measured: it cost **120.8 MB** of morph data across the export against dense's
+107.2 MB. The writer picks per target instead — `sparse_pays(vertices, moved)` —
+which lands at **102.1 MB** predicted against **102.8 MB** measured — the
+geometry-only export totals 20.6 MB and the full one 123.4 MB. Of the 79,403 real
+targets written, **10,779 are sparse and 68,624 dense**; 10,478 of the sparse
+ones index with a `u8` and 301 with a `u16`, because a primitive after the split
+is usually a handful of vertices.
+
+⛔ **A count-0 sparse accessor is not legal**, contrary to the plan.
+`accessor.sparse.schema.json` carries `"minimum": 1` on `count`. A pose that
+misses a primitive is written as an accessor with **no `bufferView` and no
+`sparse`**, which the specification defines as zeros — strictly better, since it
+occupies no bytes at all and needs no index array. 532,571 of the export's
+target slots are in that state and cost one shared accessor per vertex width.
+`dimentio` still *reads* a count-0 sparse block as "no deviations", so another
+exporter's file works.
+
+### The budget, re-measured — and what actually binds
+
+⚠️ **It was never the deltas.** Every keyframe carries a weight for every target
+in the file, and the exporter writes one keyframe per pose, so the weight block
+is `targets² × 4` bytes. At 256 targets that is 262 KB; at 1,466 (`p_luigi`) it
+is 8.6 MB of the file's 10.65 MB. D235's `MAX_TARGETS` was doing the right thing
+for a reason nobody had written down.
+
+The cost model in `gltf.costs` / `gltf.weight_cost` predicts a real `.glb` to
+within **0.2%** on every model above 400 poses (worst case 3.4%, on `p_mario`),
+checked by differencing against files written with and without animation.
+
+| targets cap | MiB cap | clips kept | dropped | morph MB | worst file |
+|---|---|---|---|---|---|
+| 256 | 2 | 2,282 | 797 | 51.2 | 2.10 MB |
+| 512 | 2 | 2,555 | 524 | 62.8 | 2.10 MB |
+| 1,024 | 4 | 2,900 | 179 | 83.7 | 4.19 MB |
+| 2,048 | 8 | 3,030 | 49 | 97.7 | 8.39 MB |
+| **2,048** | **12** | **3,079** | **0** | **102.1** | **10.65 MB** |
+| unlimited | — | 3,079 | 0 | 102.1 | 10.65 MB |
+
+**11 MiB already drops none**; 12 MiB is 11 plus room for the model's worst-case
+error. The target cap binds on nothing this disc holds — the largest file totals
+1,466 poses — and is kept only as a guard against a file whose clips are
+individually cheap and collectively unbounded. Rejected: 8 MiB (49 clips lost
+for 4.5 MB), and no cap at all (nothing bounds a file that has not been seen).
+
+### Measured on the full export
+
+| | before (D237) | after | `--dense-morphs` |
+|---|---|---|---|
+| clips written / dropped | 2,256 / **823** | **3,079 / 0** | 2,279 / 800 |
+| morph targets | 14,469 | 22,073 | 14,861 |
+| `work/export/models` | 74.5 MB | **123.4 MB** | 76.4 MB |
+| of which morph data | 53.9 MB | 102.8 MB | 55.7 MB |
+| `p_wii_mario.glb` | 963 KB | 4.02 MB |
+| `e_lui_robo.glb` (no clips) | 249 KB | **249 KB, unchanged** |
+| `e_2D_manera6.glb` | 601 KB | 599 KB |
+| `e_3D_manera2.glb` | 420 KB (7 of 49 clips) | 7.07 MB (49 of 49) |
+| `p_luigi.glb` | 631 KB (17 of 88) | 10.67 MB (88 of 88) | 664 KB (18 of 88) |
+
+Geometry alone — `--no-animation` — is **20.6 MB** for all 864, and that number
+is what the three morph figures above are differences against.
+
+⚠️ **`--dense-morphs` is not byte-identical to the old export**, and writes
+2,279 clips rather than 2,256. The caps are D235's exactly; what changed is that
+the cost is now *measured* per touched primitive rather than upper-bounded at
+`poses × all vertices × 12`, and the old bound overcharged for the primitives a
+pose never reaches. The 23 extra clips are ones that always fitted.
+
+⚠️ **The export got 66% bigger to gain 36% more clips.** That is the trade being
+made deliberately: the complaint D235 left open was "94 clips decoded, 3
+exported", and 49 MB of disk is the price. A model carrying no clip is
+byte-identical to before, which is 646 of the 864.
+
+### Structural validation, since nobody here can open a `.glb`
+
+All **864** exported files re-parsed and checked: header length equals file
+length, both chunk lengths are 4-byte aligned and sum to the file, every buffer
+view lies inside the declared buffer, every accessor lies inside its view, every
+`sparse.count` is between 1 and the accessor's count, every sparse index array
+and value array fits its view, and neither carries the `target` or `byteStride`
+the specification forbids there. **0 failures.**
+`tests/test_gltf.py::TestTheWholeExportIsStructurallySound` runs the same checks
+over five models in both encodings.
+
+### Mutation test
+
+Making `apply_sparse` ignore the index array and write the values in order
+(`let at = element;`) fails **4** Rust tests:
+`a_sparse_target_displaces_the_mesh_exactly_as_the_dense_one_does`,
+`the_sparse_values_land_on_the_vertices_the_index_array_names`,
+`every_index_width_reads_the_same_displacement` and
+`a_sparse_index_past_the_end_of_the_accessor_costs_only_that_target`.
+
+⚠️ **The real-export tests do *not* catch it**, and that is a finding about the
+rig. `a_real_clip_displaces_a_real_model` asks whether a clip moved anything,
+not whether it moved the right thing, and the new
+`a_real_clip_changes_the_picture_and_not_only_the_positions` asks the same
+question of the frame. Both pass under the mutation. Only the fixture pair,
+where the same pose exists in both encodings, can see it.
+
+⚠️ **That new pixel test was wrong on its first run and passed for the wrong
+reason once fixed.** It compared two moments of the first clip; most first clips
+in the export hold a single keyframe, so `span / 2.0` is 0.0 twice and the two
+pictures are the same picture by construction — 1 of 15 models "changed". The
+rest pose is the control it needed.

@@ -222,6 +222,7 @@ class TestModelExport:
             no_textures=True,
             no_animation=True,
             min_coverage=0.0,
+            dense_morphs=False,
         )
         assert model_command.cmd_export(args) == 0
 

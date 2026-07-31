@@ -17,6 +17,7 @@
 pub mod catalog;
 pub mod effects;
 pub mod gltf;
+pub mod gltf_accessor;
 pub mod mesh;
 pub mod morph;
 pub mod sounds;

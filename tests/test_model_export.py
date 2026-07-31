@@ -67,39 +67,55 @@ class TestTheAnimationBudget:
     nothing downstream could tell the difference.
     """
 
-    def test_the_byte_budget_binds_before_the_target_cap_on_a_big_mesh(self):
-        """4,096 vertices is the size `e_3D_manera2` is in; the cap alone would
-        give it an 11 MB animation block on a 130 KB mesh."""
-        vertices = 4096
-        expected = command.MORPH_BUDGET // (vertices * gltf.TARGET_BYTES)
-        assert command.budget(vertices) == expected
-        assert expected < command.MAX_TARGETS
+    def test_the_weight_block_is_quadratic_and_is_what_binds(self):
+        """⚠️ **Not the deltas.** Every keyframe carries a weight for every
+        target in the file, so 2,048 targets cost 16.8 MB of weights whatever
+        they displace — which is why the byte cap decides every real model and
+        the target cap decides none of them (D238)."""
+        assert gltf.weight_cost(256) == 256 * 256 * 4 + 256 * 4
+        assert gltf.weight_cost(2048) > 16 * 1024 * 1024
+        assert gltf.weight_cost(command.SPARSE.targets) > command.SPARSE.size
 
-    def test_the_target_cap_binds_on_a_small_mesh(self):
-        assert command.budget(4) == command.MAX_TARGETS
-
-    def test_a_mesh_too_large_to_afford_one_target_gets_none(self):
-        assert command.budget(command.MORPH_BUDGET) == 0
-
-    def test_clips_are_kept_in_file_order_until_the_budget_runs_out(self):
+    def test_clips_are_kept_in_file_order_until_the_budget_runs_out(self, monkeypatch):
+        monkeypatch.setattr(command, "SPARSE", command.Budget(targets=250, size=10**9))
         clips = [a_clip(f"c{i}", 100) for i in range(5)]
-        written = command.fit_animations(clips, vertices=4)
+        written = command.fit_animations(a_mesh(), clips)
         assert [clip.name for clip in written.clips] == ["c0", "c1"]
         assert written.dropped == 3
         assert written.targets == 200
 
-    def test_a_clip_too_big_to_fit_does_not_cost_the_shorter_ones_behind_it(self):
+    def test_a_clip_too_big_to_fit_does_not_cost_the_shorter_ones_behind_it(
+        self, monkeypatch
+    ):
         """⚠️ `p_wii_mario` has a 245-pose clip in the middle of 94. Stopping
         at the first clip that does not fit would drop everything after it."""
-        clips = [a_clip("huge", command.MAX_TARGETS + 1), a_clip("small", 2)]
-        written = command.fit_animations(clips, vertices=4)
+        monkeypatch.setattr(command, "SPARSE", command.Budget(targets=10, size=10**9))
+        clips = [a_clip("huge", 11), a_clip("small", 2)]
+        written = command.fit_animations(a_mesh(), clips)
         assert [clip.name for clip in written.clips] == ["small"]
         assert written.dropped == 1
 
     def test_a_clip_with_no_poses_is_neither_written_nor_counted_as_dropped(self):
-        written = command.fit_animations([command.ClipInfo(name="still")], vertices=4)
+        written = command.fit_animations(a_mesh(), [command.ClipInfo(name="still")])
         assert not written.clips
         assert written.dropped == 0
+
+    def test_the_byte_cap_stops_a_file_the_target_cap_would_allow(self, monkeypatch):
+        monkeypatch.setattr(command, "SPARSE", command.Budget(targets=10**6, size=4000))
+        written = command.fit_animations(a_mesh(), [a_clip("long", 60)])
+        assert not written.clips
+        assert written.dropped == 1
+
+    def test_sparse_fits_at_least_as_much_as_dense_on_the_same_budget(self):
+        """⚠️ **The claim being made, stated as a test.** Sparse is not
+        uniformly cheaper — after the per-shape split most targets fill their
+        primitive and are written dense anyway (D238) — but the writer picks
+        the smaller of the two per target, so it can never fit fewer."""
+        clips = [a_clip(f"c{i}", 40) for i in range(20)]
+        mesh = a_mesh()
+        assert len(command.fit_animations(mesh, clips).clips) >= len(
+            command.fit_animations(mesh, clips, dense=True).clips
+        )
 
     def test_key_times_are_converted_from_frames_to_seconds(self):
         """glTF's sampler input is seconds; the file counts in frames. A clip
@@ -129,6 +145,7 @@ class TestAgainstTheDisc:
             no_animation=True,
             guess_textures=False,
             min_coverage=0.0,
+            dense_morphs=False,
         )
         assert command.cmd_export(args) == 0
 
@@ -161,6 +178,7 @@ class TestAgainstTheDisc:
             no_animation=False,
             guess_textures=False,
             min_coverage=0.0,
+            dense_morphs=False,
         )
         assert command.cmd_export(args) == 0
         manifest = json.loads((tmp_path / command.MANIFEST).read_text())
@@ -191,6 +209,7 @@ class TestAgainstTheDisc:
             no_animation=True,
             guess_textures=False,
             min_coverage=0.0,
+            dense_morphs=False,
         )
         assert command.cmd_export(args) == 0
         manifest = json.loads((tmp_path / command.MANIFEST).read_text())

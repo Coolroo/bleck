@@ -415,15 +415,61 @@ def _box(points: list) -> Box:
     )
 
 
-def _vec(blob: bytes, document: dict, accessor: int) -> list:
-    """One VEC3 accessor's points, read back out of the binary chunk."""
-    record = document["accessors"][accessor]
-    view = document["bufferViews"][record["bufferView"]]
+#: How wide one sparse index is, by the component type that declares it.
+INDEX_WIDTH = {5121: "B", 5123: "H", 5125: "I"}
+
+
+def _binary(blob: bytes, document: dict, view: int) -> int:
+    """Where one buffer view starts, as an offset into the whole `.glb`."""
     json_length = struct.unpack_from("<I", blob, 12)[0]
-    start = 20 + json_length + 8 + view["byteOffset"]
-    return [
-        struct.unpack_from("<3f", blob, start + i * 12) for i in range(record["count"])
-    ]
+    return 20 + json_length + 8 + document["bufferViews"][view]["byteOffset"]
+
+
+def _vec(blob: bytes, document: dict, accessor: int) -> list:
+    """One VEC3 accessor's points, in whichever of the three shapes it is in.
+
+    ⚠️ **This is the reader the assertions depend on, so it implements the
+    specification and not what the writer happens to emit**: a buffer view read
+    straight through, no buffer view at all (zeros), and a `sparse` block
+    overriding named elements of either.
+    """
+    record = document["accessors"][accessor]
+    count = record["count"]
+    if "bufferView" in record:
+        start = _binary(blob, document, record["bufferView"])
+        points = [struct.unpack_from("<3f", blob, start + i * 12) for i in range(count)]
+    else:
+        points = [(0.0, 0.0, 0.0)] * count
+
+    sparse = record.get("sparse")
+    if sparse:
+        block = sparse["indices"]
+        code = INDEX_WIDTH[block["componentType"]]
+        at = _binary(blob, document, block["bufferView"]) + block.get("byteOffset", 0)
+        where = struct.unpack_from(f"<{sparse['count']}{code}", blob, at)
+        values = sparse["values"]
+        at = _binary(blob, document, values["bufferView"]) + values.get("byteOffset", 0)
+        for slot, index in enumerate(where):
+            points[index] = struct.unpack_from("<3f", blob, at + slot * 12)
+    return points
+
+
+def _posed(blob: bytes, document: dict, target: int) -> list:
+    """Every position of the model, displaced by one target of every primitive.
+
+    ⚠️ **The thing a viewer would draw**, not the file's structure. Sparse and
+    dense are two encodings of one displacement, and only this can say they
+    agree.
+    """
+    moved = []
+    for primitive in document["meshes"][0]["primitives"]:
+        rest = _vec(blob, document, primitive["attributes"]["POSITION"])
+        deltas = _vec(blob, document, primitive["targets"][target]["POSITION"])
+        moved += [
+            tuple(p + d for p, d in zip(point, delta, strict=True))
+            for point, delta in zip(rest, deltas, strict=True)
+        ]
+    return moved
 
 
 class TestMorphAnimation:
@@ -608,6 +654,19 @@ class TestAnimationSurvivesTheSplit:
         assert document["accessors"][still]["max"] == [0.0, 0.0, 0.0]
         assert not any(any(value for value in d) for d in _vec(blob, document, still))
 
+    def test_a_still_target_occupies_no_bytes_and_names_no_view(self):
+        """⛔ **Not a count-0 sparse accessor.** `accessor.sparse.count` has
+        `"minimum": 1` in the specification's schema, so zero deviations is an
+        invalid file. An accessor with no `bufferView` is defined as zeros and
+        costs nothing at all, which is what is written instead."""
+        blob = gltf.write(a_two_shape_mesh(), clips=self.clips())
+        document = parsed(blob)
+        still = document["meshes"][0]["primitives"][1]["targets"][0]["POSITION"]
+        accessor = document["accessors"][still]
+        assert "bufferView" not in accessor
+        assert "sparse" not in accessor
+        assert accessor["count"] == 3, "it must still be as wide as the primitive"
+
     def test_the_still_target_accessor_is_shared_rather_than_repeated(self):
         clips = [
             gltf.Clip(
@@ -653,6 +712,223 @@ class TestAnimationSurvivesTheSplit:
             if accessor["max"] != [0.0, 0.0, 0.0] or accessor["min"] != [0.0, 0.0, 0.0]
         ]
         assert moved, "every target in a real animated model displaced nothing"
+
+
+def a_wide_mesh(vertices: int = 40) -> model.Mesh:
+    """One shape wide enough for a partial pose to be worth writing sparsely.
+
+    ⚠️ **The tiny fixtures above cannot exercise sparse at all.** A three-vertex
+    primitive costs 36 bytes dense, and no sparse accessor is smaller than
+    that, so the writer correctly refuses to use one.
+    """
+    positions = [(float(i), float(i % 2), 0.0) for i in range(vertices)]
+    corners = [c for i in range(vertices - 2) for c in (0, i + 1, i + 2)]
+    return model.Mesh(
+        name="wide",
+        positions=positions,
+        faces=[model.Face(first=i * 3, corners=3) for i in range(vertices - 2)],
+        corner_positions=corners,
+    )
+
+
+class TestSparseTargets:
+    """Targets written as glTF sparse accessors instead of in full.
+
+    ⚠️ **This overturns D217's note, deliberately.** Dense was chosen because
+    sparse support is patchy and a target that fails to load is worse than one
+    that wastes space; the dense cost then dropped 823 of 3,079 clips, and a
+    clip that was never written cannot load either. `--dense-morphs` keeps the
+    old shape for a reader that chokes.
+
+    ⚠️ **Sparse is not a blanket win, and the writer does not apply it as
+    one.** After the per-shape split a primitive is one shape, so a pose that
+    reaches it usually moves all of it — 68% of touched primitive-poses across
+    the disc move every vertex (D238). The encoding is picked per target.
+    """
+
+    def a_partial_clip(self) -> gltf.Clip:
+        """One pose moving 4 vertices of 40 — sparse territory."""
+        return gltf.Clip(
+            name="corner",
+            poses=[
+                model.Morph(time=0.0, offsets=[(v, v + 1, 2, 0) for v in (3, 7, 11, 30)])
+            ],
+        )
+
+    def test_a_partial_pose_is_written_as_a_sparse_accessor(self):
+        document = parsed(gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()]))
+        target = document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        accessor = document["accessors"][target]
+        assert accessor["sparse"]["count"] == 4
+        assert accessor["count"] == 40, "the accessor still spans the primitive"
+        assert "bufferView" not in accessor, "sparse values are not a base array"
+
+    def test_sparse_and_dense_displace_the_mesh_identically(self):
+        """⚠️ **The claim, asserted on positions rather than on structure.**
+        Every other test here could pass on a file that loads and moves the
+        wrong vertices."""
+        mesh, clips = a_wide_mesh(), [self.a_partial_clip()]
+        thin = gltf.write(mesh, clips=clips)
+        full = gltf.write(mesh, clips=clips, sparse=False)
+        assert thin != full, "the two encodings produced the same bytes"
+        assert _posed(thin, parsed(thin), 0) == _posed(full, parsed(full), 0)
+
+    def test_the_pose_lands_on_the_vertices_it_names_and_no_others(self):
+        blob = gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()])
+        document = parsed(blob)
+        rest = _vec(blob, document, 0)
+        posed = _posed(blob, document, 0)
+        moved = [i for i, (a, b) in enumerate(zip(rest, posed, strict=True)) if a != b]
+        assert moved == [3, 7, 11, 30]
+        assert posed[7] == pytest.approx((7.0 + 8.0, 1.0 + 2.0, 0.0))
+
+    def test_the_index_type_narrows_to_the_primitive(self):
+        """A `u32` index costs more than the delta it saves. 335 of
+        `p_wii_mario`'s vertices sit in 90 primitives, so one byte is the
+        common case and four is never right for it."""
+        document = parsed(gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()]))
+        target = document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        indices = document["accessors"][target]["sparse"]["indices"]
+        assert indices["componentType"] == gltf.UNSIGNED_BYTE
+
+    def test_a_pose_that_fills_its_primitive_is_written_in_full(self):
+        """⛔ **Sparse would be larger here**, and 68% of real targets are in
+        this state. Writing them sparse anyway cost 5 MB across the export."""
+        mesh = a_wide_mesh()
+        clip = gltf.Clip(
+            name="all",
+            poses=[model.Morph(time=0.0, offsets=[(v, 1, 0, 0) for v in range(40)])],
+        )
+        document = parsed(gltf.write(mesh, clips=[clip]))
+        target = document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        assert "sparse" not in document["accessors"][target]
+
+    def test_dense_morphs_never_writes_a_sparse_accessor(self):
+        """The escape hatch, for a reader that will not follow one."""
+        document = parsed(
+            gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()], sparse=False)
+        )
+        assert not any("sparse" in a for a in document["accessors"])
+
+    def test_the_sparse_views_carry_no_buffer_target(self):
+        """⛔ The specification forbids `target` and `byteStride` on a view a
+        sparse accessor reads from. A validator rejects the whole file."""
+        blob = gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()])
+        document = parsed(blob)
+        accessor = document["accessors"][
+            document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        ]
+        for block in ("indices", "values"):
+            view = document["bufferViews"][accessor["sparse"][block]["bufferView"]]
+            assert "target" not in view
+            assert "byteStride" not in view
+
+    def test_the_bounds_count_the_zeros_the_sparse_target_implies(self):
+        """⚠️ A target that only pushes one way still reads as zero at every
+        vertex it does not name, so the origin is inside its box."""
+        blob = gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()])
+        document = parsed(blob)
+        accessor = document["accessors"][
+            document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
+        ]
+        assert accessor["min"] == [0.0, 0.0, 0.0]
+        assert accessor["max"] == [31.0, 2.0, 0.0]
+
+    def test_a_real_animated_model_is_smaller_sparse_than_dense(self):
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        data = path.read_bytes()
+        mesh = model.mesh(data)
+        clips = _decoded_clips(data, mesh)[:8]
+        assert clips, "p_wii_mario decoded no usable clip"
+        thin = gltf.write(mesh, clips=clips)
+        full = gltf.write(mesh, clips=clips, sparse=False)
+        assert len(thin) < len(full)
+        assert _posed(thin, parsed(thin), 0) == _posed(full, parsed(full), 0)
+
+
+class TestTheWholeExportIsStructurallySound:
+    """⚠️ **Nobody here can open a `.glb` in Blender**, so every structural
+    claim a viewer would make has to be made here instead — over the real
+    export, not a fixture.
+
+    Checked: the header length, both chunk lengths, every buffer view inside
+    the buffer, every accessor inside its view, and every sparse index inside
+    the accessor it deviates from.
+    """
+
+    #: Enough models to cover every shape the writer emits without costing a
+    #: minute. The animated ones are what carry sparse accessors at all.
+    SAMPLE = ("p_wii_mario", "e_lui_robo", "e_2D_manera6", "e_3D_manera2", "p_luigi")
+
+    def test_every_written_file_parses_and_stays_in_bounds(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        checked = 0
+        for name in self.SAMPLE:
+            path = MODELS / name
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            mesh = model.mesh(data)
+            clips = _decoded_clips(data, mesh)[:6]
+            for sparse in (True, False):
+                _check_container(gltf.write(mesh, b"", name, clips, sparse=sparse))
+                checked += 1
+        assert checked, "no model in the sample was on disk"
+
+
+def _check_container(blob: bytes) -> None:
+    """Every length and offset a reader trusts, checked against the bytes."""
+    magic, version, total = struct.unpack_from("<III", blob, 0)
+    assert magic == gltf.MAGIC and version == 2
+    assert total == len(blob), "the header length is not the file length"
+    json_length = struct.unpack_from("<I", blob, 12)[0]
+    assert struct.unpack_from("<I", blob, 16)[0] == gltf.JSON_CHUNK
+    assert json_length % 4 == 0
+    bin_length = struct.unpack_from("<I", blob, 20 + json_length)[0]
+    assert struct.unpack_from("<I", blob, 24 + json_length)[0] == gltf.BIN_CHUNK
+    assert bin_length % 4 == 0
+    assert 20 + json_length + 8 + bin_length == len(blob)
+
+    document = json.loads(blob[20 : 20 + json_length])
+    declared = document["buffers"][0]["byteLength"]
+    assert declared <= bin_length, "the buffer is longer than the chunk holding it"
+    for view in document["bufferViews"]:
+        assert view["byteOffset"] + view["byteLength"] <= declared
+    for accessor in document["accessors"]:
+        _check_accessor(document, accessor)
+
+
+#: Bytes one element of each accessor type takes, at four bytes a component.
+ELEMENT = {"SCALAR": 4, "VEC2": 8, "VEC3": 12}
+
+
+def _check_accessor(document: dict, accessor: dict) -> None:
+    """One accessor, dense or sparse, entirely inside the views it names."""
+    wide = ELEMENT[accessor["type"]]
+    if accessor["componentType"] != gltf.FLOAT:
+        wide = accessor["count"] and 4
+    if "bufferView" in accessor:
+        view = document["bufferViews"][accessor["bufferView"]]
+        used = accessor.get("byteOffset", 0) + accessor["count"] * wide
+        assert used <= view["byteLength"], "an accessor runs past its buffer view"
+    else:
+        assert "sparse" in accessor or accessor["max"] == [0.0, 0.0, 0.0]
+
+    sparse = accessor.get("sparse")
+    if not sparse:
+        return
+    assert sparse["count"] >= 1, "the specification's minimum for sparse.count"
+    assert sparse["count"] <= accessor["count"]
+    block = document["bufferViews"][sparse["indices"]["bufferView"]]
+    width = {5121: 1, 5123: 2, 5125: 4}[sparse["indices"]["componentType"]]
+    assert sparse["count"] * width <= block["byteLength"]
+    assert "target" not in block and "byteStride" not in block
+    values = document["bufferViews"][sparse["values"]["bufferView"]]
+    assert sparse["count"] * ELEMENT[accessor["type"]] <= values["byteLength"]
+    assert "target" not in values and "byteStride" not in values
 
 
 def _decoded_clips(data: bytes, mesh: model.Mesh) -> list:

@@ -166,7 +166,7 @@ can never match is an error rather than a silent no-op at run time.
 ```bash
 bleck model list [--search <text>] [--limit <n>]
 bleck model export [--out <dir>] [--search <text>] [--min-coverage <pct>]
-                   [--no-textures] [--no-animation]
+                   [--no-textures] [--no-animation] [--dense-morphs]
 ```
 
 The game's character geometry. `list` shows every model whose mesh can be read;
@@ -223,21 +223,31 @@ adds per-vertex offsets to a copy of the position array. That maps onto glTF
 **morph targets**, so an exported `.glb` plays in any viewer with no skeleton
 involved. In Blender the poses also appear as **Shape Keys**.
 
-**Every clip that fits is written**, each as its own named glTF animation. A
-full export writes **2,256 clips across 218 models**.
+**Every clip the disc holds is written**, each as its own named glTF animation:
+a full export writes **all 3,079 clips across 218 models**, where the previous
+budget managed 2,256 and dropped 823.
 
-!!! warning "There is a budget, and it says what it dropped"
+Most targets are written in full; the ones that move only part of a shape are
+written as glTF **sparse accessors**, and a pose that misses a shape entirely
+becomes an accessor with no buffer view, which the specification defines as
+zeros and which costs nothing. Pass **`--dense-morphs`** to write every target
+in full for a viewer that will not follow a sparse accessor — the old shape,
+and the old budget with it.
 
-    A morph target is a position delta for *every* vertex — `vertices × 12`
-    bytes — so one file's clips can dwarf its geometry. Each file is capped at
-    **256 targets or 2 MiB of morph data**, whichever binds first, and clips are
-    kept in file order until the budget runs out. The command prints how many
-    were written and how many were dropped, and `models.json` lists every clip
-    with `"written": true` or `false`.
+!!! warning "There is still a budget, and it says what it dropped"
 
-    Splitting a mesh into primitives does not change that budget: glTF wants a
-    target on every primitive, but the ones a pose leaves alone all share a
-    single do-nothing accessor, so the cost stays proportional to what actually
+    Every keyframe carries a weight for **every target in the file**, so a
+    file's animation grows with the *square* of its clip count — 2,048 targets
+    is 16 MB of weights before a single delta. Each file is capped at **2,048
+    targets or 12 MiB of morph data**, whichever binds first, and clips are kept
+    in file order until the budget runs out. Nothing on this disc reaches either
+    cap; the largest is `p_luigi` at 10.2 MiB for its 1,466 poses.
+
+    The command prints how many clips were written and how many were dropped,
+    and `models.json` lists every clip with `"written": true` or `false`.
+
+    With `--dense-morphs` the caps go back to **256 targets or 2 MiB**, which
+    drops 823 clips — a dense target costs `vertices × 12` bytes whatever it
     moves.
 
 Key times are **frames at 60 Hz** in the file and are written to the `.glb` as

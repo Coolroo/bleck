@@ -15,19 +15,13 @@
 //! Everything about the material is therefore optional at every step, and a
 //! chain that breaks anywhere yields an untextured mesh rather than an error.
 
+use super::gltf_accessor::{read_indices, read_scalars, read_vec2, read_vec3, view_bytes};
 use super::mesh::{Face, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::Texture;
 
 /// The four bytes every binary glTF opens with.
 pub(crate) const MAGIC: &[u8] = b"glTF";
-
-/// glTF component types, for the index accessor. Indices are written as
-/// `UNSIGNED_INT`, but a reader that only understood one would break on any
-/// other exporter's file for no reason.
-const UNSIGNED_BYTE: u64 = 5121;
-const UNSIGNED_SHORT: u64 = 5123;
-const UNSIGNED_INT: u64 = 5125;
 
 /// One primitive, decoded into the slice of the model it contributes.
 struct Piece {
@@ -203,6 +197,11 @@ fn merge_targets(columns: &[Vec<Pose>], widths: &[usize]) -> Vec<Pose> {
 /// dropped. Targets are positional — target 3 of one primitive is the same
 /// pose as target 3 of the next — so skipping one would slide every later
 /// target of that primitive onto the wrong clip.
+///
+/// ⚠️ **Sparse and dense targets arrive interleaved in one file.** `bleck`
+/// picks whichever is smaller per target, so a primitive's list holds both
+/// shapes and a pose it never reaches is an accessor with no buffer view at
+/// all. `gltf_accessor::read_vec3` is what flattens the three into deltas.
 fn targets(json: &serde_json::Value, bin: &[u8], primitive: &serde_json::Value) -> Vec<Pose> {
     let Some(list) = primitive["targets"].as_array() else {
         return Vec::new();
@@ -360,115 +359,6 @@ fn material(json: &serde_json::Value, bin: &[u8], primitive: &serde_json::Value)
         texture,
         masked: material["alphaMode"].as_str() == Some("MASK"),
     }
-}
-
-/// The bytes one buffer view covers.
-fn view_bytes<'a>(
-    json: &serde_json::Value,
-    bin: &'a [u8],
-    index: usize,
-) -> Result<&'a [u8], String> {
-    let view = &json["bufferViews"][index];
-    let offset = view["byteOffset"].as_u64().unwrap_or(0) as usize;
-    let length = view["byteLength"]
-        .as_u64()
-        .ok_or("view has no byteLength")? as usize;
-    if offset + length > bin.len() {
-        return Err("a buffer view runs past the binary chunk".into());
-    }
-    Ok(&bin[offset..offset + length])
-}
-
-/// One accessor's bytes, and how many elements it declares.
-struct Elements<'a> {
-    bytes: &'a [u8],
-    count: usize,
-}
-
-fn accessor_bytes<'a>(
-    json: &serde_json::Value,
-    bin: &'a [u8],
-    index: usize,
-) -> Result<Elements<'a>, String> {
-    let accessor = &json["accessors"][index];
-    let count = accessor["count"].as_u64().ok_or("accessor has no count")? as usize;
-    let view = accessor["bufferView"]
-        .as_u64()
-        .ok_or("accessor has no bufferView")? as usize;
-    let skip = accessor["byteOffset"].as_u64().unwrap_or(0) as usize;
-    let bytes = view_bytes(json, bin, view)?;
-    let bytes = bytes.get(skip..).ok_or("accessor starts past its view")?;
-    Ok(Elements { bytes, count })
-}
-
-/// Read one 32-bit float out of a little-endian accessor.
-fn float(bytes: &[u8], at: usize) -> f32 {
-    f32::from_le_bytes(bytes[at..at + 4].try_into().unwrap())
-}
-
-fn read_vec3(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<Vec3>, String> {
-    let read = accessor_bytes(json, bin, index)?;
-    if read.bytes.len() < read.count * 12 {
-        return Err("POSITION accessor is shorter than its count".into());
-    }
-    Ok((0..read.count)
-        .map(|i| {
-            let at = i * 12;
-            Vec3::new(
-                float(read.bytes, at),
-                float(read.bytes, at + 4),
-                float(read.bytes, at + 8),
-            )
-        })
-        .collect())
-}
-
-fn read_vec2(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<Uv>, String> {
-    let read = accessor_bytes(json, bin, index)?;
-    if read.bytes.len() < read.count * 8 {
-        return Err("TEXCOORD_0 accessor is shorter than its count".into());
-    }
-    Ok((0..read.count)
-        .map(|i| {
-            let at = i * 8;
-            Uv::new(float(read.bytes, at), float(read.bytes, at + 4))
-        })
-        .collect())
-}
-
-/// One `SCALAR` float accessor — keyframe times, and the weights they carry.
-fn read_scalars(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<f32>, String> {
-    let read = accessor_bytes(json, bin, index)?;
-    if read.bytes.len() < read.count * 4 {
-        return Err("a scalar accessor is shorter than its count".into());
-    }
-    Ok((0..read.count).map(|i| float(read.bytes, i * 4)).collect())
-}
-
-fn read_indices(json: &serde_json::Value, bin: &[u8], index: usize) -> Result<Vec<usize>, String> {
-    let kind = json["accessors"][index]["componentType"]
-        .as_u64()
-        .ok_or("index accessor has no componentType")?;
-    let read = accessor_bytes(json, bin, index)?;
-    let width = match kind {
-        UNSIGNED_BYTE => 1,
-        UNSIGNED_SHORT => 2,
-        UNSIGNED_INT => 4,
-        other => return Err(format!("index componentType {other} is not an integer")),
-    };
-    if read.bytes.len() < read.count * width {
-        return Err("index accessor is shorter than its count".into());
-    }
-    Ok((0..read.count)
-        .map(|i| {
-            let at = i * width;
-            match width {
-                1 => read.bytes[at] as usize,
-                2 => u16::from_le_bytes(read.bytes[at..at + 2].try_into().unwrap()) as usize,
-                _ => u32::from_le_bytes(read.bytes[at..at + 4].try_into().unwrap()) as usize,
-            }
-        })
-        .collect())
 }
 
 /// Building the files this reader is pointed at, in the shape

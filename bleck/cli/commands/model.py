@@ -183,20 +183,38 @@ def _clips_of(data: bytes, mesh: model.Mesh) -> list:  # pylint: disable=contain
     return clips
 
 
-#: Morph targets one file may carry, across every clip in it.
-#:
-#: ⚠️ **Measured, not picked round.** 218 of 864 models have a clip that moves
-#: something, and they hold 3,079 such clips between them; 256 is the smallest
-#: cap under which *every one of those 218 gets at least one clip*, because a
-#: file whose shortest usable clip is 245 poses gets nothing from a smaller one.
-#: It keeps 2,256 of the 3,079 (D235).
-MAX_TARGETS = 256
+@dataclass(frozen=True)
+class Budget:
+    """What one file's morph data may weigh, both ways it can be capped.
 
-#: ...and the bytes those targets may take, whichever binds first. A target
-#: costs `vertices * 12`, so the cap above alone would give `e_3D_manera2` --
-#: 3,811 welded vertices -- an 11 MB animation block on a 130 KB mesh. At 2 MiB
-#: the largest file in a full export is 2.08 MB.
-MORPH_BUDGET = 2 * 1024 * 1024
+    ⚠️ **Two caps, and whichever is smaller wins.** `targets` binds on a small
+    mesh with hundreds of poses; `size` binds on a large one. A single cap of
+    either shape is wrong, because the cost per target varies 25-fold across
+    the disc.
+    """
+
+    targets: int
+    size: int
+
+
+#: The default caps, priced against `gltf.costs` rather than a vertex count.
+#:
+#: ⚠️ **Measured across all 864 models, not picked round** (D238). Keeping
+#: every clip on the disc needs **10.65 MB** on the worst file (`p_luigi`,
+#: 1,466 poses) and **1,466** targets; 11 MiB already drops none, and 12 MiB
+#: leaves room for the cost model's 3.4% worst-case error. **All 3,079 clips
+#: are written**, for 102 MB of morph data across the export against the old
+#: 55 MB for 2,279.
+#:
+#: ⚠️ The target cap binds on nothing this disc holds. It is a guard against a
+#: file whose clips are individually cheap and collectively unbounded, and the
+#: byte cap is what actually decides every real model.
+SPARSE = Budget(targets=2048, size=12 * 1024 * 1024)
+
+#: ...and the caps `--dense-morphs` restores, exactly as D235 measured them. A
+#: dense target costs `vertices * 12`, so 256 alone would give `e_3D_manera2`
+#: -- 3,811 welded vertices -- an 11 MB animation block on a 130 KB mesh.
+DENSE = Budget(targets=256, size=2 * 1024 * 1024)
 
 
 @dataclass(frozen=True)
@@ -220,28 +238,31 @@ class Animations:
         return any(kept is clip for kept in self.clips)
 
 
-def budget(vertices: int) -> int:
-    """How many targets this mesh may carry, of the two caps that apply."""
-    cost = max(vertices * gltf.TARGET_BYTES, 1)
-    return min(MAX_TARGETS, MORPH_BUDGET // cost)
-
-
-def fit_animations(clips: list, vertices: int) -> Animations:
+def fit_animations(mesh, clips: list, dense: bool = False) -> Animations:
     """Every clip that moves something and fits, in the file's own order.
 
     ⚠️ **Greedy, in file order, skipping what does not fit.** A clip too big
     for what is left does not end the walk — a 245-pose clip in the middle of a
     file must not cost every shorter clip behind it.
+
+    ⚠️ **The cost of adding a clip rises as the file fills**, because every
+    keyframe already written gains a weight for each new target. So the walk
+    prices each clip against the total it would produce, not against itself.
     """
+    cap = DENSE if dense else SPARSE
     usable = [clip for clip in clips if clip.poses]
-    allowed = budget(vertices)
+    priced = gltf.costs(mesh, usable, sparse=not dense)
     kept: list = []
-    left = allowed
-    for clip in usable:
-        if len(clip.poses) <= left:
-            left -= len(clip.poses)
+    spent = 0
+    targets = 0
+    for clip, cost in zip(usable, priced, strict=True):
+        total = targets + cost.poses
+        grew = spent + cost.body + gltf.weight_cost(total) - gltf.weight_cost(targets)
+        if grew <= cap.size and total <= cap.targets:
+            spent = grew
+            targets = total
             kept.append(clip)
-    return Animations(clips=kept, dropped=len(usable) - len(kept), targets=allowed - left)
+    return Animations(clips=kept, dropped=len(usable) - len(kept), targets=targets)
 
 
 def texture_for(
@@ -363,7 +384,7 @@ def _clip_entry(clip: ClipInfo, written: bool) -> dict:
     }
 
 
-def _summarise(entries: list) -> None:
+def _summarise(entries: list, dense: bool = False) -> None:
     """What the export produced, in the terms that decide whether to trust it."""
     textured = sum(1 for entry in entries if entry["textured"])
     many = sum(1 for entry in entries if entry["shapes"] > 1)
@@ -387,12 +408,14 @@ def _summarise(entries: list) -> None:
             f"    has its own image and the binding is not decoded (D229).\n"
             f"    --guess-textures paints image 0 on them anyway."
         )
+    cap = DENSE if dense else SPARSE
+    shape = "dense" if dense else "sparse"
     print(f"  {animated} carry a playable morph animation")
-    print(f"  {played} clip(s) written as {targets} morph target(s)")
+    print(f"  {played} clip(s) written as {targets} {shape} morph target(s)")
     if dropped:
         print(
             f"  ! {dropped} further clip(s) did NOT fit the per-file budget of\n"
-            f"    {MAX_TARGETS} target(s) or {MORPH_BUDGET // 1024} KiB, whichever\n"
+            f"    {cap.targets} target(s) or {cap.size // 1024} KiB, whichever\n"
             f"    binds first. Each is listed in the manifest with written: false."
         )
     print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
@@ -418,12 +441,19 @@ def cmd_export(args: argparse.Namespace) -> int:
         animation = (
             Animations()
             if args.no_animation
-            else fit_animations(entry.clips, gltf.vertex_count(entry.mesh))
+            else fit_animations(entry.mesh, entry.clips, args.dense_morphs)
         )
         written = [clip.as_gltf() for clip in animation.clips]
         try:
             tree.write(
-                entry.relative, gltf.write(entry.mesh, texture, entry.name, written)
+                entry.relative,
+                gltf.write(
+                    entry.mesh,
+                    texture,
+                    entry.name,
+                    written,
+                    sparse=not args.dense_morphs,
+                ),
             )
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
@@ -461,7 +491,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     )
     print(f"wrote {len(entries)} .glb file(s) under {out / KIND}")
     print(f"  and {MANIFEST} to {out}")
-    _summarise(entries)
+    _summarise(entries, args.dense_morphs)
     if failed:
         print(f"\n{len(failed)} could not be written:")
         for note in failed[:5]:
@@ -486,6 +516,13 @@ def register(add: AddCommand) -> None:
         "--no-textures", action="store_true", help="geometry only, smaller files"
     )
     export.add_argument("--no-animation", action="store_true", help="skip morph targets")
+    export.add_argument(
+        "--dense-morphs",
+        action="store_true",
+        help="write every morph target in full rather than as a sparse "
+        "accessor; larger files and far fewer clips, for a viewer that will "
+        "not read sparse",
+    )
     export.add_argument(
         "--guess-textures",
         action="store_true",

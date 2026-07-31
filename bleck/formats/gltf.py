@@ -22,6 +22,32 @@ side, and merged there was no way to see that it was a separate object or to
 hide it. Each shape is now its own primitive, which is also the prerequisite
 for ever binding a texture per shape (D229).
 
+## Morph targets, sparse where sparse is smaller
+
+A pose displaces a few dozen of a *model's* vertices out of hundreds (D217), so
+a target can be written as a glTF **sparse accessor**: an index array, a value
+array, and zero everywhere else.
+
+⚠️ **This overturns an earlier decision, deliberately.** Targets were written
+dense on the grounds that sparse support is patchy across readers and a target
+that fails to load is worse than one that wastes a few kilobytes (D217). That
+reasoning is not withdrawn — it is outweighed. The dense cost dropped 823 of
+3,079 clips from the export, and a clip that was never written cannot fail to
+load either. `write(..., sparse=False)` writes every target in full for a
+reader that chokes, and `bleck model export --dense-morphs` reaches it.
+
+⚠️ **Sparse turned out to be the minority case, and it is applied per target
+rather than everywhere.** A primitive is one *shape* after the split above, so
+a pose that reaches a primitive at all usually moves all of it: 68% of touched
+primitive-poses across the disc move every vertex the primitive has, and the
+mean fill is 0.811 (D238). A sparse accessor over those costs more than the
+dense one it replaces, so `sparse_pays` decides each target on its own.
+
+⛔ **A pose that misses a primitive is not a count-0 sparse accessor.**
+`accessor.sparse.count` carries `"minimum": 1` in the specification's schema.
+It is an accessor with no `bufferView` and no `sparse` instead, which the
+specification defines as zeros and which occupies no bytes at all.
+
 ## The container
 
     [12-byte header][JSON chunk][BIN chunk]
@@ -45,6 +71,14 @@ BIN_CHUNK = 0x004E4942
 #: glTF component types, from the specification's enum.
 FLOAT = 5126
 UNSIGNED_INT = 5125
+UNSIGNED_SHORT = 5123
+UNSIGNED_BYTE = 5121
+
+#: The narrowest index type a sparse accessor over `count` elements can use,
+#: and how many bytes one of its indices takes. ⚠️ Most primitives after the
+#: per-shape split hold a handful of vertices, so this is nearly always one
+#: byte -- a `u32` index would cost more than the delta it points at saves.
+INDEX_WIDTHS = ((0x100, UNSIGNED_BYTE, 1), (0x10000, UNSIGNED_SHORT, 2))
 
 #: Buffer view targets. Vertex data and index data are bound differently, and
 #: some readers reject a view that does not say which it is.
@@ -55,6 +89,28 @@ ELEMENT_ARRAY_BUFFER = 34963
 #: delta. ⚠️ The whole reason animation needs a budget -- a file's targets are
 #: `poses * vertices * 12` bytes, which passes the geometry at three poses.
 TARGET_BYTES = 12
+
+#: What one target costs in the JSON chunk before any delta: the accessor
+#: record and the buffer views it names. ⚠️ **Measured, by differencing real
+#: `.glb` files against the same models written without animation** -- a sparse
+#: accessor names two views and carries a nested `sparse` object, so it costs
+#: ~100 bytes more than a dense one however few vertices it moves.
+SPARSE_OVERHEAD = 260
+DENSE_OVERHEAD = 162
+
+#: What each primitive adds to every pose, as one `{"POSITION":n}` entry in its
+#: own `targets` array. ⚠️ **This is what binds on a split mesh.**
+#: `p_wii_mario` carries 90 primitives, so a pose costs ~1.8 KB of JSON before
+#: a single delta is written.
+TARGET_REFERENCE = 20
+
+#: One float of the `weights` array a keyframe carries for every target in the
+#: file, and the `0.0,` the mesh's own array spends on each.
+#: ⚠️ **This term is quadratic** -- `keys * targets` with one key per target --
+#: and above a few hundred targets it is the largest cost in the file, whatever
+#: the targets themselves are encoded as.
+WEIGHT_BYTES = 4
+WEIGHT_JSON = 4
 
 
 @dataclass
@@ -108,9 +164,9 @@ class Part:
     """One shape, as the primitive that will carry it.
 
     ⚠️ **Its own vertices, not a window into a shared list.** A morph target is
-    per-primitive and dense, so primitives sharing one vertex list would each
-    pay for every other primitive's vertices — 92 shapes would cost 92 times
-    the animation block. Partitioned, the total is what it always was.
+    per-primitive, so primitives sharing one vertex list would each pay for
+    every other primitive's vertices — 92 shapes would cost 92 times the
+    animation block. Partitioned, the total is what it always was.
     """
 
     vertices: list = field(default_factory=list)  # pylint: disable=container-return
@@ -157,59 +213,172 @@ def _parts(mesh) -> list:  # pylint: disable=container-return
     return found
 
 
-def _target(blob: _Blob, accessors: list, part: Part, moved: dict) -> int | None:
-    """One pose's deltas for one primitive, or `None` when it moves nothing.
+@dataclass(frozen=True)
+class Shift:
+    """One pose's effect on one primitive: which vertices move, and by how much.
 
-    ⚠️ **Dense, not sparse.** A pose touches a handful of vertices, but glTF's
-    sparse accessors are widely half-supported and a target that fails to load
-    is worse than one that wastes a few kilobytes.
+    `at` indexes the *primitive's* vertex list and ascends strictly, which is
+    what a glTF sparse accessor requires of its index array.
 
     ⚠️ Offsets are addressed by *model* vertex, and a glTF vertex is a welded
-    (position, normal, uv) triple — so one offset may land on several of them.
+    (position, normal, uv) triple — so one offset may land on several entries.
     """
-    deltas = [moved.get(v.position, (0.0, 0.0, 0.0)) for v in part.vertices]
-    if not any(any(value for value in delta) for delta in deltas):
-        return None
-    view = blob.add(b"".join(struct.pack("<3f", *d) for d in deltas), ARRAY_BUFFER)
-    accessor = _accessor(view, len(part.vertices), "VEC3", FLOAT)
-    accessor["min"] = [min(d[i] for d in deltas) for i in range(3)]
-    accessor["max"] = [max(d[i] for d in deltas) for i in range(3)]
+
+    at: list = field(default_factory=list)  # pylint: disable=container-return
+    deltas: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+def _shift(part: Part, moved: dict) -> Shift:
+    """Which of one primitive's vertices a pose displaces.
+
+    A delta that is all zeros is left out: it is indistinguishable from not
+    being named at all, and naming it costs a sparse element.
+    """
+    at: list[int] = []
+    deltas: list = []
+    for index, vertex in enumerate(part.vertices):
+        delta = moved.get(vertex.position)
+        if delta is not None and any(delta):
+            at.append(index)
+            deltas.append(delta)
+    return Shift(at=at, deltas=deltas)
+
+
+def _bounds(accessor: dict, deltas: list, whole: bool) -> None:
+    """The accessor's `min`/`max`, counting the zeros a sparse target implies.
+
+    ⚠️ A sparse accessor's values are the *deviations*; every vertex it does
+    not name still reads as zero, and a bound that ignored them would exclude
+    the origin on any target that only pushes one way.
+    """
+    values = list(deltas) if whole else [*deltas, (0.0, 0.0, 0.0)]
+    accessor["min"] = [float(min(d[axis] for d in values)) for axis in range(3)]
+    accessor["max"] = [float(max(d[axis] for d in values)) for axis in range(3)]
+
+
+@dataclass(frozen=True)
+class Indexing:
+    """The narrowest integer a sparse index array over `count` elements fits."""
+
+    component: int
+    width: int
+    code: str
+
+
+def _indexing(count: int) -> Indexing:
+    """How to pack one primitive's sparse indices."""
+    for limit, component, width in INDEX_WIDTHS:
+        if count <= limit:
+            return Indexing(component=component, width=width, code="BH"[width - 1])
+    return Indexing(component=UNSIGNED_INT, width=4, code="I")
+
+
+def _sparse_target(blob: _Blob, accessors: list, part: Part, shift: Shift) -> int:
+    """One pose's deltas for one primitive, as a sparse accessor.
+
+    ⚠️ **The index and value views carry no `target`.** The specification
+    forbids `target` and `byteStride` on a buffer view a sparse accessor reads
+    from, and a validator rejects the file outright when they are set.
+
+    `byteOffset` is left out of both where it would be zero: it defaults to
+    zero, and at ~15 bytes each it is a real fraction of the record.
+    """
+    count = len(shift.at)
+    index = _indexing(len(part.vertices))
+    indices = blob.add(struct.pack(f"<{count}{index.code}", *shift.at))
+    values = blob.add(b"".join(struct.pack("<3f", *d) for d in shift.deltas))
+    accessor = {
+        "componentType": FLOAT,
+        "count": len(part.vertices),
+        "type": "VEC3",
+        "sparse": {
+            "count": count,
+            "indices": {"bufferView": indices, "componentType": index.component},
+            "values": {"bufferView": values},
+        },
+    }
+    _bounds(accessor, shift.deltas, count == len(part.vertices))
     accessors.append(accessor)
     return len(accessors) - 1
 
 
-def _still(view: int, vertices: int) -> dict:  # pylint: disable=container-return
-    """A target that displaces nothing, over a primitive of `vertices`."""
-    accessor = _accessor(view, vertices, "VEC3", FLOAT)
+def sparse_pays(vertices: int, moved: int) -> bool:
+    """Whether a sparse accessor is smaller than the same target written full.
+
+    ⚠️ **Usually it is not, and that is a consequence of the per-shape split.**
+    A pose moves a few dozen of a *model's* vertices, but a primitive is one
+    shape, so when a pose reaches a primitive at all it tends to move all of
+    it: measured over the whole disc, 68% of touched primitive-poses move
+    **every** vertex the primitive has, and the mean fill is 0.811 (D238).
+    Sparse costs ~100 bytes more of JSON and saves only on what it leaves out.
+    """
+    index = _indexing(vertices)
+    sparse = SPARSE_OVERHEAD + moved * (index.width + TARGET_BYTES)
+    return sparse < DENSE_OVERHEAD + vertices * TARGET_BYTES
+
+
+def _dense_target(blob: _Blob, accessors: list, part: Part, shift: Shift) -> int:
+    """The same pose written out in full: a zero triple per vertex it misses."""
+    deltas = [(0.0, 0.0, 0.0)] * len(part.vertices)
+    for index, delta in zip(shift.at, shift.deltas, strict=True):
+        deltas[index] = delta
+    view = blob.add(b"".join(struct.pack("<3f", *d) for d in deltas), ARRAY_BUFFER)
+    accessor = _accessor(view, len(part.vertices), "VEC3", FLOAT)
+    _bounds(accessor, deltas, True)
+    accessors.append(accessor)
+    return len(accessors) - 1
+
+
+def _still(vertices: int, view: int | None) -> dict:  # pylint: disable=container-return
+    """A target that displaces nothing, over a primitive of `vertices`.
+
+    ⛔ **Sparse cannot express this as a count-0 accessor.**
+    `accessor.sparse.count` carries `"minimum": 1` in the specification's
+    schema, so a count of zero is an invalid file rather than a free one. An
+    accessor with **no `bufferView` and no `sparse`** is what the specification
+    defines as zeros — it costs no bytes at all, which is strictly better.
+    """
+    accessor = {"componentType": FLOAT, "count": vertices, "type": "VEC3"}
+    if view is not None:
+        accessor["bufferView"] = view
     accessor["min"] = [0.0, 0.0, 0.0]
     accessor["max"] = [0.0, 0.0, 0.0]
     return accessor
 
 
-def _morph_targets(blob: _Blob, accessors: list, parts: list, poses: list) -> list:
+def _morph_targets(
+    blob: _Blob, accessors: list, parts: list, poses: list, sparse: bool
+) -> list:
     # pylint: disable=container-return
     """Every pose's targets, as one accessor-index column per primitive.
 
-    ⚠️ **One shared do-nothing accessor per primitive, reused by every pose
-    that leaves it alone.** glTF requires each primitive to carry the same
-    number of targets, and a pose moves one shape out of dozens — writing a
-    fresh zero-filled target for the rest gave `p_wii_mario` 23,434 accessors
-    and a 2.9 MB JSON chunk on a 335-vertex mesh (D236).
+    ⚠️ **One shared do-nothing accessor per vertex count, reused by every pose
+    that leaves that primitive alone.** glTF requires each primitive to carry
+    the same number of targets, and a pose moves one shape out of dozens —
+    writing a fresh zero-filled target for the rest gave `p_wii_mario` 23,434
+    accessors and a 2.9 MB JSON chunk on a 335-vertex mesh (D236).
     """
     widest = max(len(part.vertices) for part in parts)
-    zero = blob.add(b"\0" * (widest * TARGET_BYTES), ARRAY_BUFFER)
-    blanks: list[int | None] = [None] * len(parts)
+    zero = None if sparse else blob.add(b"\0" * (widest * TARGET_BYTES), ARRAY_BUFFER)
+    blanks: dict[int, int] = {}
     columns: list[list[int]] = [[] for _ in parts]
     for pose in poses:
         moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
         for at, part in enumerate(parts):
-            index = _target(blob, accessors, part, moved)
-            if index is None:
-                if blanks[at] is None:
-                    blanks[at] = len(accessors)
-                    accessors.append(_still(zero, len(part.vertices)))
-                index = blanks[at]
-            columns[at].append(index)
+            shift = _shift(part, moved)
+            if shift.at:
+                write = (
+                    _sparse_target
+                    if sparse and sparse_pays(len(part.vertices), len(shift.at))
+                    else _dense_target
+                )
+                columns[at].append(write(blob, accessors, part, shift))
+                continue
+            wide = len(part.vertices)
+            if wide not in blanks:
+                blanks[wide] = len(accessors)
+                accessors.append(_still(wide, zero))
+            columns[at].append(blanks[wide])
     return columns
 
 
@@ -264,7 +433,7 @@ def _weight_animation(
     }
 
 
-def _morphs(document: dict, blob: _Blob, parts: list, clips: list) -> None:
+def _morphs(document: dict, blob: _Blob, parts: list, clips: list, sparse: bool) -> None:
     """Every clip's poses as one target list, and one animation per clip.
 
     A clip with no poses is skipped rather than written as an empty animation:
@@ -281,7 +450,7 @@ def _morphs(document: dict, blob: _Blob, parts: list, clips: list) -> None:
         return
     accessors = document["accessors"]
     poses = [pose for clip in usable for pose in clip.poses]
-    columns = _morph_targets(blob, accessors, parts, poses)
+    columns = _morph_targets(blob, accessors, parts, poses, sparse)
 
     primitives = document["meshes"][0]["primitives"]
     for primitive, column in zip(primitives, columns, strict=True):
@@ -297,14 +466,60 @@ def _morphs(document: dict, blob: _Blob, parts: list, clips: list) -> None:
     document["animations"] = animations
 
 
-def vertex_count(mesh) -> int:
-    """How many glTF vertices a mesh welds to, across every primitive.
+@dataclass(frozen=True)
+class ClipCost:
+    """What one clip's morph targets add to a file, and how many it adds.
 
-    A dense morph target costs this many times `TARGET_BYTES`, so it is what a
-    caller budgeting animation has to divide by. Welding is what decides it —
-    the model's own position count is a lower bound, not the answer.
+    ⚠️ **`body` is not the whole cost.** Every keyframe also carries a weight
+    for every target in the *file*, so a file's weight block is quadratic in
+    the total and cannot be attributed to one clip — the caller adds that term
+    as it decides what to keep.
     """
-    return sum(len(part.vertices) for part in _parts(mesh))
+
+    poses: int
+    body: int
+
+
+def costs(mesh, clips: list, sparse: bool = True) -> list:  # pylint: disable=container-return
+    """Each clip's target cost, measured by partitioning the way `write` does.
+
+    ⚠️ **Measured, not estimated from the vertex count.** What a target costs
+    depends on which primitives the pose reaches and how much of each it moves,
+    and the two encodings differ by a factor of ten on the same pose.
+    """
+    parts = _parts(mesh)
+    if not parts:
+        return []
+    reference = len(parts) * TARGET_REFERENCE
+    found = []
+    for clip in clips:
+        body = 0
+        for pose in clip.poses:
+            moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
+            body += reference
+            for part in parts:
+                shift = _shift(part, moved)
+                if not shift.at:
+                    continue
+                wide = len(part.vertices)
+                if sparse and sparse_pays(wide, len(shift.at)):
+                    body += SPARSE_OVERHEAD + len(shift.at) * (
+                        _indexing(wide).width + TARGET_BYTES
+                    )
+                else:
+                    body += DENSE_OVERHEAD + wide * TARGET_BYTES
+        found.append(ClipCost(poses=len(clip.poses), body=body))
+    return found
+
+
+def weight_cost(targets: int) -> int:
+    """What a file's weight arrays cost once it carries `targets` of them.
+
+    ⚠️ **Quadratic.** One keyframe per target, each weighting every target:
+    256 targets cost 262 KB, 1,024 cost 4.2 MB, and 2,048 cost 16.8 MB. It is
+    the term that decides how many clips a file can hold, not the deltas.
+    """
+    return targets * targets * WEIGHT_BYTES + targets * WEIGHT_JSON
 
 
 def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
@@ -346,19 +561,28 @@ def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
     return {"attributes": attributes, "indices": indices}
 
 
-def write(mesh, texture: bytes = b"", name: str = "", clips: list | None = None) -> bytes:
+def write(
+    mesh,
+    texture: bytes = b"",
+    name: str = "",
+    clips: list | None = None,
+    sparse: bool = True,
+) -> bytes:
     """One mesh as a `.glb`, one primitive per shape.
 
     ⚠️ Returns bytes rather than writing a file, so a caller can size it,
     checksum it or hand it to a test without touching a disk.
 
     ⚠️ **`clips` is a list, and the caller decides how long it is.** Every
-    entry is another full set of dense morph targets; nothing here refuses one
-    for being large, because only the caller knows the file's budget.
+    entry is another full set of morph targets; nothing here refuses one for
+    being large, because only the caller knows the file's budget.
 
     ⚠️ **Primitives of one mesh, not a node each.** Both split the geometry;
     only this one keeps a single shared `weights` array, so an animation stays
     one channel rather than one per shape (D236).
+
+    `sparse=False` writes every target in full instead — see the note on that
+    choice below.
     """
     parts = _parts(mesh)
     if not parts:
@@ -401,7 +625,7 @@ def write(mesh, texture: bytes = b"", name: str = "", clips: list | None = None)
             primitive["material"] = 0
 
     if clips:
-        _morphs(document, blob, parts, clips)
+        _morphs(document, blob, parts, clips, sparse)
 
     document["buffers"] = [{"byteLength": len(blob.data)}]
     return _container(document, bytes(blob.data))

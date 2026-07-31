@@ -298,3 +298,54 @@ fn a_textured_model_reaches_the_frame_as_more_than_one_colour() {
         "no textured model in the export was big enough"
     );
 }
+
+/// ⚠️ **The frame, on a real sparse file.** A clip that moves the positions
+/// and never changes a pixel is invisible to every test above, and so is a
+/// sparse target that lands its deltas on vertices nothing draws.
+///
+/// ⛔ **Not "two moments of the clip".** Most first clips in the export hold a
+/// single keyframe, so both moments are the same moment and the comparison
+/// passes on a reader that displaces nothing. The rest pose is the control.
+#[test]
+fn a_real_clip_changes_the_picture_and_not_only_the_positions() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let size = crate::render::Size::new(128, 128);
+
+    let mut drew = 0;
+    let mut looked = 0;
+    for entry in library.entries() {
+        if entry.animations == 0 {
+            continue;
+        }
+        let mut mesh = Mesh::load(&entry.path).expect("mesh");
+        let view = crate::render::View {
+            camera: crate::render::Camera::fit(mesh.bounds()),
+            background: crate::render::Background::DarkGrey,
+        };
+        mesh.unpose();
+        let rest = crate::render::render(&mesh, &view, size);
+        let span = mesh
+            .animation()
+            .and_then(|animation| animation.clips().first())
+            .map_or(0.0, |clip| clip.seconds());
+        mesh.pose(0, span / 2.0);
+        let posed = crate::render::render(&mesh, &view, size);
+        looked += 1;
+        if (0..size.height).any(|y| (0..size.width).any(|x| rest.pixel(x, y) != posed.pixel(x, y)))
+        {
+            drew += 1;
+        }
+        if looked == 15 {
+            break;
+        }
+    }
+    assert!(looked > 0, "no model in the export declared a clip");
+    assert!(
+        drew * 2 > looked,
+        "only {drew} of {looked} clips changed the frame"
+    );
+}
