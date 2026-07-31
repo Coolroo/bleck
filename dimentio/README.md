@@ -37,7 +37,7 @@ zoom, three background presets, and a camera that fits itself to a model's
 bounds on load. It reads `models.json` and the Wavefront OBJs that
 `bleck model export` writes.
 
-⚠️ **The viewport is a software rasteriser** (`src/render.rs`), not a `wgpu`
+⚠️ **The viewport is a software rasteriser** (`src/render/`), not a `wgpu`
 surface — perspective projection, a depth buffer, and flat shading from each
 face's own normal, all on the CPU into an RGBA buffer that egui uploads as one
 texture. That is what makes it testable: `cargo test` asserts on the pixels.

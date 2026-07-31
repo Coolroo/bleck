@@ -1,9 +1,10 @@
-//! What `bleck` exported, read from the manifest it writes beside the PNGs.
+//! The texture manifest `bleck texture export` writes, and the PNGs it names.
 //!
-//! ⚠️ The manifest is the contract, not the directory listing. Scanning for
-//! `*.png` would work today and lose everything `bleck` knows about an image —
-//! which disc file it came from, which container member, what its original
-//! format was. None of that survives a filename.
+//! ⚠️ The manifest is the contract, not the directory listing — the rule for
+//! this whole layer, stated once in `data`'s module doc. Scanning for `*.png`
+//! would work today and lose everything `bleck` knows about an image: which
+//! disc file it came from, which container member, what its original format
+//! was. None of that survives a filename.
 
 use serde::Deserialize;
 use std::collections::BTreeSet;

@@ -1,9 +1,10 @@
 //! What `bleck effect export` wrote: the effect table, each effect's parts,
-//! and the transform rows behind them.
+//! and the transform rows behind them. **This is the data layer** — the panels
+//! that draw it are in `app::effects`.
 //!
-//! ⚠️ The manifest is the contract, not the directory listing — the same rule
-//! as `catalog.rs` and `mesh.rs`. Nothing here reads `effdata.dat`; `bleck`
-//! owns that format and is tested against a real disc.
+//! ⚠️ The manifest is the contract, not the directory listing — the rule for
+//! this whole layer, stated once in `data`'s module doc. Nothing here reads
+//! `effdata.dat`; `bleck` owns that format and is tested against a real disc.
 //!
 //! ⛔ **Which image a part draws is not decoded.** Six candidate fields have
 //! been refuted, so this module deliberately offers no way to ask. `bank`
@@ -15,7 +16,7 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-use crate::catalog;
+use super::catalog;
 
 /// The file `bleck effect export` writes.
 const MANIFEST: &str = "effects.json";

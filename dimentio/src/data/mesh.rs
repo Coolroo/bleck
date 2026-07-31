@@ -1,9 +1,14 @@
 //! What `bleck model export` wrote: a manifest, and one Wavefront OBJ per model.
 //!
-//! ⚠️ The manifest is the contract, not the directory listing — same rule as
-//! `catalog.rs`. A `.obj` filename cannot say which disc file the model came
-//! from or which Maya shape inside it produced these triangles, and both are
-//! how a model is identified.
+//! The manifest reader and the OBJ parser sit together because a model is only
+//! identified by both — the geometry says what to draw, the manifest says what
+//! it is — and the end-to-end test at the foot of this file walks the two of
+//! them plus the rasteriser in one pass.
+//!
+//! ⚠️ The manifest is the contract, not the directory listing — the rule for
+//! this whole layer, stated once in `data`'s module doc. A `.obj` filename
+//! cannot say which disc file the model came from or which Maya shape inside it
+//! produced these triangles, and both are how a model is identified.
 //!
 //! ⚠️ Geometry is read on demand, not at load. The manifest is a few hundred
 //! bytes per model; the meshes are not, and a folder of them would sit in

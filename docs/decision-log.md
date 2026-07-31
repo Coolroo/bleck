@@ -13974,3 +13974,43 @@ row scroll comfortably, and whether the strip crowds the detail panel.
 
 ⚠️ The instrument was checked against a break: deleting the zero-length guard
 makes the layout test fail, so the test can see that class of fault.
+
+## D220 — Dimentio is three layers, not five files (2026-07-30)
+
+✅ **Restructured, behaviour unchanged.** `dimentio/src/` was five flat files
+with `main.rs` at **1,073 lines** — over this repo's own module ceiling — holding
+app state, three tabs' UI and a test module in one namespace.
+
+Now three layers, largest file 742, `main.rs` down to **53**:
+
+| | |
+|---|---|
+| `data/` | what `bleck` exported — `catalog.rs`, `mesh.rs`, `effects.rs` |
+| `app/` | how it is shown — `mod.rs` plus one file per tab |
+| `render/` | how pixels are made — `camera.rs`, `raster.rs`, `background.rs` |
+
+51 tests still pass, `clippy --all-targets -D warnings` and `fmt --check` clean.
+Tests moved with the code they exercise.
+
+### Two things kept together on purpose
+
+⚠️ **`data/mesh.rs` stayed one 742-line file.** The manifest reader and the OBJ
+parser are separable in principle, but one test walks manifest → geometry →
+pixels in a single pass, and `Bounds::around`'s "ignore unreferenced positions"
+rule (D213) only makes sense with both halves in view. Splitting it would have
+been contortion for a number.
+
+⚠️ **`render/mod.rs` keeps a shared `#[cfg(test)] mod fixtures`.** Every render
+test but one drives the public `render()`, so they need the same measuring
+apparatus; one cube beats four copies of it.
+
+### The naming hazard, handled
+
+`data/effects.rs` and `app/effects.rs` share a name. Each module's `//!` doc now
+says which layer it is in its **first sentence**, and the part→image warnings
+split by layer: "do not index the bank" sits on the loader, "nothing here is
+paired with a part" sits on the panel that draws it.
+
+⛔ **No `⚠️`/`⛔` note was lost** — 39 survive across 11 modules, including the
+one that matters most: which image an effect part draws is still not decoded
+(D210, D218), and both layers say so.
