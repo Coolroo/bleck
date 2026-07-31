@@ -37,6 +37,14 @@ const FRAGMENT: egui::Color32 = egui::Color32::from_rgb(220, 170, 90);
 pub(super) struct ModelPane {
     pub(super) library: data::ModelLibrary,
     pub(super) search: String,
+    /// Hide models whose faces reach almost none of their vertices.
+    ///
+    /// ⚠️ **On by default**, because 732 of 864 exported models are fragments
+    /// and a fragment does not look broken — it looks like a model with one
+    /// corner torn into the middle, which reads as a renderer fault rather
+    /// than incomplete data (D211). `e_genjin_b` was reported that way: it is
+    /// recognisably a Cragnon, at 7.6% coverage.
+    pub(super) whole_only: bool,
     pub(super) selected: Option<usize>,
     /// The selected model's geometry. Empty until something is picked, and
     /// empty again if the file behind a selection could not be read.
@@ -58,6 +66,7 @@ impl ModelPane {
     pub(super) fn load(root: &Path) -> Self {
         Self {
             library: data::ModelLibrary::load(root),
+            whole_only: true,
             ..Default::default()
         }
     }
@@ -113,12 +122,32 @@ impl Viewer {
                     }
                 });
 
-                let visible = self.models.library.matching(&self.models.search);
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.models.whole_only, "whole models only")
+                        .on_hover_text(
+                            "A fragment is one shape record out of a file that \
+                             holds many. It renders as a recognisable model with \
+                             a corner torn into the middle, which looks like a \
+                             rendering fault rather than incomplete data.",
+                        );
+                });
+
+                let visible = self
+                    .models
+                    .library
+                    .filtered(&self.models.search, self.models.whole_only);
                 ui.label(
                     egui::RichText::new(format!(
-                        "{} of {} model(s)",
+                        "{} of {} model(s){}",
                         visible.len(),
-                        self.models.library.len()
+                        self.models.library.len(),
+                        if self.models.whole_only {
+                            format!(", {} hidden as fragments", {
+                                self.models.library.len() - self.models.library.whole()
+                            })
+                        } else {
+                            String::new()
+                        }
                     ))
                     .weak(),
                 );

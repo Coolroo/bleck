@@ -38,6 +38,12 @@ MANIFEST = "models.json"
 #: Where character models live on the disc.
 MODEL_DIR = "files/a"
 
+#: Coverage at or above which a model is treated as whole rather than a
+#: fragment. ⚠️ **The manifest's `fragment` flag used to be a hardcoded `True`**,
+#: which made it useless to filter on — a viewer honouring it hid everything.
+#: 132 of 864 models clear this bar (D211).
+WHOLE = 0.95
+
 
 @dataclass(frozen=True)
 class Found:
@@ -247,7 +253,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "faces": len(entry.mesh.faces),
                 "triangles": len(entry.mesh.triangles()),
                 "coverage": round(entry.mesh.coverage, 4),
-                "fragment": True,
+                "fragment": entry.mesh.coverage < WHOLE,
                 "textured": entry.mesh.is_textured and bool(texture),
                 "animated": bool(clip),
                 "clips": [

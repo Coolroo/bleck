@@ -572,11 +572,24 @@ impl Library {
     /// Indices matching a search, in manifest order. Shape names are searched
     /// as well as model names: one disc file holds several shapes, and the
     /// shape is what tells them apart.
+    #[cfg(test)]
     pub fn matching(&self, search: &str) -> Vec<usize> {
+        self.filtered(search, false)
+    }
+
+    /// Models matching the search, optionally only the whole ones.
+    ///
+    /// ⚠️ **A fragment does not look like missing data, it looks like a
+    /// rendering fault** — a corner torn into the middle of an otherwise
+    /// recognisable character. 732 of 864 exported models are fragments
+    /// (D211), so hiding them is the difference between a viewer that looks
+    /// broken and one that looks partial.
+    pub fn filtered(&self, search: &str, whole_only: bool) -> Vec<usize> {
         let needle = search.to_lowercase();
         self.entries
             .iter()
             .enumerate()
+            .filter(|(_, entry)| !whole_only || !entry.fragment)
             .filter(|(_, entry)| {
                 needle.is_empty()
                     || entry.name.to_lowercase().contains(&needle)
@@ -584,6 +597,11 @@ impl Library {
             })
             .map(|(index, _)| index)
             .collect()
+    }
+
+    /// How many models the whole-only filter would keep.
+    pub fn whole(&self) -> usize {
+        self.entries.iter().filter(|entry| !entry.fragment).count()
     }
 }
 
