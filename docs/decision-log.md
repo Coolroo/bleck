@@ -14412,3 +14412,38 @@ and the first 24 agree with their manifest row to within 10 ms.
 Whether sound comes out, at the right pitch, from the right offset, needs a
 person with ears — which is doubly true while D226's "definitely sped up"
 remains unexplained.
+
+## D228 — The decoder was right; the reference was wrong (2026-07-31)
+
+✅ **Resolved by a listener.** Three copies of `ff_itemget1_32k` were sent at
+32000, 16000 and 21333 Hz. The answer: **32000 — the rate stated in the file.**
+
+So the BRSTM decoder, the rate handling and the WAV writer are all faithful,
+and D226's "definitely sped up" was not a decoding fault.
+
+### ⛔ The near-miss, which is the point of this entry
+
+D226 built a case against the decoder from the **ADPC seek table**: its history
+values appear nowhere in the decoded stream, at any granularity, under any of
+eight decoder variants. That looked like strong evidence of a real defect —
+strong enough that the next step was to keep varying the decoder until one
+matched.
+
+**That would have broken working code.** The decoder was correct the whole
+time; the *reference* was misread. Whatever the ADPC table stores, it is not
+"the two decoded samples before this point".
+
+⚠️ **This is the mirror image of the session's other lessons.** D209, D214 and
+D216 were all cases of an instrument too blind to see a real signal. This is an
+instrument confidently reporting a signal that was not there — and the failure
+mode is worse, because the fix would have been to damage something that worked.
+
+**What actually protected the code:** refusing to adopt a variant on the
+strength of one matching 16-bit value, and asking a person instead. The
+measurements that *did* hold up — adjacent correlation 0.67-0.96 against a
+~0.00 control, L/R correlation 0.65-0.92, tempos of 60-187 BPM, sample counts
+matching every header — were all consistent with a correct decode, and were
+outvoted by a single unexplained table.
+
+⚠️ **The ADPC table remains undecoded**, and that is now a curiosity rather
+than a blocker. Nothing reads it: seeking uses the decoded samples directly.
