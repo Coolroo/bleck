@@ -15,7 +15,8 @@ the rest are binary parameter data and are not.
 |---|---|---|
 | 0 | 6,176 | ✅ **139 effect records**, 44 bytes each |
 | 1 | 14,080 | ✅ **704 part records**, 20 bytes each |
-| 2-15 | ~1.3 MB | 🔶 binary; no strings, no structure established |
+| 6 | 64,768 | ✅ **4,048 transform rows**, four floats each |
+| 2-5, 7-15 | ~1.3 MB | 🔶 binary; no strings, no structure established |
 
 An **effect record** is a 32-byte name then three u32s: the index of its first
 part, how many parts it has, and a third running index into something in
@@ -47,8 +48,13 @@ the disc, and why searching for one found nothing.
 `+18` — reaches 621 against 219 images, so it is not a TPL index. Until that is
 found, this reader can say what an effect is made of but not what it looks like.
 
-⛔ **Sections 2-15.** 1.3 MB of it, no strings. The third field of each effect
-record indexes into that region and is the thread to pull.
+⛔ **The remaining sections.** 1.3 MB, no strings.
+
+⚠️ **What a transform row *means* is not established.** They are plainly
+geometry -- 42% are unit-length vectors, and `chaos` holds an exact 72-degree
+rotation -- but which row is a rotation, which a scale, and how many belong to
+one emitter is unknown. The per-effect row counts are not multiples of three, so
+they are not simply 3x4 matrices.
 """
 
 from __future__ import annotations
@@ -70,6 +76,10 @@ EFFECT_NAME = 32
 PART_STRIDE = 20
 PART_NAME = 16
 
+#: Section 6: four big-endian floats per row. `Effect.extra` indexes it.
+TRANSFORM_SECTION = 6
+TRANSFORM_STRIDE = 16
+
 
 class EffectDataError(BleckError):
     """`effdata.dat` could not be read."""
@@ -90,6 +100,25 @@ class Part:
 
 
 @dataclass(frozen=True)
+class Row:
+    """Four floats from section 6, indexed by an effect's `extra`.
+
+    ⚠️ Geometry, but of an unestablished kind. `chaos` holds an exact 72-degree
+    rotation -- 360/5, matching the five-fold ring measured in game (D172,
+    D173) -- and 42% of all rows are unit-length. That is enough to say these
+    drive placement and not enough to say how.
+    """
+
+    index: int
+    values: tuple
+
+    @property
+    def is_unit(self) -> bool:
+        x, y, z = self.values[:3]
+        return abs((x * x + y * y + z * z) ** 0.5 - 1.0) < 1e-4
+
+
+@dataclass(frozen=True)
 class Effect:
     """A named effect, and the parts it is assembled from."""
 
@@ -101,6 +130,8 @@ class Effect:
     """A third running index, into the undecoded sections."""
 
     parts: list[Part] = field(default_factory=list)
+    rows: list[Row] = field(default_factory=list)
+    """Transform rows from `extra` up to the next effect's `extra`."""
 
     def composed(self) -> list[str]:  # pylint: disable=container-return
         """The names the game builds at runtime: effect plus each part (D172)."""
@@ -122,7 +153,8 @@ def read(data: bytes) -> list[Effect]:  # pylint: disable=container-return
         )
 
     parts = _read_parts(data, offsets[1], offsets[2])
-    return _read_effects(data, offsets[0], offsets[1], parts)
+    effects = _read_effects(data, offsets[0], offsets[1], parts)
+    return _attach_rows(data, offsets, effects)
 
 
 def _read_parts(data: bytes, start: int, end: int) -> list[Part]:
@@ -169,3 +201,43 @@ def chains_cleanly(effects: list[Effect]) -> bool:
         this.first_part + this.part_count == following.first_part
         for this, following in itertools.pairwise(effects)
     )
+
+
+def _read_rows(data: bytes, start: int, end: int) -> list[Row]:
+    # pylint: disable=container-return
+    return [
+        Row(index, struct.unpack_from(">4f", data, at))
+        for index, at in enumerate(
+            range(start, end - TRANSFORM_STRIDE + 1, TRANSFORM_STRIDE)
+        )
+    ]
+
+
+def _attach_rows(data: bytes, offsets: list[int], effects: list[Effect]) -> list[Effect]:
+    # pylint: disable=container-return
+    """Give each effect the rows between its `extra` and the next one's.
+
+    ⚠️ The span is inferred from the *next* record, because no field states a
+    count. The last effect therefore takes everything remaining, which is why
+    its row list is far longer than any other and must not be read as meaning
+    that effect is enormous.
+    """
+    start = offsets[TRANSFORM_SECTION]
+    end = offsets[TRANSFORM_SECTION + 1]
+    rows = _read_rows(data, start, end)
+
+    out: list[Effect] = []
+    for index, effect in enumerate(effects):
+        stop = effects[index + 1].extra if index + 1 < len(effects) else len(rows)
+        out.append(
+            Effect(
+                index=effect.index,
+                name=effect.name,
+                first_part=effect.first_part,
+                part_count=effect.part_count,
+                extra=effect.extra,
+                parts=effect.parts,
+                rows=rows[effect.extra : stop],
+            )
+        )
+    return out

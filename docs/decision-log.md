@@ -12421,3 +12421,53 @@ that region and is the thread to pull next.
 
 ⚠️ So the viewer can currently say what an effect is *made of*, and not what it
 looks like. That is a smaller gap than it was this morning and it is not closed.
+
+---
+
+## D191 — `effdata.dat` section 6 is geometry, and it holds the Chaos Heart's 72 degrees (2026-07-30)
+
+✅ **Section 6 decoded as 4,048 rows of four big-endian floats**, indexed by
+each effect record's third field (`extra`). Found by asking which section size
+divides cleanly by a count just above the last `extra` of 3,733: only two
+candidates existed, and one of them opens with `3f 00 00 00` — `0.5f`.
+
+### 🟢 The confirmation
+
+`chaos`'s rows are:
+
+```
+ 0.000000   0.000000   1.000000   0.000000
+ 0.309017   0.951056   0.000000   0.000000
+-0.951056   0.309017   0.000000   0.000000
+ 0.000000   0.000000   1.000000   0.000000
+```
+
+Rows 1 and 2 are `[cos θ, sin θ; -sin θ, cos θ]` for **θ = 72°**, to within
+1.87e-07 — float32 precision. Bracketed by the z axis.
+
+⚠️ **72° is 360/5, and the Chaos Heart is ringed by *five* hearts.** That was
+measured in game from the opposite direction: D172 and D173 established the
+five-fold ring by disassembly and probe, and `example-mods/chaos-heart` drives
+five orbiters 72° apart with a hand-built rotation table. The same angle was
+sitting in the file the whole time.
+
+That is what raises this from "these floats look geometric" to a reading: an
+independently measured quantity turned up where the structure predicted it.
+
+✅ 42% of all 4,048 rows are unit-length vectors, consistent with a mix of axes
+and rotations among non-normalised scale or offset rows.
+
+### 🔶 What a row *means* is still open
+
+⛔ **They are not 3x4 matrices.** The obvious reading — three rows per
+transform — is refuted by the per-effect row counts, which are not multiples of
+three. `chaos` has 4 rows for 4 parts, `3D_switch` 4 rows for 2 parts,
+`pure_heart` 7 rows for 5 parts, so it is not one row per part either. Pinned as
+a test so the wrong reading stays refuted.
+
+⚠️ **The row span is inferred from the next record**, since nothing states a
+count. The last effect therefore absorbs every remaining row and must not be
+read as being enormous.
+
+⛔ **The texture link is still missing.** Section 6 says where things go, not
+what they look like. Nine sections remain, none with any strings.
