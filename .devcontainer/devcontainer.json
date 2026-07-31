@@ -1,0 +1,58 @@
+{
+  "name": "bleck (arm64 Linux)",
+
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // The image is arch-neutral; on an Apple Silicon host this runs native arm64
+  // with no Rosetta and no qemu. Uncomment to force arm64 on an x86 host --
+  // it works, through emulation, and is slow.
+  // "runArgs": ["--platform=linux/arm64"],
+
+  "workspaceFolder": "/workspaces/bleck",
+
+  "mounts": [
+    // ⚠️ `work/extracted` is the one directory that must not live on the bind
+    // mount. It is thousands of small files that every build walks, and a
+    // macOS bind mount is where that gets slow. It is also pure build output,
+    // so nothing is lost by keeping it inside the VM.
+    //
+    // ⛔ Do NOT extend this volume to cover `work/` as a whole. `work/build`
+    // is the handoff to native Dolphin, and `work/roms` is the user's own
+    // disc images -- both have to stay visible from macOS.
+    {
+      "source": "bleck-extracted",
+      "target": "/workspaces/bleck/work/extracted",
+      "type": "volume"
+    }
+  ],
+
+  "containerEnv": {
+    "BLECK_SYMBOLS_DIR": "/workspaces/bleck/work/symbols",
+    "BLECK_HEADERS_DIR": "/workspaces/bleck/work/upstream/spm-headers/include"
+  },
+
+  // Installs the console script into the image's virtualenv, pointed at the
+  // mounted checkout. `--no-deps` because the image already resolved the lock.
+  "postCreateCommand": "uv pip install --no-deps -e . && bleck --help >/dev/null && echo 'bleck ready'",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "charliermarsh.ruff"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/opt/venv/bin/python"
+      }
+    }
+  },
+
+  // Root, deliberately. The workspace arrives as a bind mount from macOS,
+  // where Docker maps ownership through its VM rather than preserving uids;
+  // a non-root user in the container is the usual source of "permission
+  // denied" on a file the host can write perfectly well.
+  "remoteUser": "root"
+}

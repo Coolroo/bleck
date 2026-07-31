@@ -1,0 +1,29 @@
+# The build context for .devcontainer/Dockerfile.
+#
+# ⚠️ `work/` is the reason this file exists: it holds disc images and extracted
+# filesystems and is 100+ GB on a working checkout. BuildKit only sends what a
+# COPY actually names, so it costs nothing today -- but a plain `docker build`,
+# or one more COPY added later, would send all of it.
+#
+# The Dockerfile copies exactly two files: pyproject.toml and uv.lock. Keep it
+# that way; the checkout arrives as a mount, not as a layer.
+
+work/
+.venv/
+.git/
+.github/
+__pycache__/
+*.pyc
+*.pyo
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+node_modules/
+
+# Build output, not source.
+example-mods/*/overlay/
+mods/
+
+# Machine-local tool paths; the container has its own.
+.env
