@@ -8,7 +8,7 @@ for the error type the package would not load at all.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from bleck.common.errors import BleckError
 
@@ -54,3 +54,7 @@ class Shape:
     first: int
     count: int
     name: str = ""
+    #: Which of the model's materials this shape draws with, in GX texture-map
+    #: order. ✅ **Read from the shape record's layer list** (D243); empty for a
+    #: shape that draws untextured, which is 23% of the disc's shapes.
+    textures: list = field(default_factory=list)  # pylint: disable=container-return

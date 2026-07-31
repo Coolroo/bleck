@@ -179,7 +179,7 @@ bleck model export [--out <dir>] [--search <text>] [--min-coverage <pct>]
 ```
 
 The game's character geometry. `list` shows every model whose mesh can be read;
-`export` writes each as **glTF 2.0** (`.glb`) with its texture and animation
+`export` writes each as **glTF 2.0** (`.glb`) with its textures and animation
 embedded, plus a `models.json` manifest that
 [Dimentio](#dimentio-and-the-manifests) reads.
 
@@ -224,6 +224,24 @@ of them.
     in the file — a third-party rip of the same model simply left it out — and
     merged into one mesh it read as broken geometry attached to the robot. Split
     out, it is one checkbox.
+
+#### Each shape draws with its own image
+
+The image a shape is painted with is **read from the model file**, not guessed:
+a shape lists the texture layers it draws with, each layer names a material, and
+a material names its place in the texture bank stored beside the model. An
+export carries one glTF material per image its shapes reach — `e_lui_robo`
+writes 15 over 92 primitives — so a model arrives fully textured rather than
+with one picture stretched across all of it.
+
+**781 of 864 models export with textures.** The remaining 83 name no image at
+all: every shape in them is drawn with vertex colour, which the file says
+outright. `--no-textures` skips the images entirely for smaller files.
+
+!!! tip "Blender opens in Solid shading"
+
+    Press `Z` and pick **Material Preview** — until then everything renders flat
+    grey whether it carries a texture or not.
 
 #### Animation
 

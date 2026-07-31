@@ -53,19 +53,23 @@ GROUP_LIMIT = 0x10000
 #: splits the face list.
 SHAPE_RECORD_SLOT = 19
 SHAPE_RECORD_STRIDE = 108
-RECORD_TEXTURED_AT = 0x00
+
+#: How many texture layers the shape draws with. ⛔ **Not a boolean** (D243):
+#: 0, 1 and 2 all occur, and reading it as a flag left the 40 two-layer shapes
+#: on the disc reading their UVs at the wrong corner. `modelmat` resolves the
+#: layers themselves; this half only needs to know whether there are any.
+RECORD_LAYERS_AT = 0x00
 RECORD_FIRST_FACE_AT = 0x38
 RECORD_FACE_COUNT_AT = 0x3C
 RECORD_CORNER_AT = 0x40
 
 #: The first of eight per-channel UV corner offsets: `addi r24, r29, 76` builds
 #: the table and `lwzx r0, r24, r5` picks the channel. ⚠️ **Not the same as
-#: `RECORD_CORNER_AT`.** A shape whose `+0x00` is not 1 draws with no texture
+#: `RECORD_CORNER_AT`.** A shape whose `+0x00` is zero draws with no texture
 #: coordinates at all and does not advance this, so the two run apart the moment
 #: a model mixes textured and untextured shapes -- `e_lui_robo_hige` reaches
 #: corner 368 with 136 UV corners behind it.
 RECORD_UV_CORNER_AT = 0x4C
-RECORD_TEXTURED = 1
 
 
 @dataclass(frozen=True)
@@ -349,8 +353,14 @@ def _counted(shapes: list, positions: list, uvs: list) -> list:
     return found
 
 
-def spans(owners: list, names: list) -> list:  # pylint: disable=container-return
-    """Runs of one shape id, as spans of the face list they cover."""
+def spans(owners: list, names: list, bindings: list | None = None) -> list:  # pylint: disable=container-return
+    """Runs of one shape id, as spans of the face list they cover.
+
+    `bindings` is one `modelmat.Binding` per shape, so each span carries the
+    images its shape draws with. It is optional because a file whose material
+    chain does not read still has geometry worth returning.
+    """
+    bound = bindings or []
     found: list[Shape] = []
     start = 0
     for index in range(1, len(owners) + 1):
@@ -361,6 +371,7 @@ def spans(owners: list, names: list) -> list:  # pylint: disable=container-retur
                     first=start,
                     count=index - start,
                     name=names[owner] if owner < len(names) else "",
+                    textures=(list(bound[owner].images) if owner < len(bound) else []),
                 )
             )
             start = index
@@ -422,8 +433,7 @@ def _records(data: bytes, faces: int) -> list:  # pylint: disable=container-retu
                 count=count,
                 corner=struct.unpack_from(">I", data, at + RECORD_CORNER_AT)[0],
                 uv_corner=struct.unpack_from(">I", data, at + RECORD_UV_CORNER_AT)[0],
-                textured=struct.unpack_from(">I", data, at + RECORD_TEXTURED_AT)[0]
-                == RECORD_TEXTURED,
+                textured=struct.unpack_from(">I", data, at + RECORD_LAYERS_AT)[0] > 0,
             )
         )
         seen += count

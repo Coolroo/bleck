@@ -123,9 +123,11 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 6 | `0x168` | 490 entries | 🔶 an index stream; D208's addendum reads the colour index here | 🔶 D207, D208 |
 | 7 | `0x16C` | 153 entries, 23 distinct | **corner → UV index**, one per corner | ✅ D234 |
 | 8..15 | `0x170`+ | one offset, repeated | **eight texture-coordinate channels**; slot 8 is channel 0 | ✅ D208 addendum |
-| 16..18 | `0x190`+ | — | ⛔ **unread** | — |
-| 19 | `0x19C` | 108 bytes × shapes | **shape records** — first face, face count, and the corner offset of each index stream | ✅ D240 |
-| 20..23 | `0x1A0`+ | — | ⛔ **unread.** Slot 17 was tested as a shape→texture map and refuted | ⛔ D229 addendum |
+| 16 | `0x190` | — | ⛔ **unread** | — |
+| 17 | `0x194` | 8 bytes × layers | **layer records** — `+0x00` a material index, `+0x04` a wrap flag | ✅ D243 |
+| 18 | `0x198` | 64 bytes × materials | **material records** — `+0x04` the bank image index, `+0x0C` the source TGA path | ✅ D243 |
+| 19 | `0x19C` | 108 bytes × shapes | **shape records** — layer count and list, first face, face count, and the corner offset of each index stream | ✅ D240, D243 |
+| 20..23 | `0x1A0`+ | — | ⛔ **unread** | — |
 
 ⚠️ **The draw code loads slots 8–15 as *index* streams, not channel data.**
 `lwzx r0, r24, r5` picks `0x16C + channel × 4`, so `0x16C`…`0x188` are eight
@@ -252,7 +254,7 @@ the position array, and left `e_lui_robo` at 90° to its own normals.
 | what | where | fields |
 |---|---|---|
 | **group records** | the word at `0x14C`, 168 bytes each, running to `table[0]` | `char name[0x40]`; `(base, count)` for positions `0x40`, normals `0x48`, colours `0x50`, eight UV channels `0x58`…`0x94`; first shape `0x98`; shape count `0x9C` |
-| **shape records** | slot 19, 108 bytes each | textured flag `0x00`; first face `0x38`; face count `0x3C`; corner offsets for the position `0x40`, normal `0x44` and colour `0x48` index streams; eight UV corner offsets `0x4C`…`0x68` |
+| **shape records** | slot 19, 108 bytes each | layer count `0x00`; eight layer indices `0x10`…`0x2C`; first face `0x38`; face count `0x3C`; corner offsets for the position `0x40`, normal `0x44` and colour `0x48` index streams; eight UV corner offsets `0x4C`…`0x68` |
 
 - the **face list is split by the shape records**, not by `first` restarting at
   zero. The two disagree on **51 models** — a shape whose first face does not
@@ -602,32 +604,54 @@ its view, every `sparse.count` between 1 and the accessor's count. **0 failures*
 
 ## Open questions
 
-### ⛔ Shape → texture binding — three candidates refuted
+### ✅ Shape → texture binding — SOLVED
 
-✅ **Each shape has its own image** (D229). `e_2D_manera6` is a paper sprite built
-from 31 flat quads, and **all 31 groups span the full `[0,1]` UV square** — so a
-shape is not a *region* of an atlas. That is why one texture cannot serve a model,
-and why the link works perfectly for single-shape models like
-`MOBJ_broken_heart`, which a person confirmed.
+⛔ **This was the longest-open question here and is not one any more** (D243).
+It is read from the file, through **two indirections** — which is why the three
+candidates below all failed: each tried to go straight from a shape to an image.
+
+```
+shape record +0x00   how many texture layers (0, 1 or 2)
+shape record +0x10   eight layer indices, -1 where unused
+      -> slot 17     8-byte layer record, +0x00 a material index
+      -> slot 18     64-byte material record, +0x04 the bank image index
+```
+
+⚠️ **The layer list is stored backwards.** The draw loop reads
+`indices[count - i - 1]` and binds it to `GX_TEXMAP` *i*, so the last stored
+index is map 0. `modelmat.Binding.images` is already in map order.
+
+⚠️ **`+0x00` is a count, not a flag.** Reading it as a boolean called the disc's
+40 two-layer shapes untextured, which also cost them their UV corner offset.
+
+Validated against the Brobot rips (D236) two independent ways, each with a
+shuffled control: **284 of 286** matched shapes pick an image of exactly the
+reference's dimensions (controls 13.6% / 24.4% / 31.2%), and **61 of 61**
+confident content matches of the rip's own images agree (controls 38.4% /
+56.5%). 42 of 46 shapes we call untextured get a flat placeholder in the rip;
+**0 of 286** textured ones do.
+
+✅ **Each shape still has its own image** (D229). `e_2D_manera6` is a paper
+sprite built from 31 flat quads, and all 31 groups span the full `[0,1]` UV
+square — so a shape is not a *region* of an atlas. That observation was right;
+only the conclusion drawn from it, that the binding could not be found, was
+wrong.
 
 | candidate | how it died |
 |---|---|
 | ⛔ shape *i* uses texture *i* | quad aspect against texture aspect: 30–31% within 15%, against 21–24% shuffled (D229, D229 addendum) |
 | ⛔ a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked (D229) |
-| ⛔ section slot 17 | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum) |
+| ⛔ section slot 17 read as a per-shape array | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum). Slot 17 *is* in the chain — one hop further along |
 
-**What ships instead:** a model with more than one shape exports untextured and
-says so. 109 of 870 have a single shape and keep their texture. ⚠️ That is a
-deliberate loss — **wrong texturing reads as a broken renderer, and no texturing
-reads as what it is.**
+**What ships:** 781 of 864 models export textured with 6,647 embedded images,
+one glTF material per image any shape reaches. The 83 that stay bare name no
+image at all, which the file states. ⛔ `--guess-textures` and the manifest's
+`texture_guessed` are deleted with the guesswork they described.
 
-⚠️ **`--guess-textures` paints image 0 on every shape anyway.** It is **wrong for
-most models**, opt-in, off by default, marked `texture_guessed` per model in the
-manifest, printed as `N of those are GUESSED` in capitals, and shown in Dimentio
-as amber "texture is a guess". It exists because identifying a character from
-untextured geometry is genuinely hard.
-
-⚠️ **The per-shape split (D237) is this binding's prerequisite, not its answer.**
+⚠️ **The per-shape split (D237) was this binding's prerequisite, and the split
+was also hiding a bug:** `gltf._primitive` asked `mesh.is_textured` for the
+whole mesh, so the 269 models that mix textured and bare shapes wrote no UVs at
+all (D243).
 
 ### ✅ Which Maya shape name goes with which primitive — SOLVED
 
@@ -665,11 +689,16 @@ bytes = 888 records of 20, which is large enough and untested.
 See above. It is an inference from `effdata`'s frame counts, not a measurement of
 the model clip table. Nothing has timed a clip against the running game.
 
-### 🔶 Slots 5, 6, 16–18 and 20–23
+### 🔶 Slots 5, 6, 16 and 20–23
 
 Vertex colours and their index stream are read by nobody, and the counts D207
-measured do not pair cleanly. ✅ Slot 19 is decoded (D240). The rest are unread
-apart from slot 17, tested and refuted above.
+measured do not pair cleanly. ✅ Slots 17, 18 and 19 are decoded (D240, D243).
+
+Two fields inside the decoded ones are still open: the shape record's
+`+0x30`…`+0x37`, one byte per layer and `0` on every model (a UV-channel
+selector is the obvious reading, and nothing on the disc distinguishes it from a
+constant), and slot 17's `+0x04`, which the draw code branches on to pick a
+`GXTexWrapMode` — the exporter always writes `REPEAT` (D243).
 
 ### 🔶 Group record `+0xA0` and `+0xA4`
 

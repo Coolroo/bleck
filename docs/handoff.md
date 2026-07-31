@@ -157,12 +157,14 @@ Four are new this session and all four have already misled someone.
    jingle as MP3 (D232). Tests use it and **skip when it is absent**, so a fresh
    clone passes without it. ⛔ It is third-party asset data: `work/` is
    git-ignored and stays that way.
-2. ⚠️ **`--guess-textures` produces deliberately wrong art.** It paints image 0
-   on every shape of a multi-shape model. Three candidate bindings are refuted
-   (D229, D229 addendum) and the real one is unknown. It is opt-in, off by
-   default, marked `texture_guessed` per model in the manifest, printed in
-   capitals by the export, and shown in amber in the window. **Never cite a
-   guessed export as evidence about the format.**
+2. ✅ **Which image a shape draws with is decoded** (D243), and
+   `--guess-textures` is deleted with the guesswork it produced. A shape record
+   counts its texture layers at `+0x00` and lists them at `+0x10`; each resolves
+   through slot 17 to a slot-18 material record whose `+0x04` is the image's
+   place in the bank. **781 of 864 models now export textured**, up from 95.
+   ⛔ D229's "three candidates refuted, binding unknown" is superseded — all
+   three skipped the two indirections. ⚠️ The manifest's `texture_guessed` is
+   gone; Dimentio reads it with `#[serde(default)]` and degrades to `false`.
 3. 🔶 **The 60 Hz clip rate is an inference, not a measurement.** Model key
    times are whole numbers and `effdata` already converts effect frames at 60
    (D219), so `FRAME_RATE = 60.0` applies the same inference to a second table

@@ -95,7 +95,7 @@ This is the complete list of variables `bleck` reads.
 
     ```bash
     export BLECK_BASE_DIR="/mnt/games/spm/eu0"
-    export BLECK_DOLPHIN_TOOL="/Applications/Dolphin.app/Contents/MacOS/DolphinTool"
+    export BLECK_DOLPHIN_TOOL="/Applications/Dolphin.app/Contents/MacOS/dolphin-tool"
     export BLECK_DOLPHIN="/Applications/Dolphin.app/Contents/MacOS/Dolphin"
     ```
 

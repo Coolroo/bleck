@@ -75,7 +75,7 @@ Add a field to a `PlatformProfile` in `bleck/platforms/`, never an
 
 | | |
 |---|---|
-| Tool names | `dolphin-tool`, `DolphinTool.exe`, `DolphinTool` |
+| Tool names | `dolphin-tool` on Linux and macOS, `DolphinTool.exe` on Windows |
 | Search directories | `/usr/games`, `C:\Program Files\Dolphin`, `Dolphin.app/Contents/MacOS` |
 | Filesystem quirks | read-only deletion, `.DS_Store` filtering |
 

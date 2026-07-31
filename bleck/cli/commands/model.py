@@ -267,45 +267,51 @@ def fit_animations(mesh, clips: list, dense: bool = False) -> Animations:
     return Animations(clips=kept, dropped=len(usable) - len(kept), targets=targets)
 
 
-def texture_for(
-    base: Path, disc_path: str, shapes: int = 1, guess: bool = False
-) -> bytes:
-    """Image 0 of the bank beside a model, when that is unambiguous.
+def textures_for(base: Path, disc_path: str, mesh: model.Mesh) -> list:
+    # pylint: disable=container-return
+    """The bank images this model's shapes actually name, as PNG.
 
-    ⛔ **A model with more than one shape gets no texture** (D229). Every
-    shape's UVs span the whole [0,1] square, so each has its *own* image rather
-    than a region of an atlas, and which image goes with which shape is not
-    decoded. Painting image 0 across all of them draws the whole sprite sheet
-    onto every limb -- `e_2D_manera6` rendered as a crowd of small Mimis on a
-    big one.
+    ✅ **Each shape's own image, read from the file** (D243). A shape's record
+    lists the texture layers it draws with, each layer resolves through slot 17
+    to a material record, and the material's index is the image's place in the
+    bank beside the model.
 
-    ⚠️ 109 of 870 models have a single shape. The other 761 export untextured
-    until the binding is found, because wrong texturing looks like a broken
-    renderer while no texturing looks like what it is.
+    ⛔ D229 shipped image 0 for single-shape models and nothing at all for the
+    other 761, because the binding was not decoded and painting image 0 across
+    a whole model drew the sprite sheet onto every limb. That is superseded:
+    the binding is now read, and `--guess-textures` is gone with it.
 
-    ⛔ `guess=True` overrides that and gives every shape image 0 anyway. **It
-    is wrong for most models** and exists only because grey geometry is hard to
-    identify; the manifest marks each one `texture_guessed` so nothing
-    downstream mistakes it for a reading. Three mappings have been refuted:
-    shape *i* to texture *i* (31% vs a 24% shuffled control), the slot-17 table
-    (23% -- worse than shuffling), and a material index in the face record
-    (always zero). See D229.
+    ⚠️ Only the images some shape reaches are decoded. A bank may carry images
+    nothing references, and embedding those would grow every `.glb` for
+    nothing.
     """
-    if shapes != 1 and not guess:
-        return b""
+    wanted = sorted({index for span in mesh.shape_spans() for index in span.textures})
+    if not wanted:
+        return []
     bank = model.bank_for(base / disc_path)
     if not bank.is_file():
-        return b""
+        return []
     try:
         raw = bank.read_bytes()
         images = tpl.read(raw) if tpl.is_tpl(raw) else []
-        if not images:
-            return b""
-        pixels = texdecode.decode(raw, images[0])
-        return png.write(pixels.width, pixels.height, pixels.rgba)
     except (tpl.TextureError, OSError, ValueError):
         # ⚠️ An undecodable bank costs a texture, never the geometry.
-        return b""
+        return []
+    found = []
+    for index in wanted:
+        at = mesh.materials[index].index if index < len(mesh.materials) else index
+        if at >= len(images):
+            continue
+        try:
+            pixels = texdecode.decode(raw, images[at])
+        except (tpl.TextureError, ValueError):
+            continue
+        found.append(
+            gltf.Paint(
+                index=index, png=png.write(pixels.width, pixels.height, pixels.rgba)
+            )
+        )
+    return found
 
 
 def _extent(mesh: model.Mesh) -> tuple:  # pylint: disable=container-return
@@ -389,26 +395,20 @@ def _clip_entry(clip: ClipInfo, written: bool) -> dict:
 def _summarise(entries: list, dense: bool = False) -> None:
     """What the export produced, in the terms that decide whether to trust it."""
     textured = sum(1 for entry in entries if entry["textured"])
-    many = sum(1 for entry in entries if entry["shapes"] > 1)
+    images = sum(entry["textures"] for entry in entries)
+    bare = sum(1 for entry in entries if not entry["textured"])
     animated = sum(1 for entry in entries if entry["animated"])
     clips = sum(len(entry["clips"]) for entry in entries)
     curves = sum(c["curves"] for entry in entries for c in entry["clips"])
-    guessed = sum(1 for entry in entries if entry["texture_guessed"])
     played = sum(entry["animations"] for entry in entries)
     dropped = sum(entry["animations_dropped"] for entry in entries)
     targets = sum(entry["targets"] for entry in entries)
-    print(f"  {textured} carry an embedded texture")
-    if guessed:
+    print(f"  {textured} carry a texture, {images} embedded image(s) in total")
+    if bare:
         print(
-            f"  ! {guessed} of those are GUESSED -- every shape got image 0,\n"
-            f"    which is wrong for most of them. The manifest marks each one\n"
-            f"    texture_guessed; the binding is not decoded (D229)."
-        )
-    elif many:
-        print(
-            f"  ! {many} have several shapes and export untextured: each shape\n"
-            f"    has its own image and the binding is not decoded (D229).\n"
-            f"    --guess-textures paints image 0 on them anyway."
+            f"  ! {bare} name no image at all: every shape in them draws with\n"
+            f"    vertex colour, which the file states rather than this reader\n"
+            f"    failing to find one (D243)."
         )
     cap = DENSE if dense else SPARSE
     shape = "dense" if dense else "sparse"
@@ -433,12 +433,8 @@ def cmd_export(args: argparse.Namespace) -> int:
     entries: list[dict] = []
     failed: list[str] = []
     for entry in found:
-        texture = (
-            b""
-            if args.no_textures
-            else texture_for(
-                base, entry.disc_path, entry.mesh.shapes, args.guess_textures
-            )
+        paints = (
+            [] if args.no_textures else textures_for(base, entry.disc_path, entry.mesh)
         )
         animation = (
             Animations()
@@ -451,10 +447,10 @@ def cmd_export(args: argparse.Namespace) -> int:
                 entry.relative,
                 gltf.write(
                     entry.mesh,
-                    texture,
-                    entry.name,
-                    written,
+                    name=entry.name,
+                    clips=written,
                     sparse=not args.dense_morphs,
+                    paints=paints,
                 ),
             )
         except ValueError as exc:
@@ -472,8 +468,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "triangles": len(entry.mesh.triangles()),
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": entry.mesh.coverage < WHOLE,
-                "textured": entry.mesh.is_textured and bool(texture),
-                "texture_guessed": bool(texture) and entry.mesh.shapes > 1,
+                "textured": bool(paints),
+                "textures": len(paints),
                 "shapes": entry.mesh.shapes,
                 "animated": bool(animation.clips),
                 "animations": len(animation.clips),
@@ -524,12 +520,6 @@ def register(add: AddCommand) -> None:
         help="write every morph target in full rather than as a sparse "
         "accessor; larger files and far fewer clips, for a viewer that will "
         "not read sparse",
-    )
-    export.add_argument(
-        "--guess-textures",
-        action="store_true",
-        help="give multi-shape models image 0 anyway; wrong for most of them, "
-        "and the manifest marks each one guessed",
     )
     export.add_argument(
         "--min-coverage",

@@ -87,7 +87,7 @@ has no published build. Python 3.13+, and two small runtime dependencies
 
     ---
 
-    Homebrew for both tools. `DolphinTool` lives inside `Dolphin.app`.
+    Homebrew for both tools. `dolphin-tool` lives inside `Dolphin.app`.
 
 -   :material-microsoft-windows: **[Windows](windows.md)**
 

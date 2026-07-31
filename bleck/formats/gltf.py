@@ -171,6 +171,22 @@ class Part:
 
     vertices: list = field(default_factory=list)  # pylint: disable=container-return
     indices: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Which of the model's images this shape draws with, in texture-map order.
+    #: The first is what becomes the primitive's `baseColorTexture`.
+    textures: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+@dataclass(frozen=True)
+class Paint:
+    """One image the caller decoded, ready to embed.
+
+    `index` is the model's own image index, which is what `Part.textures`
+    names -- not a position in the list, so a caller may pass only the images
+    its shapes actually reach.
+    """
+
+    index: int
+    png: bytes
 
 
 def _weld(mesh, faces: list | None) -> Part:
@@ -214,7 +230,13 @@ def _parts(mesh) -> list:  # pylint: disable=container-return
     for span in mesh.shape_spans():
         part = _weld(mesh, mesh.shape_faces(span))
         if part.vertices and part.indices:
-            found.append(part)
+            found.append(
+                Part(
+                    vertices=part.vertices,
+                    indices=part.indices,
+                    textures=list(getattr(span, "textures", [])),
+                )
+            )
     return found
 
 
@@ -551,7 +573,10 @@ def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
             _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC3", FLOAT)
         )
 
-    if mesh.is_textured and all(v.uv is not None for v in vertices):
+    # ⚠️ **Asked of this primitive, not of the mesh** (D243). `mesh.is_textured`
+    # is false the moment any one shape draws bare, and 269 models mix the two,
+    # so gating here on the whole mesh left every one of them unpaintable.
+    if mesh.uvs and all(v.uv is not None and v.uv < len(mesh.uvs) for v in vertices):
         data = b"".join(struct.pack("<2f", *mesh.uvs[v.uv]) for v in vertices)
         attributes["TEXCOORD_0"] = len(accessors)
         accessors.append(
@@ -566,12 +591,64 @@ def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
     return {"attributes": attributes, "indices": indices}
 
 
-def write(
+def _material(image: int) -> dict:  # pylint: disable=container-return
+    """One glTF material over one image."""
+    return {
+        "pbrMetallicRoughness": {
+            "baseColorTexture": {"index": image},
+            "metallicFactor": 0.0,
+            "roughnessFactor": 1.0,
+        },
+        # ⚠️ Game art is cut out with alpha, and the default OPAQUE mode
+        # ignores it -- every transparent pixel renders black.
+        "alphaMode": "MASK",
+        "doubleSided": True,
+    }
+
+
+def _paint(document: dict, blob, primitives: list, parts: list, paints: list) -> None:
+    """Give each primitive the image its shape draws with.
+
+    ✅ **Per shape, not per file** (D243). A model's shapes each name their own
+    image through the layer table, so a file carries as many glTF materials as
+    its shapes reach — `e_lui_robo` writes 20 of its bank's 24.
+
+    ⚠️ A primitive with no texture coordinates gets no material at all rather
+    than an untextured one, because a reader that finds `TEXCOORD_0` missing
+    and a `baseColorTexture` present samples nothing and draws black.
+    """
+    at = {}
+    images: list = []
+    textures: list = []
+    materials: list = []
+    for paint in paints:
+        if not paint.png or paint.index in at:
+            continue
+        at[paint.index] = len(materials)
+        images.append({"bufferView": blob.add(paint.png), "mimeType": "image/png"})
+        textures.append({"sampler": 0, "source": len(textures)})
+        materials.append(_material(len(materials)))
+    if not materials:
+        return
+    document["images"] = images
+    document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
+    document["textures"] = textures
+    document["materials"] = materials
+    for primitive, part in zip(primitives, parts, strict=True):
+        if "TEXCOORD_0" not in primitive["attributes"]:
+            continue
+        chosen = next((at[i] for i in part.textures if i in at), None)
+        if chosen is not None:
+            primitive["material"] = chosen
+
+
+def write(  # pylint: disable=too-many-positional-arguments
     mesh,
     texture: bytes = b"",
     name: str = "",
     clips: list | None = None,
     sparse: bool = True,
+    paints: list | None = None,
 ) -> bytes:
     """One mesh as a `.glb`, one primitive per shape.
 
@@ -607,27 +684,19 @@ def write(
         "bufferViews": blob.views,
     }
 
-    painted = [p for p in primitives if "TEXCOORD_0" in p["attributes"]]
-    if texture and painted:
-        image_view = blob.add(texture)
-        document["images"] = [{"bufferView": image_view, "mimeType": "image/png"}]
-        document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
-        document["textures"] = [{"sampler": 0, "source": 0}]
-        document["materials"] = [
-            {
-                "pbrMetallicRoughness": {
-                    "baseColorTexture": {"index": 0},
-                    "metallicFactor": 0.0,
-                    "roughnessFactor": 1.0,
-                },
-                # ⚠️ Game art is cut out with alpha, and the default OPAQUE
-                # mode ignores it -- every transparent pixel renders black.
-                "alphaMode": "MASK",
-                "doubleSided": True,
-            }
-        ]
-        for primitive in painted:
-            primitive["material"] = 0
+    if paints:
+        _paint(document, blob, primitives, parts, paints)
+    else:
+        painted = [p for p in primitives if "TEXCOORD_0" in p["attributes"]]
+        if texture and painted:
+            document["images"] = [
+                {"bufferView": blob.add(texture), "mimeType": "image/png"}
+            ]
+            document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
+            document["textures"] = [{"sampler": 0, "source": 0}]
+            document["materials"] = [_material(0)]
+            for primitive in painted:
+                primitive["material"] = 0
 
     if clips:
         _morphs(document, blob, parts, clips, sparse)

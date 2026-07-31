@@ -31,21 +31,36 @@ def a_mesh() -> model.Mesh:
 
 
 class TestTheTexturePairing:
-    """The bank beside a model, as PNG for embedding.
+    """The bank beside a model, as the PNGs its shapes name.
 
-    ⚠️ **Image 0, not the right image.** Which texture a shape draws with is
-    not decoded, so a bank holding several may texture a model wrongly.
+    ✅ **The image each shape draws with, read from the file** (D243), not
+    image 0 painted over everything.
     """
 
-    def test_a_real_bank_decodes_to_a_png(self):
+    def test_a_real_bank_decodes_to_pngs(self):
         if not MODELS.is_dir():
             pytest.skip(f"no extracted disc at {MODELS}")
         base = MODELS.parent.parent
-        data = command.texture_for(base, "files/a/p_wii_mario")
-        assert data[:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "not a PNG"
+        mesh = model.mesh((MODELS / "p_wii_mario").read_bytes())
+        paints = command.textures_for(base, "files/a/p_wii_mario", mesh)
+        assert paints, "a textured model produced no images"
+        for paint in paints:
+            assert paint.png[:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "not a PNG"
+
+    def test_only_the_images_some_shape_names_are_decoded(self):
+        """⚠️ A bank may hold images nothing references. Embedding those would
+        grow every `.glb` for art no primitive can reach."""
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        base = MODELS.parent.parent
+        mesh = model.mesh((MODELS / "p_wii_mario").read_bytes())
+        named = {index for span in mesh.shape_spans() for index in span.textures}
+        paints = command.textures_for(base, "files/a/p_wii_mario", mesh)
+        assert {paint.index for paint in paints} <= named
 
     def test_a_model_with_no_bank_costs_a_texture_not_an_error(self):
-        assert command.texture_for(Path("/nowhere"), "files/a/missing") == b""
+        bare = model.Mesh(name="x", groups=[model.Shape(first=0, count=1, textures=[0])])
+        assert not command.textures_for(Path("/nowhere"), "files/a/missing", bare)
 
 
 def a_clip(name: str, poses: int, step: float = 10.0) -> command.ClipInfo:
@@ -143,7 +158,6 @@ class TestAgainstTheDisc:
             search="p_wii_mario",
             no_textures=False,
             no_animation=True,
-            guess_textures=False,
             min_coverage=0.0,
             dense_morphs=False,
         )
@@ -176,7 +190,6 @@ class TestAgainstTheDisc:
             search="p_wii_mario",
             no_textures=True,
             no_animation=False,
-            guess_textures=False,
             min_coverage=0.0,
             dense_morphs=False,
         )
@@ -207,7 +220,6 @@ class TestAgainstTheDisc:
             search="p_wii_mario",
             no_textures=True,
             no_animation=True,
-            guess_textures=False,
             min_coverage=0.0,
             dense_morphs=False,
         )

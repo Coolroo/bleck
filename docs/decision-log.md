@@ -15715,3 +15715,161 @@ reads the catalog it tests and asserts on **that catalog's own first row**,
 comparing whitespace-separated columns rather than substrings (`ITEM_ID_NULL`
 contains `NULL`). `npccatalog.json` is bundled but still untested: its only CLI
 surface needs a real setup file.
+
+## D243 — A shape names its own image, through two tables (2026-07-31)
+
+⛔ **D229 is superseded.** It concluded that which texture a shape draws with
+was not decoded, and made every multi-shape model export bare — 95 of 864
+models textured, measured on today's reader. It is now read from the file, and
+**781 of 864 export textured**, carrying 6,647 embedded images.
+
+### What the draw code says ✅
+
+The same rule that cracked geometry (D206, D240): **when a format will not
+yield, find the code that reads it.** `dolscan.py dis 0x80047f00` steps a shape
+record and hands three things to `0x8004729c`:
+
+```
+lwz   r3, 0(r29)        ; shape +0x00 -> how many texture layers
+addi  r4, r29, 16       ; shape +0x10 -> the layer indices
+lwz   r5, 404(r8)       ; +0x194 (slot 17) -> 8-byte layer records
+lwz   r7, 308(r8)       ; +0x134 -> how many materials there are
+lwz   r8, 408(r8)       ; +0x198 (slot 18) -> 64-byte material records
+```
+
+and inside that function:
+
+```
+lwzx  r3, r26, r0       ; indices[count - i - 1]   <- read in reverse
+lwzx  r7, r27, r3       ; slot17[idx].word0 -> a material index
+lbzx  r6, r24, r0       ; + a runtime byte, which is how a texture animates
+mulli r0, r21, 64       ; -> slot 18, the material record
+lwz   r20, 4(r5)        ; its index in the bank beside the file
+bl    0x802e3200        ; look it up, GXInitTexObj, then GXLoadTexObj(obj, i)
+```
+
+The binding is **two indirections deep**, which is exactly why D229's three
+candidates all failed: every one of them tried to go straight from a shape to
+an image.
+
+| field | what it is |
+|---|---|
+| shape record `+0x00` | **the number of texture layers**, 0–2 on this disc. ⛔ **Not a boolean**, which is how `modelrebase` was reading it |
+| shape record `+0x10`…`+0x2C` | eight `s32` layer indices, `-1` where unused |
+| shape record `+0x30`…`+0x37` | 🔶 one byte per layer, `0` where used and `0xFF` where not. A UV-channel selector is the obvious reading and is untested |
+| slot 17, 8 bytes | `+0x00` a material index; `+0x04` a wrap/clamp flag the draw code tests bits 2 and 3 of |
+| slot 18, 64 bytes | `+0x04` **the image's index in the TPL bank beside the file**; `+0x0C` the source TGA path |
+| header `0x130` / `0x134` / `0x138` | the layer, material and shape counts, stated outright |
+
+⚠️ **The layer list is stored in reverse of GX texture-map order.** The loop
+reads `indices[count - i - 1]` and binds it to map *i*, so the **last** stored
+index is `GX_TEXMAP0`. It only matters for the 40 two-layer shapes, all of them
+effect quads in `MOBJ_EFF_mahojin_*`, `MOBJ_EFF_queen_tornade` and
+`MOBJ_EFF_uranoko`.
+
+⛔ **`model.TEXTURE_RE` was scraping slot 18 all along.** The TGA paths D202
+found by regex are the material records' `+0x0C` field, which is why
+"references == bank images" held on 773 of 787 pairs. The count was right and
+the structure around it was never looked at.
+
+### The invariants, measured on all 870 models ✅
+
+| check | result |
+|---|---|
+| header counts agree with the section strides (8 / 64 / 108) | **870 / 870** |
+| every slot-17 material index inside slot 18 | **870 / 870** |
+| every layer index inside slot 17, unused slots exactly `-1` | **870 / 870** |
+| every slot-18 record names a `.tga` | **870 / 870** |
+| bank image count == material count | 773 of 787; the other 14 hold **more** images than materials, never fewer |
+
+Layer counts across 19,022 shapes: **0 → 4,319 · 1 → 14,663 · 2 → 40**. 854 of
+870 models bind at least one shape; 575 bind every shape.
+
+### Validated against a third-party rip, twice, with controls ✅
+
+`work/reference/x/{Brobot, Brobot L type, missile}` are OBJ/DAE rips carrying
+real `usemtl` assignments and the image files themselves (D236). Reference
+objects were matched to `bleck` shapes on a **rigid-invariant key** — triangle
+count plus total surface area, which no rotation or translation changes — and
+only keys unique on both sides were kept.
+
+**Test 1 — image dimensions.** For each matched shape, does the image our
+binding picks have the width and height of the image the rip applied?
+
+| | matched | agree | shuffled control |
+|---|---|---|---|
+| Brobot | 83 | **83 (100%)** | mean 13.6%, max 25.3% |
+| Brobot L type | 195 | **193 (99.0%)** | mean 24.4%, max 33.3% |
+| missile | 8 | **8 (100%)** | mean 31.2%, max 75.0% |
+
+The two misses are one key collision on a 6-face `oya1Shape`, not a binding
+error. ⚠️ **The first run of this test scored 1/24**, because DDS stores
+`dwHeight` at offset 12 and `dwWidth` at 16 and the reader had them the other
+way round — every row was an exact transpose. Without the control that would
+have read as a refutation.
+
+**Test 2 — image content**, the stronger instrument, which needed its own
+control first. The rip's images are re-encoded (DXT1, some of them twice), so
+exact hashes are worthless. The signature is a 6×6 grid of alpha-weighted RGB
+plus coverage, z-scored, taking the better of the two vertical orientations.
+
+- ✅ **Positive control:** each of the 46 disc images in these six banks was
+  re-encoded as DXT1 and fed back to the matcher. Self-score **≥ 0.992**, and
+  **46 / 46** came back as themselves (32) or as an image scoring ≥ 0.99
+  against themselves (14 — the banks genuinely hold near-duplicates).
+- ⚠️ **The distributions overlap.** Unrelated pairs reach 0.999 at the maximum
+  and 0.888 at the 95th percentile, so the matcher is usable only with a
+  threshold and an ambiguity check. Saying "no match" from this instrument
+  alone would mean nothing.
+- ✅ **Composed:** shape → `usemtl` → rip image → (content) → bank image,
+  against our binding. **61 of 61 agree** — 18 on Brobot, 43 on Brobot L type,
+  none on missile, whose images are too heavily re-encoded to clear the
+  threshold. 207 further comparisons were dropped as ambiguous. Shuffled
+  controls: 38.4% and 56.5%, high because these banks hold as few as two
+  images.
+
+✅ **A third check falls out for free.** 42 of the 46 shapes our reading calls
+*untextured* are given a flat 137-byte placeholder image by the rip, and **0 of
+286** textured shapes are. The ripper invented a solid colour where the game
+draws with vertex colour, which is the same statement from the other side.
+
+⛔ **Refuted: the `Tex_0088_0.dds` numbering is not a game texture index.** The
+numbers run 0 to 460 across banks holding 2–24 images, jump between files, and
+do not order consistently with bank position. It is the ripper's own dump
+counter, and treating it as a second bridge would have been a fitted one.
+
+### What changed in the code
+
+- **`bleck/formats/modelmat.py`** is new: `Material`, `Binding`, `Palette` and
+  `read`. It returns an empty `Palette` rather than raising, like
+  `group_table`, because half of `files/a` is not a model.
+- `Shape.textures` carries the material indices; `Mesh.materials` the images.
+- `gltf.write(..., paints=[Paint(index, png)])` writes **one glTF material per
+  image the shapes reach** and gives each primitive its own. `e_lui_robo`
+  writes 15 materials over 92 primitives, 68 of which are painted.
+- ⛔ **`--guess-textures` is deleted**, along with `texture_guessed` in the
+  manifest. Dimentio reads that field with `#[serde(default)]`, so it degrades
+  to `false` rather than failing to parse.
+- Only the images some shape reaches are decoded and embedded; a bank may hold
+  art nothing references.
+
+⚠️ **One bug found on the way, and it was not in the new code.**
+`gltf._primitive` gated `TEXCOORD_0` on `mesh.is_textured` — the *whole* mesh —
+so any model with a single bare shape wrote no UVs at all and could not be
+painted whatever the binding said. D240 fixed exactly this in `_weld` and
+missed it here. 269 models mix textured and untextured shapes.
+
+### Still open 🔶
+
+- Shape record `+0x30`…`+0x37`: one byte per layer, `0` everywhere on the disc.
+  A UV-channel selector is the obvious reading, and nothing on the disc
+  distinguishes it from a constant.
+- Slot 17 `+0x04`: the draw code branches on bits 2 and 3 to choose a
+  `GXTexWrapMode`, so it is a wrap flag. The exact mapping is not recorded and
+  the exporter always writes `REPEAT`.
+- Group record `+0xA0` / `+0xA4` (D240) are still undecoded; this did not touch
+  them. `+0xA4` indexes a static table at `0x80407d40`, and `+0xA0` is compared
+  against a global at `+0xE0`, which reads as a render-pass selector.
+- The runtime byte added to `slot17[idx].word0` animates a texture by stepping
+  through consecutive material records. A static export takes offset 0, the
+  first frame; nothing here plays one.

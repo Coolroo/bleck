@@ -20,6 +20,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass, field
 
+from bleck.formats import modelmat
 from bleck.formats.modelbase import (
     FIELD,
     SHAPE_SECTIONS,
@@ -166,12 +167,19 @@ class Mesh:
     streams: list = field(default_factory=list)  # pylint: disable=container-return
     #: How many separate shapes the face list describes.
     #:
-    #: ⛔ **A model with more than one cannot be textured** (D229). Each shape
-    #: has its own image -- every group's UVs span the whole [0,1] square, so
-    #: they are not regions of one atlas -- and which image goes with which
-    #: shape is not decoded. Painting image 0 across all of them draws the
-    #: whole sprite sheet onto every limb.
+    #: ⚠️ Each has its **own** image rather than a region of one atlas -- every
+    #: group's UVs span the whole [0,1] square (D229). Which image is now read
+    #: from the file: see `materials` and `Shape.textures`.
     shapes: int = 1
+    #: Every image the file can draw with, in bank order, as `modelmat.Material`.
+    #:
+    #: ✅ **The binding is decoded** (D243). ⛔ D229 said it was not and that a
+    #: model with more than one shape had to export bare; that is superseded.
+    #: A shape names its own material through the layer table, and 284 of 286
+    #: shapes checked against a third-party rip of Brobot pick an image of
+    #: exactly the reference's dimensions, against 14-31% for a shuffled
+    #: control.
+    materials: list = field(default_factory=list)  # pylint: disable=container-return
     #: Where each shape's faces sit in `faces`, in draw order.
     #:
     #: ⚠️ **May be shorter than `shapes`.** A shape whose every face rebased
@@ -487,13 +495,15 @@ def mesh(data: bytes) -> Mesh:
         < len(positions)
     ]
     faces = [face for face, _ in kept]
-    groups = spans([owner for _, owner in kept], rebased.names)
+    palette = modelmat.read(data)
+    groups = spans([owner for _, owner in kept], rebased.names, palette.shapes)
     corner_uvs = _corner_uvs(
         rebased.uvs,
         corner_positions,
         Extent(uvs=len(uvs), positions=len(positions), corners=_reach(faces)),
     )
     return Mesh(
+        materials=palette.images,
         corner_positions=corner_positions,
         corner_normals=_stream(data, table, edges, NORMAL_INDEX_SLOT),
         corner_uvs=corner_uvs,

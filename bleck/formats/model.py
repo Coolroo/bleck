@@ -11,6 +11,7 @@ model reader.
 | ✅ bounding box | read, and sane — Mario is 58.7 units tall |
 | ✅ shape names | read, in file order |
 | ✅ texture references | read, and **counted against the TPL bank** |
+| ✅ which image each shape draws with | read (D243), in `modelmat` |
 | ✅ joint names | 176 for Mario |
 | ✅ animation clip names | 94 for Mario -- `mario_N_1`, `mario_W_1` |
 | ✅ section table | 26 entries, found by structure |
@@ -44,7 +45,13 @@ from **Mon Jan 29 2007**.
 table (`mesh`, `material_name_table`, `animation_table`, D167); none of those
 markers appears in a character file. Two containers, decoded separately.
 
-## 🟢 The texture link, which is exact
+## ✅ The texture link, which is exact
+
+⚠️ **These paths are a section, not loose strings** (D243). `TEXTURE_RE` scrapes
+them out of the file, and where they live is slot 18: one 64-byte material
+record per image, its `+0x04` the image's index in the bank and its `+0x0C` this
+path. `modelmat` reads the records; this regex stays because it also finds the
+paths in files whose section table does not read.
 
 A model names its textures by their **original TGA source paths** —
 `ara/playar/mario/w_tex/R_arem.1.tga`. `p_wii_mario` carries **126** of them and

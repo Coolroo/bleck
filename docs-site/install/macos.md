@@ -20,18 +20,39 @@ description: Installing bleck on macOS
     brew install --cask dolphin
     ```
 
-    `DolphinTool` lives **inside the application bundle** at
-    `/Applications/Dolphin.app/Contents/MacOS/DolphinTool`, not on your PATH.
+    Dolphin's command-line tool lives **inside the application bundle** at
+    `/Applications/Dolphin.app/Contents/MacOS/dolphin-tool`, not on your PATH.
     `bleck` looks inside the bundle automatically.
+
+    !!! note
+
+        It is spelled `dolphin-tool` here, not `DolphinTool`. Dolphin renames it
+        on Windows only —
+        [`Source/Core/DolphinTool/CMakeLists.txt`](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DolphinTool/CMakeLists.txt)
+        applies `OUTPUT_NAME DolphinTool` inside `if (WIN32)`. `bleck` accepts
+        either name, so an older bundle still works.
 
 1.  **Install Wiimms ISO Tools**
 
-    There is no Homebrew formula. Download the macOS build from
-    [wit.wiimm.de](https://wit.wiimm.de/) and put `wit` on your PATH, or:
+    There is no Homebrew formula. Download **v3.05a or later** from
+    [wit.wiimm.de](https://wit.wiimm.de/download.html) and put `wit` on your
+    PATH, or:
 
     ```bash
     export BLECK_WIT="/path/to/wit"
     ```
+
+    !!! warning "Apple Silicon"
+
+        v3.05a is the first release with an arm64 slice — earlier macOS builds
+        are x86_64 only. If `wit version` reports `Killed: 9`, macOS has rejected
+        the signature; users report an ad-hoc re-sign fixes it, applied **after**
+        `install.sh` and to every binary in the toolset's `bin/`:
+
+        ```bash
+        sudo codesign --sign - --force \
+          --preserve-metadata=entitlements,requirements,flags,runtime /usr/local/bin/wit
+        ```
 
 1.  **Clone and sync**
 
@@ -56,12 +77,27 @@ Only needed if you write behaviour rather than swap assets.
 
 1.  **A PowerPC cross-compiler**
 
-    devkitPPC is preferred — it targets the same ABI the game was built with:
+    devkitPPC is preferred — it targets the same ABI the game was built with.
+    On macOS it installs from a `.pkg`: download
+    `devkitpro-pacman-installer.pkg` from
+    [devkitPro/pacman releases](https://github.com/devkitPro/pacman/releases/latest)
+    (latest v6.0.2), open it, then:
 
     ```bash
-    curl -L https://apt.devkitpro.org/install-devkitpro-pacman -o install.sh
-    sudo ./install.sh && sudo dkp-pacman -S gamecube-dev
+    sudo dkp-pacman -S gamecube-dev
     ```
+
+    !!! warning
+
+        ⛔ **Do not use `apt.devkitpro.org/install-devkitpro-pacman`** — that is
+        the Debian/Ubuntu installer, and the Linux page is where it belongs.
+
+        devkitPro publishes **no arm64 macOS build**: its precompiled toolchains
+        are Linux x86_64 and macOS x86_64
+        ([devkitPro setup](https://switchbrew.org/wiki/Setting_up_Development_Environment)).
+        Apple Silicon therefore needs Rosetta 2 —
+        `softwareupdate --install-rosetta` — and Homebrew packages no PowerPC
+        cross-compiler as an alternative.
 
 1.  **wstrt, from Wiimms SZS Toolset**
 
