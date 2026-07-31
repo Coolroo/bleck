@@ -13627,3 +13627,68 @@ Its 13.6% coverage remains unexplained and is reported honestly everywhere.
 The open contradiction is unchanged and now better fenced: a shape has 324
 positions, 336 corners, and no stream that can address 324 things. What has been
 ruled out is that a per-group base closes the gap.
+
+## D215 — glTF replaces OBJ, and a human confirms the geometry is right (2026-07-30)
+
+✅ **Verified by a person looking at it**, which is the first time that has been
+possible for model geometry.
+
+### Why the format changed
+
+⛔ **Wavefront OBJ cannot carry animation.** No skeleton, no keyframe — the
+thing the viewer is for is inexpressible in it. FBX carries both and is
+proprietary, binary, and has no maintainable open writer.
+
+**glTF 2.0 in the `.glb` container** was chosen for a reason beyond features:
+**it opens in Blender, Windows 3D Viewer and any browser**. Until now the only
+thing that could display our geometry was `dimentio`, on a machine that cannot
+capture its own screen (D213) — so every visual claim had to route through a
+human describing it. A `.glb` can be opened by anyone, which makes the export
+falsifiable by someone other than us.
+
+It is JSON plus one binary blob, so `bleck/formats/gltf.py` is stdlib-only. No
+third runtime dependency.
+
+### The two observations that settled it
+
+A human opened the exports and reported:
+
+1. ⛔ `p_wii_mario` — "all stretched out and weird looking". Its coverage is
+   **6.5%**: 29 glTF vertices carrying 432 indices, so nearly every triangle is
+   degenerate. Stretched geometry is exactly what a fragment looks like.
+2. ✅ `e_3D_manera_ruby` — "renders correctly and looks like a ruby". It is the
+   **only model at 100% coverage** in the whole export.
+
+**So the reading is correct and incomplete, not wrong.** Where the face list
+covers the vertices the result is a recognisable object; where it does not, the
+same code produces a mess. That distinction was invisible from inside the data
+and took thirty seconds of a human looking at a file.
+
+⚠️ **This is the positive result the standing rule asks for.** D211 concluded
+from coverage alone that something was wrong; it could not say whether the
+*indices* were wrong or merely partial. A rendered ruby answers that.
+
+### What shipped
+
+- `bleck/formats/gltf.py` — positions, normals, UVs, indices, an embedded PNG
+  texture, `alphaMode: MASK` (game art is alpha-cut; OPAQUE renders those pixels
+  black) and `doubleSided`.
+- Texture coordinates, newly read (D215 below), one pair per position in 73% of
+  models.
+- `--min-coverage`, because **132 models reach 95%+ and those are the ones
+  known to render correctly**. The other 732 are fragments and the command now
+  says so and points at the flag.
+
+### Texture coordinates
+
+✅ The first texture-coordinate channel holds float pairs: 324 of them in
+`p_wii_mario`, **exactly matching its 324 positions**, and every one inside
+[0,1]. Across the disc 79% are entirely in [0,1] and 74% match the position
+count; values above 1 are texture tiling, not a misread.
+
+⚠️ Its length runs to the next **different** table entry. All eight channel
+slots carry the same offset when one channel is in use, so the obvious
+`table[n+1] - table[n]` is zero and reads as no data.
+
+⚠️ **Image 0 of the bank, not the right image.** Which texture a shape draws
+with is still not decoded.

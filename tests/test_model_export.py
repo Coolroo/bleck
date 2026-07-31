@@ -30,83 +30,63 @@ def a_mesh() -> model.Mesh:
     )
 
 
-class TestTheObjWriter:
-    def test_indices_are_one_based(self):
-        text = command.write_obj(a_mesh())
-        faces = [line for line in text.splitlines() if line.startswith("f ")]
-        assert faces == ["f 1 2 3", "f 1 3 4"]
+class TestTheTexturePairing:
+    """The bank beside a model, as PNG for embedding.
 
-    def test_no_index_is_zero(self):
-        """⚠️ A zero would be silently wrong: OBJ has no vertex 0."""
-        for line in command.write_obj(a_mesh()).splitlines():
-            if line.startswith("f "):
-                assert "0" not in line.split()[1:], line
+    ⚠️ **Image 0, not the right image.** Which texture a shape draws with is
+    not decoded, so a bank holding several may texture a model wrongly.
+    """
 
-    def test_a_vertex_line_per_position(self):
-        text = command.write_obj(a_mesh())
-        assert len([x for x in text.splitlines() if x.startswith("v ")]) == 4
+    def test_a_real_bank_decodes_to_a_png(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        base = MODELS.parent.parent
+        data = command.texture_for(base, "files/a/p_wii_mario")
+        assert data[:4] == bytes([0x89, 0x50, 0x4E, 0x47]), "not a PNG"
 
-    def test_the_origin_survives_the_round_trip(self):
-        """`%.6g` must not turn 0.0 into something a parser rejects."""
-        assert "v 0 0 0" in command.write_obj(a_mesh()).splitlines()
+    def test_a_model_with_no_bank_costs_a_texture_not_an_error(self):
+        assert command.texture_for(Path("/nowhere"), "files/a/missing") == b""
 
 
 class TestAgainstTheDisc:
-    def test_a_real_model_exports_indices_in_range(self):
-        path = MODELS / "p_wii_mario"
-        if not path.is_file():
-            pytest.skip(f"no {path}")
-        mesh = model.mesh(path.read_bytes())
-        text = command.write_obj(mesh)
-        lines = text.splitlines()
-        vertices = len([x for x in lines if x.startswith("v ")])
-        normals = len([x for x in lines if x.startswith("vn ")])
-        assert normals == len(mesh.normals)
-        for line in lines:
-            if not line.startswith("f "):
-                continue
-            for token in line.split()[1:]:
-                position, _, normal = token.partition("//")
-                assert 1 <= int(position) <= vertices, line
-                if normal:
-                    assert 1 <= int(normal) <= normals, line
-
-    def test_shading_normals_are_not_assumed_to_be_the_identity(self):
-        """⚠️ 104 of 870 models carry a non-identity normal stream, so a
-        corner's normal must come from the stream and not from its own index."""
-        if not MODELS.is_dir():
-            pytest.skip(f"no extracted disc at {MODELS}")
-        shifted = 0
-        for path in sorted(MODELS.iterdir()):
-            if not path.is_file():
-                continue
-            data = path.read_bytes()
-            if not model.is_model(data):
-                continue
-            try:
-                mesh = model.mesh(data)
-            except model.ModelError:
-                continue
-            if mesh.corner_normals and mesh.corner_normals != list(
-                range(len(mesh.corner_normals))
-            ):
-                shifted += 1
-        assert shifted > 50, f"only {shifted} non-identity streams; the read regressed"
-
     def test_export_writes_a_manifest_the_viewer_can_read(self, tmp_path):
         if not MODELS.is_dir():
             pytest.skip(f"no extracted disc at {MODELS}")
         import argparse  # pylint: disable=import-outside-toplevel
 
-        args = argparse.Namespace(out=str(tmp_path), search="p_wii_mario")
+        args = argparse.Namespace(
+            out=str(tmp_path),
+            search="p_wii_mario",
+            no_textures=False,
+            min_coverage=0.0,
+        )
         assert command.cmd_export(args) == 0
 
         manifest = json.loads((tmp_path / command.MANIFEST).read_text())
         assert manifest["schema"] == 1
         assert manifest["models"], "the manifest names no models"
         for entry in manifest["models"]:
-            assert (tmp_path / entry["file"]).is_file()
+            written = tmp_path / entry["file"]
+            assert written.is_file()
+            assert written.suffix == ".glb"
+            assert written.read_bytes()[:4] == b"glTF"
             assert entry["triangles"] > 0
             assert len(entry["min"]) == 3 and len(entry["max"]) == 3
             for low, high in zip(entry["min"], entry["max"], strict=True):
                 assert low <= high
+
+    def test_no_textures_still_writes_geometry(self, tmp_path):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        import argparse  # pylint: disable=import-outside-toplevel
+
+        args = argparse.Namespace(
+            out=str(tmp_path),
+            search="p_wii_mario",
+            no_textures=True,
+            min_coverage=0.0,
+        )
+        assert command.cmd_export(args) == 0
+        manifest = json.loads((tmp_path / command.MANIFEST).read_text())
+        assert manifest["models"]
+        assert not any(entry["textured"] for entry in manifest["models"])

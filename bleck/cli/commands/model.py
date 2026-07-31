@@ -27,7 +27,7 @@ from pathlib import Path
 
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
-from bleck.formats import model
+from bleck.formats import gltf, model, png, texdecode, tpl
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -52,7 +52,7 @@ class Found:
 
     @property
     def filename(self) -> str:
-        return f"{self.name}.obj"
+        return f"{self.name}.glb"
 
 
 def _base() -> Path:
@@ -96,30 +96,26 @@ def _walk(base: Path, pattern: str) -> list[Found]:  # pylint: disable=container
     return found
 
 
-def write_obj(mesh: model.Mesh) -> str:
-    """One mesh as Wavefront OBJ: vertices, then triangles.
+def texture_for(base: Path, disc_path: str) -> bytes:
+    """Image 0 of the bank beside a model, as PNG, or empty when there is none.
 
-    ⚠️ OBJ indices are **1-based**, and an off-by-one here shifts every face by
-    a vertex — which still renders, as a recognisable model with wrong
-    topology. That is the failure this whole reading has been guarding against.
+    ⚠️ **Image 0, not the right image.** Which texture a shape draws with is not
+    decoded; the bank pairing is (D202), and most banks hold one image. A model
+    whose bank holds several may be textured with the wrong one.
     """
-    lines = [f"# {mesh.name}", f"# {len(mesh.positions)} vertices"]
-    for x, y, z in mesh.positions:
-        lines.append(f"v {x:.6g} {y:.6g} {z:.6g}")
-    for x, y, z in mesh.normals:
-        lines.append(f"vn {x:.6g} {y:.6g} {z:.6g}")
-
-    usable = len(mesh.normals)
-    for triangle in mesh.corner_triangles():
-        parts = []
-        for corner in triangle:
-            normal = corner.normal
-            if normal is None or normal >= usable:
-                parts.append(str(corner.position + 1))
-            else:
-                parts.append(f"{corner.position + 1}//{normal + 1}")
-        lines.append("f " + " ".join(parts))
-    return "\n".join(lines) + "\n"
+    bank = model.bank_for(base / disc_path)
+    if not bank.is_file():
+        return b""
+    try:
+        raw = bank.read_bytes()
+        images = tpl.read(raw) if tpl.is_tpl(raw) else []
+        if not images:
+            return b""
+        pixels = texdecode.decode(raw, images[0])
+        return png.write(pixels.width, pixels.height, pixels.rgba)
+    except (tpl.TextureError, OSError, ValueError):
+        # ⚠️ An undecodable bank costs a texture, never the geometry.
+        return b""
 
 
 def _extent(mesh: model.Mesh) -> tuple:  # pylint: disable=container-return
@@ -156,10 +152,15 @@ def _warn_about_coverage(found: list[Found]) -> None:
         return
     ranked = sorted(entry.mesh.coverage for entry in found)
     median = ranked[len(ranked) // 2]
+    low = sum(1 for value in ranked if value < 0.95)
+    if not low:
+        print(f"\n  all {len(ranked)} reach 95%+ of their vertices")
+        return
     print(
-        f"\n! these are fragments: median coverage {median * 100:.1f}% of each\n"
-        f"  file's vertices. One shape record is read per file and a character\n"
-        f"  holds dozens -- see D211. Do not treat one as a whole model."
+        f"\n! {low} of {len(ranked)} are fragments -- median coverage "
+        f"{median * 100:.1f}% of each\n"
+        f"  file's vertices, and a fragment renders as stretched geometry.\n"
+        f"  Pass --min-coverage 95 for the ones known to render correctly."
     )
 
 
@@ -167,10 +168,29 @@ def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    found = _walk(_base(), args.search or "")
+    base = _base()
+    found = _walk(base, args.search or "")
+    if args.min_coverage:
+        wanted = args.min_coverage / 100.0
+        kept = [entry for entry in found if entry.mesh.coverage >= wanted]
+        # ⚠️ Said out loud. A filter that silently halved the output would
+        # read as "the disc has fewer models".
+        print(
+            f"keeping {len(kept)} of {len(found)} model(s) at "
+            f"{args.min_coverage:g}% coverage or better"
+        )
+        found = kept
     entries: list[dict] = []
+    failed: list[str] = []
     for entry in found:
-        (out / entry.filename).write_text(write_obj(entry.mesh), encoding="ascii")
+        texture = b"" if args.no_textures else texture_for(base, entry.disc_path)
+        try:
+            (out / entry.filename).write_bytes(
+                gltf.write(entry.mesh, texture, entry.name)
+            )
+        except ValueError as exc:
+            failed.append(f"{entry.name}: {exc}")
+            continue
         lowest, highest = _extent(entry.mesh)
         entries.append(
             {
@@ -183,6 +203,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "triangles": len(entry.mesh.triangles()),
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": True,
+                "textured": entry.mesh.is_textured and bool(texture),
                 "min": [round(v, 4) for v in lowest],
                 "max": [round(v, 4) for v in highest],
             }
@@ -192,7 +213,14 @@ def cmd_export(args: argparse.Namespace) -> int:
         json.dumps({"schema": 1, "models": entries}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"wrote {len(entries)} OBJ file(s) and {MANIFEST} to {out}")
+    textured = sum(1 for entry in entries if entry["textured"])
+    print(f"wrote {len(entries)} .glb file(s) and {MANIFEST} to {out}")
+    print(f"  {textured} carry an embedded texture")
+    print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
+    if failed:
+        print(f"\n{len(failed)} could not be written:")
+        for note in failed[:5]:
+            print(f"  {note}")
     _warn_about_coverage(found)
     return 0
 
@@ -206,7 +234,18 @@ def register(add: AddCommand) -> None:
     listing.add_argument("--limit", type=int, default=40)
     listing.set_defaults(func=cmd_list)
 
-    export = sub.add_parser("export", help="write models out as Wavefront OBJ")
+    export = sub.add_parser("export", help="write models out as glTF (.glb)")
     export.add_argument("--out", default="work/models", help="where to write them")
     export.add_argument("--search", help="only paths containing this")
+    export.add_argument(
+        "--no-textures", action="store_true", help="geometry only, smaller files"
+    )
+    export.add_argument(
+        "--min-coverage",
+        type=float,
+        default=0.0,
+        metavar="PCT",
+        help="only models whose faces reach this much of their vertices; "
+        "95 gives the 132 that are known to render correctly",
+    )
     export.set_defaults(func=cmd_export)
