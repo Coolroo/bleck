@@ -203,8 +203,12 @@ TABLE_LEAST = 6
 JOINTS_FROM_END = 2
 ANIMS_FROM_END = 1
 
-#: A model's own name and its build stamp sit at fixed offsets in the opening
-#: record, each in a 32-byte field.
+#: Three 64-byte string fields follow the opening word: the model's own name,
+#: the texture bank it draws from, and its build stamp. ⚠️ **`NAME_AT` is the
+#: bank's name, not the model's** (D245) -- the two agree on 795 of 864 files,
+#: which is why the field read as a name for as long as it did. The model's own
+#: name is at `OWN_NAME_AT` and matches the filename on 870 of 872.
+OWN_NAME_AT = 0x04
 NAME_AT = 0x44
 STAMP_AT = 0x84
 
@@ -422,6 +426,28 @@ def read(data: bytes) -> Model:
     )
 
 
-def bank_for(path: Path) -> Path:
-    """The TPL bank beside a model: the same name with a trailing `-`."""
-    return path.with_name(path.name + "-")
+def bank_for(path: Path, data: bytes | None = None) -> Path:
+    """The TPL bank a model draws from: a sibling file ending in `-`.
+
+    ✅ **Which bank is stated in the file, at `NAME_AT`** (D245). Pass `data`
+    and the name recorded there decides; without it this falls back to the
+    model's own filename, which is right for 795 of 864 and silently wrong for
+    the rest.
+
+    ⚠️ **69 models name a bank that is not their own name**, and 52 of those
+    have no same-named file at all -- `e_bari_beam` draws from `e__bari_beam-`
+    with a doubled underscore, `e_burosu_b` from `e_burosu_h-`, and the three
+    `e_kmoon_*` share one 201-image bank. Guessing left every one of them
+    exporting with no texture.
+
+    A recorded name whose file is missing falls back rather than failing: 31
+    models name a bank the disc does not carry at all.
+    """
+    own = path.with_name(path.name + "-")
+    if data is None:
+        return own
+    named = text(data[NAME_AT : NAME_AT + FIELD])
+    if not named or named == path.name:
+        return own
+    beside = path.with_name(named + "-")
+    return beside if beside.is_file() else own

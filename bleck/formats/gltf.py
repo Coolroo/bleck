@@ -611,35 +611,45 @@ def _paint(document: dict, blob, primitives: list, parts: list, paints: list) ->
 
     ✅ **Per shape, not per file** (D243). A model's shapes each name their own
     image through the layer table, so a file carries as many glTF materials as
-    its shapes reach — `e_lui_robo` writes 20 of its bank's 24.
+    its shapes reach — `e_lui_robo` writes 15 over 92 primitives.
 
     ⚠️ A primitive with no texture coordinates gets no material at all rather
     than an untextured one, because a reader that finds `TEXCOORD_0` missing
     and a `baseColorTexture` present samples nothing and draws black.
+
+    ⛔ **An image no primitive reaches is not embedded** (D245). Writing every
+    image the caller decoded left ten files carrying art nothing referenced --
+    bytes a reader downloads, decodes and never draws -- and made the manifest
+    call them textured when they open bare.
     """
-    at = {}
+    ready = {paint.index: paint.png for paint in paints if paint.png}
+    picks = []
+    for primitive, part in zip(primitives, parts, strict=True):
+        if "TEXCOORD_0" not in primitive["attributes"]:
+            continue
+        chosen = next((index for index in part.textures if index in ready), None)
+        if chosen is not None:
+            picks.append((primitive, chosen))
+    if not picks:
+        return
+
+    at: dict[int, int] = {}
     images: list = []
     textures: list = []
     materials: list = []
-    for paint in paints:
-        if not paint.png or paint.index in at:
-            continue
-        at[paint.index] = len(materials)
-        images.append({"bufferView": blob.add(paint.png), "mimeType": "image/png"})
-        textures.append({"sampler": 0, "source": len(textures)})
-        materials.append(_material(len(materials)))
-    if not materials:
-        return
+    for primitive, chosen in picks:
+        if chosen not in at:
+            at[chosen] = len(materials)
+            images.append(
+                {"bufferView": blob.add(ready[chosen]), "mimeType": "image/png"}
+            )
+            textures.append({"sampler": 0, "source": len(textures)})
+            materials.append(_material(len(materials)))
+        primitive["material"] = at[chosen]
     document["images"] = images
     document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
     document["textures"] = textures
     document["materials"] = materials
-    for primitive, part in zip(primitives, parts, strict=True):
-        if "TEXCOORD_0" not in primitive["attributes"]:
-            continue
-        chosen = next((at[i] for i in part.textures if i in at), None)
-        if chosen is not None:
-            primitive["material"] = chosen
 
 
 def write(  # pylint: disable=too-many-positional-arguments
@@ -711,6 +721,48 @@ class Clip:
 
     name: str
     poses: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+@dataclass(frozen=True)
+class Painting:
+    """What a written `.glb` actually carries, counted from its own bytes."""
+
+    primitives: int
+    painted: int
+    images: int
+
+    @property
+    def textured(self) -> bool:
+        """Whether any primitive in the file resolves to an image."""
+        return bool(self.painted)
+
+
+def parse(blob: bytes) -> dict:  # pylint: disable=container-return
+    """The JSON chunk of a `.glb`, parsed the way a reader parses it."""
+    at = 12
+    while at + 8 <= len(blob):
+        length, kind = struct.unpack_from("<II", blob, at)
+        if kind == JSON_CHUNK:
+            return json.loads(blob[at + 8 : at + 8 + length])
+        at += 8 + length
+    raise ValueError("the file carries no JSON chunk")
+
+
+def painting(blob: bytes) -> Painting:
+    """How much of a written file a reader will find painted.
+
+    ⚠️ **Read back out of the emission, not taken from what the writer was
+    handed** (D245). The manifest reported the images a caller had decoded, so
+    ten files counted as textured while every primitive in them drew bare and
+    nobody could tell from the manifest.
+    """
+    parsed = parse(blob)
+    primitives = [p for mesh in parsed.get("meshes", []) for p in mesh["primitives"]]
+    return Painting(
+        primitives=len(primitives),
+        painted=sum(1 for p in primitives if "material" in p),
+        images=len(parsed.get("images", [])),
+    )
 
 
 def _container(document: dict, binary: bytes) -> bytes:

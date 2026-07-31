@@ -15873,3 +15873,199 @@ missed it here. 269 models mix textured and untextured shapes.
 - The runtime byte added to `slot17[idx].word0` animates a texture by stepping
   through consecutive material records. A static export takes offset 0, the
   first frame; nothing here plays one.
+
+## D245 — The export was right and the files were stale; three real defects behind that (2026-07-31)
+
+⚠️ **This entry opens with a false alarm, because the false alarm is the
+lesson.** A person opened `e_lui_robo.glb` and `p_wii_mario.glb` in Blender and
+reported no materials at all. D243 had just claimed 781 of 864 textured. Both
+were true: the `.glb` files under `work/export/` were written at 14:25, and
+D243 landed at 15:13. **The files predated the fix by 48 minutes.**
+
+⛔ **Do not conclude "the writer is broken" from a file on disk without
+checking when the file was written.** Nothing about the report was wrong; the
+artifact was simply older than the code.
+
+### What the bytes said ✅
+
+Read out of the containers, not inferred from the writer:
+
+| file | primitives | with `material` | images |
+|---|---|---|---|
+| `work/export/…/e_lui_robo.glb` (14:25) | 92 | **0** | **0** |
+| the same model re-exported | 92 | **68** | 15 |
+
+The stale file has no `materials`, `textures`, `images` or `samplers` key at
+all — not a broken link, an absent section. That is exactly what a viewer
+showing bare geometry looks like, and it matches the report precisely.
+
+### The instrument, and its control ✅
+
+A structural walker was written over the emitted bytes, following the chain a
+reader follows:
+
+```
+primitive.material -> materials[m].pbrMetallicRoughness.baseColorTexture
+  -> textures[t].source -> images[i].bufferView -> PNG bytes
+```
+
+with each PNG's chunk CRCs recomputed rather than its magic merely checked.
+
+⚠️ **It was controlled before it was believed.** A minimal textured `.glb` was
+hand-written — one triangle, one 2×2 PNG, one material — then cut twelve ways:
+material index out of range, no `baseColorTexture`, no `source`, no `samplers`,
+no `mimeType`, no `TEXCOORD_0`, a `texCoord` slot the primitive lacks,
+`byteStride` on an image's buffer view, corrupted PNG magic, a truncated image
+view, and an image nothing references. **The intact file passed; all twelve
+cuts were caught.**
+
+⚠️ **One cut exposed a hole in the checker itself.** The truncated-image case
+made it raise `struct.error` instead of reporting a fault — it would have
+crashed on a real malformed file rather than naming it. Found only because the
+control existed.
+
+✅ **Confirmed by a reader that has never seen this repo.** `trimesh` 4.12.2 in
+a throwaway venv, decoding images through Pillow:
+
+- the hand-written control — 1 geometry, 1 UV set, 1 decoded image
+- the stale `e_lui_robo.glb` — **92 geometry, 0 UV, 0 images**
+- the same model re-exported — **92 geometry, 68 UV, 68 decoded base-colour
+  images**, 14 distinct
+
+Across all 864 exported files the walker reports **zero structural
+violations**, before and after the changes below.
+
+### Defect 1 ✅ — the texture bank was guessed from the filename
+
+`model.bank_for` returned `<model filename>-`. **The file states which bank it
+draws from**, in the 64-byte string at `0x44`.
+
+⚠️ **`NAME_AT = 0x44` is mislabelled: that field holds the *bank's* name, not
+the model's.** The model's own name is at `0x04` and matches the filename on
+870 of 872 files. The two agree on 795 of 864, which is why it read as a name
+for as long as it did.
+
+**69 models name a bank other than their own name, and 52 have no same-named
+file at all**: `e_bari_beam` draws from `e__bari_beam-` with a doubled
+underscore, `e_burosu_b` from `e_burosu_h-`, and `e_kmoon_g`/`_w`/`_b` share
+one 201-image bank. All 52 exported with no texture whatever the binding said.
+
+✅ **Positive control on the fix.** For those 52, the model's own count of TGA
+source paths was compared against the named bank's image count: **33 match
+exactly**, and the other 19 are shared banks where the bank is a superset —
+67 vs 201, 40 vs 46, 1 vs 2. **Never a deficit**, which a wrong file would
+sometimes be. No material record's image index landed outside a bank.
+
+⚠️ 31 models name a bank the disc does not carry at all, so an unresolvable
+name falls back to the old guess rather than failing.
+
+### Defect 2 ✅ — images were embedded that no primitive could reach
+
+`_paint` wrote a glTF material for every image the caller decoded, then handed
+materials only to primitives carrying `TEXCOORD_0`. **Ten files ended up with
+images nothing referenced** — `EFF_inseki`, `OFF_d_kaiten`, `OFF_d_saku` and
+seven further `OFF_d_*` — and `MOBJ_EFF_queen_tornade` and `MOBJ_EFF_uranoko`
+carried one dead image each. Bytes a reader downloads, decodes and never draws.
+
+`_paint` now chooses per primitive first and embeds only what was chosen.
+Unreferenced images across the corpus: **12 before, 0 after.**
+
+### Defect 3 ✅ — the manifest described intent, not output
+
+`textured` was `bool(paints)` — what the writer was *handed*. So all ten files
+above were listed as textured while every primitive in them drew bare, and
+nothing downstream could tell.
+
+`gltf.painting(blob)` now parses the file just written and counts primitives
+carrying a material and images embedded; the manifest reports that, plus a new
+`painted` field. **A manifest derived from the emitted bytes cannot
+over-report again**, which is the whole failure mode of this entry.
+
+### The corpus, measured ✅
+
+| | before | after |
+|---|---|---|
+| models exported | 864 | 864 |
+| files where a primitive resolves an image | **771** | **823** |
+| files the manifest calls textured | 781 (10 of them wrong) | 823 (agrees) |
+| shapes resolving to an image | 13,091 | **13,953** |
+| embedded images | 6,647 | 6,886 |
+| images nothing references | 12 | 0 |
+| files naming no image at all | 83 | 41 |
+| structural violations | 0 | 0 |
+
+⚠️ **D243's headline "781 of 864, 6,647 images" was never true as stated.** 781
+counted files handed at least one decoded image; only 771 of them painted a
+primitive. The honest figure for that commit is **771**.
+
+Shapes that name a texture and still export bare fall from 1,170 to 308. Of
+those, 50 carry no usable UV — a `baseColorTexture` there would sample nothing
+and draw black — and the rest belong to the 31 models whose named bank is not
+on the disc.
+
+### What SpmViewer settled — ⚠️ licence first
+
+`follyfoxe/SpmViewer` (now `follycake/SpmViewer`, archived 2024-04-01) renders
+these same models.
+
+⛔ **It carries no licence of any kind.** No `LICENSE`, `COPYING` or
+`UNLICENSE` on either branch, GitHub's licence field is `null`, and none of its
+28 sources carries a copyright header. **No licence is stricter than GPL, not
+looser** — the default is exclusive copyright. Nothing was copied, no row was
+added to `THIRD-PARTY-NOTICES.md`, and everything below is stated as a fact
+about the file format, each one verified independently against the disc. It
+also ships a GPL-2.0 TPL-decoding DLL, which is moot: `bleck` decodes TPL
+itself.
+
+✅ **Confirms Defect 1 independently.** Its reading is that a model's textures
+live in a sibling file named by the header's texture string plus `-`. Found
+here first, from the 67 models with no same-named bank; corroborated by an
+implementation that has rendered these files.
+
+✅ **Confirms D243's chain** against D229's refuted one-index reading: shape →
+sub-shape → layer slots → layer → material → TPL image index. ⚠️ Its field
+names are *inverted* relative to ours — its "Sampler" is our layer, its
+"Texture" our material, its "SubShape" our shape — which will confuse anyone
+reading both.
+
+🔶 **Adds, untested here:** the 24-byte texture-coordinate-transform table at
+header `0x190` is 1:1 with the layer table on all 870 models and holds
+translate, scale and rotation alongside the frame-offset byte that the animated
+texture swap adds. That locates the runtime byte D243 left open.
+
+⛔ **Its layer handling is wrong and must not be carried over.** It treats slot
+0 as a base and takes consecutive layers, binding only the first; that works
+only because every two-layer pair on the disc happens to be consecutive. Ours
+reads the eight slots in reverse GX texture-map order.
+
+### The test that was missing
+
+`tests/test_gltf_materials.py` walks the chain **in the emitted file**, checks
+each PNG's CRCs, and requires every embedded image to be reachable — with the
+twelve cuts above as parametrised controls, plus three cases against the disc:
+`e_lui_robo` and `p_wii_mario` (the two found bare) and `e_bari_beam` (the
+doubled underscore).
+
+⚠️ **Every pre-existing texture test asserted on what the writer was handed, or
+on one field of the document it built.** None followed a primitive through to
+image bytes. That is why an export carrying no materials at all passed 1,508
+tests, and it is the reason this shipped.
+
+### Still open 🔶
+
+- 50 shapes name a texture and carry no usable UV. Whether the game draws them
+  from some other coordinate source is not established.
+- The two-layer case — 40 sub-shapes — still exports only the first layer.
+- `NAME_AT` is not renamed. `is_model` and `Model.name` both read it and
+  correcting the name is wider than this change; `OWN_NAME_AT = 0x04` is
+  recorded beside it.
+- ⛔ **`dimentio` renders only one texture per model, and its own comment now
+  says something false.** `paint_of` in `dimentio/src/data/gltf.rs` takes the
+  first material that yields an image and paints the whole mesh with it,
+  reasoning that "every textured primitive points at the same material today".
+  D243 ended that: `e_lui_robo` carries 15 materials over 68 painted
+  primitives, so the viewer draws one of the 15 stretched across all of them.
+  The `.glb` is correct — third-party readers see all 15 — so this is a viewer
+  defect, not an export one, and it is why a viewer we wrote is weaker evidence
+  than one we did not. Untouched here: binding a texture per shape is renderer
+  work, not a manifest field.

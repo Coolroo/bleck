@@ -234,7 +234,7 @@ export carries one glTF material per image its shapes reach — `e_lui_robo`
 writes 15 over 92 primitives — so a model arrives fully textured rather than
 with one picture stretched across all of it.
 
-**781 of 864 models export with textures.** The remaining 83 name no image at
+**823 of 864 models export with textures.** The remaining 41 name no image at
 all: every shape in them is drawn with vertex colour, which the file says
 outright. `--no-textures` skips the images entirely for smaller files.
 

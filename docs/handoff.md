@@ -161,7 +161,8 @@ Four are new this session and all four have already misled someone.
    `--guess-textures` is deleted with the guesswork it produced. A shape record
    counts its texture layers at `+0x00` and lists them at `+0x10`; each resolves
    through slot 17 to a slot-18 material record whose `+0x04` is the image's
-   place in the bank. **781 of 864 models now export textured**, up from 95.
+   place in the bank. **823 of 864 models now export textured**, up from 95 (D243, corrected
+   and extended by D245).
    ⛔ D229's "three candidates refuted, binding unknown" is superseded — all
    three skipped the two indirections. ⚠️ The manifest's `texture_guessed` is
    gone; Dimentio reads it with `#[serde(default)]` and degrades to `false`.

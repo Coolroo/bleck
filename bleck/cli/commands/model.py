@@ -288,7 +288,11 @@ def textures_for(base: Path, disc_path: str, mesh: model.Mesh) -> list:
     wanted = sorted({index for span in mesh.shape_spans() for index in span.textures})
     if not wanted:
         return []
-    bank = model.bank_for(base / disc_path)
+    source = base / disc_path
+    try:
+        bank = model.bank_for(source, source.read_bytes())
+    except OSError:
+        return []
     if not bank.is_file():
         return []
     try:
@@ -403,7 +407,9 @@ def _summarise(entries: list, dense: bool = False) -> None:
     played = sum(entry["animations"] for entry in entries)
     dropped = sum(entry["animations_dropped"] for entry in entries)
     targets = sum(entry["targets"] for entry in entries)
+    shapes = sum(entry["painted"] for entry in entries)
     print(f"  {textured} carry a texture, {images} embedded image(s) in total")
+    print(f"  {shapes} shape(s) resolve to one, counted in the files themselves")
     if bare:
         print(
             f"  ! {bare} name no image at all: every shape in them draws with\n"
@@ -443,19 +449,20 @@ def cmd_export(args: argparse.Namespace) -> int:
         )
         written = [clip.as_gltf() for clip in animation.clips]
         try:
-            tree.write(
-                entry.relative,
-                gltf.write(
-                    entry.mesh,
-                    name=entry.name,
-                    clips=written,
-                    sparse=not args.dense_morphs,
-                    paints=paints,
-                ),
+            blob = gltf.write(
+                entry.mesh,
+                name=entry.name,
+                clips=written,
+                sparse=not args.dense_morphs,
+                paints=paints,
             )
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
             continue
+        tree.write(entry.relative, blob)
+        # ⚠️ Counted out of the bytes just written, never from `paints`. An
+        # image the caller decoded is not an image a primitive reaches (D245).
+        painted = gltf.painting(blob)
         lowest, highest = _extent(entry.mesh)
         entries.append(
             {
@@ -468,8 +475,9 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "triangles": len(entry.mesh.triangles()),
                 "coverage": round(entry.mesh.coverage, 4),
                 "fragment": entry.mesh.coverage < WHOLE,
-                "textured": bool(paints),
-                "textures": len(paints),
+                "textured": painted.textured,
+                "textures": painted.images,
+                "painted": painted.painted,
                 "shapes": entry.mesh.shapes,
                 "animated": bool(animation.clips),
                 "animations": len(animation.clips),

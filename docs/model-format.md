@@ -643,9 +643,11 @@ wrong.
 | ⛔ a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked (D229) |
 | ⛔ section slot 17 read as a per-shape array | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum). Slot 17 *is* in the chain — one hop further along |
 
-**What ships:** 781 of 864 models export textured with 6,647 embedded images,
-one glTF material per image any shape reaches. The 83 that stay bare name no
-image at all, which the file states. ⛔ `--guess-textures` and the manifest's
+**What ships:** 823 of 864 models export textured with 6,886 embedded images,
+one glTF material per image any shape reaches. The 41 that stay bare name no
+image at all, which the file states. ⚠️ D243 first reported 781 and 6,647; 10
+of those 781 embedded art no primitive referenced, and 52 models were reading
+the wrong texture bank (D245). ⛔ `--guess-textures` and the manifest's
 `texture_guessed` are deleted with the guesswork they described.
 
 ⚠️ **The per-shape split (D237) was this binding's prerequisite, and the split
