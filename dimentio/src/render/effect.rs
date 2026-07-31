@@ -14,7 +14,7 @@
 use super::camera::Basis;
 use super::{Camera, Rgba};
 use crate::data::effects::Entry;
-use crate::data::mesh::{Bounds, Face, Mesh, Parts, Uv, Vec3};
+use crate::data::mesh::{Bounds, Face, Mesh, Parts, Shape, Uv, Vec3};
 use crate::data::texture::Texture;
 
 /// Half the edge of a part's quad, in the units the layout below uses.
@@ -175,6 +175,12 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
             at - right - up,
         ],
         faces: vec![Face { a: 0, b: 1, c: 2 }, Face { a: 0, b: 2, c: 3 }],
+        // One billboard is one shape; there is nothing here to hide separately.
+        shapes: vec![Shape {
+            first: 0,
+            count: 2,
+            visible: true,
+        }],
         // Top-left first, matching the corner order above: the sampler puts
         // (0, 0) at the image's top-left, so a different order flips the art.
         uvs: Some(vec![

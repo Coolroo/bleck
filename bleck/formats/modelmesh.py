@@ -81,6 +81,19 @@ class Face:
 
 
 @dataclass(frozen=True)
+class Shape:
+    """One shape's faces, as a span of the mesh's face list.
+
+    ⚠️ **The span, not the shape's name.** A file's Maya shape names are read
+    elsewhere and which name goes with which face group is not decoded, so a
+    span identifies itself by where it sits and nothing else (D236).
+    """
+
+    first: int
+    count: int
+
+
+@dataclass(frozen=True)
 class Corner:
     """One corner of a face: which position it uses, which normal, which UV."""
 
@@ -135,6 +148,12 @@ class Mesh:
     #: shape is not decoded. Painting image 0 across all of them draws the
     #: whole sprite sheet onto every limb.
     shapes: int = 1
+    #: Where each shape's faces sit in `faces`, in draw order.
+    #:
+    #: ⚠️ **May be shorter than `shapes`.** A shape whose every face rebased
+    #: past the end of the position array leaves no span, and `shapes` counts
+    #: what the file describes rather than what survived the read.
+    groups: list = field(default_factory=list)  # pylint: disable=container-return
 
     @property
     def is_textured(self) -> bool:
@@ -194,25 +213,44 @@ class Mesh:
             for face in self.faces
         )
 
-    def triangles(self) -> list:  # pylint: disable=container-return
+    def shape_spans(self) -> list:  # pylint: disable=container-return
+        """Each shape's faces, or one span over all of them.
+
+        ⚠️ **The fallback is what keeps a hand-built `Mesh` working.** Nothing
+        outside `mesh()` fills `groups`, and a caller that got an empty list
+        back would write a file with no geometry in it.
+        """
+        if self.groups:
+            return list(self.groups)
+        return [Shape(first=0, count=len(self.faces))] if self.faces else []
+
+    def shape_faces(self, span: Shape) -> list:  # pylint: disable=container-return
+        """The faces one span covers."""
+        return self.faces[span.first : span.first + span.count]
+
+    def triangles(self, faces: list | None = None) -> list:
+        # pylint: disable=container-return
         """Every face fanned into triangles, as indices into `positions`.
 
         A fan is correct for these faces because they are **planar** -- 98% of
         4-corner faces on the disc are, against 16% for shuffled indices, which
         is what made the reading trustworthy in the first place (D209).
         """
-        return [tuple(c.position for c in tri) for tri in self.corner_triangles()]
+        return [tuple(c.position for c in tri) for tri in self.corner_triangles(faces)]
 
-    def corner_triangles(self) -> list:  # pylint: disable=container-return
+    def corner_triangles(self, faces: list | None = None) -> list:
+        # pylint: disable=container-return
         """The same triangles, keeping each corner's normal and UV alongside it.
 
         ⚠️ A corner's normal comes from `corner_normals` and its UV from
         `corner_uvs`; neither is reliably the identity -- 104 of 870 models
         would be mis-shaded by assuming it for normals, and the UV stream is a
         different length from the position stream on 26% of them.
+
+        `faces` narrows this to one shape's span; the default is every face.
         """
         out = []
-        for face in self.faces:
+        for face in self.faces if faces is None else faces:
             span = slice(face.first, face.first + face.corners)
             positions = self.corner_positions[span]
             normals = self.corner_normals[span]
@@ -416,13 +454,15 @@ def mesh(data: bytes) -> Mesh:
     # ⚠️ 22 faces across the disc rebase past the end, against 1,250 for a
     # shuffled control -- so the bases are right and these few are not. Dropped
     # rather than clamped, since a clamped face stretches to the last vertex.
-    faces = [
-        face
-        for face in rebased.faces
+    kept = [
+        (face, owner)
+        for face, owner in zip(rebased.faces, rebased.groups, strict=True)
         if face.first + face.corners <= len(corner_positions)
         and max(corner_positions[face.first : face.first + face.corners], default=0)
         < len(positions)
     ]
+    faces = [face for face, _ in kept]
+    groups = _spans([owner for _, owner in kept])
     corner_uvs = _corner_uvs(
         rebased.uvs,
         corner_positions,
@@ -439,6 +479,7 @@ def mesh(data: bytes) -> Mesh:
         faces=faces,
         streams=streams,
         shapes=shapes,
+        groups=groups,
     )
 
 
@@ -532,6 +573,10 @@ class Rebased:
     faces: list = field(default_factory=list)  # pylint: disable=container-return
     positions: list = field(default_factory=list)  # pylint: disable=container-return
     uvs: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Which shape each face came from, parallel to `faces`. ⚠️ The only place
+    #: the boundaries are still visible -- rebasing makes every `first`
+    #: absolute, so nothing downstream can tell where one shape ended.
+    groups: list = field(default_factory=list)  # pylint: disable=container-return
 
 
 def _rebase(faces: list, positions: list, uvs: list) -> Rebased:
@@ -554,27 +599,39 @@ def _rebase(faces: list, positions: list, uvs: list) -> Rebased:
     position_stream = list(positions)
     uv_stream = list(uvs)
     out: list[Face] = []
+    owners: list[int] = []
     corner_base = 0
     position_base = 0
     uv_base = 0
-    for group in _groups(faces):
+    for index, group in enumerate(_groups(faces)):
         span = max((f.first + f.corners for f in group), default=0)
         seen_positions: set[int] = set()
         seen_uvs: set[int] = set()
         for face in group:
             low = corner_base + face.first
-            high = low + face.corners
-            for at in range(low, min(high, len(position_stream))):
+            for at in range(low, min(low + face.corners, len(position_stream))):
                 seen_positions.add(position_stream[at])
                 position_stream[at] += position_base
-            for at in range(low, min(high, len(uv_stream))):
+            for at in range(low, min(low + face.corners, len(uv_stream))):
                 seen_uvs.add(uv_stream[at])
                 uv_stream[at] += uv_base
             out.append(Face(first=low, corners=face.corners))
+            owners.append(index)
         corner_base += span
         position_base += len(seen_positions)
         uv_base += len(seen_uvs)
-    return Rebased(faces=out, positions=position_stream, uvs=uv_stream)
+    return Rebased(faces=out, positions=position_stream, uvs=uv_stream, groups=owners)
+
+
+def _spans(owners: list) -> list:  # pylint: disable=container-return
+    """Runs of one shape id, as spans of the face list they cover."""
+    found: list[Shape] = []
+    start = 0
+    for index in range(1, len(owners) + 1):
+        if index == len(owners) or owners[index] != owners[start]:
+            found.append(Shape(first=start, count=index - start))
+            start = index
+    return found
 
 
 def _groups(faces: list) -> list:  # pylint: disable=container-return

@@ -60,6 +60,15 @@ pub(super) struct ModelPane {
     pub(super) posed: Option<Posed>,
 }
 
+/// One shape the user just showed or hid.
+///
+/// Collected while the menu is open and applied after it closes: the list is
+/// drawn from the mesh, so it cannot be mutated while it is being read.
+struct Toggle {
+    index: usize,
+    shown: bool,
+}
+
 /// A point in a clip: which one, and how far in.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(super) struct Posed {
@@ -112,11 +121,94 @@ impl Viewer {
             self.models.view.camera = render::Camera::fit(self.models.mesh.bounds());
             self.models.stale = true;
         }
+        ui.separator();
+        self.shape_menu(ui);
         ui.label(
             egui::RichText::new("drag to orbit · scroll to zoom")
                 .weak()
                 .small(),
         );
+    }
+
+    /// How many shapes the selection was split into, and a checkbox each.
+    ///
+    /// ⚠️ **This is what turns a stray shape into a fact.** `e_lui_robo` holds
+    /// 92 and one of them is a flat quad 130 units to the side; merged into one
+    /// mesh it was reported as "fucked up verts", because nothing said it was a
+    /// separate object and nothing could hide it (D236).
+    fn shape_menu(&mut self, ui: &mut egui::Ui) {
+        let total = self.models.mesh.shapes().len();
+        if total == 0 {
+            return;
+        }
+        let hidden = self.models.mesh.hidden_shapes();
+        let label = if hidden == 0 {
+            format!("{total} shape(s)")
+        } else {
+            format!("{total} shape(s), {hidden} hidden")
+        };
+        if total == 1 {
+            ui.label(egui::RichText::new(label).weak().small());
+            return;
+        }
+
+        let mut toggled: Vec<Toggle> = Vec::new();
+        let mut all = None;
+        ui.menu_button(label, |ui| {
+            ui.label(
+                egui::RichText::new(
+                    "One shape per glTF primitive, as the file groups its faces. \
+                     Which Maya shape name goes with which is not decoded.",
+                )
+                .weak()
+                .small(),
+            );
+            ui.horizontal(|ui| {
+                if ui.button("show all").clicked() {
+                    all = Some(true);
+                }
+                if ui.button("hide all").clicked() {
+                    all = Some(false);
+                }
+            });
+            ui.separator();
+            let step = ui.text_style_height(&egui::TextStyle::Body) + 6.0;
+            let shapes: Vec<mesh::Shape> = self.models.mesh.shapes().to_vec();
+            egui::ScrollArea::vertical().max_height(320.0).show_rows(
+                ui,
+                step,
+                shapes.len(),
+                |ui, range| {
+                    for index in range {
+                        let Some(shape) = shapes.get(index) else {
+                            break;
+                        };
+                        let mut shown = shape.visible;
+                        let name = format!("shape {index} · {} tris", shape.count);
+                        if ui.checkbox(&mut shown, name).changed() {
+                            toggled.push(Toggle { index, shown });
+                        }
+                    }
+                },
+            );
+        });
+
+        if let Some(shown) = all {
+            if shown {
+                self.models.mesh.show_all_shapes();
+            } else {
+                for index in 0..total {
+                    self.models.mesh.set_shape_visible(index, false);
+                }
+            }
+            self.models.stale = true;
+        }
+        for change in toggled {
+            self.models
+                .mesh
+                .set_shape_visible(change.index, change.shown);
+            self.models.stale = true;
+        }
     }
 
     /// The models to choose from, searchable. Rows are virtualised for the
@@ -245,6 +337,8 @@ impl Viewer {
                 asset.inline(ui, "faces", &entry.faces.to_string());
                 ui.separator();
                 asset.inline(ui, "tris", &entry.triangles.to_string());
+                ui.separator();
+                asset.inline(ui, "shapes", &self.models.mesh.shapes().len().to_string());
                 ui.separator();
                 asset.inline(ui, "extent", &entry.extent());
                 ui.separator();

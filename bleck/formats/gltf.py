@@ -14,6 +14,14 @@ glTF is JSON plus one binary blob, so this is stdlib-only. `bleck` ships with
 two runtime dependencies, both argued for in `pyproject.toml`, and a model
 exporter is not the place to spend a third.
 
+## One primitive per shape
+
+⛔ **Merging a file's shapes into one mesh is what made `e_lui_robo` look
+broken** (D236). It holds 92 of them, one is a flat quad 130 units off to the
+side, and merged there was no way to see that it was a separate object or to
+hide it. Each shape is now its own primitive, which is also the prerequisite
+for ever binding a texture per shape (D229).
+
 ## The container
 
     [12-byte header][JSON chunk][BIN chunk]
@@ -95,13 +103,27 @@ def _accessor(view: int, count: int, kind: str, component: int) -> dict:
     }
 
 
-def _welded(mesh) -> tuple:  # pylint: disable=container-return
+@dataclass(frozen=True)
+class Part:
+    """One shape, as the primitive that will carry it.
+
+    ⚠️ **Its own vertices, not a window into a shared list.** A morph target is
+    per-primitive and dense, so primitives sharing one vertex list would each
+    pay for every other primitive's vertices — 92 shapes would cost 92 times
+    the animation block. Partitioned, the total is what it always was.
+    """
+
+    vertices: list = field(default_factory=list)  # pylint: disable=container-return
+    indices: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+def _weld(mesh, faces: list | None) -> Part:
     """Corners collapsed to unique (position, normal, uv) vertices."""
     order: dict[Vertex, int] = {}
     vertices: list[Vertex] = []
     indices: list[int] = []
     textured = mesh.is_textured
-    for triangle in mesh.corner_triangles():
+    for triangle in mesh.corner_triangles(faces):
         for corner in triangle:
             vertex = Vertex(
                 position=corner.position,
@@ -114,12 +136,29 @@ def _welded(mesh) -> tuple:  # pylint: disable=container-return
                 order[vertex] = found
                 vertices.append(vertex)
             indices.append(found)
-    return vertices, indices
+    return Part(vertices=vertices, indices=indices)
 
 
-def _morph_targets(blob: _Blob, accessors: list, vertices: list, poses: list) -> list:
-    # pylint: disable=container-return
-    """Each pose as a dense POSITION-delta target, plus its accessor index.
+def _parts(mesh) -> list:  # pylint: disable=container-return
+    """One `Part` per shape the mesh describes.
+
+    ⛔ **Not one merged mesh.** `e_lui_robo` holds 92 shapes and one of them is
+    a flat quad 130 units from the character; merged, it reads as broken
+    geometry welded to the model with no way to hide it (D236).
+
+    A shape whose faces all fell out as degenerate contributes no primitive
+    rather than an empty one, which no reader accepts.
+    """
+    found = []
+    for span in mesh.shape_spans():
+        part = _weld(mesh, mesh.shape_faces(span))
+        if part.vertices and part.indices:
+            found.append(part)
+    return found
+
+
+def _target(blob: _Blob, accessors: list, part: Part, moved: dict) -> int | None:
+    """One pose's deltas for one primitive, or `None` when it moves nothing.
 
     ⚠️ **Dense, not sparse.** A pose touches a handful of vertices, but glTF's
     sparse accessors are widely half-supported and a target that fails to load
@@ -128,20 +167,50 @@ def _morph_targets(blob: _Blob, accessors: list, vertices: list, poses: list) ->
     ⚠️ Offsets are addressed by *model* vertex, and a glTF vertex is a welded
     (position, normal, uv) triple — so one offset may land on several of them.
     """
-    out = []
+    deltas = [moved.get(v.position, (0.0, 0.0, 0.0)) for v in part.vertices]
+    if not any(any(value for value in delta) for delta in deltas):
+        return None
+    view = blob.add(b"".join(struct.pack("<3f", *d) for d in deltas), ARRAY_BUFFER)
+    accessor = _accessor(view, len(part.vertices), "VEC3", FLOAT)
+    accessor["min"] = [min(d[i] for d in deltas) for i in range(3)]
+    accessor["max"] = [max(d[i] for d in deltas) for i in range(3)]
+    accessors.append(accessor)
+    return len(accessors) - 1
+
+
+def _still(view: int, vertices: int) -> dict:  # pylint: disable=container-return
+    """A target that displaces nothing, over a primitive of `vertices`."""
+    accessor = _accessor(view, vertices, "VEC3", FLOAT)
+    accessor["min"] = [0.0, 0.0, 0.0]
+    accessor["max"] = [0.0, 0.0, 0.0]
+    return accessor
+
+
+def _morph_targets(blob: _Blob, accessors: list, parts: list, poses: list) -> list:
+    # pylint: disable=container-return
+    """Every pose's targets, as one accessor-index column per primitive.
+
+    ⚠️ **One shared do-nothing accessor per primitive, reused by every pose
+    that leaves it alone.** glTF requires each primitive to carry the same
+    number of targets, and a pose moves one shape out of dozens — writing a
+    fresh zero-filled target for the rest gave `p_wii_mario` 23,434 accessors
+    and a 2.9 MB JSON chunk on a 335-vertex mesh (D236).
+    """
+    widest = max(len(part.vertices) for part in parts)
+    zero = blob.add(b"\0" * (widest * TARGET_BYTES), ARRAY_BUFFER)
+    blanks: list[int | None] = [None] * len(parts)
+    columns: list[list[int]] = [[] for _ in parts]
     for pose in poses:
         moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
-        payload = b"".join(
-            struct.pack("<3f", *moved.get(v.position, (0.0, 0.0, 0.0))) for v in vertices
-        )
-        view = blob.add(payload, ARRAY_BUFFER)
-        accessor = _accessor(view, len(vertices), "VEC3", FLOAT)
-        deltas = [moved.get(v.position, (0.0, 0.0, 0.0)) for v in vertices]
-        accessor["min"] = [min(d[i] for d in deltas) for i in range(3)]
-        accessor["max"] = [max(d[i] for d in deltas) for i in range(3)]
-        out.append(len(accessors))
-        accessors.append(accessor)
-    return out
+        for at, part in enumerate(parts):
+            index = _target(blob, accessors, part, moved)
+            if index is None:
+                if blanks[at] is None:
+                    blanks[at] = len(accessors)
+                    accessors.append(_still(zero, len(part.vertices)))
+                index = blanks[at]
+            columns[at].append(index)
+    return columns
 
 
 @dataclass(frozen=True)
@@ -195,79 +264,72 @@ def _weight_animation(
     }
 
 
-def _morphs(document: dict, blob: _Blob, vertices: list, clips: list) -> None:
+def _morphs(document: dict, blob: _Blob, parts: list, clips: list) -> None:
     """Every clip's poses as one target list, and one animation per clip.
 
     A clip with no poses is skipped rather than written as an empty animation:
     a sampler with no keyframes is not loadable, and the caller has already
     counted it.
+
+    ⚠️ **Every primitive gets the same number of targets, in the same order.**
+    glTF requires it, and it is what lets the one `weights` array on the mesh
+    drive all of them from a single animation channel — one node per shape
+    would need a channel and a full weight array each.
     """
     usable = [clip for clip in clips if clip.poses]
     if not usable:
         return
     accessors = document["accessors"]
     poses = [pose for clip in usable for pose in clip.poses]
-    targets = _morph_targets(blob, accessors, vertices, poses)
+    columns = _morph_targets(blob, accessors, parts, poses)
 
-    primitive = document["meshes"][0]["primitives"][0]
-    primitive["targets"] = [{"POSITION": index} for index in targets]
-    document["meshes"][0]["weights"] = [0.0] * len(targets)
+    primitives = document["meshes"][0]["primitives"]
+    for primitive, column in zip(primitives, columns, strict=True):
+        primitive["targets"] = [{"POSITION": index} for index in column]
+    document["meshes"][0]["weights"] = [0.0] * len(poses)
 
     animations = []
     first = 0
     for clip in usable:
-        slot = Slot(first=first, total=len(targets))
+        slot = Slot(first=first, total=len(poses))
         animations.append(_weight_animation(blob, accessors, clip.poses, slot, clip.name))
         first += len(clip.poses)
     document["animations"] = animations
 
 
 def vertex_count(mesh) -> int:
-    """How many glTF vertices a mesh welds to.
+    """How many glTF vertices a mesh welds to, across every primitive.
 
     A dense morph target costs this many times `TARGET_BYTES`, so it is what a
     caller budgeting animation has to divide by. Welding is what decides it —
     the model's own position count is a lower bound, not the answer.
     """
-    return len(_welded(mesh)[0])
+    return sum(len(part.vertices) for part in _parts(mesh))
 
 
-def write(  # pylint: disable=too-many-locals
-    mesh, texture: bytes = b"", name: str = "", clips: list | None = None
-) -> bytes:
-    """One mesh as a `.glb`, with the texture embedded when there is one.
-
-    ⚠️ Returns bytes rather than writing a file, so a caller can size it,
-    checksum it or hand it to a test without touching a disk.
-
-    ⚠️ **`clips` is a list, and the caller decides how long it is.** Every
-    entry is another full set of dense morph targets; nothing here refuses one
-    for being large, because only the caller knows the file's budget.
-    """
-    vertices, indices = _welded(mesh)
-    if not vertices or not indices:
-        raise ValueError("the mesh has no triangles to write")
-
-    blob = _Blob()
+def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
+    # pylint: disable=container-return
+    """One shape's attributes and indices, as the primitive that draws it."""
+    vertices = part.vertices
     positions = [mesh.positions[v.position] for v in vertices]
     payload = b"".join(struct.pack("<3f", *p) for p in positions)
-    position_view = blob.add(payload, ARRAY_BUFFER)
 
-    attributes = {"POSITION": 0}
-    accessors = [_accessor(position_view, len(vertices), "VEC3", FLOAT)]
+    attributes = {"POSITION": len(accessors)}
+    accessor = _accessor(blob.add(payload, ARRAY_BUFFER), len(vertices), "VEC3", FLOAT)
     # ⚠️ Required by the specification on POSITION, and some readers frame the
     # camera from it. Omitting it makes a valid-looking file open empty.
-    accessors[0]["min"] = [min(p[i] for p in positions) for i in range(3)]
-    accessors[0]["max"] = [max(p[i] for p in positions) for i in range(3)]
+    accessor["min"] = [min(p[i] for p in positions) for i in range(3)]
+    accessor["max"] = [max(p[i] for p in positions) for i in range(3)]
+    accessors.append(accessor)
 
-    if mesh.normals and all(v.normal is not None for v in vertices):
-        usable = [v for v in vertices if v.normal < len(mesh.normals)]
-        if len(usable) == len(vertices):
-            data = b"".join(struct.pack("<3f", *mesh.normals[v.normal]) for v in vertices)
-            attributes["NORMAL"] = len(accessors)
-            accessors.append(
-                _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC3", FLOAT)
-            )
+    if mesh.normals and all(
+        v.normal is not None and v.normal < len(mesh.normals) for v in vertices
+    ):
+        data = b"".join(struct.pack("<3f", *mesh.normals[v.normal]) for v in vertices)
+        attributes["NORMAL"] = len(accessors)
+        accessors.append(
+            _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC3", FLOAT)
+        )
 
     if mesh.is_textured and all(v.uv is not None for v in vertices):
         data = b"".join(struct.pack("<2f", *mesh.uvs[v.uv]) for v in vertices)
@@ -276,28 +338,48 @@ def write(  # pylint: disable=too-many-locals
             _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC2", FLOAT)
         )
 
-    index_view = blob.add(
-        struct.pack(f"<{len(indices)}I", *indices), ELEMENT_ARRAY_BUFFER
+    view = blob.add(
+        struct.pack(f"<{len(part.indices)}I", *part.indices), ELEMENT_ARRAY_BUFFER
     )
-    index_accessor = len(accessors)
-    accessors.append(_accessor(index_view, len(indices), "SCALAR", UNSIGNED_INT))
+    indices = len(accessors)
+    accessors.append(_accessor(view, len(part.indices), "SCALAR", UNSIGNED_INT))
+    return {"attributes": attributes, "indices": indices}
+
+
+def write(mesh, texture: bytes = b"", name: str = "", clips: list | None = None) -> bytes:
+    """One mesh as a `.glb`, one primitive per shape.
+
+    ⚠️ Returns bytes rather than writing a file, so a caller can size it,
+    checksum it or hand it to a test without touching a disk.
+
+    ⚠️ **`clips` is a list, and the caller decides how long it is.** Every
+    entry is another full set of dense morph targets; nothing here refuses one
+    for being large, because only the caller knows the file's budget.
+
+    ⚠️ **Primitives of one mesh, not a node each.** Both split the geometry;
+    only this one keeps a single shared `weights` array, so an animation stays
+    one channel rather than one per shape (D236).
+    """
+    parts = _parts(mesh)
+    if not parts:
+        raise ValueError("the mesh has no triangles to write")
+
+    blob = _Blob()
+    accessors: list = []
+    primitives = [_primitive(blob, accessors, mesh, part) for part in parts]
 
     document = {
         "asset": {"version": "2.0", "generator": "bleck"},
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": [{"mesh": 0, "name": name or mesh.name}],
-        "meshes": [
-            {
-                "name": mesh.name,
-                "primitives": [{"attributes": attributes, "indices": index_accessor}],
-            }
-        ],
+        "meshes": [{"name": mesh.name, "primitives": primitives}],
         "accessors": accessors,
         "bufferViews": blob.views,
     }
 
-    if texture and "TEXCOORD_0" in attributes:
+    painted = [p for p in primitives if "TEXCOORD_0" in p["attributes"]]
+    if texture and painted:
         image_view = blob.add(texture)
         document["images"] = [{"bufferView": image_view, "mimeType": "image/png"}]
         document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
@@ -315,10 +397,11 @@ def write(  # pylint: disable=too-many-locals
                 "doubleSided": True,
             }
         ]
-        document["meshes"][0]["primitives"][0]["material"] = 0
+        for primitive in painted:
+            primitive["material"] = 0
 
     if clips:
-        _morphs(document, blob, vertices, clips)
+        _morphs(document, blob, parts, clips)
 
     document["buffers"] = [{"byteLength": len(blob.data)}]
     return _container(document, bytes(blob.data))

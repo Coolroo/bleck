@@ -15019,3 +15019,126 @@ prerequisite for ever binding a texture per shape.
 four rounds of eyeballing had not converged.
 
 ⛔ The rips are third-party assets: `work/` is git-ignored and stays that way.
+
+## D237 — One glTF primitive per shape, and the accessor blow-up it nearly cost (2026-07-31)
+
+✅ **Built.** D236's 🔶 is now the shipped behaviour: `bleck model export`
+writes **one primitive per shape** instead of one merged mesh, and `dimentio`
+reads all of them, lists how many there are, and can hide any of them.
+
+| model | before | after |
+|---|---|---|
+| `e_lui_robo` | 1 primitive, 3,130 tris | **91 primitives**, 3,130 tris |
+| `e_2D_manera6` | 1 primitive, 86 tris | **31 primitives**, 86 tris |
+| `p_wii_mario` | 1 primitive, 143 tris | **90 primitives**, 143 tris |
+
+The triangle counts are the point: the split moves geometry between primitives
+and creates none. `tests/test_gltf.py::TestTheSplitPreservesTheGeometry` asserts
+both halves of that — total corners across primitives, and the *set* of
+positions written.
+
+⚠️ **91 spans, not 92.** `Mesh.shapes` counts the groups the file describes;
+`Mesh.groups` holds the spans that survived. One of `e_lui_robo`'s shapes lost
+every face to the existing rebase-past-the-end filter, so it contributes no
+primitive. Both numbers are kept rather than reconciled.
+
+### Primitives, not nodes
+
+⛔ **One node per shape was rejected.** Both split the geometry, but glTF puts
+morph targets on the *primitive* and weights on the *mesh*:
+
+- **primitives of one mesh** — one shared `weights` array, so an animation stays
+  one sampler and one channel however many shapes there are;
+- **a node each** — a channel, a sampler and a full weight array *per node*. The
+  weight array is already `keys × targets`; `p_wii_mario` at 256 targets is
+  65,536 floats, and 90 nodes would make that 24 MB.
+
+So the choice was forced by the animation, not by the geometry.
+
+### Targets map to shapes by partition, not by duplication
+
+Each primitive carries its own vertices, and each pose is written as one dense
+target **per primitive over that primitive's own vertices**. Target *n* of every
+primitive is one pose of the model; glTF requires the counts to match, and
+`dimentio` concatenates column *n* back into a full-length delta list in the
+same order it concatenated the positions.
+
+⛔ **Sharing one vertex list across primitives was rejected** for the same
+reason: a dense target is sized to the primitive, so 92 primitives over one
+shared list would cost 92× the animation block.
+
+### ⚠️ The mistake that nearly shipped: 23,434 accessors
+
+A pose moves one shape out of dozens, but every primitive must still carry a
+target for it. Writing a fresh zero-filled target for the untouched ones gave
+`p_wii_mario` — a **335-vertex** mesh — **23,434 accessors and a 2.9 MB JSON
+chunk**, on a file whose whole binary payload was 400 KB.
+
+✅ **Fixed by sharing.** One run of zeros wide enough for the largest primitive,
+and one do-nothing accessor per primitive reused by every pose that leaves it
+alone. Measured on the same four models:
+
+| model | accessors | JSON | `.glb` |
+|---|---|---|---|
+| `p_wii_mario` | 23,434 → **979** | 2.92 MB → **552 KB** | 3.33 MB → **961 KB** |
+| `e_2D_manera6` | 6,841 → **923** | 888 KB → **266 KB** | 1.22 MB → **596 KB** |
+| `e_3D_manera2` | 2,126 → **456** | 286 KB → **110 KB** | 596 KB → **420 KB** |
+
+⚠️ **The export budget did not have to change.** `p_wii_mario`'s merged file was
+~1.05 MB of dense targets; split with zero-sharing it is 961 KB, because the
+zeros the merged writer paid for in *binary* now cost one accessor. `MAX_TARGETS`
+and `MORPH_BUDGET` (D235) stand as measured.
+
+### Verified against the reference rip
+
+`work/reference/x/Brobot/Brobot.obj` (D236) is now a test, skipped where the
+folder is absent:
+
+- **90 of `e_lui_robo`'s 91 shapes sit inside the reference bounding box.** The
+  worst overshoot among them is **1.27** units, on min Y — the reference floor
+  is 0.016 and ours is −1.25.
+- **Shape 0 overshoots by 127.8** units on X. Nothing sits between 1.27 and
+  127.8, so a slack of 2.0 separates the stray quad from every real shape
+  without tuning.
+- Max Y still matches to 0.1: **100.827** both ways.
+
+### Mutation test, and the two tests it rewrote
+
+Merging shapes 0 and 1 into one primitive — `_parts` folding the first two
+spans together — fails **7 tests**:
+`test_each_shape_becomes_its_own_primitive` (1 primitive, not 2),
+`test_a_primitive_carries_only_its_own_shapes_vertices` (6 vertices, not 3),
+`test_every_textured_primitive_gets_the_material`, the three
+`TestAnimationSurvivesTheSplit` tests that index the second primitive, and — the
+one that matters —
+`TestAgainstTheReferenceRip::test_exactly_one_primitive_leaves_the_reference_box_and_it_is_a_quad`,
+which reports `[(0, 16)]`: the primitive outside the box now draws **16
+triangles instead of 2**, because the stray quad has 14 triangles of the robot
+welded to it. That is precisely the shape of the D236 report.
+
+⚠️ **Two earlier versions of that test did not catch it, and both looked
+right.** They are worth recording:
+
+1. *"Every shape except shape 0 is inside the box."* Merging 0 and 1 makes the
+   merged shape index 0 — which the test **skips**. A phrasing with an
+   exemption in it cannot see something growing into the exemption.
+2. *Measuring `mesh.shape_spans()` rather than the written document.* The
+   mutation was in the writer, so the mesh still described the shapes apart and
+   the test passed while the exported file was wrong.
+
+The version that holds reads the `.glb`'s own per-primitive POSITION `min`/`max`
+and asserts the offender is `(0, 2)` — the right primitive **and** the right
+size.
+
+⚠️ **`dimentio`'s own suite does not catch that mutation**, and cannot: it reads
+whatever primitives the file holds. Its guard is
+`a_real_models_shapes_partition_its_faces`, which fails if every model in a real
+export reads as a single shape.
+
+### Still not decoded
+
+⛔ **Which Maya shape name goes with which primitive.** `Model.shapes` reads the
+names in file order and the face groups are found by `first` restarting at zero;
+nothing has been measured that binds one to the other, so a primitive is labelled
+`shape <index>` and nothing claims more. The per-shape texture binding (D229) is
+unchanged too — the split is its prerequisite, not its answer.

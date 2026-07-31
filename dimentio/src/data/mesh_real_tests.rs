@@ -60,6 +60,68 @@ fn a_real_mesh_carries_the_triangles_the_manifest_promised() {
     }
 }
 
+/// ⚠️ **The fixture next door is two primitives written by this crate's own
+/// test.** Only a file `bleck` wrote can show the two ends agreeing on a real
+/// model, and `e_lui_robo` has 92 shapes where the fixture has two.
+#[test]
+fn a_real_models_shapes_partition_its_faces() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let mut many = 0;
+    for entry in library.entries().iter().take(60) {
+        let mesh = Mesh::load(&entry.path).expect("mesh");
+        let shapes = mesh.shapes();
+        assert!(!shapes.is_empty(), "{} carries no shape at all", entry.name);
+        assert_eq!(shapes[0].first, 0, "{}", entry.name);
+        let mut at = 0;
+        for shape in shapes {
+            assert_eq!(shape.first, at, "{} has a gap in its shapes", entry.name);
+            assert!(shape.count > 0, "{} has an empty shape", entry.name);
+            at += shape.count;
+        }
+        assert_eq!(at, mesh.faces().len(), "{}", entry.name);
+        if shapes.len() > 1 {
+            many += 1;
+        }
+    }
+    assert!(
+        many > 0,
+        "every model read as a single shape — the export predates the split"
+    );
+}
+
+/// Hiding a shape has to take triangles off a real model, not merely flip a
+/// flag: the whole point is that a stray shape can be looked away from.
+#[test]
+fn hiding_a_shape_of_a_real_model_draws_fewer_triangles() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let mut checked = 0;
+    for entry in library.entries() {
+        let mut mesh = Mesh::load(&entry.path).expect("mesh");
+        if mesh.shapes().len() < 2 {
+            continue;
+        }
+        let before = mesh.faces().len();
+        let dropped = mesh.shapes()[0].count;
+        mesh.set_shape_visible(0, false);
+        assert_eq!(mesh.faces().len(), before - dropped, "{}", entry.name);
+        mesh.show_all_shapes();
+        assert_eq!(mesh.faces().len(), before, "{}", entry.name);
+        checked += 1;
+        if checked == 10 {
+            break;
+        }
+    }
+    assert!(checked > 0, "no model in the export carried several shapes");
+}
+
 /// ⚠️ **The fixture cannot catch this.** `animated_quad` is written by this
 /// crate's own test module and would agree with a reader that had the
 /// animation chain wrong; only a file `bleck` wrote can disagree.

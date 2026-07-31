@@ -15,7 +15,7 @@
 //! Everything about the material is therefore optional at every step, and a
 //! chain that breaks anywhere yields an untextured mesh rather than an error.
 
-use super::mesh::{Face, Parts, Uv, Vec3};
+use super::mesh::{Face, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::Texture;
 
@@ -29,44 +29,168 @@ const UNSIGNED_BYTE: u64 = 5121;
 const UNSIGNED_SHORT: u64 = 5123;
 const UNSIGNED_INT: u64 = 5125;
 
+/// One primitive, decoded into the slice of the model it contributes.
+struct Piece {
+    positions: Vec<Vec3>,
+    faces: Vec<Face>,
+    uvs: Option<Vec<Uv>>,
+    targets: Vec<Pose>,
+}
+
 /// Read a `.glb` into the parts a `Mesh` is built from.
+///
+/// ⛔ **Every primitive, not primitive 0.** `bleck` writes one per shape, and a
+/// reader that took the first drew one limb of `e_lui_robo`'s 92 (D236). The
+/// primitives are concatenated into one position and face list, with a `Shape`
+/// recording which faces came from where so they can be hidden again.
 pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
     let chunks = split_chunks(raw)?;
     let json: serde_json::Value =
         serde_json::from_slice(chunks.json).map_err(|why| format!("glTF JSON: {why}"))?;
     let bin = chunks.bin;
 
-    let primitive = json["meshes"][0]["primitives"][0].clone();
-    let position = primitive["attributes"]["POSITION"]
-        .as_u64()
-        .ok_or("no POSITION attribute")? as usize;
-    let indices = primitive["indices"].as_u64().ok_or("no indices")? as usize;
+    let primitives = json["meshes"][0]["primitives"]
+        .as_array()
+        .ok_or("the first mesh has no primitives")?
+        .clone();
+    if primitives.is_empty() {
+        return Err("the first mesh has no primitives".into());
+    }
 
-    let positions = read_vec3(&json, bin, position)?;
-    let corners = read_indices(&json, bin, indices)?;
-    let faces = corners
-        .chunks_exact(3)
-        .map(|corner| Face {
-            a: corner[0],
-            b: corner[1],
-            c: corner[2],
-        })
-        .collect::<Vec<_>>();
+    let mut positions: Vec<Vec3> = Vec::new();
+    let mut faces: Vec<Face> = Vec::new();
+    let mut shapes: Vec<Shape> = Vec::new();
+    let mut uvs: Vec<Uv> = Vec::new();
+    let mut textured = false;
+    let mut columns: Vec<Vec<Pose>> = Vec::new();
+    let mut widths: Vec<usize> = Vec::new();
 
-    let uvs = primitive["attributes"]["TEXCOORD_0"]
-        .as_u64()
-        .and_then(|index| read_vec2(&json, bin, index as usize).ok());
-    let paint = material(&json, bin, &primitive);
-    let animation = Animation::new(targets(&json, bin, &primitive), clips(&json, bin));
+    for primitive in &primitives {
+        let piece = piece(&json, bin, primitive)?;
+        let base = positions.len();
+        let first = faces.len();
+        faces.extend(piece.faces.iter().map(|face| Face {
+            a: face.a + base,
+            b: face.b + base,
+            c: face.c + base,
+        }));
+        shapes.push(Shape {
+            first,
+            count: faces.len() - first,
+            visible: true,
+        });
+        // ⚠️ UVs are one per position across the whole model, so a primitive
+        // that carries none still has to occupy its own span — otherwise every
+        // later primitive samples the one before it.
+        match piece.uvs {
+            Some(found) => {
+                textured = true;
+                uvs.extend(
+                    found
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat(Uv::default()))
+                        .take(piece.positions.len()),
+                );
+            }
+            None => uvs.extend(std::iter::repeat_n(Uv::default(), piece.positions.len())),
+        }
+        widths.push(piece.positions.len());
+        positions.extend(piece.positions);
+        columns.push(piece.targets);
+    }
+
+    let paint = paint_of(&json, bin, &primitives);
+    let animation = Animation::new(merge_targets(&columns, &widths), clips(&json, bin));
 
     Ok(Parts {
         positions,
         faces,
-        uvs,
+        shapes,
+        uvs: textured.then_some(uvs),
         texture: paint.texture,
         masked: paint.masked,
         animation,
     })
+}
+
+/// One primitive's own positions, triangles, texture coordinates and targets,
+/// all indexed from zero.
+fn piece(
+    json: &serde_json::Value,
+    bin: &[u8],
+    primitive: &serde_json::Value,
+) -> Result<Piece, String> {
+    let position = primitive["attributes"]["POSITION"]
+        .as_u64()
+        .ok_or("no POSITION attribute")? as usize;
+    let indices = primitive["indices"].as_u64().ok_or("no indices")? as usize;
+    let corners = read_indices(json, bin, indices)?;
+    Ok(Piece {
+        positions: read_vec3(json, bin, position)?,
+        faces: corners
+            .chunks_exact(3)
+            .map(|corner| Face {
+                a: corner[0],
+                b: corner[1],
+                c: corner[2],
+            })
+            .collect(),
+        uvs: primitive["attributes"]["TEXCOORD_0"]
+            .as_u64()
+            .and_then(|index| read_vec2(json, bin, index as usize).ok()),
+        targets: targets(json, bin, primitive),
+    })
+}
+
+/// The first material in the file that yields an image, or none at all.
+///
+/// ⚠️ Every textured primitive points at the same material today, so this stops
+/// at the first — decoding the PNG once per primitive would cost 92 decodes on
+/// `e_lui_robo` for one image.
+fn paint_of(json: &serde_json::Value, bin: &[u8], primitives: &[serde_json::Value]) -> Paint {
+    primitives
+        .iter()
+        .map(|primitive| material(json, bin, primitive))
+        .find(|paint| paint.texture.is_some())
+        .unwrap_or(Paint {
+            texture: None,
+            masked: false,
+        })
+}
+
+/// Each target index gathered across every primitive, in primitive order.
+///
+/// ⚠️ **glTF holds targets per primitive and weights per mesh**, so target `n`
+/// of every primitive is one pose of the model. The deltas are concatenated in
+/// the same order the positions were, and a primitive short of a target — or
+/// carrying one that would not read — contributes zeros rather than shifting
+/// everything after it.
+fn merge_targets(columns: &[Vec<Pose>], widths: &[usize]) -> Vec<Pose> {
+    let total = columns.iter().map(Vec::len).max().unwrap_or(0);
+    (0..total)
+        .map(|index| {
+            let mut deltas = Vec::new();
+            for (column, &width) in columns.iter().zip(widths) {
+                match column.get(index) {
+                    Some(pose) if pose.deltas.len() == width => {
+                        deltas.extend_from_slice(&pose.deltas);
+                    }
+                    Some(pose) => {
+                        deltas.extend(
+                            pose.deltas
+                                .iter()
+                                .copied()
+                                .chain(std::iter::repeat(Vec3::ZERO))
+                                .take(width),
+                        );
+                    }
+                    None => deltas.extend(std::iter::repeat_n(Vec3::ZERO, width)),
+                }
+            }
+            Pose { deltas }
+        })
+        .collect()
 }
 
 /// The primitive's morph targets, as position deltas.
@@ -75,17 +199,22 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
 /// the rasteriser shades from face normals, so a normal target would be
 /// decoded and then thrown away.
 ///
-/// A target that will not read is skipped rather than failing the file: the
-/// geometry is still worth drawing, and the clips that referred to it will
-/// simply weigh a target that is not there.
+/// ⚠️ A target that will not read becomes an **empty** pose rather than being
+/// dropped. Targets are positional — target 3 of one primitive is the same
+/// pose as target 3 of the next — so skipping one would slide every later
+/// target of that primitive onto the wrong clip.
 fn targets(json: &serde_json::Value, bin: &[u8], primitive: &serde_json::Value) -> Vec<Pose> {
     let Some(list) = primitive["targets"].as_array() else {
         return Vec::new();
     };
     list.iter()
-        .filter_map(|target| target["POSITION"].as_u64())
-        .filter_map(|index| read_vec3(json, bin, index as usize).ok())
-        .map(|deltas| Pose { deltas })
+        .map(|target| {
+            let deltas = target["POSITION"]
+                .as_u64()
+                .and_then(|index| read_vec3(json, bin, index as usize).ok())
+                .unwrap_or_default();
+            Pose { deltas }
+        })
         .collect()
 }
 
@@ -520,14 +649,14 @@ pub(crate) mod fixtures {
         container(&json, &bin)
     }
 
-    fn push_floats(bin: &mut Vec<u8>, values: &[f32]) {
+    pub(crate) fn push_floats(bin: &mut Vec<u8>, values: &[f32]) {
         for value in values {
             bin.extend_from_slice(&value.to_le_bytes());
         }
     }
 
     /// Append indices at a 4-byte boundary and report where they landed.
-    fn pad(bin: &mut Vec<u8>, indices: &[u32]) -> usize {
+    pub(crate) fn pad(bin: &mut Vec<u8>, indices: &[u32]) -> usize {
         while bin.len() % 4 != 0 {
             bin.push(0);
         }
@@ -538,7 +667,7 @@ pub(crate) mod fixtures {
         at
     }
 
-    fn container(json: &str, bin: &[u8]) -> Vec<u8> {
+    pub(crate) fn container(json: &str, bin: &[u8]) -> Vec<u8> {
         let mut text = json.as_bytes().to_vec();
         while text.len() % 4 != 0 {
             text.push(b' ');
@@ -764,3 +893,11 @@ mod tests {
         assert_eq!(surface.uvs.len(), mesh.positions().len());
     }
 }
+
+/// One primitive per shape: reading all of them, and hiding one.
+///
+/// ⚠️ Split out only to keep this module under a thousand lines; `#[path]`
+/// keeps it here.
+#[cfg(test)]
+#[path = "gltf_shape_tests.rs"]
+mod shape_tests;

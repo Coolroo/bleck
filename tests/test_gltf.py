@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -217,6 +218,214 @@ class TestAgainstTheDisc:
             ), "a buffer view runs past the end of the buffer"
 
 
+def a_two_shape_mesh() -> model.Mesh:
+    """Two triangles the face list keeps apart, as `mesh()` would hand them
+    over: two spans, and a position range each."""
+    return model.Mesh(
+        name="pair",
+        positions=[
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (9.0, 9.0, 0.0),
+            (10.0, 9.0, 0.0),
+            (9.0, 10.0, 0.0),
+        ],
+        faces=[model.Face(first=0, corners=3), model.Face(first=3, corners=3)],
+        corner_positions=[0, 1, 2, 3, 4, 5],
+        groups=[model.Shape(first=0, count=1), model.Shape(first=1, count=1)],
+    )
+
+
+class TestOnePrimitivePerShape:
+    """⛔ **The merge was the defect, not the read** (D236). `e_lui_robo` holds
+    92 shapes and one of them is a flat quad 130 units to the side; flattened
+    into one mesh it reads as broken geometry welded to the character."""
+
+    def test_each_shape_becomes_its_own_primitive(self):
+        primitives = parsed(gltf.write(a_two_shape_mesh()))["meshes"][0]["primitives"]
+        assert len(primitives) == 2
+
+    def test_a_primitive_carries_only_its_own_shapes_vertices(self):
+        """⚠️ The failure that would look like success: two primitives sharing
+        one vertex list, which draws correctly and costs every primitive a full
+        morph target for every other primitive's vertices."""
+        document = parsed(gltf.write(a_two_shape_mesh()))
+        primitives = document["meshes"][0]["primitives"]
+        for primitive in primitives:
+            accessor = document["accessors"][primitive["attributes"]["POSITION"]]
+            assert accessor["count"] == 3
+        far = document["accessors"][primitives[1]["attributes"]["POSITION"]]
+        assert far["min"] == [9.0, 9.0, 0.0]
+
+    def test_a_single_shape_mesh_still_writes_one_primitive(self):
+        assert len(parsed(gltf.write(a_mesh()))["meshes"][0]["primitives"]) == 1
+
+    def test_every_textured_primitive_gets_the_material(self):
+        """⚠️ Only primitive 0 carried it while the mesh was merged. The others
+        would render untextured, which looks like a decode failure."""
+        mesh = a_two_shape_mesh()
+        textured = model.Mesh(
+            name=mesh.name,
+            positions=mesh.positions,
+            faces=mesh.faces,
+            corner_positions=mesh.corner_positions,
+            corner_uvs=[0, 1, 2, 3, 4, 5],
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)] * 2,
+            groups=mesh.groups,
+        )
+        document = parsed(gltf.write(textured, b"pretend-png"))
+        assert [p["material"] for p in document["meshes"][0]["primitives"]] == [0, 0]
+
+
+class TestTheSplitPreservesTheGeometry:
+    """The split must move triangles between primitives and create none."""
+
+    def a_real_mesh(self) -> model.Mesh:
+        path = MODELS / "e_lui_robo"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        return model.mesh(path.read_bytes())
+
+    def test_the_primitives_hold_every_triangle_and_no_more(self):
+        mesh = self.a_real_mesh()
+        document = parsed(gltf.write(mesh))
+        corners = sum(
+            document["accessors"][p["indices"]]["count"]
+            for p in document["meshes"][0]["primitives"]
+        )
+        assert corners == len(mesh.triangles()) * 3
+
+    def test_the_union_of_the_positions_written_is_unchanged(self):
+        """⚠️ Set equality, not a count: welding per shape may keep two copies
+        of a point two shapes share, and that is not a change to the model."""
+        mesh = self.a_real_mesh()
+        blob = gltf.write(mesh)
+        document = parsed(blob)
+        written = set()
+        for primitive in document["meshes"][0]["primitives"]:
+            written |= set(_vec(blob, document, primitive["attributes"]["POSITION"]))
+        drawn = {mesh.positions[i] for tri in mesh.triangles() for i in tri}
+        assert written == drawn
+
+    def test_the_spans_partition_the_face_list(self):
+        mesh = self.a_real_mesh()
+        spans = mesh.shape_spans()
+        assert sum(span.count for span in spans) == len(mesh.faces)
+        assert [span.first for span in spans] == [
+            sum(s.count for s in spans[:i]) for i in range(len(spans))
+        ]
+
+
+class TestAgainstTheReferenceRip:
+    """⚠️ **Third-party rips, kept out of the repo.** `work/reference/` is
+    git-ignored, so this skips where it is absent — which is CI and a fresh
+    clone. It exists because a bounding box from someone else's exporter is the
+    only thing that can say the geometry is right and the grouping was not
+    (D236)."""
+
+    #: How far outside the reference box a genuine shape sits. Measured: the
+    #: worst non-stray shape overshoots by **1.27** units on min Y, and the
+    #: stray quad overshoots by **127.8** on X, so nothing sits between them.
+    SLACK = 2.0
+
+    #: The one shape the reference rip did not export: face span 0, positions
+    #: 0-3, a flat quad at x -176. Group 0's position base is zero, so these are
+    #: read verbatim — the file genuinely holds it (D236).
+    STRAY = 0
+
+    def reference(self) -> Box:
+        path = REPO / "work" / "reference" / "x" / "Brobot" / "Brobot.obj"
+        if not path.is_file():
+            pytest.skip(f"no reference rip at {path}")
+        points = [
+            tuple(float(word) for word in line.split()[1:4])
+            for line in path.read_text(errors="replace").splitlines()
+            if line.startswith("v ")
+        ]
+        assert points, "the reference rip carries no vertices"
+        return _box(points)
+
+    def robot(self) -> model.Mesh:
+        path = MODELS / "e_lui_robo"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        return model.mesh(path.read_bytes())
+
+    def written(self) -> dict:  # pylint: disable=container-return
+        """⚠️ **The exported document, not the mesh.** These measure what a
+        third party would open, so a writer that merged shapes back together
+        while the mesh still described them apart has to fail here."""
+        return parsed(gltf.write(self.robot(), name="e_lui_robo"))
+
+    def test_exactly_one_primitive_leaves_the_reference_box_and_it_is_a_quad(self):
+        """⚠️ **Not "every primitive but the first is inside".** That phrasing
+        passes when the first swallows its neighbour, which is the merge this
+        whole change undoes. What is asserted is that the primitive outside the
+        box is *only* the quad — two triangles, with nothing welded to it."""
+        box = self.reference()
+        document = self.written()
+        outside = []
+        for index, primitive in enumerate(document["meshes"][0]["primitives"]):
+            accessor = document["accessors"][primitive["attributes"]["POSITION"]]
+            if any(
+                accessor["min"][axis] < box.low[axis] - self.SLACK
+                or accessor["max"][axis] > box.high[axis] + self.SLACK
+                for axis in range(3)
+            ):
+                corners = document["accessors"][primitive["indices"]]["count"]
+                outside.append((index, corners // 3))
+        assert outside == [(self.STRAY, 2)], (
+            f"the reference box says these primitives are wrong: {outside}"
+        )
+
+    def test_the_stray_primitive_is_still_there_and_still_apart(self):
+        """⚠️ The control. Without it, a writer that dropped every odd shape
+        would pass the test above."""
+        box = self.reference()
+        document = self.written()
+        primitive = document["meshes"][0]["primitives"][self.STRAY]
+        accessor = document["accessors"][primitive["attributes"]["POSITION"]]
+        assert accessor["min"][0] < box.low[0] - 100.0, "the stray quad is gone"
+
+    def test_the_tallest_point_matches_the_reference(self):
+        """⚠️ The measurement that says scale and origin are right, and a wrong
+        reading almost never gets."""
+        document = self.written()
+        tallest = max(
+            document["accessors"][p["attributes"]["POSITION"]]["max"][1]
+            for p in document["meshes"][0]["primitives"]
+        )
+        assert tallest == pytest.approx(self.reference().high[1], abs=0.1)
+
+
+@dataclass(frozen=True)
+class Box:
+    """An axis-aligned bounding box, as three numbers each way."""
+
+    low: list
+    high: list
+
+
+def _box(points: list) -> Box:
+    """The axis-aligned bounds of a point cloud."""
+    return Box(
+        low=[min(p[axis] for p in points) for axis in range(3)],
+        high=[max(p[axis] for p in points) for axis in range(3)],
+    )
+
+
+def _vec(blob: bytes, document: dict, accessor: int) -> list:
+    """One VEC3 accessor's points, read back out of the binary chunk."""
+    record = document["accessors"][accessor]
+    view = document["bufferViews"][record["bufferView"]]
+    json_length = struct.unpack_from("<I", blob, 12)[0]
+    start = 20 + json_length + 8 + view["byteOffset"]
+    return [
+        struct.unpack_from("<3f", blob, start + i * 12) for i in range(record["count"])
+    ]
+
+
 class TestMorphAnimation:
     """Poses written as glTF morph targets, which is what makes a clip play.
 
@@ -340,6 +549,121 @@ class TestSeveralClips:
             gltf.write(a_mesh(), clips=[gltf.Clip(name="empty"), *self.clips()])
         )
         assert [a["name"] for a in document["animations"]] == ["wave", "jump"]
+
+
+class TestAnimationSurvivesTheSplit:
+    """⚠️ **glTF's morph targets are per-primitive.** Splitting one mesh into
+    92 of them breaks animation outright unless every primitive carries the
+    same targets in the same order — which is also what lets the one `weights`
+    array on the mesh keep driving all of them from a single channel (D236)."""
+
+    def clips(self) -> list:
+        """One pose in each shape of `a_two_shape_mesh`: vertex 0 is in the
+        first, vertex 5 in the second."""
+        return [
+            gltf.Clip(
+                name="both",
+                poses=[
+                    model.Morph(time=0.0, offsets=[(0, 3, 0, 0)]),
+                    model.Morph(time=1.0, offsets=[(5, 0, 4, 0)]),
+                ],
+            )
+        ]
+
+    def test_every_primitive_carries_the_same_targets_in_the_same_order(self):
+        document = parsed(gltf.write(a_two_shape_mesh(), clips=self.clips()))
+        counts = {len(p["targets"]) for p in document["meshes"][0]["primitives"]}
+        assert counts == {2}, "glTF rejects primitives with unequal target counts"
+        assert document["meshes"][0]["weights"] == [0.0, 0.0]
+
+    def test_one_channel_still_drives_the_whole_mesh(self):
+        document = parsed(gltf.write(a_two_shape_mesh(), clips=self.clips()))
+        assert len(document["animations"]) == 1
+        channels = document["animations"][0]["channels"]
+        assert len(channels) == 1
+        assert channels[0]["target"] == {"node": 0, "path": "weights"}
+
+    def test_a_targets_deltas_land_on_the_shape_that_owns_the_vertex(self):
+        """⛔ The failure that loads cleanly and animates the wrong limb: a
+        target addressed by the file's vertex index rather than the
+        primitive's, which is a different number in every primitive but the
+        first."""
+        blob = gltf.write(a_two_shape_mesh(), clips=self.clips())
+        document = parsed(blob)
+        primitives = document["meshes"][0]["primitives"]
+        first = _vec(blob, document, primitives[0]["targets"][0]["POSITION"])
+        assert first[0] == pytest.approx((3.0, 0.0, 0.0))
+        assert not any(any(value for value in d) for d in first[1:])
+
+        second = _vec(blob, document, primitives[1]["targets"][1]["POSITION"])
+        assert second[2] == pytest.approx((0.0, 4.0, 0.0))
+
+    def test_a_pose_that_misses_a_primitive_writes_it_a_still_target(self):
+        """⚠️ Not an omission. A primitive short of a target is an invalid
+        file; a shared do-nothing accessor costs one entry however many poses
+        leave that shape alone."""
+        blob = gltf.write(a_two_shape_mesh(), clips=self.clips())
+        document = parsed(blob)
+        still = document["meshes"][0]["primitives"][1]["targets"][0]["POSITION"]
+        assert document["accessors"][still]["max"] == [0.0, 0.0, 0.0]
+        assert not any(any(value for value in d) for d in _vec(blob, document, still))
+
+    def test_the_still_target_accessor_is_shared_rather_than_repeated(self):
+        clips = [
+            gltf.Clip(
+                name="one-shape-only",
+                poses=[
+                    model.Morph(time=float(step), offsets=[(0, step + 1, 0, 0)])
+                    for step in range(6)
+                ],
+            )
+        ]
+        document = parsed(gltf.write(a_two_shape_mesh(), clips=clips))
+        untouched = document["meshes"][0]["primitives"][1]["targets"]
+        assert len({t["POSITION"] for t in untouched}) == 1
+
+    def test_a_real_animated_model_still_animates(self):
+        """⚠️ The fixtures above are three vertices wide. `p_wii_mario` has 90
+        shapes and 94 clips, and is the only thing that can show the split
+        holding up against the export's own budget."""
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        data = path.read_bytes()
+        mesh = model.mesh(data)
+        clips = [
+            gltf.Clip(name=clip.name, poses=clip.poses)
+            for clip in _decoded_clips(data, mesh)
+        ][:2]
+        assert clips, "p_wii_mario decoded no usable clip"
+
+        blob = gltf.write(mesh, clips=clips)
+        document = parsed(blob)
+        primitives = document["meshes"][0]["primitives"]
+        wanted = sum(len(clip.poses) for clip in clips)
+        assert len(primitives) > 1, "a merged mesh cannot exercise this"
+        assert {len(p["targets"]) for p in primitives} == {wanted}
+        assert len(document["meshes"][0]["weights"]) == wanted
+
+        moved = [
+            accessor
+            for primitive in primitives
+            for target in primitive["targets"]
+            for accessor in [document["accessors"][target["POSITION"]]]
+            if accessor["max"] != [0.0, 0.0, 0.0] or accessor["min"] != [0.0, 0.0, 0.0]
+        ]
+        assert moved, "every target in a real animated model displaced nothing"
+
+
+def _decoded_clips(data: bytes, mesh: model.Mesh) -> list:
+    """The file's clips that carry poses this mesh can be displaced by."""
+    reach = len(mesh.positions)
+    found = []
+    for clip in model.read(data).animations:
+        poses = [p for p in model.morphs(data, clip) if p.offsets and p.reach < reach]
+        if poses:
+            found.append(gltf.Clip(name=clip.name, poses=poses))
+    return found
 
 
 def _floats(blob: bytes, document: dict, accessor: int) -> list:

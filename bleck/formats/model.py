@@ -116,6 +116,7 @@ from bleck.formats.modelmesh import (
     Corner,
     Face,
     Mesh,
+    Shape,
     mesh,
 )
 
@@ -169,6 +170,7 @@ __all__ = [
     "Model",
     "ModelError",
     "Morph",
+    "Shape",
     "Span",
     "bank_for",
     "curves",

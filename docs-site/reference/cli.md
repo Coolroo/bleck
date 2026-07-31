@@ -201,6 +201,21 @@ than exported as noise.
     **Pass `--min-coverage 95`** for the **132 models known to render
     correctly**.
 
+#### One primitive per shape
+
+A model file groups its faces into **shapes**, and each becomes its own glTF
+primitive rather than being welded into one mesh — `e_lui_robo` exports as 91,
+`e_2D_manera6` as 31. In Blender they arrive as separate material slots you can
+isolate; in Dimentio the toolbar says how many there are and lets you hide any
+of them.
+
+!!! tip "A shape that looks wrong is usually a shape you can turn off"
+
+    `e_lui_robo` carries a flat quad 130 units from the character. It is really
+    in the file — a third-party rip of the same model simply left it out — and
+    merged into one mesh it read as broken geometry attached to the robot. Split
+    out, it is one checkbox.
+
 #### Animation
 
 Animation in this game is **per-vertex morphing**, not skeletal — the engine
@@ -219,6 +234,11 @@ full export writes **2,256 clips across 218 models**.
     kept in file order until the budget runs out. The command prints how many
     were written and how many were dropped, and `models.json` lists every clip
     with `"written": true` or `false`.
+
+    Splitting a mesh into primitives does not change that budget: glTF wants a
+    target on every primitive, but the ones a pose leaves alone all share a
+    single do-nothing accessor, so the cost stays proportional to what actually
+    moves.
 
 Key times are **frames at 60 Hz** in the file and are written to the `.glb` as
 seconds, since that is what glTF's samplers are defined in. The manifest carries
