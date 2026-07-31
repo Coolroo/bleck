@@ -161,3 +161,54 @@ class TestTheTexturePairing:
         found = model.read(path.read_bytes())
         images = tpl.read(model.bank_for(path).read_bytes())
         assert len(found.textures) == len(images) == 126
+
+
+@pytest.mark.gamedata
+class TestClips:
+    """The animation table: fixed-stride name plus a pointer to clip data."""
+
+    def _mario(self) -> model.Model:
+        path = MODELS / "p_wii_mario"
+        if not path.is_file():
+            pytest.skip("no p_wii_mario")
+        return model.read(path.read_bytes())
+
+    def test_mario_has_his_clips(self):
+        found = self._mario()
+        names = [c.name for c in found.animations]
+        assert len(names) == 94
+        assert "mario_Z_1" in names
+        assert "mario_W_1" in names
+
+    def test_no_clip_name_carries_a_stray_leading_byte(self):
+        """⚠️ A loose scan read `mario_S_3` as `Tmario_S_3` -- the tail of the
+        previous record, printable by chance. The strided read cannot do that,
+        and this is what would notice if it were reintroduced."""
+        for clip in self._mario().animations:
+            assert clip.name.startswith("mario_"), clip.name
+
+    def test_every_clip_points_inside_its_own_file(self):
+        """⛔ The check that makes the pointer a pointer. Across all 869 models
+        and 10,851 clips, none falls outside."""
+        outside = 0
+        checked = 0
+        for path in sorted(MODELS.iterdir()) if MODELS.is_dir() else []:
+            if not path.is_file() or path.name.endswith("-"):
+                continue
+            data = path.read_bytes()
+            try:
+                found = model.read(data)
+            except model.ModelError:
+                continue
+            for clip in found.animations:
+                checked += 1
+                if not 0 < clip.offset < len(data):
+                    outside += 1
+        if not checked:
+            pytest.skip("no extracted disc")
+        assert checked > 10000
+        assert outside == 0
+
+    def test_clips_are_not_playable_and_say_so(self):
+        """⛔ Names and pointers are not keyframes."""
+        assert self._mario().can_animate is False

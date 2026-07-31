@@ -13000,3 +13000,56 @@ record the file's *leading word* points at, and gives **73.4**.
 ⚠️ Six individually reasonable numbers is exactly what a wrong offset produces
 here. The test asserts a height known independently rather than merely a
 positive one, which is the only reason the error surfaced rather than shipping.
+
+---
+
+## D203 — A tool for reading an undecoded file, and the animation table (2026-07-30)
+
+### `scripts/modelscan.py`, because the process kept evaporating
+
+The character format was mapped with a dozen throwaway `python -c` snippets.
+Each answered one question and vanished, so the *findings* were recorded and the
+*method* was not — and `plan-dimentio.md` names model geometry as the blocker
+for the 3D stages, meaning whoever picks it up would have started over.
+
+`dolscan.py` is this for the DOL. `modelscan.py` is it for a data file:
+`survey`, `header`, `offsets`, `at`, `strings`.
+
+⚠️ **It immediately found more than the snippets had.** `offsets` reported the
+section table as **26 entries starting at 0x148**; reading by eye had found only
+its tail at 0x170 and missed eight entries, including the two that turned out to
+hold the joint and animation names.
+
+### ✅ The animation table
+
+The last section is a **fixed-stride clip table**: a 60-byte name field then a
+`u32` file offset at +0x3C.
+
+```
+mario_Z_1  -> 0x015F5C      mario_S_1 -> 0x015FFC      mario_W_1 -> 0x01BEE8
+```
+
+✅ Across all 869 readable models: **10,851 clips**, and **zero** whose pointer
+falls outside its own file. That zero is what makes it a pointer rather than a
+number that happens to be in range.
+
+⚠️ And it corrects D202: the record at `0x15F5C` is **the first clip's data**,
+not a scene header. The bounding box read from it is that clip's, which is why
+it is Mario-sized and still right.
+
+### ⛔ Two readings refuted along the way
+
+**A loose name scan is wrong.** `mario_S_3` read as `Tmario_S_3` — the tail of
+the previous record, printable by chance. Requiring a preceding NUL then found
+only *one* clip, because the block is padded rather than NUL-separated. Only the
+strided read is correct, and both wrong versions produced plausible output.
+
+⚠️ **The joint table is *not* fixed-stride** — its first two records are 0x58
+apart and the next is 0x59 — so joints stay a scan, and `Model.joints` says in
+its docstring that the count is not to be trusted.
+
+### 🔶 Still not decoded
+
+Vertices, indices, weights, and what a clip's pointer actually addresses.
+`has_geometry` and `can_animate` are both hard `False`; names and pointers are
+not keyframes, and a viewer handed them would have nothing to draw.

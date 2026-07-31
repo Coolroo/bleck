@@ -11,9 +11,11 @@ model reader.
 | ✅ bounding box | read, and sane — Mario is 58.7 units tall |
 | ✅ shape names | read, in file order |
 | ✅ texture references | read, and **counted against the TPL bank** |
-| 🔶 offset table | located, targets partly identified |
-| ⛔ vertices, indices, weights, joints | **not decoded** |
-| ⛔ animations | not decoded |
+| ✅ joint names | 176 for Mario |
+| ✅ animation clip names | 94 for Mario -- `mario_N_1`, `mario_W_1` |
+| ✅ section table | 26 entries, found by structure |
+| ⛔ vertices, indices, weights | **not decoded** |
+| ⛔ animation keyframes | not decoded -- only the clip names |
 
 ## What the file looks like
 
@@ -55,6 +57,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from bleck.common.errors import BleckError
+
+#: The section table is a run of ascending in-file offsets near the start.
+#: ⚠️ Located by *structure*, not a fixed offset -- `scripts/modelscan.py
+#: offsets` is what found it, and every one of the 870 models has 26 entries.
+#: The last two sections are the joint names and the animation clip names.
+TABLE_SEARCH = 0x400
+TABLE_LEAST = 6
+JOINTS_FROM_END = 2
+ANIMS_FROM_END = 1
+
+#: An animation clip record: a 60-byte name field, then a `u32` file offset to
+#: that clip's data. ⚠️ Measured, not guessed -- `mario_Z_1` at +0x00 points at
+#: 0x15F5C and `mario_S_1` at +0x40 points at 0x15FFC, which is immediately
+#: past it.
+CLIP_STRIDE = 0x40
+CLIP_POINTER_AT = 0x3C
 
 #: A model's own name and its build stamp sit at fixed offsets in the opening
 #: record, each in a 32-byte field.
@@ -99,6 +117,15 @@ class Bounds:
 
 
 @dataclass(frozen=True)
+class Clip:
+    """One animation clip: its name, and where its data begins."""
+
+    name: str
+    offset: int
+    """Into this file. ⛔ What is there has not been decoded."""
+
+
+@dataclass(frozen=True)
 class Model:
     """What a character file says about itself, short of its geometry."""
 
@@ -114,16 +141,36 @@ class Model:
     """Original TGA source paths. ⚠️ These name the images in the `-` bank
     beside this file, and the counts match."""
 
+    joints: list[str] = field(default_factory=list)
+    """Skeleton node names -- `R_Arm_skin`, `zentai`, `mario_arm`.
+
+    ⚠️ **Approximate.** Unlike the clip table these records are *not* a fixed
+    stride -- the first two are 0x58 apart and the next is 0x59 -- so these are
+    scanned rather than indexed, and a name may be missed or carry a stray
+    leading byte. Do not count them and conclude anything."""
+
+    animations: list[Clip] = field(default_factory=list)
+    """Clips, each with a name and a pointer to its own data. ⚠️ The pointer is
+    real and checked; **what it points at is not decoded**, so nothing here can
+    play one."""
+
     @property
     def has_geometry(self) -> bool:
         """⛔ Always False. Vertices are not decoded, and a caller asking this
         is better served by a plain no than by an empty list it might render."""
         return False
 
+    @property
+    def can_animate(self) -> bool:
+        """⛔ Also always False. `animations` holds names; a name is not a
+        curve, and a viewer offered one would have nothing to play."""
+        return False
+
     def describe(self) -> str:
         return (
             f"{self.name}: {len(self.shapes)} shape(s), "
-            f"{len(self.textures)} texture(s), bounds {self.bounds.describe()}"
+            f"{len(self.textures)} texture(s), {len(self.joints)} joint(s), "
+            f"{len(self.animations)} clip(s), bounds {self.bounds.describe()}"
         )
 
 
@@ -174,6 +221,78 @@ def _bounds(data: bytes) -> Bounds:
     return Bounds(*values)
 
 
+_ANY_NAME = re.compile(rb"[A-Za-z][A-Za-z0-9_.]{1,31}\x00")
+
+
+def section_table(data: bytes) -> tuple:  # pylint: disable=container-return
+    """Where the section table starts and how many entries it has.
+
+    ⚠️ Found as the longest run of ascending in-file offsets near the start,
+    because no fixed offset works: the run begins at 0x148 in `p_wii_mario` and
+    a naive look at 0x170 finds only its tail. `scripts/modelscan.py offsets`
+    is the tool that showed the fuller table.
+    """
+    runs: list[tuple[int, int]] = []
+    words = min(len(data) // 4, TABLE_SEARCH // 4)
+    start = None
+    previous = -1
+    for index in range(words):
+        value = struct.unpack_from(">I", data, index * 4)[0]
+        if 0 < value < len(data) and value >= previous:
+            if start is None:
+                start = index
+            previous = value
+            continue
+        if start is not None and index - start >= TABLE_LEAST:
+            runs.append((start * 4, index - start))
+        start = None
+        previous = -1
+    if start is not None and words - start >= TABLE_LEAST:
+        runs.append((start * 4, words - start))
+    if not runs:
+        raise ModelError("no section table found in the first 1 KB")
+    return max(runs, key=lambda run: run[1])
+
+
+def _names_between(data: bytes, start: int, end: int) -> list[str]:
+    """Null-terminated names in a padded block.
+
+    ⚠️ Each must be **preceded by a null or the block edge**. Without that the
+    tail of the previous entry gets picked up whenever its last byte happens to
+    be printable, and `mario_S_3` reads as `Tmario_S_3` -- wrong in a way that
+    looks like a real name.
+    """
+    # pylint: disable=container-return
+    if not 0 <= start < end <= len(data):
+        return []
+    block = data[start:end]
+    found = []
+    for match in _ANY_NAME.finditer(block):
+        if match.start() and block[match.start() - 1] != 0:
+            continue
+        found.append(match.group()[:-1].decode("ascii", "replace"))
+    return found
+
+
+def _clips(data: bytes, start: int, end: int) -> list[Clip]:
+    """The animation table: fixed-stride records of name plus data pointer.
+
+    ⚠️ A record whose pointer falls outside the file ends the table. The block
+    is padded, so reading to `end` blindly yields empty trailing entries.
+    """
+    # pylint: disable=container-return
+    found: list[Clip] = []
+    if not 0 <= start < end <= len(data):
+        return found
+    for at in range(start, end - CLIP_STRIDE + 1, CLIP_STRIDE):
+        name = _text(data[at : at + CLIP_POINTER_AT])
+        offset = struct.unpack_from(">I", data, at + CLIP_POINTER_AT)[0]
+        if not name or not 0 < offset < len(data):
+            break
+        found.append(Clip(name=name, offset=offset))
+    return found
+
+
 def read(data: bytes) -> Model:
     """Everything this reader can establish about a character model."""
     if not is_model(data):
@@ -183,6 +302,20 @@ def read(data: bytes) -> Model:
         )
     shapes = [_text(m.group()) for m in _NAME_RE.finditer(data)]
     textures = [m.group().decode("ascii", "replace") for m in TEXTURE_RE.finditer(data)]
+
+    joints: list[str] = []
+    animations: list[str] = []
+    try:
+        at, count = section_table(data)
+        ends = struct.unpack_from(f">{count}I", data, at)
+        head = struct.unpack_from(">I", data, 0)[0]
+        joints = _names_between(data, ends[-JOINTS_FROM_END], ends[-ANIMS_FROM_END])
+        animations = _clips(data, ends[-ANIMS_FROM_END], head)
+    except (ModelError, struct.error):
+        # ⚠️ Absent, not fatal: 11 of 870 models do not yield both lists, and a
+        # model with no clips is still worth reading for everything else.
+        pass
+
     return Model(
         name=_text(data[NAME_AT : NAME_AT + FIELD]),
         stamp=_text(data[STAMP_AT : STAMP_AT + FIELD]),
@@ -192,6 +325,8 @@ def read(data: bytes) -> Model:
         # against the bank's image count, and deduplicating would hide a
         # model that legitimately reuses one.
         textures=textures,
+        joints=joints,
+        animations=animations,
     )
 
 
