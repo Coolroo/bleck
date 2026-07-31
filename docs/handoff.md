@@ -71,6 +71,41 @@ of `npcEntryFromTemplate` only. Effects spawn from one cleanly.
 `evtdis.py` closed a real gap: `bleck` compiled *to* evt and had never read it
 back, so every question about a vanilla script was answered from raw hex.
 
+## Assets: Dimentio can show two of three, and one is a fragment
+
+`bleck` now exports three manifests into one folder, and `dimentio/` (Rust,
+eframe) reads them:
+
+```bash
+bleck texture export --out work/export   # 21,780 images, PNG
+bleck model   export --out work/export   # 864 OBJ + models.json
+bleck effect  export --out work/export   # 139 effects + effects.json
+```
+
+| | state |
+|---|---|
+| **Textures** | ✅ browsable, searchable, filterable by GameCube format |
+| **Models** | 🔶 geometry decoded and rendering, but **each is a fragment** |
+| **Animations** | ⛔ names and pointers only; nothing can play a clip |
+| **Effects** | 🔶 structure, part durations and transform rows; **no part→image link** |
+
+⚠️ **The model reading is the thing to be careful about.** The vertex format was
+read off the game's own draw code (D207) and is solid; the *face and index*
+reading resolves cleanly but reaches only **13.6% of a file's vertices**
+(D211). Every command prints the coverage and the manifest carries
+`"fragment": true`. Do not treat an exported OBJ as a character.
+
+⛔ **Two hypotheses for the gap are already ruled out**: a per-group position
+base (D214, refuted by shuffling the bases) and the size-prefixed record chain
+past `0x15F5C` holding the other shapes (D212, refuted — it contains no
+normals, so it is not geometry). The open contradiction is that a shape has 324
+positions and 336 corners and **no index stream can address 324 things**.
+
+⚠️ **Nobody has looked at Dimentio's window.** This machine cannot capture its
+own interactive desktop, which is exactly why the viewport is a software
+rasteriser with 36 pixel-level tests behind it (D213) — but drag direction and
+layout are unverified by eye.
+
 ## Entities have an onSpawn hook (D176)
 
 `NPCEnemyTemplate+0x30` is `onSpawnScript` — documented in `spm-headers` all
