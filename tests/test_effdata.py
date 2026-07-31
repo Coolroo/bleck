@@ -249,3 +249,42 @@ class TestGroupsAndEntries:
         assert max(e.reference for e in records) == 522
         assert len({e.kind for e in records}) == 9
         assert max(e.variant for e in records) == 5
+
+
+@pytest.mark.gamedata
+class TestTheHeader:
+    """The two fields `effSubMain` reads after checking the magic (D201)."""
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def test_the_texture_count_matches_the_tpl_beside_it(self):
+        """🟢 The one hard constraint on the texture-index search.
+
+        The game reads a `u16` at EFDT+0x28 and keeps it at `effsub_wp+0x14`.
+        It is 219, and `effdata.tpl` holds exactly 219 images -- which is what
+        says any texture index in this file is bounded by that, and why five
+        candidate fields reaching 522, 621 and 64,960 are refuted.
+        """
+        from bleck.formats import tpl  # pylint: disable=import-outside-toplevel
+
+        beside = EFFDATA.with_suffix(".tpl")
+        if not beside.is_file():
+            pytest.skip("no effdata.tpl beside effdata.dat")
+        head = effdata.header(self._data())
+        assert head.texture_count == len(tpl.read(beside.read_bytes()))
+
+    def test_the_version_is_two(self):
+        assert effdata.header(self._data()).version == 2
+
+    def test_the_records_start_where_the_header_ends(self):
+        """⚠️ `EFFECT_STRIDE` doubles as the EFDT block's size, and that is not
+        a coincidence worth leaving unstated: the first record name sits at
+        +0x2C, immediately past the field the loader reads last."""
+        data = self._data()
+        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        first = offsets[0] + effdata.EFFECT_STRIDE
+        assert data[first : first + 9] == b"3D_switch"
+        assert effdata.EFFECT_STRIDE > effdata.TEXTURE_COUNT_AT

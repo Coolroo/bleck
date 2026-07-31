@@ -12893,3 +12893,53 @@ hypothesis was about — would have returned "identical" and left sections 7 and
 
 That is three runs in a row where breadth cost nothing and narrowness would
 have cost a cycle (D198, D199, this). Recorded as method, not as a preference.
+
+---
+
+## D201 — The game's own loader fixes the EFDT header, and names a texture count (2026-07-30)
+
+Reading `effSubMain` past the file load, rather than inferring from shape.
+
+### ✅ The magic check, and the two fields that follow it
+
+`0x8005C0B8` validates the magic **one byte at a time** — `cmpwi 69, 70, 68, 84`
+= `'E','F','D','T'` — and on success reads exactly two fields:
+
+```
+lwz  r0, 32(r3)   EFDT+0x20 -> effsub_wp+0x08     = 2, a version
+lhz  r0, 40(r3)   EFDT+0x28 -> effsub_wp+0x14     = 219
+```
+
+🟢 **219 is exactly the image count of `effdata.tpl`.** The game holds a texture
+count, so a texture index exists and **is bounded by 219** — the first hard
+constraint on a search that has now refuted five candidate fields reaching 522,
+621 and 64,960 (D190, D195, D196).
+
+⚠️ And it confirms a number this project already used on inference: records
+begin at EFDT+0x2C, immediately past the last field the loader touches, which is
+why `EFFECT_STRIDE` doubles as the header size.
+
+### ✅ `effsub_wp`'s layout, so far
+
+| offset | |
+|---|---|
+| +0x08 | EFDT version (2) |
+| +0x0C | the `.tpl` file handle — path at handle+0x20 (D198) |
+| +0x10 | the `.dat` file handle |
+| +0x14 | **texture count** |
+| +0xEC, +0xF0 | lazily created, guarded on both handles being non-null |
+
+⚠️ Those last two are built from string literals `"system"` and
+`"EnvSpeculer0"` — and `system` is the **last effect record in section 0**. So
+the runtime looks effects up by exactly the names this file holds, which closes
+the loop between the record table and the live entity system.
+
+### The route that worked
+
+⛔ `dolscan calls` wanted a target function this had not found yet. The thing
+that worked was plainer: disassemble forward from the loader and read what it
+does next. Four `cmpwi` against ASCII letters is not a pattern any search would
+have been aimed at, and it names the structure outright.
+
+⚠️ Same shape as D128 and D136 — the game's own code is the specification, and
+it is on the disc.

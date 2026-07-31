@@ -28,6 +28,23 @@ that disagree completely and are the same thing.
 | 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 |
 | 3-5, 9, 11-15 | ~650 KB | 🔶 binary; no structure established |
 
+### The EFDT block, as the game's own loader reads it
+
+`effSubMain` validates `'E','F','D','T'` byte by byte and then reads exactly two
+fields, which is what fixes this layout rather than inferring it (D201):
+
+| | | |
+|---|---|---|
+| +0x00 | `"EFDT"` | checked one byte at a time |
+| +0x04 | build stamp | `"Tue Jan 1 10:43:27   2002"` |
+| +0x20 | `u32` = 2 | `lwz`, stored at `effsub_wp+0x08`. A version |
+| +0x28 | `u16` = **219** | `lhz`, stored at `effsub_wp+0x14` |
+| +0x2C | records begin | which is why `EFFECT_STRIDE` is the header size too |
+
+🟢 **219 is exactly the number of images in `effdata.tpl`.** The game holds a
+texture count, so a texture index exists somewhere and is bounded by it — the
+first hard constraint on a search that has refuted five candidate fields.
+
 An **effect record** is a 32-byte name then three u32s: the index of its first
 part, how many parts it has, and a third running index into something in
 sections 2-15 that is not yet identified.
@@ -418,3 +435,40 @@ def entries(data: bytes) -> list[Entry]:  # pylint: disable=container-return
         Entry(index, *struct.unpack_from(">4H", data, at))
         for index, at in enumerate(range(start, end - ENTRY_STRIDE + 1, ENTRY_STRIDE))
     ]
+
+
+#: Inside the EFDT block, at the start of section 0. Both offsets are the ones
+#: `effSubMain` reads immediately after checking the magic (D201).
+VERSION_AT = 0x20
+TEXTURE_COUNT_AT = 0x28
+
+
+@dataclass(frozen=True)
+class Header:
+    """The EFDT block's two meaningful fields, plus its build stamp."""
+
+    version: int
+    """`u32` at +0x20. The game stores it at `effsub_wp+0x08`."""
+
+    texture_count: int
+    """`u16` at +0x28, stored at `effsub_wp+0x14`.
+
+    🟢 Equals the image count of the matching `effdata.tpl` -- 219 for the main
+    set. ⚠️ That is the bound any texture index in this file must respect, and
+    the reason five candidate fields reaching 522, 621 and 64,960 are refuted.
+    """
+
+    stamp: str
+
+
+def header(data: bytes) -> Header:
+    """The EFDT block, read the way the game's loader reads it."""
+    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
+    at = offsets[0]
+    if data[at : at + 4] != MAGIC:
+        raise EffectDataError(f"no {MAGIC.decode()} magic at {at:#x}")
+    return Header(
+        version=struct.unpack_from(">I", data, at + VERSION_AT)[0],
+        texture_count=struct.unpack_from(">H", data, at + TEXTURE_COUNT_AT)[0],
+        stamp=_text(data[at + 4 : at + VERSION_AT]),
+    )
