@@ -16068,4 +16068,116 @@ tests, and it is the reason this shipped.
   The `.glb` is correct — third-party readers see all 15 — so this is a viewer
   defect, not an export one, and it is why a viewer we wrote is weaker evidence
   than one we did not. Untouched here: binding a texture per shape is renderer
-  work, not a manifest field.
+  work, not a manifest field. ✅ **Closed by D246.**
+
+## D246 — The viewer binds a texture per primitive, and the control says the old path bound one (2026-07-31)
+
+✅ **The open item at the foot of D245 is closed.** `dimentio` painted a whole
+model with the first material that yielded an image. It now resolves the
+material each primitive names, and every finding below is measured on the
+pixel buffer or on the exported bytes — nobody looked at a screen.
+
+### What was actually there ✅
+
+Read out of `work/export/models/files/a/e_lui_robo.glb`, not inferred from the
+writer:
+
+| | |
+|---|---|
+| primitives | 92 |
+| carrying a `material` | **68** |
+| distinct materials named | **15** |
+| `materials` / `textures` / `images` in the document | 15 / 15 / 15 |
+| material → image | 1:1, `0…14` |
+
+Across all 864 exported models, **640 name more than one material**; the
+largest is `p_peach` at 69. So the old reading was wrong on three quarters of
+the corpus, not on one awkward file.
+
+### The change
+
+- `Shape` carries `paint: Option<usize>`, an index into the mesh's `paints`.
+  `Parts.texture`/`Parts.masked` are gone; `Mesh::surface()` is gone with them,
+  because a mesh does not have *a* surface.
+- `Mesh::batches()` hands the renderer a run of faces plus the surface that run
+  samples, and `render::draw` walks batches instead of a flat face list. The
+  surface is still resolved once per run, not per triangle.
+- `masked` moved from the mesh to the paint: `alphaMode` belongs to the
+  material, and two materials can name one PNG and treat its alpha differently.
+- Decoding is cached **per glTF material**, so 68 painted primitives over 15
+  materials cost 15 PNG decodes. ⛔ Not per primitive — that was the stated
+  reason the old code stopped at the first material, and it would have been a
+  real cost at 69 materials and 92 primitives.
+- Shape toggling and the clip picker are untouched; `faces()` and `batches()`
+  are held to each other by a test, since the renderer walks one and the older
+  tests assert on the other.
+
+### The render-level result, with its control ✅
+
+The control is the old path reproduced exactly — parse the real file, then set
+every shape's `paint` to `Some(0)` — so both frames come off the same
+rasteriser, the same camera and the same geometry. **A colour count that cannot
+tell the two apart would prove nothing**, which is why the control is asserted
+on first.
+
+`e_lui_robo`, 256×256, camera fitted to its bounds:
+
+| | control (one image) | per primitive |
+|---|---|---|
+| pixels drawn | 2,451 | **3,649** |
+| pixels differing between the two frames | — | **3,587 of 3,649 (98.3%)** |
+
+⚠️ **The control draws 33% *fewer* pixels, which was not expected.** Every
+material in this file is `alphaMode: "MASK"`, so painting image 0 over all 92
+primitives discards every texel that image happens to have transparent —
+geometry that should be solid was being cut away, not merely mis-coloured.
+
+On a hand-built fixture — three coplanar quads, three single-texel images, so
+one colour in the frame is one image sampled — the same measurement gives
+**1 colour before, 3 after**, and the three are red, green and blue in their
+own quads.
+
+### A pre-existing test failure was this bug ✅
+
+`a_real_clip_changes_the_picture_and_not_only_the_positions` was failing before
+any of this: **3 of 15 clips changed the frame**. It now reports **15 of 15**,
+on the same export, with no change to the morph code. The masking above is why
+— most of each model was being discarded, so displacing it moved nothing
+visible.
+
+⚠️ It had been read as a morph or export problem. It was the texture binding,
+seen through a different instrument.
+
+### Held against `bleck`'s own count, over the whole corpus ✅
+
+D245 made the manifest report `textures` (images embedded) and `painted`
+(primitives given a material), both measured from the emitted bytes. The
+reader's `paints().len()` and its count of painted shapes are now asserted
+against those two numbers for **all 864 models — 0 disagreements**.
+
+⚠️ **This is the only cross-end check that exists here.** Every fixture in the
+crate is written by its own tests and would agree with a reader that had the
+material chain wrong; these numbers came from the other program.
+
+### Rejected
+
+- ⛔ **A parallel `Vec<Option<usize>>` alongside the face list.** Two arrays
+  that must stay the same length, rebuilt on every shape toggle. Faces are
+  already grouped by shape and shapes already carry their span, so the grouping
+  was there to be used.
+- ⛔ **Keeping `Mesh::surface()` as "the first paint" for the facts row.** It
+  reads as *the* texture, which is the sentence that caused this. The row now
+  says "15 images, first 64x64", derived from the mesh rather than the manifest
+  — a manifest that over-reported is the whole failure of D245.
+- ⛔ **Copying SpmViewer's layer handling.** It carries no licence at all, which
+  is stricter than GPL. Its handling is also wrong: it binds only the first of
+  consecutive layers.
+
+### Still open 🔶
+
+- **Only `TEXCOORD_0`.** A two-layer shape (40 of them, D243) still draws its
+  first layer only, and the exporter writes only that layer.
+- Wrap mode is still assumed REPEAT everywhere; slot 17 `+0x04` is a wrap flag
+  whose mapping is unrecorded (D243).
+- **Nobody has looked at the result.** Every claim above is a pixel count or a
+  byte count. That the robot now *looks* right is untested.

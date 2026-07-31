@@ -15,8 +15,10 @@
 //! Everything about the material is therefore optional at every step, and a
 //! chain that breaks anywhere yields an untextured mesh rather than an error.
 
+use std::collections::HashMap;
+
 use super::gltf_accessor::{read_indices, read_scalars, read_vec2, read_vec3, view_bytes};
-use super::mesh::{Face, Parts, Shape, Uv, Vec3};
+use super::mesh::{Face, Paint, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::Texture;
 
@@ -37,6 +39,9 @@ struct Piece {
 /// reader that took the first drew one limb of `e_lui_robo`'s 92 (D236). The
 /// primitives are concatenated into one position and face list, with a `Shape`
 /// recording which faces came from where so they can be hidden again.
+///
+/// ⛔ **Every material, not material 0** (D246). A primitive names its own, and
+/// 640 of 864 real models reach more than one; the `Shape` carries which.
 pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
     let chunks = split_chunks(raw)?;
     let json: serde_json::Value =
@@ -58,6 +63,7 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
     let mut textured = false;
     let mut columns: Vec<Vec<Pose>> = Vec::new();
     let mut widths: Vec<usize> = Vec::new();
+    let mut palette = Palette::default();
 
     for primitive in &primitives {
         let piece = piece(&json, bin, primitive)?;
@@ -72,6 +78,7 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
             first,
             count: faces.len() - first,
             visible: true,
+            paint: palette.slot_for(&json, bin, primitive),
         });
         // ⚠️ UVs are one per position across the whole model, so a primitive
         // that carries none still has to occupy its own span — otherwise every
@@ -94,7 +101,6 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
         columns.push(piece.targets);
     }
 
-    let paint = paint_of(&json, bin, &primitives);
     let animation = Animation::new(merge_targets(&columns, &widths), clips(&json, bin));
 
     Ok(Parts {
@@ -102,8 +108,7 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
         faces,
         shapes,
         uvs: textured.then_some(uvs),
-        texture: paint.texture,
-        masked: paint.masked,
+        paints: palette.paints,
         animation,
     })
 }
@@ -135,22 +140,6 @@ fn piece(
             .and_then(|index| read_vec2(json, bin, index as usize).ok()),
         targets: targets(json, bin, primitive),
     })
-}
-
-/// The first material in the file that yields an image, or none at all.
-///
-/// ⚠️ Every textured primitive points at the same material today, so this stops
-/// at the first — decoding the PNG once per primitive would cost 92 decodes on
-/// `e_lui_robo` for one image.
-fn paint_of(json: &serde_json::Value, bin: &[u8], primitives: &[serde_json::Value]) -> Paint {
-    primitives
-        .iter()
-        .map(|primitive| material(json, bin, primitive))
-        .find(|paint| paint.texture.is_some())
-        .unwrap_or(Paint {
-            texture: None,
-            masked: false,
-        })
 }
 
 /// Each target index gathered across every primitive, in primitive order.
@@ -293,9 +282,9 @@ fn keys(times: &[f32], weights: &[f32]) -> Vec<Key> {
 }
 
 /// The two chunks a `.glb` is made of.
-struct Chunks<'a> {
-    json: &'a [u8],
-    bin: &'a [u8],
+pub(crate) struct Chunks<'a> {
+    pub(crate) json: &'a [u8],
+    pub(crate) bin: &'a [u8],
 }
 
 /// Split a `.glb` into its JSON and binary chunks.
@@ -303,7 +292,7 @@ struct Chunks<'a> {
 /// ⚠️ Each chunk is padded to four bytes and the header length **includes**
 /// the padding, so the next chunk starts at the declared length, not at the
 /// end of the meaningful data.
-fn split_chunks(raw: &[u8]) -> Result<Chunks<'_>, String> {
+pub(crate) fn split_chunks(raw: &[u8]) -> Result<Chunks<'_>, String> {
     if raw.len() < 20 {
         return Err("too short to be a glTF".into());
     }
@@ -328,37 +317,60 @@ fn split_chunks(raw: &[u8]) -> Result<Chunks<'_>, String> {
     Ok(Chunks { json, bin })
 }
 
-/// What the primitive's material asks for: an image, and whether its alpha is
-/// a cut-out or decoration.
-struct Paint {
-    texture: Option<Texture>,
-    masked: bool,
+/// The images the primitives read so far, and where each glTF material landed
+/// among them.
+///
+/// ⚠️ **Keyed on the material, so a PNG is decoded once however many primitives
+/// name it.** `e_lui_robo` has 68 painted primitives over 15 materials, and
+/// `p_peach` 69 materials; decoding per primitive would repeat the work of the
+/// whole file. A material that yields no image is remembered as `None` for the
+/// same reason.
+#[derive(Default)]
+struct Palette {
+    paints: Vec<Paint>,
+    resolved: HashMap<usize, Option<usize>>,
 }
 
-/// Follow primitive → material → texture → image → buffer view, and decode the
-/// PNG at the end of it.
+impl Palette {
+    /// Which paint this primitive draws with, decoding its image on first
+    /// sight.
+    fn slot_for(
+        &mut self,
+        json: &serde_json::Value,
+        bin: &[u8],
+        primitive: &serde_json::Value,
+    ) -> Option<usize> {
+        let index = primitive["material"].as_u64()? as usize;
+        if let Some(&slot) = self.resolved.get(&index) {
+            return slot;
+        }
+        let slot = material(json, bin, index).map(|paint| {
+            self.paints.push(paint);
+            self.paints.len() - 1
+        });
+        self.resolved.insert(index, slot);
+        slot
+    }
+}
+
+/// Follow material → texture → image → buffer view, and decode the PNG at the
+/// end of it.
 ///
-/// ⚠️ A decode failure yields no texture rather than an error, so one model
-/// with a broken image cannot take the whole export down. The real-export test
-/// is what catches an image the decoder has stopped understanding.
-fn material(json: &serde_json::Value, bin: &[u8], primitive: &serde_json::Value) -> Paint {
-    let Some(index) = primitive["material"].as_u64() else {
-        return Paint {
-            texture: None,
-            masked: false,
-        };
-    };
-    let material = &json["materials"][index as usize];
+/// ⚠️ A decode failure yields no paint rather than an error, so one model with
+/// a broken image cannot take the whole export down. The real-export test is
+/// what catches an image the decoder has stopped understanding.
+fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint> {
+    let material = &json["materials"][index];
     let texture = material["pbrMetallicRoughness"]["baseColorTexture"]["index"]
         .as_u64()
         .and_then(|texture| json["textures"][texture as usize]["source"].as_u64())
         .and_then(|image| json["images"][image as usize]["bufferView"].as_u64())
         .and_then(|view| view_bytes(json, bin, view as usize).ok())
-        .and_then(|bytes| Texture::decode(bytes).ok());
-    Paint {
+        .and_then(|bytes| Texture::decode(bytes).ok())?;
+    Some(Paint {
         texture,
         masked: material["alphaMode"].as_str() == Some("MASK"),
-    }
+    })
 }
 
 /// Building the files this reader is pointed at, in the shape
@@ -539,6 +551,122 @@ pub(crate) mod fixtures {
         container(&json, &bin)
     }
 
+    /// One quad per entry, side by side along X, each painted with its own
+    /// solid-colour image — or bare where the entry is `None`, which is the
+    /// state 24 of `e_lui_robo`'s 92 primitives are in.
+    ///
+    /// ⚠️ **Solid images, one texel each, on purpose.** Every pixel a quad
+    /// covers is then exactly that quad's colour, so counting the frame's
+    /// distinct colours counts the images that were sampled. All the quads are
+    /// coplanar, so they take the same shading term and cannot differ for any
+    /// other reason.
+    pub(crate) fn painted_quads(colours: &[Option<Texel>]) -> Vec<u8> {
+        let mut bin: Vec<u8> = Vec::new();
+        let mut views: Vec<String> = Vec::new();
+        let mut accessors: Vec<String> = Vec::new();
+        let mut primitives: Vec<String> = Vec::new();
+        let mut images: Vec<String> = Vec::new();
+        let mut textures: Vec<String> = Vec::new();
+        let mut materials: Vec<String> = Vec::new();
+        /// Declare a buffer view over `bin` and report its index.
+        fn view(views: &mut Vec<String>, at: usize, length: usize) -> usize {
+            views.push(format!(
+                r#"{{"buffer":0,"byteOffset":{at},"byteLength":{length}}}"#
+            ));
+            views.len() - 1
+        }
+
+        for (index, colour) in colours.iter().enumerate() {
+            let centre = index as f32 * 6.0;
+            let at = bin.len();
+            push_floats(
+                &mut bin,
+                &[
+                    centre - 2.0,
+                    -2.0,
+                    0.0,
+                    centre + 2.0,
+                    -2.0,
+                    0.0,
+                    centre + 2.0,
+                    2.0,
+                    0.0,
+                    centre - 2.0,
+                    2.0,
+                    0.0,
+                ],
+            );
+            let held = view(&mut views, at, 48);
+            let position = accessors.len();
+            accessors.push(format!(
+                r#"{{"bufferView":{held},"componentType":5126,"count":4,"type":"VEC3"}}"#
+            ));
+
+            let mut attributes = format!(r#""POSITION":{position}"#);
+            let mut names = String::new();
+            if let Some(texel) = colour {
+                let uv_at = bin.len();
+                for (u, v) in QUAD_UVS {
+                    push_floats(&mut bin, &[u, v]);
+                }
+                let held = view(&mut views, uv_at, 32);
+                let uv = accessors.len();
+                accessors.push(format!(
+                    r#"{{"bufferView":{held},"componentType":5126,"count":4,"type":"VEC2"}}"#
+                ));
+                attributes.push_str(&format!(r#","TEXCOORD_0":{uv}"#));
+
+                let image_at = bin.len();
+                let image = png(1, 1, &[*texel]);
+                bin.extend_from_slice(&image);
+                let held = view(&mut views, image_at, image.len());
+                images.push(format!(r#"{{"bufferView":{held},"mimeType":"image/png"}}"#));
+                textures.push(format!(r#"{{"sampler":0,"source":{}}}"#, images.len() - 1));
+                materials.push(format!(
+                    r#"{{"pbrMetallicRoughness":{{"baseColorTexture":{{"index":{}}}}},
+                        "alphaMode":"MASK","doubleSided":true}}"#,
+                    textures.len() - 1
+                ));
+                names = format!(r#","material":{}"#, materials.len() - 1);
+            }
+
+            let indices_at = pad(&mut bin, &[0u32, 1, 2, 0, 2, 3]);
+            let held = view(&mut views, indices_at, 24);
+            let indices = accessors.len();
+            accessors.push(format!(
+                r#"{{"bufferView":{held},"componentType":5125,"count":6,"type":"SCALAR"}}"#
+            ));
+            primitives.push(format!(
+                r#"{{"attributes":{{{attributes}}},"indices":{indices}{names}}}"#
+            ));
+        }
+
+        let painting = if materials.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#""images":[{}],"samplers":[{{"wrapS":10497,"wrapT":10497}}],
+                   "textures":[{}],"materials":[{}],"#,
+                images.join(","),
+                textures.join(","),
+                materials.join(",")
+            )
+        };
+        let json = format!(
+            r#"{{"asset":{{"version":"2.0"}},
+                "meshes":[{{"primitives":[{}]}}],
+                "accessors":[{}],
+                "bufferViews":[{}],
+                {painting}
+                "buffers":[{{"byteLength":{}}}]}}"#,
+            primitives.join(","),
+            accessors.join(","),
+            views.join(","),
+            bin.len()
+        );
+        container(&json, &bin)
+    }
+
     pub(crate) fn push_floats(bin: &mut Vec<u8>, values: &[f32]) {
         for value in values {
             bin.extend_from_slice(&value.to_le_bytes());
@@ -655,9 +783,11 @@ mod tests {
     fn a_model_with_no_material_carries_no_uvs_and_no_texture() {
         let parts = parse(&bare_triangle()).expect("bare triangle parses");
         assert!(parts.uvs.is_none());
-        assert!(parts.texture.is_none());
-        assert!(!parts.masked);
-        assert!(parts.into_mesh().surface().is_none());
+        assert!(parts.paints.is_empty());
+        assert!(parts
+            .into_mesh()
+            .batches()
+            .all(|batch| batch.surface.is_none()));
     }
 
     #[test]
@@ -666,14 +796,15 @@ mod tests {
             parse(&textured_quad(QUAD_UVS, 2, 1, &[RED, GREEN])).expect("textured quad parses");
         assert_eq!(parts.positions.len(), 4);
         assert_eq!(parts.faces.len(), 2);
-        assert!(parts.masked, "alphaMode MASK was not read");
+        let paint = parts.paints.first().expect("a material");
+        assert!(paint.masked, "alphaMode MASK was not read");
 
         let uvs = parts.uvs.as_ref().expect("TEXCOORD_0");
         assert_eq!(uvs.len(), 4);
         assert_eq!((uvs[0].u, uvs[0].v), (0.0, 1.0));
         assert_eq!((uvs[2].u, uvs[2].v), (1.0, 0.0));
 
-        let texture = parts.texture.as_ref().expect("embedded png");
+        let texture = &paint.texture;
         assert_eq!(texture.width(), 2);
         assert_eq!(texture.height(), 1);
         assert_eq!(texture.sample(0.25, 0.5), RED);
@@ -778,7 +909,11 @@ mod tests {
         let scratch = Scratch::new("glb-textured");
         scratch.write("quad.glb", textured_quad(QUAD_UVS, 2, 1, &[RED, GREEN]));
         let mesh = Mesh::load(&scratch.path.join("quad.glb")).expect("textured quad loads");
-        let surface = mesh.surface().expect("a surface");
+        let surface = mesh
+            .batches()
+            .next()
+            .and_then(|batch| batch.surface)
+            .expect("a surface");
         assert_eq!(surface.texture.sample(0.75, 0.5), GREEN);
         assert_eq!(surface.uvs.len(), mesh.positions().len());
     }

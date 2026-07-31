@@ -316,11 +316,7 @@ impl Viewer {
         // said about it: an untextured model and one whose image failed to
         // decode are indistinguishable on screen, and both look like a broken
         // renderer.
-        let painted = self
-            .models
-            .mesh
-            .surface()
-            .map(|surface| format!("{}x{}", surface.texture.width(), surface.texture.height()));
+        let painted = Self::painted_text(&self.models.mesh);
         let source = entry.source_text();
         let asset = Asset::sourced(&entry.name, source.as_deref());
         egui::TopBottomPanel::bottom("model-facts").show(ctx, |ui| {
@@ -342,7 +338,7 @@ impl Viewer {
                 ui.separator();
                 asset.inline(ui, "extent", &entry.extent());
                 ui.separator();
-                asset.inline(ui, "texture", painted.as_deref().unwrap_or("none"));
+                asset.inline(ui, "texture", &painted);
                 ui.separator();
                 asset.inline(ui, "clips", &Self::clip_count(&entry));
                 if entry.animations_dropped > 0 {
@@ -380,6 +376,24 @@ impl Viewer {
             });
             ui.add_space(4.0);
         });
+    }
+
+    /// The images the mesh file actually decoded, sized.
+    ///
+    /// ⚠️ A count, not one size. A model binds one image per shape and reaches
+    /// up to 69 of them, so a single dimension in this row would name whichever
+    /// happened to be first and say nothing about the rest.
+    fn painted_text(mesh: &mesh::Mesh) -> String {
+        match mesh.paints() {
+            [] => "none".to_owned(),
+            [only] => format!("{}x{}", only.texture.width(), only.texture.height()),
+            many => format!(
+                "{} images, first {}x{}",
+                many.len(),
+                many[0].texture.width(),
+                many[0].texture.height()
+            ),
+        }
     }
 
     /// How many clips the manifest says are playable, out of how many the file

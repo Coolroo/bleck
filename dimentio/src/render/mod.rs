@@ -140,42 +140,46 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
         return;
     }
     let positions = mesh.positions();
-    // Resolved once: a mesh either carries a texture and coordinates or it
-    // does not, and asking per face would re-check 3,500 times a frame.
-    let surface = mesh.surface();
 
-    for face in mesh.faces() {
-        let (Some(&a), Some(&b), Some(&c)) = (
-            positions.get(face.a),
-            positions.get(face.b),
-            positions.get(face.c),
-        ) else {
-            continue;
-        };
-        let corners = [a, b, c];
-        let viewed = corners.map(|corner| basis.to_view(corner));
-        if viewed.iter().any(|corner| corner.z <= NEAR) {
-            continue;
+    // ⚠️ Per shape, not per mesh. The surface is resolved once for a whole run
+    // of faces — asking per face would re-check 3,500 times a frame — but a
+    // mesh carries as many images as its shapes reach, and taking one of them
+    // for all of them paints 68 of `e_lui_robo`'s parts with the wrong texture
+    // (D246).
+    for batch in mesh.batches() {
+        for face in batch.faces {
+            let (Some(&a), Some(&b), Some(&c)) = (
+                positions.get(face.a),
+                positions.get(face.b),
+                positions.get(face.c),
+            ) else {
+                continue;
+            };
+            let corners = [a, b, c];
+            let viewed = corners.map(|corner| basis.to_view(corner));
+            if viewed.iter().any(|corner| corner.z <= NEAR) {
+                continue;
+            }
+            let screen = viewed.map(|corner| lens.project(corner));
+            let intensity = raster::lighting(basis, &corners);
+            // A face whose corners the UV list does not reach falls back to
+            // flat, so a short TEXCOORD_0 accessor loses a triangle's texture
+            // rather than the whole model.
+            let paint = match batch.surface.and_then(|surface| {
+                surface
+                    .corners(*face)
+                    .map(|corners| raster::Paint::Textured {
+                        texture: surface.texture,
+                        corners,
+                        intensity,
+                        masked: surface.masked,
+                    })
+            }) {
+                Some(textured) => textured,
+                None => raster::Paint::Flat(piece.flat.shaded(intensity)),
+            };
+            raster::raster(image, depth, &screen, &paint);
         }
-        let screen = viewed.map(|corner| lens.project(corner));
-        let intensity = raster::lighting(basis, &corners);
-        // A face whose corners the UV list does not reach falls back to flat,
-        // so a short TEXCOORD_0 accessor loses a triangle's texture rather
-        // than the whole model.
-        let paint = match surface.and_then(|surface| {
-            surface
-                .corners(*face)
-                .map(|corners| raster::Paint::Textured {
-                    texture: surface.texture,
-                    corners,
-                    intensity,
-                    masked: surface.masked,
-                })
-        }) {
-            Some(textured) => textured,
-            None => raster::Paint::Flat(piece.flat.shaded(intensity)),
-        };
-        raster::raster(image, depth, &screen, &paint);
     }
 }
 

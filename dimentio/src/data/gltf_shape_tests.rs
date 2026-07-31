@@ -9,10 +9,30 @@
 //! stopped at the first is visible in the vertex count, the face count and the
 //! bounds alike.
 
-use super::fixtures::{container, pad, push_floats};
+use super::fixtures::{container, pad, painted_quads, push_floats};
 use super::*;
 use crate::data::mesh::Mesh;
 use crate::data::scratch::Scratch;
+use crate::data::texture::Texel;
+
+const RED: Texel = Texel {
+    r: 255,
+    g: 0,
+    b: 0,
+    a: 255,
+};
+const GREEN: Texel = Texel {
+    r: 0,
+    g: 255,
+    b: 0,
+    a: 255,
+};
+const BLUE: Texel = Texel {
+    r: 0,
+    g: 0,
+    b: 255,
+    a: 255,
+};
 
 /// Two quads as two primitives of one mesh: the first around the origin, the
 /// second ten units along X so no bounds test can confuse them.
@@ -234,4 +254,81 @@ fn every_target_spans_the_whole_merged_vertex_list() {
     let mut posed = mesh.clone();
     posed.pose(0, 0.5);
     assert_eq!(posed.positions().len(), 8);
+}
+
+/// ⛔ **The reader took the first material that yielded an image and painted
+/// the whole mesh with it** (D246). Three primitives, three images: a reader
+/// that stops at the first decodes one image and binds it three times.
+#[test]
+fn each_primitive_resolves_its_own_image() {
+    let parts = parse(&painted_quads(&[Some(RED), Some(GREEN), Some(BLUE)])).expect("parses");
+    assert_eq!(parts.paints.len(), 3, "the images were collapsed into one");
+
+    let slots: Vec<Option<usize>> = parts.shapes.iter().map(|shape| shape.paint).collect();
+    assert_eq!(slots, [Some(0), Some(1), Some(2)]);
+
+    let sampled: Vec<Texel> = parts
+        .paints
+        .iter()
+        .map(|paint| paint.texture.sample(0.5, 0.5))
+        .collect();
+    assert_eq!(sampled, [RED, GREEN, BLUE], "a slot holds the wrong image");
+}
+
+/// A primitive with no material keeps its span and draws flat, beside ones that
+/// do — 24 of `e_lui_robo`'s 92 primitives are in that state, and 269 models
+/// mix the two.
+#[test]
+fn an_unpainted_primitive_sits_between_painted_ones_without_taking_their_image() {
+    let parts = parse(&painted_quads(&[Some(RED), None, Some(BLUE)])).expect("parses");
+    let slots: Vec<Option<usize>> = parts.shapes.iter().map(|shape| shape.paint).collect();
+    assert_eq!(slots, [Some(0), None, Some(1)]);
+    assert_eq!(parts.paints.len(), 2);
+
+    let mesh = parts.into_mesh();
+    let painted: Vec<bool> = mesh
+        .batches()
+        .map(|batch| batch.surface.is_some())
+        .collect();
+    assert_eq!(painted, [true, false, true]);
+}
+
+/// ⚠️ **One decode per material, not per primitive.** Two primitives naming
+/// material 0 must share one image rather than decoding the same PNG twice —
+/// `e_lui_robo` has 68 painted primitives over 15 materials.
+#[test]
+fn primitives_that_name_one_material_share_a_single_decoded_image() {
+    let raw = painted_quads(&[Some(RED), Some(GREEN)]);
+    let chunks = split_chunks(&raw).expect("the fixture is a glb");
+    let json = std::str::from_utf8(chunks.json).expect("the JSON chunk is text");
+    assert!(
+        json.contains(r#""material":1"#),
+        "the fixture is not paired"
+    );
+    let shared = json.replace(r#""material":1"#, r#""material":0"#);
+    let parts = parse(&container(&shared, chunks.bin)).expect("parses");
+
+    assert_eq!(parts.paints.len(), 1, "one material decoded twice");
+    let slots: Vec<Option<usize>> = parts.shapes.iter().map(|shape| shape.paint).collect();
+    assert_eq!(slots, [Some(0), Some(0)]);
+}
+
+/// ⚠️ **`faces` and `batches` must describe the same triangles.** The renderer
+/// walks one and every test asserts on the other, so a shape hidden from one
+/// and not the other would be invisible to both.
+#[test]
+fn the_batches_flatten_to_exactly_the_faces_that_are_drawn() {
+    let mut mesh = parse(&painted_quads(&[Some(RED), Some(GREEN), Some(BLUE)]))
+        .expect("parses")
+        .into_mesh();
+    let flattened = |mesh: &Mesh| -> Vec<Face> {
+        mesh.batches()
+            .flat_map(|batch| batch.faces.to_vec())
+            .collect()
+    };
+    assert_eq!(flattened(&mesh), mesh.faces());
+
+    mesh.set_shape_visible(1, false);
+    assert_eq!(flattened(&mesh), mesh.faces());
+    assert_eq!(mesh.batches().count(), 2);
 }

@@ -14,6 +14,21 @@ fn export() -> Option<PathBuf> {
     root.join(MANIFEST).is_file().then_some(root)
 }
 
+/// `e_lui_robo` as the manifest places it — the 92-shape, 15-image model every
+/// finding about the material chain was measured on.
+///
+/// ⚠️ Found through the manifest, not by joining a path. The exported layout has
+/// moved once already, and a hand-built path that stops matching skips silently.
+fn robot() -> Option<PathBuf> {
+    let library = Library::load(&export()?);
+    library
+        .entries()
+        .iter()
+        .find(|entry| entry.name == "e_lui_robo")
+        .map(|entry| entry.path.clone())
+        .filter(|path| path.is_file())
+}
+
 #[test]
 fn every_mesh_the_manifest_names_actually_loads() {
     let Some(root) = export() else {
@@ -223,13 +238,18 @@ fn the_textured_models_are_the_single_shape_minority() {
     let mut bare = 0;
     for entry in library.entries() {
         let mesh = Mesh::load(&entry.path).expect("mesh");
-        match mesh.surface() {
-            Some(surface) => {
-                assert!(surface.texture.width() > 0, "{}", entry.name);
+        for paint in mesh.paints() {
+            assert!(paint.texture.width() > 0, "{}", entry.name);
+        }
+        for batch in mesh.batches() {
+            if let Some(surface) = batch.surface {
                 assert_eq!(surface.uvs.len(), mesh.positions().len(), "{}", entry.name);
-                painted += 1;
             }
-            None => bare += 1,
+        }
+        if mesh.paints().is_empty() {
+            bare += 1;
+        } else {
+            painted += 1;
         }
     }
     // ⛔ **This must not assume which flags produced the export.** It once
@@ -265,7 +285,7 @@ fn a_textured_model_reaches_the_frame_as_more_than_one_colour() {
             continue;
         }
         let mesh = Mesh::load(&entry.path).expect("mesh");
-        if mesh.surface().is_none() || mesh.faces().len() < 200 {
+        if mesh.paints().is_empty() || mesh.faces().len() < 200 {
             continue;
         }
         let view = crate::render::View {
@@ -296,6 +316,144 @@ fn a_textured_model_reaches_the_frame_as_more_than_one_colour() {
     assert!(
         checked > 0,
         "no textured model in the export was big enough"
+    );
+}
+
+/// ⛔ **The reader painted a whole model with one image** (D246). `e_lui_robo`
+/// carries 15, over 68 of its 92 primitives; the fixtures next door are written
+/// by this crate's own tests and would agree with a reader that had the
+/// material chain wrong.
+///
+/// ⚠️ Named outright rather than "some model with several images", because the
+/// numbers are the finding and a search that settled for any multi-material
+/// file would pass on one that had two.
+#[test]
+fn the_robot_binds_fifteen_images_across_sixty_eight_of_its_ninety_two_shapes() {
+    let Some(path) = robot() else {
+        eprintln!("no e_lui_robo in work/export on this machine; skipped");
+        return;
+    };
+    let mesh = Mesh::load(&path).expect("e_lui_robo loads");
+    assert_eq!(mesh.shapes().len(), 92);
+    assert_eq!(mesh.paints().len(), 15, "the images were collapsed");
+
+    let painted = mesh.shapes().iter().filter(|s| s.paint.is_some()).count();
+    assert_eq!(painted, 68, "not every primitive kept its own material");
+
+    let mut slots: Vec<usize> = mesh.shapes().iter().filter_map(|s| s.paint).collect();
+    slots.sort_unstable();
+    slots.dedup();
+    assert_eq!(slots.len(), 15, "the shapes reached {} images", slots.len());
+
+    // ⚠️ Distinct *images*, not distinct slots: 15 materials naming one PNG
+    // fifteen times would satisfy everything above and paint the same robot.
+    let mut sizes: Vec<(usize, usize)> = mesh
+        .paints()
+        .iter()
+        .map(|paint| (paint.texture.width(), paint.texture.height()))
+        .collect();
+    sizes.sort_unstable();
+    sizes.dedup();
+    assert!(sizes.len() > 1, "every image was the same size: {sizes:?}");
+}
+
+/// **`bleck`'s own count of what it wrote, against what this reads back.**
+/// D245 made the manifest report the images embedded and the primitives given a
+/// material, both measured from the emitted bytes — so the two programs can be
+/// held to each other over the whole corpus.
+///
+/// ⚠️ An export written before those fields existed reports 0 for every model,
+/// which would make this pass vacuously. That is checked first.
+#[test]
+fn every_models_images_and_painted_shapes_agree_with_the_manifest() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    if library.entries().iter().all(|entry| entry.textures == 0) {
+        eprintln!("this export predates the per-model texture counts; skipped");
+        return;
+    }
+
+    let mut several = 0;
+    let mut disagreed: Vec<String> = Vec::new();
+    for entry in library.entries() {
+        let mesh = Mesh::load(&entry.path).expect("mesh");
+        let painted = mesh.shapes().iter().filter(|s| s.paint.is_some()).count();
+        if mesh.paints().len() != entry.textures || painted != entry.painted {
+            disagreed.push(format!(
+                "{}: {} images / {painted} painted, manifest says {} / {}",
+                entry.name,
+                mesh.paints().len(),
+                entry.textures,
+                entry.painted
+            ));
+        }
+        if mesh.paints().len() > 1 {
+            several += 1;
+        }
+    }
+    assert!(
+        disagreed.is_empty(),
+        "{} of {} models disagree, e.g. {:?}",
+        disagreed.len(),
+        library.len(),
+        &disagreed[..disagreed.len().min(3)]
+    );
+    assert!(
+        several * 2 > library.len(),
+        "only {several} of {} models bound several images",
+        library.len()
+    );
+}
+
+/// **The render-level claim, on a real model, with the old path as its
+/// control.** A frame drawn with each primitive's own image must differ from
+/// one drawn with the first image over all of them — and the control has to
+/// show the old path really did that, or the comparison measures nothing.
+#[test]
+fn per_primitive_binding_changes_a_real_frame_against_the_single_image_path() {
+    let Some(path) = robot() else {
+        eprintln!("no e_lui_robo in work/export on this machine; skipped");
+        return;
+    };
+    let raw = std::fs::read(&path).expect("e_lui_robo reads");
+    let bound = gltf::parse(&raw).expect("parses").into_mesh();
+
+    let mut flattened = gltf::parse(&raw).expect("parses");
+    for shape in &mut flattened.shapes {
+        shape.paint = Some(0);
+    }
+    let flattened = flattened.into_mesh();
+    assert_eq!(flattened.paints().len(), bound.paints().len());
+
+    let size = crate::render::Size::new(256, 256);
+    let view = crate::render::View {
+        camera: crate::render::Camera::fit(bound.bounds()),
+        background: crate::render::Background::DarkGrey,
+    };
+    let one = crate::render::render(&flattened, &view, size);
+    let many = crate::render::render(&bound, &view, size);
+
+    let sky = crate::render::Background::DarkGrey.pixel(0, 0, size);
+    let pixels = || (0..size.height).flat_map(|y| (0..size.width).map(move |x| (x, y)));
+    let covered =
+        |image: &crate::render::Image| pixels().filter(|&(x, y)| image.pixel(x, y) != sky).count();
+    let (before, after) = (covered(&one), covered(&many));
+    let changed = pixels()
+        .filter(|&(x, y)| one.pixel(x, y) != many.pixel(x, y))
+        .count();
+    println!("e_lui_robo: {before} pixels drawn by the control, {after} by the binding, {changed} differ");
+
+    // ⚠️ Both frames first. A control that drew nothing would report every
+    // pixel of the fixed frame as changed and look like a triumph.
+    assert!(before > 1_000, "the control barely drew: {before} pixels");
+    assert!(after > 1_000, "the model barely drew: {after} pixels");
+    assert!(
+        changed * 2 > after,
+        "only {changed} of {after} drawn pixels moved — \
+         the two paths are near enough identical to prove nothing"
     );
 }
 

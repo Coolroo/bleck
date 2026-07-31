@@ -394,7 +394,7 @@ mod tests {
 mod texture_tests {
     use super::*;
     use crate::data::gltf;
-    use crate::data::gltf::fixtures::{bare_quad, textured_quad, tiled, QUAD_UVS};
+    use crate::data::gltf::fixtures::{bare_quad, painted_quads, textured_quad, tiled, QUAD_UVS};
     use crate::data::mesh::Mesh;
     use crate::data::texture::Texel;
     use crate::render::fixtures::{covered, flat, head_on, FRAME};
@@ -433,6 +433,15 @@ mod texture_tests {
 
     fn loaded(raw: &[u8]) -> Mesh {
         gltf::parse(raw).expect("fixture parses").into_mesh()
+    }
+
+    /// The surface of a mesh's first shape, for the tests that hand a texture
+    /// straight to `raster` rather than going through `render`.
+    fn only_surface(mesh: &Mesh) -> crate::data::mesh::Surface<'_> {
+        mesh.batches()
+            .next()
+            .and_then(|batch| batch.surface)
+            .expect("a surface")
     }
 
     /// The quad fills screen 31.5..168.5 on both axes, so these four points sit
@@ -533,7 +542,7 @@ mod texture_tests {
     #[test]
     fn a_fully_transparent_masked_texture_leaves_only_the_background() {
         let mesh = loaded(&textured_quad(QUAD_UVS, 1, 1, &[CLEAR]));
-        assert!(mesh.surface().expect("a surface").masked, "MASK not read");
+        assert!(only_surface(&mesh).masked, "MASK not read");
         let image = render(&mesh, &flat(head_on()), FRAME);
         assert_eq!(covered(&image), 0, "a transparent quad was drawn anyway");
     }
@@ -544,7 +553,7 @@ mod texture_tests {
     #[test]
     fn a_discarded_pixel_does_not_hide_what_is_behind_it() {
         let clear = loaded(&textured_quad(QUAD_UVS, 1, 1, &[CLEAR]));
-        let surface = clear.surface().expect("a transparent surface");
+        let surface = only_surface(&clear);
         let corner = |x: f32, y: f32, inv_z: f32| Point { x, y, inv_z };
         let at = |inv_z: f32| {
             [
@@ -581,6 +590,112 @@ mod texture_tests {
             covered(&image) > 5_000,
             "the cut-out claimed the depth buffer and hid the face behind it"
         );
+    }
+
+    /// The set of colours a whole frame is made of, background excluded.
+    ///
+    /// ⚠️ The fixture's quads are coplanar and each carries a single-texel
+    /// image, so one colour here is one image sampled — and the count is
+    /// directly comparable between the two paths below.
+    fn palette(image: &Image) -> Vec<Rgba> {
+        let sky = Background::DarkGrey.pixel(0, 0, image.size());
+        let mut seen: Vec<Rgba> = Vec::new();
+        for y in 0..image.size().height {
+            for x in 0..image.size().width {
+                let pixel = image.pixel(x, y);
+                if pixel != sky && !seen.contains(&pixel) {
+                    seen.push(pixel);
+                }
+            }
+        }
+        seen
+    }
+
+    fn framed(mesh: &Mesh) -> Image {
+        let view = crate::render::View {
+            camera: crate::render::Camera::fit(mesh.bounds()),
+            background: Background::DarkGrey,
+        };
+        render(mesh, &view, FRAME)
+    }
+
+    /// The mesh as the reader built it before D246: whichever material came
+    /// first, stretched over every primitive.
+    ///
+    /// ⚠️ **The control for the test below, and it has to be measured with the
+    /// same ruler.** A colour count that cannot tell the old path from the new
+    /// one proves nothing about either.
+    fn one_image_over_all_of_it(raw: &[u8]) -> Mesh {
+        let mut parts = gltf::parse(raw).expect("fixture parses");
+        for shape in &mut parts.shapes {
+            shape.paint = Some(0);
+        }
+        parts.into_mesh()
+    }
+
+    /// ⛔ **The bug this exists for.** Three primitives, three images: the frame
+    /// must hold three colours, and the old path is shown holding one.
+    #[test]
+    fn each_primitive_is_painted_with_the_image_it_names() {
+        let raw = painted_quads(&[Some(RED), Some(GREEN), Some(BLUE)]);
+
+        let before = palette(&framed(&one_image_over_all_of_it(&raw)));
+        assert_eq!(
+            before.len(),
+            1,
+            "the control did not reproduce the single-image path: {before:?}"
+        );
+        assert_eq!(channels(before[0]), [true, false, false], "{before:?}");
+
+        let after = palette(&framed(&loaded(&raw)));
+        assert_eq!(
+            after.len(),
+            3,
+            "one image was stretched over all three quads: {after:?}"
+        );
+        let mut signatures: Vec<[bool; 3]> = after.iter().map(|pixel| channels(*pixel)).collect();
+        signatures.sort_unstable();
+        assert_eq!(
+            signatures,
+            [
+                [false, false, true],
+                [false, true, false],
+                [true, false, false]
+            ],
+            "the three quads did not sample red, green and blue"
+        );
+    }
+
+    /// A primitive with no material draws flat beside painted ones, rather than
+    /// borrowing the first image at UV (0, 0) — which is what the old path did
+    /// to 24 of `e_lui_robo`'s 92 primitives.
+    #[test]
+    fn an_unpainted_primitive_draws_flat_beside_painted_ones() {
+        let raw = painted_quads(&[Some(RED), None, Some(BLUE)]);
+        let seen = palette(&framed(&loaded(&raw)));
+        assert_eq!(seen.len(), 3, "{seen:?}");
+        assert!(
+            seen.iter()
+                .any(|pixel| channels(*pixel) == [true, true, true]),
+            "no quad was flat-shaded: {seen:?}"
+        );
+    }
+
+    /// ⚠️ **The regression guard for the single-material majority.** 183 of 864
+    /// real models reach exactly one image, and per-primitive binding must not
+    /// cost them it: both primitives here name material 0 and both must paint.
+    #[test]
+    fn a_model_with_one_material_still_paints_every_primitive_with_it() {
+        let raw = painted_quads(&[Some(RED), Some(GREEN)]);
+        let chunks = gltf::split_chunks(&raw).expect("the fixture is a glb");
+        let json = std::str::from_utf8(chunks.json).expect("the JSON chunk is text");
+        let shared = json.replace(r#""material":1"#, r#""material":0"#);
+        let mesh = loaded(&gltf::fixtures::container(&shared, chunks.bin));
+
+        assert_eq!(mesh.paints().len(), 1);
+        let seen = palette(&framed(&mesh));
+        assert_eq!(seen.len(), 1, "the quads disagreed on one image: {seen:?}");
+        assert_eq!(channels(seen[0]), [true, false, false], "{seen:?}");
     }
 
     /// ⚠️ 21% of real models tile their texture, so coordinates well outside

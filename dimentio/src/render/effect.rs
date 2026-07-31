@@ -14,7 +14,7 @@
 use super::camera::Basis;
 use super::{Camera, Rgba};
 use crate::data::effects::Entry;
-use crate::data::mesh::{Bounds, Face, Mesh, Parts, Shape, Uv, Vec3};
+use crate::data::mesh::{Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::Texture;
 
 /// Half the edge of a part's quad, in the units the layout below uses.
@@ -166,7 +166,14 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
     let up = basis.up.scaled(HALF);
     // A bank image is cut-out art with a real alpha channel; without the mask
     // its transparent surround is drawn as a black square around the sprite.
-    let masked = image.is_some();
+    let paints: Vec<Paint> = image
+        .map(|texture| Paint {
+            texture,
+            masked: true,
+        })
+        .into_iter()
+        .collect();
+    let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![
             at - right + up,
@@ -180,6 +187,7 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
             first: 0,
             count: 2,
             visible: true,
+            paint,
         }],
         // Top-left first, matching the corner order above: the sampler puts
         // (0, 0) at the image's top-left, so a different order flips the art.
@@ -189,8 +197,7 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
             Uv::new(1.0, 1.0),
             Uv::new(0.0, 1.0),
         ]),
-        texture: image,
-        masked,
+        paints,
         // A billboard is built fresh from the camera each frame; there is
         // nothing to morph and nothing that would outlive one.
         animation: None,

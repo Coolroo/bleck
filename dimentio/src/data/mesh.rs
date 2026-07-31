@@ -64,6 +64,23 @@ pub struct Entry {
     /// window says otherwise.
     #[serde(default)]
     pub fragment: bool,
+    /// Images the exporter embedded, and primitives it gave a material to —
+    /// both counted by `bleck` from the bytes it had just written (D245).
+    ///
+    /// ⚠️ **This is the only cross-end check on the material chain.** The
+    /// fixtures are written by this crate's own tests and would agree with a
+    /// reader that had it wrong; these two numbers were produced by the other
+    /// program from the same file.
+    ///
+    /// Not shown in the window: the facts row reports what the mesh file
+    /// actually decoded, because a manifest that over-reported was the whole
+    /// failure of D245.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub textures: usize,
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub painted: usize,
     /// ⚠️ Set when `bleck --guess-textures` gave a multi-shape model image 0
     /// anyway. The image is almost certainly the wrong one, so a test asserting
     /// what a texture *looks like* must skip these (D229).
@@ -311,7 +328,8 @@ impl Bounds {
     }
 }
 
-/// One shape of a model: a run of the face list, and whether it is drawn.
+/// One shape of a model: a run of the face list, the image it draws with, and
+/// whether it is drawn at all.
 ///
 /// ⚠️ **The span, not a name.** `bleck` writes one glTF primitive per shape and
 /// the Maya shape names are not bound to them — which name goes with which
@@ -325,6 +343,11 @@ pub struct Shape {
     pub first: usize,
     pub count: usize,
     pub visible: bool,
+    /// Which of the mesh's `paints` this shape samples, or `None` when it draws
+    /// flat. `e_lui_robo` reaches 15 of them across 68 of its 92 shapes, so one
+    /// image over the whole mesh paints most of the robot with a stranger's
+    /// texture (D246).
+    pub paint: Option<usize>,
 }
 
 /// Everything a mesh file can carry, before bounds are measured from it.
@@ -338,10 +361,9 @@ pub(crate) struct Parts {
     pub(crate) shapes: Vec<Shape>,
     /// One per position, when the file carried `TEXCOORD_0`.
     pub(crate) uvs: Option<Vec<Uv>>,
-    pub(crate) texture: Option<Texture>,
-    /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
-    /// below the cutoff is not drawn at all.
-    pub(crate) masked: bool,
+    /// Every image some shape reaches, decoded once each. A shape's `paint`
+    /// indexes this.
+    pub(crate) paints: Vec<Paint>,
     /// The morph targets and clips the file carried, when it carried any.
     pub(crate) animation: Option<Animation>,
 }
@@ -356,14 +378,14 @@ impl Parts {
             first: 0,
             count: faces.len(),
             visible: true,
+            paint: None,
         }];
         Self {
             positions,
             faces,
             shapes,
             uvs: None,
-            texture: None,
-            masked: false,
+            paints: Vec::new(),
             animation: None,
         }
     }
@@ -379,11 +401,34 @@ impl Parts {
             hidden: 0,
             bounds,
             uvs: self.uvs,
-            texture: self.texture,
-            masked: self.masked,
+            paints: self.paints,
             animation: self.animation,
         }
     }
+}
+
+/// One image a mesh draws with, and how its alpha is read.
+///
+/// ⚠️ `masked` belongs to the material, not to the image: two materials can
+/// name the same PNG and treat its alpha differently, so it is held here rather
+/// than once for the whole mesh.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Paint {
+    pub texture: Texture,
+    /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
+    /// below the cutoff is not drawn at all.
+    pub masked: bool,
+}
+
+/// One shape's faces and the surface they are painted with.
+///
+/// ⚠️ **This is what binds a texture, not the mesh.** A model carries as many
+/// images as its shapes reach — 15 on `e_lui_robo` — and a renderer that asked
+/// the mesh for "its" texture would stretch one of them over all 92 (D246).
+#[derive(Debug, Clone, Copy)]
+pub struct Batch<'a> {
+    pub faces: &'a [Face],
+    pub surface: Option<Surface<'a>>,
 }
 
 /// The texture a mesh is painted with, and the coordinates that index it.
@@ -427,8 +472,7 @@ pub struct Mesh {
     hidden: usize,
     bounds: Bounds,
     uvs: Option<Vec<Uv>>,
-    texture: Option<Texture>,
-    masked: bool,
+    paints: Vec<Paint>,
     animation: Option<Animation>,
 }
 
@@ -480,6 +524,11 @@ impl Mesh {
     }
 
     /// The triangles to draw: every one, or only the shapes still shown.
+    ///
+    /// The renderer walks `batches` instead, because a triangle alone does not
+    /// say which image it samples. This is the same set flattened, and a test
+    /// next door holds the two to each other.
+    #[allow(dead_code)]
     pub fn faces(&self) -> &[Face] {
         if self.hidden == 0 {
             &self.faces
@@ -536,13 +585,40 @@ impl Mesh {
             .collect();
     }
 
-    /// What to paint this mesh with, or `None` when it is untextured — 277 of
-    /// 864 real models are, and they are drawn flat-shaded.
-    pub fn surface(&self) -> Option<Surface<'_>> {
+    /// Every image this mesh draws with, in the order its shapes first reach
+    /// them. Empty when it is untextured — 41 of 864 real models are, and they
+    /// are drawn flat-shaded.
+    pub fn paints(&self) -> &[Paint] {
+        &self.paints
+    }
+
+    /// The triangles to draw, grouped by the image each shape samples.
+    ///
+    /// ⚠️ Hidden shapes are left out, so this and `faces` describe the same
+    /// triangles — `redraw` concatenates exactly these runs.
+    pub fn batches(&self) -> impl Iterator<Item = Batch<'_>> + '_ {
+        self.shapes
+            .iter()
+            .filter(|shape| shape.visible)
+            .map(move |shape| Batch {
+                faces: self
+                    .faces
+                    .get(shape.first..shape.first + shape.count)
+                    .unwrap_or_default(),
+                surface: self.surface_of(*shape),
+            })
+    }
+
+    /// What one shape is painted with, or `None` when it draws flat.
+    ///
+    /// Only handed out when the image and the coordinates are both there, so
+    /// the rasteriser cannot reach a half-textured shape.
+    fn surface_of(&self, shape: Shape) -> Option<Surface<'_>> {
+        let paint = self.paints.get(shape.paint?)?;
         Some(Surface {
-            texture: self.texture.as_ref()?,
+            texture: &paint.texture,
             uvs: self.uvs.as_deref()?,
-            masked: self.masked,
+            masked: paint.masked,
         })
     }
 
