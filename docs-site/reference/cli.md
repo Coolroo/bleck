@@ -161,6 +161,79 @@ An index is a **position in the order the map registers its doors**, not an id
 and nothing visible in game. `bleck` checks it when building, so a selector that
 can never match is an error rather than a silent no-op at run time.
 
+### `bleck model`
+
+```bash
+bleck model list [--search <text>] [--limit <n>]
+bleck model export [--out <dir>] [--search <text>]
+```
+
+The game's character geometry. `list` shows every model whose mesh can be read;
+`export` writes each as a Wavefront OBJ, plus a `models.json` manifest that
+[Dimentio](#dimentio-and-the-manifests) reads.
+
+```
+$ bleck model list --search mario --limit 3
+p_wii_mario              R_Arm_skinShape                     324 verts     96 faces
+```
+
+Positions and normals are float32, and faces are polygons — mostly quads and
+triangles, with occasional n-gons — fanned into triangles on export. **864** of
+the disc's models read; the six that fail a consistency check are skipped rather
+than exported as noise.
+
+!!! warning "One shape per file, for now"
+
+    A character file holds several shapes and only the first is read, so an
+    exported OBJ is a **part of a model** rather than a whole character.
+    Animation is not decoded at all — the clips have names and nothing to play.
+
+### `bleck effect`
+
+```bash
+bleck effect list [--search <text>] [--limit <n>]
+bleck effect show <name> [--limit <n>]
+bleck effect export [--out <dir>]
+```
+
+The 139 effects in `files/eff/effdata.dat` — what each is assembled from, how
+long each part lasts, and the transform rows that place them.
+
+```
+$ bleck effect show chaos
+chaos  (4 part(s))
+  part   61  chaosA                              0  181
+  part   62  chaosC                              1   61
+  row   497     0.0000     0.0000     1.0000     0.0000  unit
+  row   498     0.3090     0.9511     0.0000     0.0000  unit
+```
+
+The fourth column is a **duration in frames** at 60 Hz, counted inclusively —
+181 is three seconds, 61 is one.
+
+!!! warning "Which image a part draws is not known"
+
+    An effect's images are the 219 in `files/eff/effdata.tpl`, which
+    `bleck texture export` writes out. **Nothing yet says which of them a given
+    part uses.** Six candidate fields have been ruled out; the structure,
+    timing and image bank are all readable, and the binding between them is not.
+
+### Dimentio, and the manifests
+
+`texture export`, `model export` and `effect export` each write a JSON manifest
+beside their output. Point all three at one folder and Dimentio — the asset
+viewer that ships in this repo — can open it:
+
+```bash
+bleck texture export --out work/export
+bleck model export   --out work/export
+bleck effect export  --out work/export
+```
+
+The manifest is the contract, not the directory listing: a filename cannot say
+which disc file an asset came from, which archive member, or what format it was
+stored in.
+
 ## Archives
 
 ### `bleck ls`
