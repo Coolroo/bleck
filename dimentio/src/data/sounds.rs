@@ -73,6 +73,21 @@ impl Entry {
         )
     }
 
+    /// What a copy puts on the clipboard.
+    ///
+    /// ⚠️ The track's name, not the exported WAV's path. `name` is what this
+    /// track is called everywhere else; the WAV is a temporary file on one
+    /// machine.
+    pub fn copy_text(&self) -> String {
+        self.name.clone()
+    }
+
+    /// The disc file the track was decoded from, for the exports that recorded
+    /// one.
+    pub fn source_text(&self) -> Option<String> {
+        (!self.source.is_empty()).then(|| self.source.clone())
+    }
+
     /// The loop point in seconds, for the tracks that have one. `loop_start` is
     /// counted in sample frames, so it means nothing without the rate.
     pub fn loop_seconds(&self) -> Option<f32> {
@@ -382,6 +397,37 @@ mod tests {
         assert_eq!(library.matching("FLOWER"), vec![0]);
         assert_eq!(library.matching("brstm"), vec![0, 1], "the disc path");
         assert!(library.matching("dimentio").is_empty());
+    }
+
+    /// ⚠️ The name, not the WAV. The exported file is a temporary on one
+    /// machine, so a clipboard full of those paths names nothing anyone else
+    /// can look up.
+    #[test]
+    fn a_track_copies_its_name_and_the_disc_file_behind_it() {
+        let (_scratch, library) = library();
+        let flower = &library.entries()[0];
+        assert_eq!(flower.copy_text(), "b_happy_flower_44k_lp");
+        assert_eq!(
+            flower.source_text(),
+            Some("files/sound/b_happy_flower_44k_lp.brstm".to_owned())
+        );
+        assert_ne!(
+            flower.copy_text(),
+            flower.path.display().to_string(),
+            "the export's own file is not what names this track"
+        );
+    }
+
+    /// A "Copy source path" that put nothing on the clipboard reads as a copy
+    /// that failed.
+    #[test]
+    fn a_track_with_no_source_offers_nothing_for_it() {
+        let bare = Entry {
+            name: "b_nowhere".to_owned(),
+            ..Default::default()
+        };
+        assert_eq!(bare.copy_text(), "b_nowhere");
+        assert_eq!(bare.source_text(), None);
     }
 
     #[test]

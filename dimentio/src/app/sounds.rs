@@ -12,6 +12,7 @@ use std::path::Path;
 
 use eframe::egui;
 
+use super::clipboard::{copy_button, Asset};
 use super::{audio, Viewer};
 use crate::data::{self, sounds, wav};
 use crate::render;
@@ -215,7 +216,13 @@ impl Viewer {
                         };
                         let label = format!("{}  ·  {:.1}s", entry.name, entry.seconds);
                         let row = ui.selectable_label(selected == Some(index), label);
-                        if row.on_hover_text(entry.describe()).clicked() {
+                        let source = entry.source_text();
+                        let asset = Asset::sourced(&entry.name, source.as_deref());
+                        asset.menu(&row);
+                        if row
+                            .on_hover_text(format!("{}\n{}", entry.describe(), asset.hint()))
+                            .clicked()
+                        {
                             picked = Some(index);
                         }
                     }
@@ -309,7 +316,10 @@ impl Viewer {
         };
 
         ui.add_space(4.0);
-        ui.heading(&entry.name);
+        ui.horizontal(|ui| {
+            ui.heading(&entry.name);
+            copy_button(ui, "name", &entry.copy_text());
+        });
         ui.add_space(4.0);
         Self::sound_facts(ui, &entry, self.sounds.loaded.as_ref());
         if let Some(note) = self.sounds.note.clone() {
@@ -335,10 +345,12 @@ impl Viewer {
     /// hold. Both, because a manifest that disagrees with its own WAV is the
     /// one thing a viewer can catch that an exporter cannot.
     fn sound_facts(ui: &mut egui::Ui, entry: &sounds::Entry, loaded: Option<&Loaded>) {
+        let source = entry.source_text();
+        let asset = Asset::sourced(&entry.name, source.as_deref());
         ui.horizontal_wrapped(|ui| {
-            Self::inline_fact(ui, "rate", &format!("{} Hz", entry.rate));
+            asset.inline(ui, "rate", &format!("{} Hz", entry.rate));
             ui.separator();
-            Self::inline_fact(
+            asset.inline(
                 ui,
                 "channels",
                 &format!(
@@ -348,22 +360,22 @@ impl Viewer {
                 ),
             );
             ui.separator();
-            Self::inline_fact(ui, "duration", &format!("{:.3}s", entry.seconds));
+            asset.inline(ui, "duration", &format!("{:.3}s", entry.seconds));
             ui.separator();
             match entry.loop_seconds() {
-                Some(at) => Self::inline_fact(ui, "loops", &format!("from {at:.3}s")),
-                None => Self::inline_fact(ui, "loops", "no"),
+                Some(at) => asset.inline(ui, "loops", &format!("from {at:.3}s")),
+                None => asset.inline(ui, "loops", "no"),
             }
             ui.separator();
-            Self::inline_fact(ui, "source", &entry.source);
+            asset.inline(ui, "source", &entry.source);
         });
         if let Some(loaded) = loaded {
             ui.horizontal_wrapped(|ui| {
-                Self::inline_fact(ui, "decoded", &format!("{:.3}s", loaded.audio.seconds()));
+                asset.inline(ui, "decoded", &format!("{:.3}s", loaded.audio.seconds()));
                 ui.separator();
-                Self::inline_fact(ui, "frames", &loaded.audio.frames().to_string());
+                asset.inline(ui, "frames", &loaded.audio.frames().to_string());
                 ui.separator();
-                Self::inline_fact(ui, "peak", &format!("{:.3}", loaded.envelope.peak()));
+                asset.inline(ui, "peak", &format!("{:.3}", loaded.envelope.peak()));
             });
         }
         if entry.capped {

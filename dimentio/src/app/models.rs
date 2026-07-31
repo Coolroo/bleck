@@ -9,6 +9,7 @@ use std::path::Path;
 
 use eframe::egui;
 
+use super::clipboard::Asset;
 use super::Viewer;
 use crate::data::{self, mesh};
 use crate::render;
@@ -163,7 +164,13 @@ impl Viewer {
                             format!("{}  ·  {}", entry.name, entry.shape)
                         };
                         let row = ui.selectable_label(selected == Some(index), label);
-                        if row.on_hover_text(entry.describe()).clicked() {
+                        let source = entry.source_text();
+                        let asset = Asset::sourced(&entry.name, source.as_deref());
+                        asset.menu(&row);
+                        if row
+                            .on_hover_text(format!("{}\n{}", entry.describe(), asset.hint()))
+                            .clicked()
+                        {
                             picked = Some(index);
                         }
                     }
@@ -193,22 +200,26 @@ impl Viewer {
             .mesh
             .surface()
             .map(|surface| format!("{}x{}", surface.texture.width(), surface.texture.height()));
+        let source = entry.source_text();
+        let asset = Asset::sourced(&entry.name, source.as_deref());
         egui::TopBottomPanel::bottom("model-facts").show(ctx, |ui| {
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                Self::inline_fact(ui, "source", &entry.source);
+            ui.horizontal_wrapped(|ui| {
+                asset.inline(ui, "name", &entry.copy_text());
                 ui.separator();
-                Self::inline_fact(ui, "shape", &entry.shape);
+                asset.inline(ui, "source", &entry.source);
                 ui.separator();
-                Self::inline_fact(ui, "verts", &entry.positions.to_string());
+                asset.inline(ui, "shape", &entry.shape);
                 ui.separator();
-                Self::inline_fact(ui, "faces", &entry.faces.to_string());
+                asset.inline(ui, "verts", &entry.positions.to_string());
                 ui.separator();
-                Self::inline_fact(ui, "tris", &entry.triangles.to_string());
+                asset.inline(ui, "faces", &entry.faces.to_string());
                 ui.separator();
-                Self::inline_fact(ui, "extent", &entry.extent());
+                asset.inline(ui, "tris", &entry.triangles.to_string());
                 ui.separator();
-                Self::inline_fact(ui, "texture", painted.as_deref().unwrap_or("none"));
+                asset.inline(ui, "extent", &entry.extent());
+                ui.separator();
+                asset.inline(ui, "texture", painted.as_deref().unwrap_or("none"));
                 if entry.fragment {
                     ui.separator();
                     ui.label(
@@ -235,7 +246,7 @@ impl Viewer {
     /// selection leaves a model either off-screen or a speck, since exported
     /// models are in the game's units and differ in size by orders of
     /// magnitude.
-    fn select_model(&mut self, index: usize) {
+    pub(super) fn select_model(&mut self, index: usize) {
         let Some(path) = self
             .models
             .library

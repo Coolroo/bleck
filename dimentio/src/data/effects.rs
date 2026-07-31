@@ -56,6 +56,13 @@ impl Entry {
         format!("{} part(s) · {:.2}s", self.parts.len(), self.seconds)
     }
 
+    /// What a copy puts on the clipboard: the name the game's own code calls
+    /// this effect by, which is what someone reading that code has to search
+    /// for. Not the table position, which is meaningless on its own.
+    pub fn copy_text(&self) -> String {
+        self.name.clone()
+    }
+
     /// Total frames, derived from the duration rather than read: the export
     /// records seconds per effect and frames only per part.
     pub fn frames(&self) -> u32 {
@@ -105,6 +112,20 @@ impl Part {
 
     pub fn describe(&self) -> String {
         format!("{} frames · {:.2}s", self.frames, self.seconds)
+    }
+
+    /// What a copy puts on the clipboard.
+    ///
+    /// ⚠️ The composed name, not the suffix. `name` is `A` or `C` on its own
+    /// and names nothing outside the effect it belongs to; `composed` is what
+    /// the game looks a part up by. An export that recorded no composed name
+    /// falls back to the suffix, which is all there is.
+    pub fn copy_text(&self) -> String {
+        if self.composed.is_empty() {
+            self.name.clone()
+        } else {
+            self.composed.clone()
+        }
     }
 }
 
@@ -510,6 +531,35 @@ mod tests {
         assert_eq!(play.time, 0.0);
         play.rewind();
         assert_eq!(play.time, 0.0);
+    }
+
+    /// ⚠️ The composed name, not the suffix. `A` names nothing outside the
+    /// effect it belongs to; `chaosA` is what the game looks a part up by and
+    /// what someone reading the game's code has to search for.
+    #[test]
+    fn a_part_copies_the_composed_name_rather_than_its_suffix() {
+        let library = library();
+        let chaos = &library.entries()[1];
+        assert_eq!(chaos.copy_text(), "chaos");
+        assert_eq!(chaos.parts[0].copy_text(), "chaosA");
+        assert_ne!(chaos.parts[0].copy_text(), chaos.parts[0].name);
+        assert_ne!(
+            chaos.copy_text(),
+            chaos.index.to_string(),
+            "a table position names nothing on its own"
+        );
+    }
+
+    /// An export that recorded no composed name leaves the suffix, which is
+    /// all there is to copy.
+    #[test]
+    fn a_part_with_no_composed_name_falls_back_to_the_suffix() {
+        let bare = Part {
+            name: "A".to_owned(),
+            composed: String::new(),
+            ..Default::default()
+        };
+        assert_eq!(bare.copy_text(), "A");
     }
 
     #[test]

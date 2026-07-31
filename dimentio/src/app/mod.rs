@@ -8,6 +8,10 @@
 //!
 //! ⛔ `audio` is the only module that touches a sound device, and every
 //! `rodio` type stays inside it.
+//!
+//! Copying a name to the clipboard is one idiom, and it lives in `clipboard`:
+//! all four modes reach for the same `Asset`, so a row copies the same way
+//! whichever list it is in.
 
 use eframe::egui;
 
@@ -15,11 +19,13 @@ use crate::data;
 use crate::render;
 
 mod audio;
+mod clipboard;
 mod effects;
 mod models;
 mod sounds;
 mod textures;
 
+use clipboard::copy_note;
 use effects::EffectPane;
 use models::ModelPane;
 use sounds::SoundPane;
@@ -209,6 +215,7 @@ impl Viewer {
                     Mode::Effects => self.effect_controls(ui),
                     Mode::Sounds => self.sound_controls(ui),
                 }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), copy_note);
             });
             ui.add_space(4.0);
         });
@@ -224,18 +231,6 @@ impl Viewer {
         if leaving == Mode::Sounds && self.mode != Mode::Sounds {
             self.stop_sound();
         }
-    }
-
-    fn fact(ui: &mut egui::Ui, key: &str, value: &str) {
-        Self::inline_fact(ui, key, value);
-        ui.end_row();
-    }
-
-    /// The same pair without `end_row`, which in a horizontal layout would
-    /// wrap the strip onto a second line instead of ending a grid row.
-    fn inline_fact(ui: &mut egui::Ui, key: &str, value: &str) {
-        ui.label(egui::RichText::new(key).weak());
-        ui.label(egui::RichText::new(value).monospace());
     }
 
     /// Drag orbits, scroll zooms. Reports whether the camera moved, which is
@@ -320,6 +315,22 @@ mod tests {
        "width": 64, "height": 64, "source": "files/map/aa1_01.tpl"}
     ]}"#;
 
+    /// ⚠️ The second model carries no `source`, which is the row that proves a
+    /// "Copy source path" is left off rather than offered as an empty string.
+    const MODELS: &str = r#"{"schema": 1, "models": [
+      {"name": "files/a/e_kuribo.dat", "shape": "kuriboShape", "file": "kuribo.obj",
+       "source": "files/a/e_kuribo.dat", "positions": 3, "faces": 1,
+       "triangles": 1, "coverage": 1.0, "fragment": false,
+       "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]},
+      {"name": "files/a/sourceless.dat", "shape": "", "file": "sourceless.obj",
+       "positions": 3, "faces": 1, "triangles": 1, "coverage": 1.0,
+       "fragment": false, "min": [0.0, 0.0, 0.0], "max": [1.0, 1.0, 0.0]}
+    ]}"#;
+
+    /// The smallest thing the OBJ reader accepts, so a selected model has real
+    /// geometry to frame and rasterise.
+    const TRIANGLE: &str = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
+
     /// Four rows covering the shapes the panel has to survive: a track that
     /// plays, a shorter one, a file this program refuses, and one with no
     /// samples at all.
@@ -351,6 +362,10 @@ mod tests {
         std::fs::write(root.join("effects.json"), EFFECTS).expect("effects.json");
         std::fs::write(root.join("textures.json"), TEXTURES).expect("textures.json");
         std::fs::write(root.join("sounds.json"), SOUNDS).expect("sounds.json");
+        std::fs::write(root.join("models.json"), MODELS).expect("models.json");
+        for name in ["kuribo.obj", "sourceless.obj"] {
+            std::fs::write(root.join(name), TRIANGLE).expect("a real obj");
+        }
         let texel = crate::data::texture::Texel {
             r: 0,
             g: 220,
@@ -737,5 +752,61 @@ mod tests {
         viewer.choose_image(image);
         assert_eq!(viewer.effects.stage.previewing(), None);
         draw(&mut viewer, &ctx);
+    }
+
+    /// One egui frame with every texture panel in it, and no window anywhere.
+    fn draw_textures(viewer: &mut Viewer, ctx: &egui::Context) {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            viewer.top_bar(ctx);
+            viewer.detail_panel(ctx);
+            egui::CentralPanel::default().show(ctx, |ui| viewer.grid(ui));
+        });
+    }
+
+    /// One egui frame with every model panel in it, and no window anywhere.
+    fn draw_models(viewer: &mut Viewer, ctx: &egui::Context) {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            viewer.top_bar(ctx);
+            viewer.model_list(ctx);
+            viewer.model_facts(ctx);
+            egui::CentralPanel::default().show(ctx, |ui| viewer.viewport(ui));
+        });
+    }
+
+    /// All four tabs, laid out with the copy widgets in them.
+    ///
+    /// ⚠️ Every one of these is a layout change: a fact row now holds a
+    /// frameless button and a copy button where it held a label, a grid cell
+    /// holds two widgets instead of one, and each row carries a context menu.
+    /// Layout is the only part of this window anything here can see.
+    #[test]
+    fn every_tab_lays_out_with_the_copy_widgets_present() {
+        let mut viewer = Viewer::empty();
+        viewer.open(export_folder("copy-layout"));
+        let ctx = egui::Context::default();
+
+        assert_eq!(viewer.catalog.len(), 2);
+        draw_textures(&mut viewer, &ctx);
+        viewer.selected = Some(0);
+        draw_textures(&mut viewer, &ctx);
+
+        viewer.mode = Mode::Models;
+        assert_eq!(viewer.models.library.len(), 2);
+        draw_models(&mut viewer, &ctx);
+        viewer.select_model(0);
+        draw_models(&mut viewer, &ctx);
+        // ⚠️ The row with no `source`. Its facts strip and its menu must come
+        // out one item shorter rather than offering an empty path.
+        viewer.select_model(1);
+        assert!(viewer.models.library.entries()[1].source_text().is_none());
+        draw_models(&mut viewer, &ctx);
+
+        viewer.mode = Mode::Effects;
+        viewer.select_effect(0);
+        draw(&mut viewer, &ctx);
+
+        viewer.mode = Mode::Sounds;
+        viewer.select_sound(0);
+        draw_sounds(&mut viewer, &ctx, STEP);
     }
 }

@@ -3,6 +3,7 @@
 
 use eframe::egui;
 
+use super::clipboard::{copy_button, Asset};
 use super::{Viewer, PAD};
 
 /// Thumbnail edge, in points. Small enough that a few hundred fit on screen.
@@ -63,16 +64,21 @@ impl Viewer {
                         .maintain_aspect_ratio(true),
                 );
                 ui.add_space(12.0);
+                let source = entry.source_text();
+                let asset = Asset::sourced(&entry.name, source.as_deref());
                 egui::Grid::new("facts").num_columns(2).show(ui, |ui| {
-                    Self::fact(ui, "size", &format!("{}x{}", entry.width, entry.height));
-                    Self::fact(ui, "format", &entry.format);
-                    Self::fact(ui, "source", &entry.source);
+                    asset.row(ui, "size", &format!("{}x{}", entry.width, entry.height));
+                    asset.row(ui, "format", &entry.format);
+                    asset.row(ui, "source", &entry.source);
                     if !entry.member.is_empty() {
-                        Self::fact(ui, "member", &entry.member);
+                        asset.row(ui, "member", &entry.member);
                     }
                 });
                 ui.add_space(8.0);
-                ui.label(egui::RichText::new(&entry.name).monospace().small());
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(egui::RichText::new(&entry.name).monospace().small());
+                    copy_button(ui, "name", &entry.copy_text());
+                });
                 ui.add_space(8.0);
                 if ui.button("close").clicked() {
                     self.selected = None;
@@ -130,6 +136,14 @@ impl Viewer {
         if response.clicked() {
             self.selected = Some(index);
         }
-        response.on_hover_text(format!("{}\n{}", entry.name, entry.describe()));
+        let source = entry.source_text();
+        let asset = Asset::sourced(&entry.name, source.as_deref());
+        asset.menu(&response);
+        response.on_hover_text(format!(
+            "{}\n{}\n{}",
+            entry.name,
+            entry.describe(),
+            asset.hint()
+        ));
     }
 }

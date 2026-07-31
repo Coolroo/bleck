@@ -14566,3 +14566,48 @@ So the BRSTM header's rate field is authoritative, and `bleck` already uses it.
 it does is close off the alias theory with evidence rather than leaving it as a
 plausible untested idea — the same service D210's refuted list performs for the
 effect binding.
+
+## D231 — Copying an asset name, and a test that D229 quietly invalidated (2026-07-31)
+
+✅ **Every asset name is copyable.** Right-click any list row, bank thumbnail or
+fact value for "Copy name", plus "Copy source path" where a disc file exists;
+left-click a fact value copies it; a 📋 button sits beside each one, and a
+short-lived note in the top bar confirms the copy. All four tabs, one idiom, in
+`app/clipboard.rs`.
+
+⚠️ **The idiom lives in exactly one module on purpose.** Four tabs copying four
+slightly different ways is how "copy name" quietly becomes "copy the filename"
+in one of them.
+
+### The testable part is the decision, not the call
+
+`Context::copy_text` hands a string to the window host and nothing in-process
+reads an OS clipboard back. So *what text a copy produces* is a pure function
+per asset kind — `copy_text` / `source_text` — and those are unit-tested;
+the egui call is one line. ⛔ **The clipboard write itself is unverified and
+cannot be verified here.**
+
+Mutation-tested twice. Returning the path instead of the name fails 2 tests;
+six mutations at once fail 7, including the headless layout test, which caught
+a `source_text` mutation through a deliberately sourceless model row in the
+fixture.
+
+### ⛔ A test D229 had already invalidated
+
+`most_real_models_carry_a_texture_the_decoder_understands` asserted that **most**
+models are textured. That stopped being true the moment multi-shape models
+stopped being painted with image 0 (D229): 71 textured, 793 bare.
+
+⚠️ **It was reported as "pre-existing" and it was — but it was my change that
+broke it**, one step earlier in the same session. A test naming an expectation
+that a later decision reverses does not announce itself; it just starts
+failing, and the temptation is to read it as someone else's problem. It now
+asserts what is actually true — a textured *minority* — and is renamed to say
+so.
+
+### Layout
+
+`app/mod.rs` reached 1,073 lines with the helper inline, so the idiom moved to
+`app/clipboard.rs` (mod.rs now 812). `data/mesh.rs` hit 1,045 with the new
+tests, so its real-export tests moved to a sibling behind `#[path]`, keeping the
+module path unchanged. Largest module is now 910.

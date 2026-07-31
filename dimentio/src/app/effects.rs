@@ -6,6 +6,7 @@ use std::path::Path;
 
 use eframe::egui;
 
+use super::clipboard::{copy_button, Asset};
 use super::{Viewer, PAD};
 use crate::data::{self, effects, texture};
 use crate::render;
@@ -209,7 +210,12 @@ impl Viewer {
                         };
                         let label = format!("{}  ·  {:.2}s", entry.name, entry.seconds);
                         let row = ui.selectable_label(selected == Some(index), label);
-                        if row.on_hover_text(entry.describe()).clicked() {
+                        let asset = Asset::named(&entry.name);
+                        asset.menu(&row);
+                        if row
+                            .on_hover_text(format!("{}\n{}", entry.describe(), asset.hint()))
+                            .clicked()
+                        {
                             picked = Some(index);
                         }
                     }
@@ -259,17 +265,21 @@ impl Viewer {
             return;
         };
 
-        ui.add_space(4.0);
-        ui.heading(&entry.name);
+        let asset = Asset::named(&entry.name);
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            Self::inline_fact(ui, "index", &entry.index.to_string());
+            ui.heading(&entry.name);
+            copy_button(ui, "name", &entry.copy_text());
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            asset.inline(ui, "index", &entry.index.to_string());
             ui.separator();
-            Self::inline_fact(ui, "parts", &entry.parts.len().to_string());
+            asset.inline(ui, "parts", &entry.parts.len().to_string());
             ui.separator();
-            Self::inline_fact(ui, "rows", &entry.rows.len().to_string());
+            asset.inline(ui, "rows", &entry.rows.len().to_string());
             ui.separator();
-            Self::inline_fact(
+            asset.inline(
                 ui,
                 "duration",
                 &format!("{:.3}s · {} frames", entry.seconds, entry.frames()),
@@ -464,7 +474,8 @@ impl Viewer {
                     };
                     ui.label(mark);
                     ui.label(part.name.as_str()).on_hover_text(part.describe());
-                    ui.label(egui::RichText::new(part.composed.as_str()).monospace());
+                    let composed = part.copy_text();
+                    Asset::named(&composed).value(ui, "part name", &composed);
                     ui.label(egui::RichText::new(part.index.to_string()).monospace());
                     ui.label(egui::RichText::new(part.frames.to_string()).monospace());
                     ui.label(egui::RichText::new(format!("{:.3}", part.seconds)).monospace());
@@ -562,9 +573,17 @@ impl Viewer {
                                     .maintain_aspect_ratio(true),
                             )
                             .selected(marked == Some(index));
-                            if ui
-                                .add(thumb)
-                                .on_hover_text(format!("{}\n{}", entry.name, entry.describe()))
+                            let shown = ui.add(thumb);
+                            let source = entry.source_text();
+                            let asset = Asset::sourced(&entry.name, source.as_deref());
+                            asset.menu(&shown);
+                            if shown
+                                .on_hover_text(format!(
+                                    "{}\n{}\n{}",
+                                    entry.name,
+                                    entry.describe(),
+                                    asset.hint()
+                                ))
                                 .clicked()
                             {
                                 picked = Some(index);

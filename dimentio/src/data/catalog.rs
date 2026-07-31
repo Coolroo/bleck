@@ -51,6 +51,21 @@ impl Entry {
     pub fn describe(&self) -> String {
         format!("{}x{} {}", self.width, self.height, self.format)
     }
+
+    /// What a copy puts on the clipboard.
+    ///
+    /// ⚠️ The stable identifier, not the exported PNG's path. `name` is what
+    /// this image is called everywhere else — in `bleck`'s own output, in a
+    /// manifest, in a bug report — and the PNG is a temporary file on one
+    /// machine.
+    pub fn copy_text(&self) -> String {
+        self.name.clone()
+    }
+
+    /// The disc file behind the image, for the exports that recorded one.
+    pub fn source_text(&self) -> Option<String> {
+        (!self.source.is_empty()).then(|| self.source.clone())
+    }
 }
 
 /// Why a folder produced nothing, so the window can say which.
@@ -160,5 +175,56 @@ impl Catalog {
             })
             .map(|(index, _)| index)
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(name: &str, source: &str) -> Entry {
+        Entry {
+            name: name.to_owned(),
+            path: PathBuf::from("0001.png"),
+            format: "CMPR".to_owned(),
+            width: 64,
+            height: 64,
+            source: source.to_owned(),
+            member: String::new(),
+        }
+    }
+
+    /// ⚠️ The name, not the PNG. The exported file is a temporary on one
+    /// machine, so a clipboard full of those paths names nothing anyone else
+    /// can look up.
+    #[test]
+    fn a_texture_copies_its_name_and_the_disc_file_behind_it() {
+        let shown = entry("files/eff/effdata.tpl#0", "files/eff/effdata.tpl");
+        assert_eq!(shown.copy_text(), "files/eff/effdata.tpl#0");
+        assert_eq!(
+            shown.source_text(),
+            Some("files/eff/effdata.tpl".to_owned())
+        );
+        assert_ne!(
+            shown.copy_text(),
+            shown.path.display().to_string(),
+            "the export's own file is not what names this image"
+        );
+    }
+
+    /// Some catalog rows carry no source at all, and a "Copy source path" that
+    /// put nothing on the clipboard reads as a copy that failed.
+    #[test]
+    fn a_texture_with_no_source_offers_nothing_for_it() {
+        assert_eq!(entry("loose.png#0", "").source_text(), None);
+    }
+
+    /// Disc paths are plain ASCII and go to the clipboard as they are stored.
+    /// Nothing is escaped, quoted or trimmed on the way.
+    #[test]
+    fn a_name_is_copied_exactly_as_the_manifest_holds_it() {
+        let odd = entry("files/map/aa1_01.tpl#12 (dup)", "files/map/aa1_01.tpl");
+        assert_eq!(odd.copy_text(), "files/map/aa1_01.tpl#12 (dup)");
+        assert_eq!(odd.source_text().as_deref(), Some("files/map/aa1_01.tpl"));
     }
 }
