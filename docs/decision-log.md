@@ -14276,3 +14276,53 @@ rather than skipping.
 
 ⛔ **Nobody has looked at the window.** The two-column split, the tooltip and
 the combo box have never been seen rendered.
+
+## D226 — The music decodes, and a listener says it is still too fast (2026-07-30)
+
+✅ **135 BRSTM streams read**, 56.5 minutes of DSP-ADPCM out as WAV via
+`bleck sound list` / `sound export`. ⛔ No audio ships with `bleck`; this reads
+the user's own disc like every other path.
+
+### What the format needed
+
+- ⚠️ **Every `HEAD` part offset is relative to `HEAD + 8`.** Treated as file
+  offsets they land inside the audio.
+- ⚠️ **The channel table is two hops**, not one: a per-channel entry points at
+  an info struct whose *own* second word points at the 16 coefficients.
+- ⛔ **Three final-block fields at `+0x20`/`+0x24`/`+0x28` are size, samples,
+  padded** — and reading them as size, padded, samples truncated every track.
+  It also uses the *padded* size as the channel stride in that block, not the
+  real one.
+
+### Verified
+
+- **Adjacent-sample correlation 0.67–0.96** against a shuffled control of
+  ~0.00. A wrong ADPCM decode gives samples of the right count, range and rate
+  that play as static; this is what separates the two.
+- Decoded sample counts now match every header exactly.
+- **L/R correlation 0.65–0.92**, so the two channels are genuinely left and
+  right — not sequential halves of one stream, which would have played double
+  speed.
+- Estimated tempos of 60–187 BPM at the stated rates; halving them gives 30–36
+  BPM, which is not music.
+
+### ⛔ And a listener still reports it "definitely sped up"
+
+Every structural check passes and a person says the pitch is wrong, so
+something is wrong that none of these measures can see. What is ruled out:
+
+| | |
+|---|---|
+| rate misread | ⛔ the field is plainly `0xAC44` = 44100, `0x7D00` = 32000 |
+| channels are time-halves | ⛔ L/R correlation is 0.65–0.92 |
+| 2x too fast | ⛔ halved tempos are 30–36 BPM |
+| dropped samples | ⛔ counts match the header exactly |
+
+⚠️ **The ADPC seek table does not corroborate the decode**, and that is the one
+outstanding lead. Its values appear *nowhere* in the decoded stream at any
+granularity tried. The chunk holds 406 entries for a 26-block file, so the
+table's layout is not understood — it may be the instrument that is wrong, or
+it may be pointing at a real defect the ear is hearing.
+
+**Next:** three copies of one jingle at different rates went to the listener.
+Whichever sounds right gives the exact factor, and the factor names the bug.
