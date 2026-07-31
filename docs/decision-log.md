@@ -12852,3 +12852,44 @@ would have said "found it" or "not there" and neither would have been the truth.
 ⚠️ Recorded as method: a wide first measurement with two independent marks cost
 the same single run as a narrow one and answered a question that had already
 consumed two.
+
+---
+
+## D200 — Only the header is relocated; the index sections are untouched (2026-07-30)
+
+D199 asked what else the loader rewrites, and raised it as the likely
+explanation for D196's stall. ⛔ **The answer is nothing.**
+
+Sections 7, 8 and 10 were read out of a running game and compared byte for byte
+against the file on disc:
+
+| section | live vs disc |
+|---|---|
+| header (16 words) | ⚠️ **relocated** — offsets become pointers |
+| 7 — group records | ✅ identical |
+| 8 — entry records | ✅ identical |
+| 10 — command pairs | ✅ identical |
+
+So the loader touches the header and nothing else in the index sections. ⚠️ The
+base moved between runs too — `0x91E66F40` then `0x91E66FE0` — confirming a heap
+allocation, and the relocation held at both.
+
+### What that settles
+
+🔶 **D196's stall is not a relocation artefact.** Section 8's `offset` field is
+always a multiple of 32, stops at 64,960, and is *the same number* in memory as
+on disc. It genuinely addresses something by offset, and picking between
+sections 9, 11 and 13 on 86-90% fill remains a coin toss that should not be
+taken.
+
+✅ The useful half is that `bleck`'s reading of these sections is confirmed
+against live memory. Anything built on them is standing on measured ground.
+
+### ⚠️ The wide dump earned its keep again
+
+One run covered three sections. A probe aimed at section 8 alone — the one the
+hypothesis was about — would have returned "identical" and left sections 7 and
+10 open, costing another run to close a question this one closed for free.
+
+That is three runs in a row where breadth cost nothing and narrowness would
+have cost a cycle (D198, D199, this). Recorded as method, not as a preference.

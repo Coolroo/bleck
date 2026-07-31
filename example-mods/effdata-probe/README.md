@@ -13,6 +13,10 @@ uv run python scripts/ingame.py effdata-probe --words 26 --seconds 90     --mods
 sixteen section offsets are rewritten to absolute pointers, so
 `header[n] == buffer + offset[n]` for 16 of 16 (D199).
 
+✅ **And nothing else is.** Sections 7, 8 and 10 are byte-identical live and on
+disc (D200), which confirms `bleck`'s reading of them against real memory and
+rules out relocation as the explanation for the fields that remain undecoded.
+
 ⚠️ That means a memory dump and a disc read of the same file show sixteen
 numbers that look nothing alike and are the same sixteen facts.
 
