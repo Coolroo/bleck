@@ -13494,3 +13494,33 @@ means a record is not simply one shape.
 ⚠️ **Nothing in `bleck` reads these yet.** `mesh()` still returns the single
 front-of-file shape, and still reports its coverage honestly. This is a located
 lead, not a decode.
+
+### D212 addendum — the chain holds no normals, so it is not the missing geometry (2026-07-30)
+
+⛔ **Corrects the hopeful reading above.** Scanning all 40 chain records for
+runs of unit-length float triples finds **none**. Geometry in this format
+carries a normal array (D207), so these records are not the other shapes —
+most likely they are animation curves, which is consistent with the file
+holding clips (D205) and with `LMN0`-style tags appearing inside them.
+
+✅ **The instrument was checked before the negative was believed**, per the
+standing rule. The same function pointed at the known normal array at `0x5430`
+finds it immediately; pointed at the chain region it finds nothing. So this is
+a fact about the data, not about the scan.
+
+### Which leaves the real question sharper
+
+If the rest of the file is animation, then `p_wii_mario`'s **324 positions may
+be all it has** — plausible for a flat 2007 Wii character — and D211's 13.6%
+coverage is not missing geometry but a **wrong face or index reading**.
+
+The specific contradiction to resolve: the shape has 324 positions and 336
+corners, and **no index stream in the record can address 324 things**. Two are
+the identity over 0..335, two range 0..22. So either
+
+- 🔶 the 324-entry array is shared and this shape genuinely uses 23 of it, with
+  other shapes' records stored somewhere still unfound, or
+- 🔶 the position array is 336 entries and the section boundary is being read
+  too early, making one identity stream the position index.
+
+The second is cheap to test and has not been tried.
