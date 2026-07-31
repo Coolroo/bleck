@@ -86,7 +86,12 @@ impl Rgba {
     /// instead of wrapping round to a dark pixel.
     fn shaded(self, intensity: f32) -> Self {
         let scale = |channel: u8| (f32::from(channel) * intensity).clamp(0.0, 255.0) as u8;
-        Self { r: scale(self.r), g: scale(self.g), b: scale(self.b), a: self.a }
+        Self {
+            r: scale(self.r),
+            g: scale(self.g),
+            b: scale(self.b),
+            a: self.a,
+        }
     }
 }
 
@@ -101,8 +106,11 @@ pub enum Background {
 }
 
 /// Every preset, in the order the picker offers them.
-pub const BACKGROUNDS: [Background; 3] =
-    [Background::DarkGrey, Background::Checkerboard, Background::Gradient];
+pub const BACKGROUNDS: [Background; 3] = [
+    Background::DarkGrey,
+    Background::Checkerboard,
+    Background::Gradient,
+];
 
 /// Edge of one checkerboard square, in pixels.
 const CHECK: usize = 16;
@@ -319,6 +327,9 @@ impl Image {
         &self.pixels
     }
 
+    /// One pixel, for the tests. The window uploads `as_rgba` wholesale and
+    /// never reads a single pixel back, so nothing else calls this.
+    #[allow(dead_code)]
     pub fn pixel(&self, x: usize, y: usize) -> Rgba {
         let at = (y * self.size.width + x) * 4;
         Rgba {
@@ -343,13 +354,6 @@ impl Image {
 pub struct View {
     pub camera: Camera,
     pub background: Background,
-}
-
-impl View {
-    /// A view that frames `bounds` on the default backdrop.
-    pub fn fitted(bounds: Bounds) -> Self {
-        Self { camera: Camera::fit(bounds), background: Background::default() }
-    }
 }
 
 /// Draw `mesh` through `view` at `size`.
@@ -440,10 +444,8 @@ fn raster(image: &mut Image, depth: &mut [f32], triangle: &[Point; 3], colour: R
             if w0 < 0.0 || w1 < 0.0 || w2 < 0.0 {
                 continue;
             }
-            let near = (w0 * triangle[0].inv_z
-                + w1 * triangle[1].inv_z
-                + w2 * triangle[2].inv_z)
-                / area;
+            let near =
+                (w0 * triangle[0].inv_z + w1 * triangle[1].inv_z + w2 * triangle[2].inv_z) / area;
             let slot = y * size.width + x;
             // Larger 1/z is nearer, so this keeps the closest fragment
             // regardless of the order faces arrive in.
@@ -467,7 +469,6 @@ fn fold_max(values: &[f32; 3]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mesh::Mesh;
 
     /// A cube of side 2 about the origin. Its winding is deliberately
     /// inconsistent, which is what a face-culling renderer would show holes in.
@@ -501,7 +502,10 @@ f 4 5 8
     }
 
     fn flat(camera: Camera) -> View {
-        View { camera, background: Background::DarkGrey }
+        View {
+            camera,
+            background: Background::DarkGrey,
+        }
     }
 
     /// Pixels that are not the flat background colour — i.e. the model.
@@ -664,9 +668,7 @@ f 4 5 8
                 if let Some(face) = line.strip_prefix("f ") {
                     let corners: Vec<String> = face
                         .split_whitespace()
-                        .map(|index| {
-                            (index.parse::<usize>().expect("index") + offset).to_string()
-                        })
+                        .map(|index| (index.parse::<usize>().expect("index") + offset).to_string())
                         .collect();
                     format!("f {}\n", corners.join(" "))
                 } else {
@@ -674,6 +676,42 @@ f 4 5 8
                 }
             })
             .collect()
+    }
+
+    /// ⚠️ A triangle must not fill its own bounding box. The corner outside it
+    /// is the assertion that matters: coverage and framing tests both still
+    /// pass when the edge test is removed, because a cube's silhouette nearly
+    /// fills its box anyway.
+    #[test]
+    fn a_triangle_covers_only_its_own_half_of_its_bounding_box() {
+        // Right-angled at the bottom left, in the plane the camera faces.
+        let mesh = Mesh::parse("v -2 -2 0\nv 2 -2 0\nv -2 2 0\nf 1 2 3\n").expect("parses");
+        let image = render(&mesh, &flat(head_on()), FRAME);
+        let sky = Background::DarkGrey.pixel(0, 0, FRAME);
+
+        assert_ne!(image.pixel(60, 150), sky, "inside the triangle");
+        assert_ne!(image.pixel(45, 60), sky, "inside, near the tall corner");
+        assert_eq!(image.pixel(150, 60), sky, "the opposite corner of the box");
+        assert_eq!(image.pixel(160, 40), sky, "further into that corner");
+    }
+
+    /// ⚠️ Regression for 15 models in a real export that drew nothing. Their
+    /// faces use a handful of positions out of thousands, and framing the
+    /// whole position pool put the geometry under one pixel. A renderer that
+    /// draws a speck and a renderer that draws nothing look identical.
+    #[test]
+    fn a_few_triangles_in_a_huge_position_pool_are_still_framed() {
+        let mut text = String::from("v 0 0 0\nv 1 0 0\nv 0 1 0\n");
+        for step in 0..500 {
+            text.push_str(&format!("v {0} {0} {0}\n", step as f32 * 3.0));
+        }
+        text.push_str("f 1 2 3\n");
+
+        let mesh = Mesh::parse(&text).expect("parses");
+        assert_eq!(mesh.positions().len(), 503);
+        let image = render(&mesh, &flat(Camera::fit(mesh.bounds())), FRAME);
+        let share = covered(&image) as f32 / FRAME.pixels() as f32;
+        assert!(share > 0.05, "the one triangle covered only {share}");
     }
 
     #[test]
@@ -686,13 +724,24 @@ f 4 5 8
 
     #[test]
     fn a_zero_area_face_draws_nothing() {
-        let collapsed = Mesh::parse("v 0 0 0\nv 1 1 1\nv 2 2 2\nf 1 2 3\n").expect("parses");
-        let image = render(&collapsed, &flat(Camera::fit(collapsed.bounds())), FRAME);
-        assert_eq!(covered(&image), 0);
-
         let point = Mesh::parse("v 1 1 1\nv 1 1 1\nv 1 1 1\nf 1 2 3\n").expect("parses");
         let image = render(&point, &flat(Camera::fit(point.bounds())), FRAME);
         assert_eq!(covered(&image), 0);
+    }
+
+    /// ⚠️ Not asserted as zero. Three collinear points project to a line whose
+    /// computed area is float noise rather than exactly 0, so the claim is that
+    /// a degenerate face cannot smear across the frame — not that it is
+    /// invisible.
+    #[test]
+    fn a_collinear_face_covers_almost_nothing() {
+        let flat_line = Mesh::parse("v 0 0 0\nv 1 1 1\nv 2 2 2\nf 1 2 3\n").expect("parses");
+        let image = render(&flat_line, &flat(Camera::fit(flat_line.bounds())), FRAME);
+        let share = covered(&image) as f32 / FRAME.pixels() as f32;
+        assert!(
+            share < 0.01,
+            "a collinear face covered {share} of the frame"
+        );
     }
 
     #[test]
@@ -717,7 +766,10 @@ f 4 5 8
         let frames: Vec<Image> = BACKGROUNDS
             .iter()
             .map(|&background| {
-                let view = View { camera: Camera::default(), background };
+                let view = View {
+                    camera: Camera::default(),
+                    background,
+                };
                 render(&empty, &view, FRAME)
             })
             .collect();
@@ -741,7 +793,10 @@ f 4 5 8
     fn the_model_draws_over_every_background() {
         let mesh = cube();
         for background in BACKGROUNDS {
-            let view = View { camera: Camera::fit(mesh.bounds()), background };
+            let view = View {
+                camera: Camera::fit(mesh.bounds()),
+                background,
+            };
             let drawn = render(&mesh, &view, FRAME);
             let bare = render(&Mesh::default(), &view, FRAME);
             let share = differing(&drawn, &bare) as f32 / FRAME.pixels() as f32;

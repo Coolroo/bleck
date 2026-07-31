@@ -35,12 +35,24 @@ pub struct Entry {
     /// The OBJ, relative to the export folder. Made absolute on load.
     #[serde(rename = "file")]
     pub path: PathBuf,
+    /// The disc file the model was read out of.
+    #[serde(default)]
+    pub source: String,
     #[serde(default)]
     pub positions: usize,
     #[serde(default)]
     pub faces: usize,
     #[serde(default)]
     pub triangles: usize,
+    /// Share of the file's vertices the exported faces actually reach.
+    #[serde(default)]
+    pub coverage: f32,
+    /// ⚠️ Set when the export is one shape record out of a file that holds
+    /// many, which is currently every model. The viewport shows exactly what
+    /// the OBJ contains, so a fragment looks like a broken model unless the
+    /// window says otherwise.
+    #[serde(default)]
+    pub fragment: bool,
     /// Bounds as `bleck` measured them. Shown as facts; the camera fits itself
     /// to the bounds of the geometry actually parsed, so a wrong number here
     /// mis-labels a model rather than mis-framing it.
@@ -73,7 +85,11 @@ pub enum Problem {
     NoManifest(PathBuf),
     Unreadable(String),
     NoMesh(PathBuf),
-    BadMesh { file: PathBuf, line: usize, why: String },
+    BadMesh {
+        file: PathBuf,
+        line: usize,
+        why: String,
+    },
 }
 
 impl Problem {
@@ -111,7 +127,11 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
-    pub const ZERO: Self = Self { x: 0.0, y: 0.0, z: 0.0 };
+    pub const ZERO: Self = Self {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
 
     pub const fn new(x: f32, y: f32, z: f32) -> Self {
         Self { x, y, z }
@@ -180,20 +200,47 @@ pub struct Bounds {
 }
 
 impl Bounds {
-    fn around(points: &[Vec3]) -> Self {
-        let Some(first) = points.first() else {
-            return Self::default();
+    /// The box around every point some face refers to.
+    ///
+    /// ⚠️ Unreferenced positions are excluded, and that is the whole point.
+    /// 733 of the 864 models in a real export carry positions no face uses,
+    /// and 15 of them draw a handful of triangles out of a pool spanning
+    /// hundreds of units — `p_big_mario` uses 3 of its 2,255 positions. A box
+    /// around all of them frames empty space and puts the geometry below one
+    /// pixel, which looks exactly like a renderer that draws nothing.
+    fn around(points: &[Vec3], faces: &[Face]) -> Self {
+        let mut span: Option<Self> = None;
+        let mut swallow = |point: Vec3| {
+            span = Some(match span {
+                None => Self {
+                    min: point,
+                    max: point,
+                },
+                Some(mut bounds) => {
+                    bounds.min.x = bounds.min.x.min(point.x);
+                    bounds.min.y = bounds.min.y.min(point.y);
+                    bounds.min.z = bounds.min.z.min(point.z);
+                    bounds.max.x = bounds.max.x.max(point.x);
+                    bounds.max.y = bounds.max.y.max(point.y);
+                    bounds.max.z = bounds.max.z.max(point.z);
+                    bounds
+                }
+            });
         };
-        let mut bounds = Self { min: *first, max: *first };
-        for point in points {
-            bounds.min.x = bounds.min.x.min(point.x);
-            bounds.min.y = bounds.min.y.min(point.y);
-            bounds.min.z = bounds.min.z.min(point.z);
-            bounds.max.x = bounds.max.x.max(point.x);
-            bounds.max.y = bounds.max.y.max(point.y);
-            bounds.max.z = bounds.max.z.max(point.z);
+
+        if faces.is_empty() {
+            // Nothing will be drawn, so every point is as good a guess as any.
+            points.iter().copied().for_each(&mut swallow);
+        } else {
+            for face in faces {
+                for index in [face.a, face.b, face.c] {
+                    if let Some(&point) = points.get(index) {
+                        swallow(point);
+                    }
+                }
+            }
         }
-        bounds
+        span.unwrap_or_default()
     }
 
     pub fn centre(self) -> Vec3 {
@@ -223,8 +270,9 @@ impl Mesh {
         &self.faces
     }
 
-    /// Zero-sized when the mesh has no points. The camera treats that as a
-    /// model too small to frame rather than as an error.
+    /// The box around the geometry that will actually be drawn — not around
+    /// every position in the file. Zero-sized when there are no points at all,
+    /// which the camera treats as a model too small to frame, not an error.
     pub fn bounds(&self) -> Bounds {
         self.bounds
     }
@@ -234,8 +282,8 @@ impl Mesh {
     }
 
     pub fn load(path: &Path) -> Result<Self, Problem> {
-        let text = std::fs::read_to_string(path)
-            .map_err(|_| Problem::NoMesh(path.to_path_buf()))?;
+        let text =
+            std::fs::read_to_string(path).map_err(|_| Problem::NoMesh(path.to_path_buf()))?;
         Self::parse(&text).map_err(|flaw| Problem::BadMesh {
             file: path.to_path_buf(),
             line: flaw.line,
@@ -257,22 +305,27 @@ impl Mesh {
                 Some("f") => {
                     let corners = read_corners(words, positions.len(), line)?;
                     for window in corners[1..].windows(2) {
-                        faces.push(Face { a: corners[0], b: window[0], c: window[1] });
+                        faces.push(Face {
+                            a: corners[0],
+                            b: window[0],
+                            c: window[1],
+                        });
                     }
                 }
                 _ => {}
             }
         }
 
-        let bounds = Bounds::around(&positions);
-        Ok(Self { positions, faces, bounds })
+        let bounds = Bounds::around(&positions, &faces);
+        Ok(Self {
+            positions,
+            faces,
+            bounds,
+        })
     }
 }
 
-fn read_position<'a>(
-    words: impl Iterator<Item = &'a str>,
-    line: usize,
-) -> Result<Vec3, Flaw> {
+fn read_position<'a>(words: impl Iterator<Item = &'a str>, line: usize) -> Result<Vec3, Flaw> {
     let mut numbers = [0.0f32; 3];
     let mut seen = 0;
     for word in words.take(3) {
@@ -283,7 +336,10 @@ fn read_position<'a>(
         seen += 1;
     }
     if seen < 3 {
-        return Err(Flaw { line, why: format!("a vertex needs 3 numbers, got {seen}") });
+        return Err(Flaw {
+            line,
+            why: format!("a vertex needs 3 numbers, got {seen}"),
+        });
     }
     Ok(Vec3::new(numbers[0], numbers[1], numbers[2]))
 }
@@ -309,7 +365,10 @@ fn read_corners<'a>(
         } else if index < 0 {
             positions as i64 + index
         } else {
-            return Err(Flaw { line, why: "vertex index 0 is not valid".into() });
+            return Err(Flaw {
+                line,
+                why: "vertex index 0 is not valid".into(),
+            });
         };
         if resolved < 0 || resolved >= positions as i64 {
             return Err(Flaw {
@@ -369,7 +428,10 @@ impl Library {
                 entry
             })
             .collect();
-        Self { entries, problem: None }
+        Self {
+            entries,
+            problem: None,
+        }
     }
 
     pub fn entries(&self) -> &[Entry] {
@@ -380,6 +442,9 @@ impl Library {
         self.entries.len()
     }
 
+    /// Paired with `len` because clippy asks for it; the UI branches on
+    /// `problem()` and the match count instead, so only the tests call this.
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
@@ -429,15 +494,15 @@ mod tests {
 
     #[test]
     fn accepts_slash_forms_and_negative_indices() {
-        let mesh = Mesh::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1/1/1 -2/2 -1\n")
-            .expect("index forms parse");
+        let mesh =
+            Mesh::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1/1/1 -2/2 -1\n").expect("index forms parse");
         assert_eq!(mesh.faces(), [Face { a: 0, b: 1, c: 2 }]);
     }
 
     #[test]
     fn fans_a_quad_into_two_triangles() {
-        let mesh = Mesh::parse("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n")
-            .expect("quad parses");
+        let mesh =
+            Mesh::parse("v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\nf 1 2 3 4\n").expect("quad parses");
         assert_eq!(
             mesh.faces(),
             [Face { a: 0, b: 1, c: 2 }, Face { a: 0, b: 2, c: 3 }]
@@ -472,6 +537,28 @@ mod tests {
         assert_eq!(mesh.bounds().centre(), Vec3::new(1.0, 1.5, -2.0));
     }
 
+    /// ⚠️ Real exports do this constantly: 733 of 864 models carry positions
+    /// no face refers to. Bounding them all frames empty space, and the model
+    /// ends up too small to see.
+    #[test]
+    fn bounds_ignore_positions_no_face_refers_to() {
+        let mesh =
+            Mesh::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\nv 900 900 900\nf 1 2 3\n").expect("parses");
+        assert_eq!(mesh.positions().len(), 4);
+        assert_eq!(mesh.bounds().max, Vec3::new(1.0, 1.0, 0.0));
+    }
+
+    /// With nothing drawn there is nothing to frame, so every point counts —
+    /// which keeps a mesh of loose vertices from claiming a zero-size box at
+    /// the origin it has no points near.
+    #[test]
+    fn bounds_fall_back_to_every_point_when_there_are_no_faces() {
+        let mesh = Mesh::parse("v 5 5 5\nv 7 9 5\n").expect("parses");
+        assert!(mesh.is_empty());
+        assert_eq!(mesh.bounds().min, Vec3::new(5.0, 5.0, 5.0));
+        assert_eq!(mesh.bounds().max, Vec3::new(7.0, 9.0, 5.0));
+    }
+
     /// A directory of our own under the system temp dir, removed on drop, so
     /// the manifest tests touch the real filesystem without a dev-dependency.
     struct Scratch {
@@ -482,8 +569,8 @@ mod tests {
         fn new(tag: &str) -> Self {
             static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             let count = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            let path = std::env::temp_dir()
-                .join(format!("dimentio-{tag}-{}-{count}", std::process::id()));
+            let path =
+                std::env::temp_dir().join(format!("dimentio-{tag}-{}-{count}", std::process::id()));
             std::fs::create_dir_all(&path).expect("scratch dir");
             Self { path }
         }
@@ -505,6 +592,39 @@ mod tests {
        "min": [-30.0, -14.7, 0.0], "max": [10.8, 58.7, 3.2]}
     ]}"#;
 
+    /// The manifest as `bleck model export` writes it today, keys and all.
+    /// ⚠️ Unknown keys must stay tolerated: `schema`, `coverage` and
+    /// `fragment` all arrived after this reader was written, and a stricter
+    /// one would have refused every export the day they landed.
+    const LIVE_MANIFEST: &str = r#"{"schema": 1, "models": [
+      {"name": "p_big_mario", "shape": "zentaiShape", "file": "p_big_mario.obj",
+       "source": "files/a/p_big_mario", "positions": 2255, "faces": 3529,
+       "triangles": 3529, "coverage": 0.0013, "fragment": true,
+       "min": [-73.5, -1.2, -36.0], "max": [73.5, 147.0, 36.0],
+       "something_added_later": [1, 2, 3]}
+    ]}"#;
+
+    #[test]
+    fn reads_the_manifest_the_exporter_writes_today() {
+        let scratch = Scratch::new("live");
+        scratch.write("models.json", LIVE_MANIFEST);
+        let library = Library::load(&scratch.path);
+        assert_eq!(library.problem(), None);
+        let entry = &library.entries()[0];
+        assert_eq!(entry.source, "files/a/p_big_mario");
+        assert!(entry.fragment);
+        assert_eq!(entry.coverage, 0.0013);
+    }
+
+    /// The face form the exporter emits now that it carries normals, mixed
+    /// with corners that have none.
+    #[test]
+    fn accepts_the_position_double_slash_normal_form() {
+        let mesh = Mesh::parse("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3\n")
+            .expect("the exporter's own output parses");
+        assert_eq!(mesh.faces(), [Face { a: 0, b: 1, c: 2 }]);
+    }
+
     #[test]
     fn reads_the_manifest_and_absolutises_paths() {
         let scratch = Scratch::new("manifest");
@@ -519,9 +639,49 @@ mod tests {
         assert_eq!(entry.path, scratch.path.join("p_wii_mario.obj"));
         assert_eq!(entry.describe(), "3 verts, 1 tris");
         assert_eq!(entry.extent(), "40.8 x 73.4 x 3.2");
+        assert!(!entry.fragment, "the manifest did not claim one");
 
         let mesh = Mesh::load(&entry.path).expect("the mesh beside it loads");
         assert_eq!(mesh.faces().len(), 1);
+    }
+
+    /// The whole path a model takes through this program: an export folder on
+    /// disk, through the manifest, through the OBJ, to lit pixels. Each step
+    /// has its own test above; this is the one that fails if they stop
+    /// fitting together.
+    #[test]
+    fn an_export_folder_reaches_the_rasteriser() {
+        let scratch = Scratch::new("endtoend");
+        scratch.write(
+            "models.json",
+            r#"{"models": [{"name": "p_wii_mario", "shape": "zentaiShape",
+                 "file": "sub/p_wii_mario.obj", "positions": 4, "faces": 2,
+                 "triangles": 2, "min": [-1,-1,-1], "max": [1,1,1]}]}"#,
+        );
+        std::fs::create_dir_all(scratch.path.join("sub")).expect("subfolder");
+        std::fs::write(
+            scratch.path.join("sub/p_wii_mario.obj"),
+            "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nf 1 2 3\nf 1 3 4\n",
+        )
+        .expect("mesh file");
+
+        let library = Library::load(&scratch.path);
+        let entry = &library.entries()[library.matching("zentai")[0]];
+        let mesh = Mesh::load(&entry.path).expect("mesh loads");
+
+        let view = crate::render::View {
+            camera: crate::render::Camera::fit(mesh.bounds()),
+            background: crate::render::Background::DarkGrey,
+        };
+        let size = crate::render::Size::new(120, 120);
+        let image = crate::render::render(&mesh, &view, size);
+
+        let sky = crate::render::Background::DarkGrey.pixel(0, 0, size);
+        let drawn = (0..size.height)
+            .flat_map(|y| (0..size.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| image.pixel(x, y) != sky)
+            .count();
+        assert!(drawn > 500, "only {drawn} pixels of the square were drawn");
     }
 
     #[test]
@@ -550,7 +710,9 @@ mod tests {
     fn a_missing_mesh_file_names_itself() {
         let scratch = Scratch::new("gone");
         let path = scratch.path.join("absent.obj");
-        assert_eq!(Mesh::load(&path), Err(Problem::NoMesh(path.clone())));
+        let problem = Mesh::load(&path).expect_err("nothing is there to read");
+        assert_eq!(problem, Problem::NoMesh(path.clone()));
+        assert!(problem.describe().contains("absent.obj"), "{problem:?}");
     }
 
     #[test]

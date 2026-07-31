@@ -13524,3 +13524,76 @@ the identity over 0..335, two range 0..22. So either
   too early, making one identity stream the position index.
 
 The second is cheap to test and has not been tried.
+
+## D213 — Dimentio's viewport is a software rasteriser, deliberately (2026-07-30)
+
+✅ **Verified**, and the reason is evidence, not preference.
+
+**This machine cannot capture its own interactive desktop** — two captures
+returned the wallpaper while `Get-Process` reported a live window. So a GPU
+viewport could not be validated *at all*: it would either look right to nobody
+or be wrong and look like nothing.
+
+A CPU rasteriser's output is a `Vec<u8>` that `cargo test` can assert on. 36
+tests now do, on measured values rather than restated code: a fitted cube covers
+29.1% of a 200×200 frame in exactly **4 colours** (background plus the three
+faces a cube shows from a general direction), centroid 97.4/102.6 against a
+centre of 99.5, camera distance 6.5666 against a hand-derived 6.567.
+
+**The suite was mutation-tested — five deliberate breakages, five caught:**
+depth compare removed, edge test removed, two-sided flip removed, fit margin
+wrong, near-plane cull removed. ⚠️ The bounding-box test exists *because* the
+first mutation slipped past everything else.
+
+**Rejected:** wgpu render-to-texture. Same pixels, no headless evidence.
+
+### A bug this found, which corroborates D211 from the other side
+
+Run against the real 864-model export, **15 models rendered completely blank** —
+`p_big_mario`, `p_big_kuppa`, `e_shinigami`. Not a rasteriser fault: their faces
+reference three positions out of thousands, so a camera fitted to the whole
+position pool put the geometry under a single pixel.
+
+`Bounds::around` now spans **only positions some face references**. After the
+fix, 0 blank. **733 of 864 models carry unreferenced positions**, so this is the
+common case, not an edge one.
+
+⚠️ `p_big_mario.obj` has 3,529 face lines whose *position* indices only ever
+take the values 1, 2 and 3, while its *normal* indices vary widely. That is
+independent evidence that the position index reading is wrong — see D214.
+
+⛔ **Nobody has looked at either mode.** The window opens, holds and responds,
+and the tests assert the pixels; drag direction, panel proportions and the amber
+fragment label's legibility are unchecked by eye.
+
+## D214 — A per-group position base: 92% coverage, but weaker planarity (2026-07-30)
+
+🔶 **Hypothesis, not adopted.** D211 left a contradiction: a shape has 324
+positions and 336 corners, and no index stream can address 324 things.
+
+The candidate: position indices are **relative to a running per-group base**,
+advancing by the distinct indices each group used. 324 positions over 90 groups
+is ~3.6 each, which matches indices that never exceed 22.
+
+Measured over the disc's three-dimensional shapes:
+
+| reading | median coverage | non-degenerate quads planar |
+|---|---|---|
+| flat (shipped) | 10.1% | **72.4%** |
+| cumulative, by max index | 89.5% | 57.7% |
+| cumulative, by distinct count | **92.1%** | 53.3% |
+| shuffled control | — | 21.5% |
+
+⚠️ **The two measures disagree, so neither reading is confirmed.** Coverage says
+the cumulative base is right; planarity says the flat one is. Both beat the
+control, so both are picking up real structure. 2,962 faces still fall
+out of range under the best cumulative variant, which a correct reading would
+not do.
+
+**Rejected for now:** switching the exporter to the cumulative base. It would
+trade a measure I trust (planarity, with a control) for one I do not yet
+(coverage, which has no control — a reading that spreads indices over more of
+the array scores better whether or not it is right).
+
+The next move is a **control for coverage**: shuffle the group bases and check
+that real bases beat shuffled ones. Until that exists, this stays a hypothesis.
