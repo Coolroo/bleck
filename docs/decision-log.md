@@ -13865,3 +13865,69 @@ large mesh does not produce a file dwarfed by its own animation.
 
 ⚠️ **One clip per file.** glTF holds many; every extra is another full set of
 dense targets.
+
+## D218 — `Part.first` indexes a second record array, and r13 is 0x805B5F00 (2026-07-30)
+
+✅ **Verified.** The first concrete lead on the part→image binding after six
+refuted candidates (D210), and it came from the game's code rather than the
+file.
+
+### Finding the effect code at all
+
+⛔ **`xref` cannot see these globals.** `effdrv_wp` at `0x805ADF90` is reached
+through r13, the small-data base, so no `lis`/`addi` pair builds its address
+and `xref` returns nothing — the same shape of blind spot as D206.
+
+**r13 = `0x805B5F00`**, recovered by scanning the DOL for `lis r13` followed by
+`addi`/`ori r13`. ✅ Confirmed independently: `-32680(r13)` resolves to
+`0x805ADF58`, which the symbol list names **`animdrv_wp`** — and that is the
+global the animation code loads. So `effdrv_wp` is `-32624(r13)`, with 40
+instructions loading it.
+
+That base makes every r13-relative global addressable by name, which is worth
+more than this one finding.
+
+### What the draw code does with a part
+
+At `0x8005f920`, per part of an effect:
+
+```
+lwz   r0,32(r29)   ; the effect's first part
+lwz   r3,4(r30)    ; the part array
+add   r0,r0,r31    ; + loop counter
+mulli r0,r0,20     ; x 20 -- PART_STRIDE, as decoded
+lhz   r4,16(r3)    ; +0x10, which this project calls Part.first
+cmplwi r4,65535    ; 0xFFFF means "none" -- skip
+extsh r5,r4        ; sign-extended, so it is a *signed* index
+bl    0x8005f1a8
+```
+
+And inside that callee:
+
+```
+add   r0,r4,r5     ; a base index + Part.first
+mulli r0,r0,20     ; x 20 again -- a second 20-byte array
+lwz   r5,36(r3)    ; its base, at +0x24 of the driver struct
+add   r30,r5,r0
+lha   r0,18(r30)   ; +0x12
+lbz   r31,14(r30)  ; +0x0E
+lbz   r4,15(r30)   ; +0x0F
+lha   r7,10(r30)   ; +0x0A   (then x 12)
+lha   r8,8(r30)    ; +0x08
+```
+
+### So the reading changes
+
+⛔ **`Part.first` is not an index into anything this project has decoded.** It
+is a **signed** index, with `0xFFFF` as a null, into a *second* array of
+20-byte records — and the fields that drive drawing live in **that** record, at
+`+0x08`, `+0x0A`, `+0x0E`, `+0x0F` and `+0x12`.
+
+🔶 **Not yet established:** which `effdata.dat` section that second array is.
+Section 1 is 14,080 bytes = exactly the 704 parts at 20 bytes each, so it is
+the part table; section 7 is 17,760 = 888 records of 20, which is large enough
+for indices reaching 238 but untested. The base is loaded from a runtime struct
+(`+0x24`), not straight from the file, so the mapping needs following.
+
+⚠️ Until that is settled, **nothing pairs a part with an image**, and Dimentio
+shows the 219 effect images as the effect system's bank rather than per part.
