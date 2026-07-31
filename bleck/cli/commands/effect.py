@@ -96,9 +96,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 }
                 for part, composed in zip(effect.parts, effect.composed(), strict=True)
             ],
-            "seconds": round(
-                max((p.seconds for p in effect.parts), default=0.0), 4
-            ),
+            "seconds": round(max((p.seconds for p in effect.parts), default=0.0), 4),
             "rows": [
                 {"index": row.index, "values": [round(v, 5) for v in row.values]}
                 for row in effect.rows
