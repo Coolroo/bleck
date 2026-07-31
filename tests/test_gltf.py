@@ -33,6 +33,7 @@ def a_mesh(textured: bool = True) -> model.Mesh:
         faces=[model.Face(first=0, corners=4)],
         corner_positions=[0, 1, 2, 3],
         corner_normals=[0, 1, 2, 3],
+        corner_uvs=[0, 1, 2, 3] if textured else [],
         uvs=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)] if textured else [],
     )
 
@@ -109,7 +110,80 @@ class TestTheDocument:
             gltf.write(model.Mesh(name="empty"))
 
 
+def attribute(blob, document, name):
+    """One vertex attribute read back out of the binary chunk."""
+    accessor = document["accessors"][
+        document["meshes"][0]["primitives"][0]["attributes"][name]
+    ]
+    view = document["bufferViews"][accessor["bufferView"]]
+    json_len = struct.unpack_from("<I", blob, 12)[0]
+    start = 20 + json_len + 8 + view["byteOffset"]
+    wide = {"VEC2": 2, "VEC3": 3}[accessor["type"]]
+    return [
+        struct.unpack_from(f"<{wide}f", blob, start + i * wide * 4)
+        for i in range(accessor["count"])
+    ]
+
+
+class TestTexcoordsComeFromTheCorner:
+    """⛔ A UV belongs to a **corner**, not to the position the corner names.
+
+    Reading `uvs[corner.position]` looks right and is wrong wherever the two
+    streams disagree, which is most of the disc: `e_bara_tib_p` has 64
+    positions against 96 UVs (D234). The failure is silent — the model still
+    exports, with the art on the wrong triangles.
+    """
+
+    def a_split_mesh(self):
+        """One triangle whose UV indices are nothing like its position ones."""
+        return model.Mesh(
+            name="split",
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            normals=[(0.0, 0.0, 1.0)] * 3,
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 2],
+            corner_normals=[0, 1, 2],
+            corner_uvs=[3, 4, 5],
+            uvs=[
+                (0.9, 0.9),
+                (0.8, 0.8),
+                (0.7, 0.7),
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (0.0, 1.0),
+            ],
+        )
+
+    def test_the_written_uvs_are_the_ones_the_corners_name(self):
+        blob = gltf.write(self.a_split_mesh())
+        found = attribute(blob, parsed(blob), "TEXCOORD_0")
+        assert sorted(found) == [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0)], (
+            "the UVs came from the position index, not the corner's own"
+        )
+
+    def test_more_uvs_than_positions_still_exports_textured(self):
+        """⚠️ The count comparison this replaced dropped the texture here."""
+        assert self.a_split_mesh().is_textured
+        attributes = parsed(gltf.write(self.a_split_mesh()))["meshes"][0]["primitives"][
+            0
+        ]["attributes"]
+        assert "TEXCOORD_0" in attributes
+
+
 class TestWelding:
+    def test_corners_sharing_a_position_but_not_a_uv_stay_apart(self):
+        """⛔ Two corners on a texture seam sit at one point in space and two
+        places on the image. Welding them stretches the art across the seam."""
+        mesh = model.Mesh(
+            name="seam",
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[model.Face(first=0, corners=3), model.Face(first=3, corners=3)],
+            corner_positions=[0, 1, 2, 0, 1, 2],
+            corner_uvs=[0, 1, 2, 3, 4, 5],
+            uvs=[(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)] * 2,
+        )
+        assert parsed(gltf.write(mesh))["accessors"][0]["count"] == 6
+
     def test_corners_sharing_a_position_but_not_a_normal_stay_apart(self):
         """⛔ Collapsing them would weld a hard edge into a smooth one."""
         mesh = model.Mesh(

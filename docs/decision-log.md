@@ -14799,3 +14799,62 @@ character from untextured geometry is genuinely hard.
 capitals, and the docstring lists the three refuted mappings. A guess a viewer
 can distinguish from a reading is useful; one it cannot is the failure this
 project keeps undoing.
+
+## D234 — UVs are indexed per corner, like everything else (2026-07-31)
+
+⛔ **Reported from the window:** `e_bara_tib_p` exported bare despite having a
+12-image bank. It has **64 positions and 96 UVs**, and `is_textured` compared
+those two counts — so the texture was dropped silently. **This affected 26% of
+models**, and was mistaken for the D229 multi-shape rule.
+
+✅ **Slot 7 of the section table is the texcoord index**, one entry per corner,
+with its own accumulating per-shape base — exactly like positions (D224) and
+normals. For `e_bara_tib_p`: 152 entries, 64 distinct, against 152 corners.
+
+⚠️ **It only reads as a stream against the 24-entry table.** With the 8-entry
+shape record, slot 7's stop edge is the end of file and the run does not look
+like an index array at all — which is why it sat unread through D207, D215 and
+D229.
+
+`Mesh.corner_uvs` now carries it, `Corner.uv` reaches the writer, and `uv`
+joined the glTF weld key so two corners at a texture seam stay separate
+vertices.
+
+### The result, and the control that makes it a result
+
+**639 → 770 textured, and zero losses** — verified by set difference, not by
+comparing counts.
+
+Median UV triangle area, the D224 instrument reused unchanged:
+
+| reading | UV area | position-paired | shuffled |
+|---|---|---|---|
+| slot 7, newly textured (131 models) | **0.0474** | 0.0668 | 0.1342 |
+| slot 7, textured before (464) | **0.0312** | 0.0444 | 0.0604 |
+
+The baseline reproduced D224's 0.0626 exactly, so it is the same ruler.
+
+⚠️ **UV sanity held**: 76.2% of textured models keep every UV inside [0,1], and
+`_uvs()` was not touched. Newly-reached UVs run wider (p1..p99 = −3.05..5.0),
+which is tiling-shaped — and position-pairing gave *more* out-of-range faces on
+those same models, 16,523 against 14,835.
+
+### ⚠️ A fallback that is deliberate, and a group the instrument cannot judge
+
+258 models carry a slot-7 stream shorter than their corners. **175 of those
+hold exactly one UV per position** — `e_2D_manera` and the paper sprites — and
+keep the old position pairing. Without that fallback they would have *lost*
+their texture and the net would have been 639 → 595.
+
+⛔ **The coherence instrument cannot judge that group.** A sprite quad
+legitimately covers the whole image, so its UV area is 0.5 and the shuffled
+control scores *better* (0.0469). Their behaviour is unchanged rather than
+newly asserted — which is the honest position when the measure is blind.
+
+Mutation-tested three ways: dropping the per-shape UV base fails 3 tests,
+pairing by position in the writer fails 2, and restoring the count comparison
+fails 8.
+
+🔶 `EFF_koopa` is the one model whose rebased UV index overflows — 198 against
+191 UVs, on 1 face of 67 — and exports untextured. Same shape as the 22 faces
+D224 already records as rebasing past the end. Not investigated.

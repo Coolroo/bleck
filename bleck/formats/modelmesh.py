@@ -38,6 +38,11 @@ POSITION_INDEX_SLOT = 2
 NORMAL_SLOT = 3
 NORMAL_INDEX_SLOT = 4
 
+#: One texture-coordinate index per corner, in the same `u16`-in-`u32` form as
+#: slots 2 and 4. ⚠️ Its stop edge is `table[8]`, so reading it needs the wider
+#: table rather than the eight-entry shape record.
+TEXCOORD_INDEX_SLOT = 7
+
 #: A face is `(first corner, corner count)`, eight bytes. The draw code reads
 #: the pair as `lwz 0(r23)` and `lwz 4(r23)`, indexing `r23` by `idx * 8`.
 FACE_STRIDE = 8
@@ -77,11 +82,13 @@ class Face:
 
 @dataclass(frozen=True)
 class Corner:
-    """One corner of a face: which position it uses, and which normal."""
+    """One corner of a face: which position it uses, which normal, which UV."""
 
     position: int
     normal: int | None
     """None when the model carries no normal stream for this corner."""
+    uv: int | None = None
+    """None when the model carries no texture-coordinate stream for this corner."""
 
 
 @dataclass(frozen=True)
@@ -110,8 +117,14 @@ class Mesh:
     corner_normals: list = field(  # pylint: disable=container-return
         default_factory=list
     )
-    #: Texture coordinates, one pair per position where the counts agree.
+    #: Texture coordinates, indexed by `corner_uvs` rather than by position.
     uvs: list = field(default_factory=list)  # pylint: disable=container-return
+    #: One UV index per corner, in draw order. ⚠️ **Read from slot 7, not
+    #: derived.** `e_bara_tib_p` has 64 positions and 96 UVs, so pairing a UV to
+    #: a position index drops the texture on 26% of the disc's models (D234).
+    corner_uvs: list = field(  # pylint: disable=container-return
+        default_factory=list
+    )
     #: Lengths of the `u16`-in-`u32` index streams, in table order.
     streams: list = field(default_factory=list)  # pylint: disable=container-return
     #: How many separate shapes the face list describes.
@@ -125,13 +138,20 @@ class Mesh:
 
     @property
     def is_textured(self) -> bool:
-        """Whether a UV can be found for every position.
+        """Whether every corner a face draws resolves to a real UV.
 
-        ⚠️ Checked, not assumed: 26% of models have a different number of UVs
-        than positions, and pairing them by index there would smear a texture
-        across the wrong triangles.
+        ⚠️ **Not a count comparison.** UVs are indexed per corner and there are
+        more of them than positions on 26% of the disc — `e_bara_tib_p` has 64
+        positions against 96 UVs — so requiring the counts to match dropped the
+        texture from every one of those models (D234).
         """
-        return bool(self.uvs) and len(self.uvs) == len(self.positions)
+        if not self.uvs or not self.corner_uvs:
+            return False
+        return all(
+            corner.uv is not None and corner.uv < len(self.uvs)
+            for triangle in self.corner_triangles()
+            for corner in triangle
+        )
 
     @property
     def corners(self) -> int:
@@ -184,19 +204,25 @@ class Mesh:
         return [tuple(c.position for c in tri) for tri in self.corner_triangles()]
 
     def corner_triangles(self) -> list:  # pylint: disable=container-return
-        """The same triangles, but keeping each corner's normal alongside it.
+        """The same triangles, keeping each corner's normal and UV alongside it.
 
-        ⚠️ A corner's normal comes from `corner_normals`, which is *not*
-        reliably the identity -- 104 of 870 models would be mis-shaded by
-        assuming it is.
+        ⚠️ A corner's normal comes from `corner_normals` and its UV from
+        `corner_uvs`; neither is reliably the identity -- 104 of 870 models
+        would be mis-shaded by assuming it for normals, and the UV stream is a
+        different length from the position stream on 26% of them.
         """
         out = []
         for face in self.faces:
             span = slice(face.first, face.first + face.corners)
             positions = self.corner_positions[span]
             normals = self.corner_normals[span]
+            uvs = self.corner_uvs[span]
             corners = [
-                Corner(position=p, normal=normals[i] if i < len(normals) else None)
+                Corner(
+                    position=p,
+                    normal=normals[i] if i < len(normals) else None,
+                    uv=uvs[i] if i < len(uvs) else None,
+                )
                 for i, p in enumerate(positions)
             ]
             out += self._cut(corners)
@@ -380,23 +406,33 @@ def mesh(data: bytes) -> Mesh:
         )
 
     shapes = len(_groups(faces))
-    faces, corner_positions = _rebase(
-        faces, _stream(data, table, edges, POSITION_INDEX_SLOT)
+    rebased = _rebase(
+        faces,
+        _stream(data, table, edges, POSITION_INDEX_SLOT),
+        _uv_indices(data),
     )
+    corner_positions = rebased.positions
+    uvs = _uvs(data)
     # ⚠️ 22 faces across the disc rebase past the end, against 1,250 for a
     # shuffled control -- so the bases are right and these few are not. Dropped
     # rather than clamped, since a clamped face stretches to the last vertex.
     faces = [
         face
-        for face in faces
+        for face in rebased.faces
         if face.first + face.corners <= len(corner_positions)
         and max(corner_positions[face.first : face.first + face.corners], default=0)
         < len(positions)
     ]
+    corner_uvs = _corner_uvs(
+        rebased.uvs,
+        corner_positions,
+        Extent(uvs=len(uvs), positions=len(positions), corners=_reach(faces)),
+    )
     return Mesh(
         corner_positions=corner_positions,
         corner_normals=_stream(data, table, edges, NORMAL_INDEX_SLOT),
-        uvs=_uvs(data),
+        corner_uvs=corner_uvs,
+        uvs=uvs,
         name=name,
         positions=positions,
         normals=normals,
@@ -404,6 +440,53 @@ def mesh(data: bytes) -> Mesh:
         streams=streams,
         shapes=shapes,
     )
+
+
+def _reach(faces: list) -> int:
+    """The last corner any face draws, which is as far as a stream must go."""
+    return max((face.first + face.corners for face in faces), default=0)
+
+
+def _corner_uvs(stream: list, corner_positions: list, extent: Extent) -> list:
+    # pylint: disable=container-return
+    """One UV index per corner: slot 7 where it reaches, the position index
+    where it does not.
+
+    ✅ Slot 7 is the reading that wins where it exists — median UV triangle
+    area **0.0407** against 0.0559 for pairing by position and 0.0886 for a
+    shuffled control, over 595 models and 57,310 faces (D234).
+
+    ⚠️ Some models carry a slot-7 stream shorter than the corners their faces
+    draw, and most of those hold exactly one UV per position — `e_2D_manera`
+    and the other paper sprites, whose every shape is a quad spanning the whole
+    image. Pairing those by position is the older reading and the only one
+    available, so it stands rather than costing them their texture.
+
+    ⛔ The rest resolve no UV at all. Guessing one would smear the bank across
+    the model, which reads as a broken renderer rather than as missing data.
+    """
+    if stream and len(stream) >= extent.corners:
+        return stream
+    if extent.uvs and extent.uvs == extent.positions:
+        return list(corner_positions)
+    return []
+
+
+def _uv_indices(data: bytes) -> list:  # pylint: disable=container-return
+    """Slot 7, one texture-coordinate index per corner.
+
+    ⚠️ **Needs the 24-entry table.** The eight-entry shape record makes slot 7
+    the last one, so its span would run to the end of the file and the stream
+    would not read as one. `table[8]` is where it actually stops.
+    """
+    need = SHAPE_SECTIONS_AT + (TEXCOORD_INDEX_SLOT + 2) * 4
+    if len(data) < need:
+        return []
+    table = struct.unpack_from(f">{TEXCOORD_INDEX_SLOT + 2}I", data, SHAPE_SECTIONS_AT)
+    start, stop = table[TEXCOORD_INDEX_SLOT], table[TEXCOORD_INDEX_SLOT + 1]
+    if not 0 < start <= stop <= len(data) or not _is_index_stream(data, start, stop):
+        return []
+    return list(struct.unpack_from(f">{(stop - start) // 4}I", data, start))
 
 
 def _uvs(data: bytes) -> list:  # pylint: disable=container-return
@@ -428,35 +511,70 @@ def _uvs(data: bytes) -> list:  # pylint: disable=container-return
     return [struct.unpack_from(">2f", data, start + i * UV_PAIR) for i in range(count)]
 
 
-def _rebase(faces: list, stream: list) -> tuple:  # pylint: disable=container-return
-    """Fold each shape's corner and position bases into flat, absolute values.
+@dataclass(frozen=True)
+class Extent:
+    """How much of each array a file holds, in the terms that pick a reading."""
+
+    uvs: int
+    positions: int
+    corners: int
+
+
+@dataclass(frozen=True)
+class Rebased:
+    """A file's faces and index streams, made absolute together.
+
+    They travel as one value because a stream is only meaningful beside the
+    faces it was rebased against — the corner base that moved a face is the
+    same one that found the entries to shift.
+    """
+
+    faces: list = field(default_factory=list)  # pylint: disable=container-return
+    positions: list = field(default_factory=list)  # pylint: disable=container-return
+    uvs: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+def _rebase(faces: list, positions: list, uvs: list) -> Rebased:
+    """Fold each shape's corner, position and UV bases into absolute values.
 
     ✅ **This is what takes coverage from 13% to 100%** (D224). A file's faces
-    are grouped by shape, and a group restarts its `first` at zero — so both
-    the corner offset *and* the position index are relative to the shape, not
+    are grouped by shape, and a group restarts its `first` at zero — so the
+    corner offset *and* every index it reaches are relative to the shape, not
     the file. The draw code says so outright: `GXSetArray` is handed
     `add r16, r4, r0`, a position array **plus a per-shape offset**, which is
     why the index stream never exceeds 22 while the array holds 324 points.
 
-    Both bases accumulate: corners by the span a group covers, positions by how
-    many distinct points it used.
+    ⚠️ The UV stream is rebased the same way and needs its own base, since a
+    shape rarely uses as many UVs as points: `e_bara_tib_p` spends 96 UVs on 64
+    positions, and its slot-7 values top out at 63 because each shape restarts.
+
+    Every base accumulates: corners by the span a group covers, positions and
+    UVs by how many distinct entries the group used.
     """
-    rebased = list(stream)
+    position_stream = list(positions)
+    uv_stream = list(uvs)
     out: list[Face] = []
     corner_base = 0
     position_base = 0
+    uv_base = 0
     for group in _groups(faces):
         span = max((f.first + f.corners for f in group), default=0)
-        seen = set()
+        seen_positions: set[int] = set()
+        seen_uvs: set[int] = set()
         for face in group:
             low = corner_base + face.first
-            for at in range(low, min(low + face.corners, len(rebased))):
-                seen.add(rebased[at])
-                rebased[at] += position_base
+            high = low + face.corners
+            for at in range(low, min(high, len(position_stream))):
+                seen_positions.add(position_stream[at])
+                position_stream[at] += position_base
+            for at in range(low, min(high, len(uv_stream))):
+                seen_uvs.add(uv_stream[at])
+                uv_stream[at] += uv_base
             out.append(Face(first=low, corners=face.corners))
         corner_base += span
-        position_base += len(seen)
-    return out, rebased
+        position_base += len(seen_positions)
+        uv_base += len(seen_uvs)
+    return Rebased(faces=out, positions=position_stream, uvs=uv_stream)
 
 
 def _groups(faces: list) -> list:  # pylint: disable=container-return

@@ -68,9 +68,11 @@ class Vertex:
     """One glTF vertex: a position, and the normal and UV that go with it.
 
     ⚠️ **glTF indexes every attribute together; this format does not.** A
-    corner names its position and its normal separately, so two corners sharing
-    a position but not a normal are *two* glTF vertices. Collapsing them would
-    weld a hard edge into a smooth one.
+    corner names its position, its normal and its UV separately, so two corners
+    sharing a position but not a normal are *two* glTF vertices. Collapsing
+    them would weld a hard edge into a smooth one. The same holds for the UV:
+    two corners at one point on a texture seam sit at different places on the
+    image, and welding them stretches the art across the seam.
     """
 
     position: int
@@ -99,7 +101,7 @@ def _welded(mesh) -> tuple:  # pylint: disable=container-return
             vertex = Vertex(
                 position=corner.position,
                 normal=corner.normal,
-                uv=corner.position if textured else None,
+                uv=corner.uv if textured else None,
             )
             found = order.get(vertex)
             if found is None:
@@ -207,8 +209,8 @@ def write(  # pylint: disable=too-many-locals
                 _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC3", FLOAT)
             )
 
-    if mesh.is_textured:
-        data = b"".join(struct.pack("<2f", *mesh.uvs[v.position]) for v in vertices)
+    if mesh.is_textured and all(v.uv is not None for v in vertices):
+        data = b"".join(struct.pack("<2f", *mesh.uvs[v.uv]) for v in vertices)
         attributes["TEXCOORD_0"] = len(accessors)
         accessors.append(
             _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC2", FLOAT)

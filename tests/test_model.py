@@ -510,6 +510,189 @@ class TestDrawing:
         assert not broken.is_drawable
 
 
+def a_two_shape_model() -> bytes:
+    """Two quads written as two shapes, each restarting its indices at zero.
+
+    ⚠️ **The point of the fixture is the restart.** Both shapes name positions
+    0-3 and UVs 0-3, so a reader that does not add the per-shape base draws the
+    second quad with the first quad's data and cannot tell it went wrong.
+    """
+    import struct  # pylint: disable=import-outside-toplevel
+
+    out = bytearray(0x3C0)
+    table = [0x200, 0x210, 0x270, 0x290, 0x2F0, 0x310, 0x330, 0x350]
+    table += [0x370] * 8 + [0x3B0] * 8
+    struct.pack_into(">24I", out, model.SHAPE_SECTIONS_AT, *table)
+    struct.pack_into(">I", out, model.SHAPE_NAME_AT, 0x100)
+    out[0x100:0x108] = b"pairShap"
+
+    struct.pack_into(">II", out, table[0], 0, 4)
+    struct.pack_into(">II", out, table[0] + 8, 0, 4)
+    corners = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+    points = [(x, y, 0.0) for x, y in corners]
+    points += [(x + 2.0, y, 0.0) for x, y in corners]
+    for i, point in enumerate(points):
+        struct.pack_into(">3f", out, table[1] + i * model.TRIPLE, *point)
+        struct.pack_into(">3f", out, table[3] + i * model.TRIPLE, 0.0, 0.0, 1.0)
+        struct.pack_into(">I", out, table[2] + i * 4, i % 4)
+        struct.pack_into(">I", out, table[4] + i * 4, i)
+        struct.pack_into(">I", out, table[5] + i * 4, 0xFFFFFFFF)
+        struct.pack_into(">I", out, table[6] + i * 4, i)
+        struct.pack_into(">I", out, table[7] + i * 4, i % 4)
+
+    lower = [(u / 2, v / 2) for u, v in corners]
+    for i, pair in enumerate(lower + [(u + 0.5, v + 0.5) for u, v in lower]):
+        struct.pack_into(">2f", out, table[8] + i * model.UV_PAIR, *pair)
+    return bytes(out)
+
+
+class TestTheTexcoordIndex:
+    """⛔ UVs are indexed **per corner**, from slot 7, and rebased per shape.
+
+    The reading this replaced paired a UV to a *position* index. It survived
+    because 74% of models happen to carry one UV per position — but 26% do not,
+    and every one of them exported bare. `e_bara_tib_p` has 64 positions and 96
+    UVs, and its slot-7 stream has one entry per corner with a maximum of 63,
+    which is only below 96 because each shape restarts (D234).
+
+    ⚠️ The instrument is **UV triangle area**, not "did a texture appear". A
+    wrong index still produces a textured model, with the art smeared across
+    it. Correct UVs give small coherent triangles; the shuffled control below
+    is what says so.
+    """
+
+    def test_the_second_shape_gets_its_own_uv_base(self):
+        found = model.mesh(a_two_shape_model())
+        assert found.shapes == 2
+        assert found.corner_positions == [0, 1, 2, 3, 4, 5, 6, 7]
+        assert found.corner_uvs == [0, 1, 2, 3, 4, 5, 6, 7], (
+            "the per-shape UV base was not folded in; the second quad is "
+            "drawing with the first quad's texture coordinates"
+        )
+
+    def test_the_second_quad_lands_on_its_own_corner_of_the_image(self):
+        """The same fact stated as art rather than as indices: shape 2's UVs
+        all sit in the upper half of the image, and shape 1's in the lower."""
+        found = model.mesh(a_two_shape_model())
+        first, second = found.faces
+        for at in range(first.first, first.first + first.corners):
+            assert max(found.uvs[found.corner_uvs[at]]) <= 0.5
+        for at in range(second.first, second.first + second.corners):
+            assert min(found.uvs[found.corner_uvs[at]]) >= 0.5
+
+    def test_a_corner_carries_its_uv_index(self):
+        found = model.mesh(a_two_shape_model())
+        for triangle in found.corner_triangles():
+            for corner in triangle:
+                assert corner.uv is not None
+                assert corner.uv < len(found.uvs)
+
+    def test_more_uvs_than_positions_is_still_textured(self):
+        """⛔ `is_textured` was `len(uvs) == len(positions)`, which is false for
+        every model this fixes."""
+        found = model.Mesh(
+            name="x",
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 2],
+            corner_uvs=[2, 3, 4],
+            uvs=[(0.0, 0.0)] * 5,
+        )
+        assert len(found.uvs) != len(found.positions)
+        assert found.is_textured
+
+    def test_a_corner_pointing_past_the_uv_array_is_not_textured(self):
+        """⚠️ The check has to be able to say no, or it says nothing."""
+        found = model.Mesh(
+            name="x",
+            positions=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+            faces=[model.Face(first=0, corners=3)],
+            corner_positions=[0, 1, 2],
+            corner_uvs=[0, 1, 9],
+            uvs=[(0.0, 0.0)] * 3,
+        )
+        assert not found.is_textured
+
+    def test_bara_tib_carries_a_uv_for_every_corner(self):
+        """The model this was reported against: 64 positions, 96 UVs, bare."""
+        path = MODELS / "e_bara_tib_p"
+        if not path.is_file():
+            pytest.skip(f"no {path}")
+        found = model.mesh(path.read_bytes())
+        assert len(found.positions) == 64
+        assert len(found.uvs) == 96
+        assert found.is_textured
+
+    def test_the_disc_gains_textures_and_loses_none(self):
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        before = after = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            if not found.is_drawable:
+                continue
+            before += 1 if len(found.uvs) == len(found.positions) and found.uvs else 0
+            after += 1 if found.is_textured else 0
+        assert before == 639, f"{before} models match by count; the corpus moved"
+        assert after >= 770, (
+            f"{after} models are textured, was 770. The slot-7 reading has "
+            "regressed to pairing UVs by position index."
+        )
+
+    def test_real_uv_triangles_are_tighter_than_shuffled_ones(self):
+        """⛔ The control, and the reason the reading is believed at all.
+
+        A face's three corners land close together on the texture; a wrong
+        index scatters them across it. Measured over the models slot 7
+        unlocked: **0.0474** median UV triangle area against **0.1342** for a
+        shuffled control (D234).
+        """
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        import random  # pylint: disable=import-outside-toplevel
+
+        random.seed(2026)
+        real, control = [], []
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                found = model.mesh(data)
+            except model.ModelError:
+                continue
+            if not found.is_textured or len(found.uvs) == len(found.positions):
+                continue
+            shuffled = list(range(len(found.uvs)))
+            random.shuffle(shuffled)
+            for triangle in found.corner_triangles():
+                real.append(_uv_area([found.uvs[c.uv] for c in triangle]))
+                control.append(_uv_area([found.uvs[shuffled[c.uv]] for c in triangle]))
+        assert len(real) > 20000, f"only {len(real)} faces; the test is weak"
+        real.sort()
+        control.sort()
+        tight = real[len(real) // 2]
+        loose = control[len(control) // 2]
+        assert tight < 0.06, tight
+        assert tight < loose / 2, (tight, loose)
+
+
+def _uv_area(points) -> float:
+    """Twice the area of a UV triangle, in texture space."""
+    (au, av), (bu, bv), (cu, cv) = points
+    return abs((bu - au) * (cv - av) - (cu - au) * (bv - av)) / 2.0
+
+
 class TestCoverageIsReported:
     """Coverage, which is now the check that the rebasing still works.
 
