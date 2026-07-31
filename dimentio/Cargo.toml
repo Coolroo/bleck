@@ -13,8 +13,15 @@ license = "MIT"
 # egui plus winit plus wgpu, wired together. One dependency instead of four
 # that have to agree on versions.
 eframe = "0.29"
-# `image` arrives through this, so PNG decoding is not a direct dependency.
-egui_extras = { version = "0.29", features = ["image"] }
+# ⚠️ **Both extra features are load-bearing, and neither is obvious.**
+# `image` installs the decoder loader; **`file` installs the one that can read a
+# `file://` URI at all**, and without it every texture renders as egui's red
+# error triangle. Nothing in this program could catch that -- the machine it was
+# built on cannot capture its own interactive desktop.
+egui_extras = { version = "0.29", features = ["image", "file"] }
+# ⚠️ `egui_extras` pulls `image` in with **no format features**, so PNG has to
+# be asked for here or every decode fails after the loader finds the bytes.
+image = { version = "0.25", default-features = false, features = ["png"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
