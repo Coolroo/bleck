@@ -147,6 +147,7 @@ class TableKind(StrEnum):
     ENEMIES = "enemies"
     COINS = "coins"
     DOORS = "doors"
+    TEXTURES = "textures"
 
 
 #: Kinds the design calls for that nothing reads yet. Named apart from a plain
@@ -168,6 +169,9 @@ PLANNED_KINDS: tuple[str, ...] = ()
 #: ⛔ `DOORS` is deliberately absent: a door row is a **code patch**, not setup
 #: content, and it reaches `code.patches` through
 #: `bleck/mods/code/parts.py` instead (D134).
+#:
+#: ⛔ `TEXTURES` likewise: a texture row rewrites a *file in the overlay*, not a
+#: map's setup, and reaches the build through `mods/build/textures.py` (D193).
 PLACEMENT_KINDS = (TableKind.ENEMIES, TableKind.COINS)
 
 

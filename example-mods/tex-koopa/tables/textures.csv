@@ -1,0 +1,6 @@
+# Invert Bowser on the title screen.
+#
+# The texture comes from YOUR disc at build time. This mod ships this file and
+# nothing else -- no game bytes, so it can be shared (D193).
+file,member,image,op,arg
+files/lyt/title.bin.uk,arc/timg/koopa.tpl,,invert,

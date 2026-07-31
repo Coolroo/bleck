@@ -371,6 +371,10 @@ def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
             print(f"  {relative}")
     for built in report.code_builds:
         print(built.describe())
+    # ⚠️ Said out loud. A texture rewritten silently is an edit the author
+    # cannot tell happened from one that did not (D126).
+    for painted in report.texture_builds:
+        print(painted.describe())
     for warning in report.warnings:
         print(f"warning: {warning}")
     if report.conflicts:

@@ -119,6 +119,15 @@ def _generated_overlay_paths(mod) -> set[str]:
     maps = {placement.map_name for placement in edits.placements_for(mod)}
     for name in maps:
         produced.update(p.format(map_name=name) for p in _GENERATED_SETUP)
+
+    # ⛔ Texture edits write game-derived bytes into the overlay. Without this
+    # they classify as *assets* and a `.bleck` ships a modified Nintendo
+    # texture -- the exact thing declaring the edit was meant to stop (D193).
+    from bleck.mods.build import textures  # pylint: disable=import-outside-toplevel
+
+    for edit in textures.edits_for(mod):
+        path = edit.disc_path
+        produced.add(f"{path}/{edit.member}" if edit.member else path)
     return produced
 
 

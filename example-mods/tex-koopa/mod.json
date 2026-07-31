@@ -2,11 +2,14 @@
   "schema": 1,
   "name": "tex-koopa",
   "version": "0.1.0",
-  "description": "Invert Bowser",
+  "description": "Invert Bowser on the title screen, declared not baked",
   "author": "",
   "base": "eu0",
   "created": "",
   "dependencies": [],
   "exclusive": [],
-  "remove": []
+  "remove": [],
+  "tables": {
+    "textures": "tables/textures.csv"
+  }
 }

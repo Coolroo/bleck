@@ -17,6 +17,7 @@ from bleck.common.errors import BleckError
 from bleck.common.fsio import remove_tree
 from bleck.formats import lz77, u8
 from bleck.mods.build import generated
+from bleck.mods.build import textures as texture_edits
 from bleck.mods.build.conflicts import Conflict, detect, effective_edits, merge_three_way
 from bleck.mods.build.edits import PlacementBuild, apply_chain
 from bleck.mods.build.overlay import Plan, build_plan
@@ -51,6 +52,7 @@ class BuildReport:
     conflicts: list[Conflict] = field(default_factory=list)
     code_builds: list[CodeBuild] = field(default_factory=list)
     placement_builds: list[PlacementBuild] = field(default_factory=list)
+    texture_builds: list[texture_edits.TextureBuild] = field(default_factory=list)
 
     swept: list[str] = field(default_factory=list)
     """Overlay files the previous build wrote that this one no longer produces."""
@@ -251,6 +253,8 @@ def produce(
     report.warnings += [note for b in report.code_builds for note in b.warnings]
     report.placement_builds = apply_chain(chain, base)
     report.warnings += [note for b in report.placement_builds for note in b.warnings]
+    report.texture_builds = texture_edits.apply_chain(chain, base)
+    report.warnings += [note for b in report.texture_builds for note in b.warnings]
 
     # Recorded from what the builds say they wrote, never re-derived: a second
     # implementation of "where does this land" would drift from the first.
@@ -260,6 +264,8 @@ def produce(
             written.setdefault(name, []).append(built.output)
     for placed in report.placement_builds:
         written.setdefault(placed.mod, []).extend([placed.output, placed.also_wrote])
+    for painted in report.texture_builds:
+        written.setdefault(painted.mod, []).append(painted.output)
     for mod in chain.mods:
         generated.record(mod, written.get(mod.name, []))
         removed -= {f"{mod.name}/{path}" for path in generated.read(mod)}

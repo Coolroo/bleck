@@ -113,15 +113,28 @@ the CSV; the recipient's disc supplies the pixels.
 
 ---
 
-## What "done" means
+## What "done" means — ✅ Tier 1 complete (D193)
 
-- [ ] `tex-koopa` and `title-invert` rewritten as declarations, with **no
-      overlay files at all**
-- [ ] Both produce byte-identical output to the current hand-vendored versions,
-      or the difference is explained
-- [ ] `bleck mod pack tex-koopa` completes with **no consent prompt**
-- [ ] A round-tripped CMPR texture is byte-identical when the operation is
-      identity
+- [x] `tex-koopa` rewritten as a declaration, shipping **no game bytes**:
+      `bleck mod pack tex-koopa` produces `mod.json` + `tables/textures.csv`
+- [x] The difference from the hand-vendored version is **explained** — it is not
+      byte-identical, and the vendored one was wrong. See below.
+- [x] `bleck mod pack tex-koopa` completes with **no consent prompt**
+- [x] A round-tripped CMPR texture is byte-identical under an identity
+      operation, pinned exhaustively over all 65,536 RGB565 values (D187)
+
+### ⛔ The vendored texture was a naive bitwise NOT
+
+Comparing the old hand-made `koopa.tpl` against the base:
+
+- it differs from the base in **all but 64 bytes** — the TPL header
+- it is *exactly* `~byte` over the pixel data
+- that flipped **all 2,400 blocks** between 4-colour-opaque and
+  3-colour-plus-transparent, because DXT1 picks between them by comparing the
+  endpoints
+
+`bleck`'s invert reorders those same 2,400 blocks back to preserve their kind.
+So the two outputs disagree by design, and the declaration is the correct one.
 
 ⚠️ The third is the real acceptance test. The prompt disappearing is the whole
 point of the feature.

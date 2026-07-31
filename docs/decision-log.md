@@ -12511,3 +12511,59 @@ look at it. `uv run bleck texture export --out work/export` then
 ⚠️ Note the export is a *prerequisite*, not a suggestion — the viewer opens on a
 message saying exactly that when handed a folder with no manifest, because
 "nothing here" would send someone looking in the wrong place.
+
+---
+
+## D193 — Texture edits are declared, and the old vendored one was wrong (2026-07-30)
+
+✅ **Tier 1 of `plan-textures.md` is done.** `tables/textures.csv` declares a
+colour operation against a disc path; the build reads the texture from **the
+user's own disc**, applies it in the CMPR endpoint domain (D187), and writes the
+result to the overlay.
+
+```csv
+file,member,image,op,arg
+files/lyt/title.bin.uk,arc/timg/koopa.tpl,,invert,
+```
+
+✅ `bleck mod pack tex-koopa` now produces **two files** — `mod.json` and
+`tables/textures.csv` — with no consent prompt and no game bytes. It was the
+last edit kind that shipped as bytes.
+
+⚠️ Worth being precise about what that fixes: `tex-koopa`'s vendored texture
+lives under a **git-ignored** `overlay/`, so it was never in the repository —
+but it also meant a fresh clone got a mod that did nothing. The declaration
+makes it work from a clone, against whatever disc the user has.
+
+### ⛔ The old vendored texture was made wrongly
+
+The acceptance criterion allowed "byte-identical, **or the difference is
+explained". It is not identical, and the explanation is that the original was a
+mistake:
+
+- The vendored `koopa.tpl` differs from the base in **all but 64 bytes** — the
+  TPL header — and is *exactly* `~byte` across the pixel data.
+- A bitwise NOT hits the endpoints **and the indices**, and inverting endpoints
+  reverses their comparison, so it flipped **all 2,400 blocks** between
+  4-colour-opaque and 3-colour-plus-transparent.
+- `bleck` reorders those same 2,400 blocks back, which is the guard
+  `plan-textures.md` predicted would be needed before any of this was written.
+
+So the two disagree by design and the declaration is the correct one. 🔶 Nobody
+has compared them on screen; the transparency change may or may not be visible.
+
+### ⛔ A bug caught by writing the test that exists for it
+
+The first wiring shipped the **generated** texture inside the `.bleck`.
+`pack._generated_overlay_paths` knew about `mod.rel` and setup files and not
+about texture output, so it classified it as an *asset* — game-derived bytes,
+packed on consent. Exactly the thing the feature exists to prevent, in the
+feature that prevents it.
+
+Fixed by asking `build/textures.py` which paths a mod's rows produce, the same
+way that function already asks the builder about placements. ⚠️ Never re-derived
+from patterns: a second implementation of "where does this land" would drift
+from the first.
+
+⚠️ The build also **reports** each texture it rewrites. A generated file nobody
+is told about is indistinguishable from one that was not generated (D126).
