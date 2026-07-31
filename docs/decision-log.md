@@ -14611,3 +14611,63 @@ so.
 `app/clipboard.rs` (mod.rs now 812). `data/mesh.rs` hit 1,045 with the new
 tests, so its real-export tests moved to a sibling behind `#[path]`, keeping the
 module path unchanged. Largest module is now 910.
+
+### D230 addendum — the full routing, and a modifier hunt that also came up empty (2026-07-31)
+
+The listener pushed back on D230 twice, correctly both times: *"you might be
+looking for the wrong thing — it may be a rate **modifier** instead of a rate
+override"*, and *"we're also assuming 32k is the goal"*. Both reframings were
+tested.
+
+### ✅ The chain, end to end
+
+```
+wiimario_snd.dat  ->  RSAR sound entry  ->  file table  ->  <name>.brstm
+   (text)               (STRM, type 2)       (external)
+```
+
+`wiimario_snd.dat` holds **143 BGM records of six fields**:
+
+| field | meaning |
+|---|---|
+| 0 | player id — **6 for every BGM record** |
+| 1 | volume, 0..127 |
+| 2 | pan — **64 in every record** |
+| 3 | a flag, **0 or 8** |
+| 4 | an index |
+| 5 | **the RSAR sound index**, 1234..1376 |
+
+Field 5 is the join: the archive's 144 STRM entries start at 1233, and each
+carries a `fileId` into a 524-entry file table whose entries name the external
+`.brstm`. 119 of them resolve.
+
+### ⛔ Every modifier candidate refuted
+
+| candidate | result |
+|---|---|
+| float pitch in RSAR INFO | 1,234 floats in 0.05..20.0, and **1,233 of them are `2.0`** — a constant, not a per-sound value. No 0.7256, no 1.378. |
+| an integer rate field in the `.dat` | field 2 is constant, field 1 is volume, field 0 is the player |
+| **field 3 (0/8) selecting a rate** | ⛔ **cross-tabulated against the actual header rates** |
+
+That last one is the sharpest negative:
+
+```
+field3=0 -> {32000: 12, 32028: 1, 32728: 3, 44100: 78}
+field3=8 -> {44100: 24}
+```
+
+Field 3 is **only ever 8 on a 44.1 kHz track** — which looks like a lead until
+the other column shows 78 more 44.1 kHz tracks with field 3 = 0. It correlates
+with rate without selecting it.
+
+⚠️ **And the disc uses four rates, not two**: 32000 (12 tracks), 32028 (2),
+32728 (4), 44100 (117). Any "everything is really 32k" theory has to explain
+the two odd ones.
+
+### 🔶 The theory left standing
+
+**Wii's AX mixer runs natively at 32 kHz.** A stream played without its
+source-rate ratio set comes out at 32000/44100 = **0.73x speed** — slower in
+game than a faithful 44100 export, which is exactly the shape of the
+listener's complaint. Untested; it predicts that 117 of 135 tracks should be
+written at 32000.
