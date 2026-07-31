@@ -85,9 +85,15 @@ bleck effect  export --out work/export   # 139 effects + effects.json
 | | state |
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
-| **Models** | 🔶 geometry decoded and rendering, but **each is a fragment** |
-| **Animations** | ⛔ names and pointers only; nothing can play a clip |
+| **Models** | ✅ geometry, UVs and textures — confirmed by a person in Blender |
+| **Animations** | ✅ **playable**, as glTF morph targets (D217) |
 | **Effects** | 🔶 structure, part durations and transform rows; **no part→image link** |
+
+⛔ **Animation is per-vertex morphing, not skeletal** (D217). Two sessions went
+into hunting a track→joint mapping that does not exist: `animPoseMain` adds
+per-vertex offsets to a copy of the position array, so a key is
+`[u8 vertex stride, s8 dx, s8 dy, s8 dz]`. That maps straight onto glTF morph
+targets and needs no joints at all.
 
 ⚠️ **The model reading is the thing to be careful about.** The vertex format was
 read off the game's own draw code (D207) and is solid; the *face and index*
@@ -97,9 +103,13 @@ reading resolves cleanly but reaches only **13.6% of a file's vertices**
 
 ⛔ **Two hypotheses for the gap are already ruled out**: a per-group position
 base (D214, refuted by shuffling the bases) and the size-prefixed record chain
-past `0x15F5C` holding the other shapes (D212, refuted — it contains no
-normals, so it is not geometry). The open contradiction is that a shape has 324
-positions and 336 corners and **no index stream can address 324 things**.
+past `0x15F5C` holding the other shapes (D212, refuted — it holds the animation
+clips instead, all 80 of them). `--min-coverage 95` gives the **132 models
+known to render correctly**.
+
+⚠️ **r13 is `0x805B5F00`** (D218), so every small-data global is now
+addressable by name. `xref` cannot see them — the same blind spot as D206 —
+which is what hid the effect code for two sessions.
 
 ⚠️ **Nobody has looked at Dimentio's window.** This machine cannot capture its
 own interactive desktop, which is exactly why the viewport is a software
