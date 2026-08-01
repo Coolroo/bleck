@@ -17,7 +17,9 @@ Read alongside:
 | `bleck/formats/modelrebase.py` | the group and shape records — which slice of those arrays each shape indexes |
 | `bleck/formats/modelbase.py` | `Face`, `Shape`, the error type and the name field |
 | `bleck/formats/modelanim.py` | the clip table, its curves and its morph poses |
+| `bleck/formats/modelmat.py` | the layer, material and transform tables — which image a shape draws, how it is wrapped and where |
 | `bleck/formats/gltf.py` | the `.glb` writer |
+| `bleck/formats/gltfpaint.py` | its materials, samplers, textures and images |
 | `scripts/modelscan.py` | `survey`, `header`, `offsets`, `at`, `strings`, `chain` |
 
 ⚠️ **Some docstrings in those files are older than this page.** The
@@ -121,19 +123,47 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 4 | `0x160` | 336 entries, 0..335 | **corner → normal index** | ✅ D207, D208 |
 | 5 | `0x164` | 336 entries of 4 bytes | 🔶 **vertex colours** — not floats, and paired with an identity index stream | 🔶 D208 addendum |
 | 6 | `0x168` | 490 entries | 🔶 an index stream; D208's addendum reads the colour index here | 🔶 D207, D208 |
-| 7 | `0x16C` | 153 entries, 23 distinct | **corner → UV index**, one per corner | ✅ D234 |
-| 8..15 | `0x170`+ | one offset, repeated | **eight texture-coordinate channels**; slot 8 is channel 0 | ✅ D208 addendum |
-| 16 | `0x190` | — | ⛔ **unread** | — |
-| 17 | `0x194` | 8 bytes × layers | **layer records** — `+0x00` a material index, `+0x04` a wrap flag | ✅ D243 |
-| 18 | `0x198` | 64 bytes × materials | **material records** — `+0x04` the bank image index, `+0x0C` the source TGA path | ✅ D243 |
-| 19 | `0x19C` | 108 bytes × shapes | **shape records** — layer count and list, first face, face count, and the corner offset of each index stream | ✅ D240, D243 |
+| 7 | `0x16C` | 153 entries, 23 distinct | **corner → UV index** for channel 0, one per corner | ✅ D234 |
+| 8..14 | `0x170`+ | one offset, repeated | **UV index streams for channels 1–7**, empty on every model | ✅ D240, D247 |
+| 15 | `0x18C` | 2 floats × coordinates | **the texture-coordinate array itself** | ✅ D240, D247 |
+| 16 | `0x190` | 24 bytes × layers | **per-layer animation offset and UV transform** | ✅ D247 |
+| 17 | `0x194` | 8 bytes × layers | **layer records** — `+0x00` a material index, `+0x04` the wrap mode | ✅ D243, D247 |
+| 18 | `0x198` | 64 bytes × materials | **material records** — `+0x04` the bank image index, `+0x08` a mode the draw code branches on, `+0x0C` the source TGA path | ✅ D243 |
+| 19 | `0x19C` | 108 bytes × shapes | **shape records** — layer count and list, material mode, UV channel per layer, first face, face count, and the corner offset of each index stream | ✅ D240, D243, D247 |
 | 20..23 | `0x1A0`+ | — | ⛔ **unread** | — |
 
-⚠️ **The draw code loads slots 8–15 as *index* streams, not channel data.**
+⚠️ **The draw code loads slots 7–14 as *index* streams, not channel data.**
 `lwzx r0, r24, r5` picks `0x16C + channel × 4`, so `0x16C`…`0x188` are eight
-per-channel UV index streams and `0x18C` is the coordinate array itself. `_uvs()`
-reads from `table[8]` to the next *different* entry and lands on the right bytes
-anyway, because an unused channel's start equals the array's start (D240).
+per-channel UV index streams and `0x18C` is the coordinate array itself (D240).
+⛔ **D208's addendum put channel 0 at slot 8 and is superseded**: slot 7 is
+channel 0. `_uvs()` reads from `table[8]` to the next *different* entry and
+lands on the right bytes anyway, because every channel above 0 is empty on this
+disc — all 870 models have slots 8–14 equal to slot 15 (D247).
+
+### Slot 16 — how a layer is sampled
+
+✅ **24 bytes per layer, 1:1 with slot 17 on all 870 models** (D247). The draw
+code indexes it by layer index × 24 in two loops: one adds `+0x00` to the
+material index, the other builds a texture matrix from the five floats.
+
+| field | what |
+|---|---|
+| `+0x00` | `u8` **frame offset** added to the layer's material index at runtime — how a texture animates without the file changing |
+| `+0x04` / `+0x08` | translate U and V. ⚠️ The V the code uses is `1 - v - scale_v` |
+| `+0x0C` / `+0x10` | scale U and V |
+| `+0x14` | **rotation in degrees**, about the middle of the image `(0.5, 0.5)` |
+
+✅ Composed as `rotate × translate × scale`, each factor built only when it is
+not the identity, dispatched through an 8-entry jump table at `0x80407D50`.
+
+⚠️ **The default record still builds a translation matrix.** `+0x10` is one of
+the three fields tested, so `(0, 0, 1, 1, 0)` takes the branch — and translates
+by `(0, 1 - 0 - 1)`, which is nothing. Ask the composed matrix whether a layer
+moves, never the branches.
+
+**130 of 7,300 records are not the identity.** `MOBJ_EFF_mahojin_omote` rotates
+by 45°, 61°, 45° and 360°; the four `OFF_door*` models scale U by **-1**, which
+is how one door mirrors the other; `MOBJ_bom` translates by -2.5.
 
 ⚠️ **Slots 5 and 6 are read by nothing in `bleck`.** They are listed because
 D207 measured them, not because their meaning is settled — and D207's 490
@@ -594,6 +624,24 @@ worst-case error.
 
 Geometry alone (`--no-animation`) is **20.6 MB** for all 864.
 
+### How a texture reference is written
+
+A shape's layers become one glTF material each. The base layer is the
+`baseColorTexture`; its wrap mode is a real `samplers` entry (one per distinct
+pair, shared) and its UV transform a `KHR_texture_transform` on the texture
+reference, declared in `extensionsUsed` and never in `extensionsRequired`
+(D248).
+
+⛔ **The second layer has no core glTF slot.** It multiplies the base's colour
+*and* alpha by its own alpha, which `occlusionTexture` cannot express and
+`emissiveTexture` inverts. It is written as a full `textureInfo` at
+`material.extras.spmMaskTexture`: Blender ignores it and draws layer 0,
+`dimentio` reads it and multiplies. ⚠️ The image is a real `textures` entry, so
+it stays reachable and D245's unreferenced-image check still holds.
+
+⚠️ **Materials are deduplicated on the whole reference, not on the image.** Two
+shapes can name one picture and clamp it differently.
+
 ✅ **Structurally validated, since nobody here can open a `.glb`.** All 864 files
 re-parsed: header length equals file length, both chunks 4-byte aligned and
 summing to the file, every buffer view inside the buffer, every accessor inside
@@ -619,10 +667,51 @@ shape record +0x10   eight layer indices, -1 where unused
 
 ⚠️ **The layer list is stored backwards.** The draw loop reads
 `indices[count - i - 1]` and binds it to `GX_TEXMAP` *i*, so the last stored
-index is map 0. `modelmat.Binding.images` is already in map order.
+index is map 0. `modelmat.Binding.layers` is already in map order.
 
 ⚠️ **`+0x00` is a count, not a flag.** Reading it as a boolean called the disc's
 40 two-layer shapes untextured, which also cost them their UV corner offset.
+
+### ✅ What the two layers of a two-layer shape do — SOLVED
+
+⛔ **It is not a second colour.** Shape record `+0x08` selects a TEV program from
+a 13-entry table at `0x80409188`, and every two-layer shape on the disc — all 40
+— picks **mode 2**, which multiplies the base by the second layer's **alpha**
+(D247):
+
+```
+stage 0   prev = tex0                      (colour and alpha)
+stage 1   prev = tex1.a * prev             <- the mask; tex1.rgb is never read
+stage 2   prev = ras * prev
+```
+
+Mode 0, which every other shape picks, is a single `GX_MODULATE` stage. ⚠️
+**Mode 1 is a real decal blend and nothing on the disc uses it**, so reading the
+modes in order and stopping at the first plausible one gets this backwards.
+
+⚠️ **Both layers sample UV channel 0.** Shape record `+0x30 + i` is a *signed*
+per-layer channel index, read in the same reverse order as the layer list, and
+it is 0 everywhere; slots 8–14 are empty on all 870 models. The two layers
+differ only in their slot-16 matrices, so a second UV set is not needed and is
+not exported.
+
+### Wrap mode — slot 17 `+0x04`
+
+✅ Bits 0 and 1 choose CLAMP (0) or REPEAT (1) for S and T; bits 2 and 3
+override either with MIRROR (2). A **negative** word means "keep the image's own
+`GXInitTexObj` defaults", which nothing on the disc asks for (D247).
+
+| value | S | T | layers |
+|---|---|---|---|
+| 0 | CLAMP | CLAMP | 6,719 |
+| 1 | REPEAT | CLAMP | 22 |
+| 2 | CLAMP | REPEAT | 19 |
+| 3 | REPEAT | REPEAT | 539 |
+| 12 | MIRROR | MIRROR | 1 |
+
+⛔ **The exporter assumed REPEAT and was wrong about 6,760 of 7,300 layers.**
+D215's "~21% of models have coordinates outside `[0,1]`, so it is tiling" was
+half right: most of it is a clamp.
 
 Validated against the Brobot rips (D236) two independent ways, each with a
 shuffled control: **284 of 286** matched shapes pick an image of exactly the
@@ -643,8 +732,9 @@ wrong.
 | ⛔ a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked (D229) |
 | ⛔ section slot 17 read as a per-shape array | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum). Slot 17 *is* in the chain — one hop further along |
 
-**What ships:** 823 of 864 models export textured with 6,886 embedded images,
-one glTF material per image any shape reaches. The 41 that stay bare name no
+**What ships:** 823 of 864 models export textured with 6,892 embedded images,
+one glTF material per distinct texture reference any shape makes — image, wrap
+mode, UV transform and mask together (D247, D248). The 41 that stay bare name no
 image at all, which the file states. ⚠️ D243 first reported 781 and 6,647; 10
 of those 781 embedded art no primitive referenced, and 52 models were reading
 the wrong texture bank (D245). ⛔ `--guess-textures` and the manifest's
@@ -691,22 +781,27 @@ bytes = 888 records of 20, which is large enough and untested.
 See above. It is an inference from `effdata`'s frame counts, not a measurement of
 the model clip table. Nothing has timed a clip against the running game.
 
-### 🔶 Slots 5, 6, 16 and 20–23
+### 🔶 Slots 5, 6 and 20–23
 
 Vertex colours and their index stream are read by nobody, and the counts D207
-measured do not pair cleanly. ✅ Slots 17, 18 and 19 are decoded (D240, D243).
+measured do not pair cleanly. ✅ Slots 16, 17, 18 and 19 are decoded (D240,
+D243, D247), as are the shape record's `+0x08` material mode and its
+`+0x30`…`+0x37` UV-channel bytes.
 
-Two fields inside the decoded ones are still open: the shape record's
-`+0x30`…`+0x37`, one byte per layer and `0` on every model (a UV-channel
-selector is the obvious reading, and nothing on the disc distinguishes it from a
-constant), and slot 17's `+0x04`, which the draw code branches on to pick a
-`GXTexWrapMode` — the exporter always writes `REPEAT` (D243).
+What remains inside the decoded ones: the frame-offset byte at slot 16 `+0x00`
+steps a texture animation by walking consecutive material records, and a static
+export takes frame 0; material record `+0x08` is a mode the draw code compares
+against 1, 2 and 10 and is only partly read; and the `+0x04 < 0` branch of the
+wrap flag is unexercised on this disc.
 
-### 🔶 Group record `+0xA0` and `+0xA4`
+### ✅ Group record `+0xA4` is a cull mode — 🔶 `+0xA0`
 
-Undecoded. `0xA4` is 3 on every group measured; `0xA0` is 0 except on
-`e_lui_robo`'s `glassShape`, where it is 3. A blend or render-pass mode is the
-obvious guess and is untested (D240).
+`+0xA4` indexes the table at `0x80407D40` — `[GX_CULL_FRONT, GX_CULL_BACK,
+GX_CULL_ALL, GX_CULL_NONE]` — and the result goes to `GXSetCullMode`. It is 3 on
+every group, so the whole disc draws double-sided (D247).
+
+`+0xA0` is still undecoded: 0 except on `e_lui_robo`'s `glassShape`, where it is
+3. A blend or render-pass mode is the obvious guess and is untested (D240).
 
 ### 🔶 `OFF_hei_01b` — the one model whose group table does not read
 

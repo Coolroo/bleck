@@ -166,6 +166,13 @@ Four are new this session and all four have already misled someone.
    ⛔ D229's "three candidates refuted, binding unknown" is superseded — all
    three skipped the two indirections. ⚠️ The manifest's `texture_guessed` is
    gone; Dimentio reads it with `#[serde(default)]` and degrades to `false`.
+   ✅ **How that image is sampled is decoded too** (D247): slot 17 `+0x04` is a
+   wrap mode and **92% of the disc clamps** where the exporter used to assume
+   REPEAT, and slot 16 is a per-layer UV transform. ⛔ **A two-layer shape's
+   second layer is an alpha mask, not a second colour** — 40 shapes, declared as
+   `material.extras.spmMaskTexture` because glTF has no slot for it (D248).
+   ⚠️ **`I4` and `I8` decode to `(I, I, I, I)`**, not opaque; a test was pinning
+   the old reading and would have passed forever.
 3. 🔶 **The 60 Hz clip rate is an inference, not a measurement.** Model key
    times are whole numbers and `effdata` already converts effect frames at 60
    (D219), so `FRAME_RATE = 60.0` applies the same inference to a second table

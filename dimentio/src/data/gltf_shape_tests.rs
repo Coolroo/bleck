@@ -270,7 +270,7 @@ fn each_primitive_resolves_its_own_image() {
     let sampled: Vec<Texel> = parts
         .paints
         .iter()
-        .map(|paint| paint.texture.sample(0.5, 0.5))
+        .map(|paint| paint.texture.sample(0.5, 0.5, &paint.sampling))
         .collect();
     assert_eq!(sampled, [RED, GREEN, BLUE], "a slot holds the wrong image");
 }

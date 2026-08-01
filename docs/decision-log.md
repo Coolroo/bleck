@@ -16181,3 +16181,346 @@ material chain wrong; these numbers came from the other program.
   whose mapping is unrecorded (D243).
 - **Nobody has looked at the result.** Every claim above is a pixel count or a
   byte count. That the robot now *looks* right is untested.
+
+## D247 — The second layer is a mask, and the disc clamps far more than it repeats (2026-08-01)
+
+Both of D246's open items were assumptions, and both were wrong. The draw path
+states the answer to each, so it was disassembled rather than guessed — the
+fourth time that has worked on this format (D206, D240, D243).
+
+### Wrap mode: slot 17 `+0x04`, decoded ✅
+
+`0x8004729c` reaches `GXInitTexObj` twice — once through the CI/palette branch
+at `0x802917ac` and once direct at `0x802915a0` — and both are handed `wrap_s`
+and `wrap_t` from the same six instructions:
+
+```
+800474a0: cmpwi   r18,0            ; r18 = slot17[idx].word1
+800474b0: blt     0x800474dc       ; below zero -> keep the GXTexObj defaults
+800474b4: rlwinm. r0,r18,0,29,29   ; bit 2 -> wrap_s = GX_MIRROR (2)
+800474c4: clrlwi  r20,r18,31       ; else   wrap_s = bit 0
+800474c8: rlwinm. r0,r18,0,28,28   ; bit 3 -> wrap_t = GX_MIRROR
+800474d8: rlwinm  r21,r18,31,31,31 ; else   wrap_t = bit 1
+```
+
+⛔ **The defaults it would otherwise keep are `texinfo +0x0C` and `+0x10`** —
+the image's own declaration, which glTF has no way to express. Nothing on the
+disc takes that branch, so the question is moot in practice and recorded here
+because it will not stay moot if this reader ever meets another game.
+
+| `+0x04` | wrap_s | wrap_t | layers on the disc |
+|---|---|---|---|
+| 0 | CLAMP | CLAMP | **6,719** |
+| 1 | REPEAT | CLAMP | 22 |
+| 2 | CLAMP | REPEAT | 19 |
+| 3 | REPEAT | REPEAT | 539 |
+| 12 | MIRROR | MIRROR | 1 |
+
+⛔ **The exporter wrote `{"wrapS": REPEAT, "wrapT": REPEAT}` and was wrong about
+6,760 of 7,300 layers.** D215 recorded that ~21% of models have coordinates
+outside `[0,1]` and read it as tiling; most of it is a clamp.
+
+### The second layer: an alpha mask, and the shape record says which ✅
+
+Shape record `+0x08` is a **material-mode index**, switched at `0x80086b48`
+through a 13-entry jump table at `0x80409188`. Two values occur on the disc, and
+they line up exactly with the layer count:
+
+| `+0x08` | shapes | which |
+|---|---|---|
+| 0 | 18,982 | every 0-layer and 1-layer shape |
+| 2 | **40** | every 2-layer shape, and only those |
+
+⚠️ **The mode is not reached at all when the layer count is zero.** `0x80086b48`
+is called as `(layerCount, mode, …)` and its `r3 <= 0` path sets one stage of
+`GX_PASSCLR` — the vertex colour, which is what D243's rip comparison saw from
+the other side.
+
+**Mode 0** is one stage: `GXSetTevOrder(0, COORD0, MAP0, COLOR0A0)` and
+`GXSetTevOp(0, GX_MODULATE)` — texture times the lit colour.
+
+**Mode 2** is three, and this is the finding:
+
+```
+stage 0  Order(0, COORD0, MAP0, NULL)
+         ColorIn(0, ZERO, ZERO, ZERO, TEXC)    prev.rgb = tex0.rgb
+         AlphaIn(0, ZERO, ZERO, ZERO, TEXA)    prev.a   = tex0.a
+stage 1  Order(1, COORD1, MAP1, NULL)
+         ColorIn(1, ZERO, CPREV, TEXA, ZERO)   prev.rgb = tex1.a * prev.rgb
+         AlphaIn(1, ZERO, APREV, TEXA, ZERO)   prev.a   = tex1.a * prev.a
+stage 2  Order(2, NULL, NULL, COLOR0A0)
+         ColorIn(2, ZERO, CPREV, RASC, ZERO)   prev = ras * prev
+```
+
+✅ **The second layer's RGB is never sampled.** Only `GX_CA_TEXA` /
+`GX_CC_TEXA` from map 1 is read, and it multiplies both the colour and the alpha
+of map 0. ⛔ **Not a second diffuse layer, not a detail map, not a light map.**
+
+⚠️ **Mode 1 *is* a decal blend** — `ColorIn(1, CPREV, TEXC, TEXA, ZERO)`, a
+proper alpha-over — and **nothing on the disc uses it**. Reading the modes in
+order and stopping at the first plausible one would have got this backwards.
+
+The GX call addresses this rests on, all confirmed by argument count and by the
+constants passed: `GXSetTevOrder 0x80292ed4` · `GXSetTevOp 0x802929d4` ·
+`GXSetTevColorIn 0x80292a68` · `GXSetTevAlphaIn 0x80292aa8` ·
+`GXSetTevColorOp 0x80292ae8` · `GXSetTevAlphaOp 0x80292b40` ·
+`GXSetTevSwapMode 0x80292d58` · `GXSetTevKColorSel 0x80292cb8` ·
+`GXInitTexObj 0x802915a0` · `GXInitTexObjCI 0x802917ac` ·
+`GXInitTexObjLOD 0x802917f4` · `GXInitTlutObj 0x80291b48` ·
+`GXLoadTlut 0x80291b70` · `GXLoadTexObj 0x80291af4` ·
+`GXSetTexCoordGen2 0x8028f18c` · `GXLoadTexMtxImm 0x802943cc` ·
+`GXSetCullMode 0x802901f8`.
+
+### Slot 16 is the per-layer UV transform — D246's 🔶 lead, confirmed ✅
+
+The 24-byte table at header `0x190` is **1:1 with the layer table on 870 of 870
+models**, and the draw code indexes it by layer index times 24 in two separate
+loops. The first reads byte `+0x00`:
+
+```
+lbzx r6, r28, r0     ; r28 = the 24-byte table, r0 = idx * 24
+add. r21, r7, r6     ; material index + this byte
+```
+
+which is D243's "runtime byte" — the animation frame offset — located. The
+second loop reads the five floats after it and builds texture matrices:
+
+| field | what | evidence |
+|---|---|---|
+| `+0x00` | `u8` frame offset added to the material index | the `lbzx` above |
+| `+0x04` | translate U | `MTXTrans(f26, …)` |
+| `+0x08` | translate V, as `1 - v - scale_v` | `fsubs f0,f31,f25; fsubs f2,f0,f27` |
+| `+0x0C` | scale U | `MTXScale(f28, f27, 1.0)` |
+| `+0x10` | scale V | same |
+| `+0x14` | rotation in **degrees** | `fmuls f1,f30,f0` with `f30 = 0.017453292` |
+
+✅ **The rotation is about the middle of the image**, not the corner:
+`MTXTrans(0.5, 0.5)` and `MTXTrans(-0.5, -0.5)` bracket the `MTXRotRad`, and the
+constants at `_SDA2_BASE_ - 30732` / `- 30728` are exactly `0.5` and `-0.5`.
+`_SDA2_BASE_` is `0x805B7260`, from the register init at `0x8000630C`.
+
+✅ **Composed as `R * T * S`**, in that order, through a flag word and an
+8-entry jump table at `0x80407D50`. `MTXConcat(a, b, ab)` computes `ab = a * b`
+— read off the paired-single arithmetic at `0x8027a2d0`, not assumed — and
+`MTXRotRad`'s Z matrix is `[[cos, -sin], [sin, cos]]`, read off `0x8027a660`.
+
+⚠️ **objdump needs `-EB -M 750cl` for this.** The default decode turns
+`ps_merge00` into VMX nonsense and the matrix cannot be read at all; that is
+why `dolscan.py dis` shows garbage in the paired-single routines.
+
+**130 of the disc's 7,300 records are not the identity**, and the values are
+plainly authored: `MOBJ_EFF_mahojin_omote` rotates layers by 45°, 61°, 45° and
+360°; `OFF_doorL`, `OFF_doorR` and their `_v` siblings scale U by **-1**, which
+is how one door is the mirror of the other; `MOBJ_bom` translates by -2.5.
+Round numbers on nine models is not what a misread field looks like.
+
+⚠️ **The default record is not the identity by branch, only by result.** `+0x10`
+is one of the three fields the translate branch tests, so a layer at
+`(0, 0, 1, 1, 0)` *does* build a translation matrix — of `(0, 1 - 0 - 1)`, which
+is `(0, 0)`. Testing the branches would call 7,170 layers transformed.
+
+### Shape record `+0x30`…`+0x37` is a UV channel selector — D243's 🔶, confirmed ✅
+
+```
+80048894: subf  r0, r15, r28      ; layerCount - i
+8004889c: add   r4, r27, r0       ; r27 = shape + 0x30
+800488a4: lbz   r0, -1(r4)        ; byte [count - i - 1]  <- reverse, as the indices
+800488ac: extsb r0, r0            ; SIGNED
+800488b4: lwzx  r4, r1+48, r0*4   ; pick that channel's array
+800488b8: bl    GXSetArray(GX_VA_TEX0 + i, ptr, 8)
+```
+
+✅ It is a **signed** per-layer channel index, read in the same reverse order as
+the layer list. It is 0 on every shape of every model.
+
+⛔ **So a two-layer shape does *not* need a second UV set.** Both layers sample
+texture coordinate channel 0; measured independently, all 870 models have slots
+8–14 equal to slot 15, meaning channels 1–7 carry no index stream at all. The
+two layers differ only in their slot-16 matrices. This is what ruled out
+exporting `TEXCOORD_1`, which was the obvious plan.
+
+⚠️ **It also fixes the slot table in `model-format.md`.** Slot 7 is channel 0's
+index stream, slots 8–14 are channels 1–7, and **slot 15 is the coordinate
+array**. `_uvs()` reads from `table[8]` and lands on the array anyway only
+because channels 1–7 are empty on this disc.
+
+### Group record `+0xA4` is a cull mode ✅
+
+`0x80047b1c` reads it, indexes the table at `0x80407D40` — which holds
+`[2, 1, 3, 0]` — and calls `GXSetCullMode`. It is 3 on every group, so every
+group maps to `GX_CULL_NONE`. That is half of D240's open pair answered; `+0xA0`
+is still undecoded.
+
+### ⛔ `I4` and `I8` were decoded fully opaque, and that is a bug
+
+The texture unit expands an intensity texel to `(I, I, I, I)` — the value
+reaches the TEV as `GX_CC_TEXA` as well as `GX_CC_TEXC`. `texdecode` wrote
+`A = 255`.
+
+It matters here because **every image in `MOBJ_EFF_queen_tornade` and
+`MOBJ_EFF_uranoko` is I4**, as is one of `MOBJ_EFF_mahojin`'s two mask images:
+with the old decode the mask multiplied by 1 everywhere and the whole finding
+above would have been invisible. 17 images across `files/a` are affected, and
+an unknown number elsewhere.
+
+⛔ **A test was defending it.** `test_alpha_is_opaque_wherever_the_format_has_no_alpha`
+asserted `alphas == {255}` for I4, I8 and RGB565. It would have passed forever.
+It now covers RGB565 only, and a new test asserts alpha equals red on every
+intensity image the disc carries.
+
+### Rejected
+
+- ⛔ **Exporting the second layer as `TEXCOORD_1`.** It was the plan until the
+  channel selector was read; there is no second UV set to export, and a
+  `texCoord: 1` referencing an attribute the primitive lacks is exactly the
+  fault D245's walker was built to catch.
+- ⛔ **Baking the mask into the base image.** The two layers sample the same
+  coordinates through *different* matrices — `mahojin` shape 1's mask rotates
+  61° over an unrotated base — so there is no single image the pair collapses
+  to. It also violates the standing rule that an edit is data, not bytes.
+- ⛔ **Mapping the mask onto `occlusionTexture`.** It is structurally valid and
+  semantically false: occlusion dims indirect light only and cannot touch alpha,
+  so a reader honouring it would draw the wrong thing while looking correct.
+  `emissiveTexture` adds where this multiplies.
+- ⛔ **Reading the material modes in order and taking the first that fits.**
+  Mode 1 is a decal blend and would have been a plausible answer; the disc uses
+  mode 2. The corpus said which, not the disassembly.
+
+### Still open 🔶
+
+- The `+0x04 < 0` branch of the wrap flag — the image's own default — is
+  unexercised on this disc and cannot be expressed in glTF. It falls back to
+  REPEAT.
+- Modes 1 and 3–12 of the material table are decoded only as far as reading
+  their TEV programs; nothing on the disc selects them, so nothing checks the
+  reading.
+- The frame-offset byte at slot 16 `+0x00` steps a texture animation by walking
+  consecutive material records. A static export takes frame 0. 74 layers carry
+  1 and a handful carry up to 14.
+- Group record `+0xA0`.
+
+## D248 — Representing a mask glTF has no slot for, and a viewer that draws it (2026-08-01)
+
+D247 settled what the file says. This is what the exporter writes and what
+`dimentio` does with it — and, as in D246, every claim below is a pixel count or
+a byte count.
+
+### Wrap mode maps cleanly, so it maps ✅
+
+`gltfpaint` writes one `samplers` entry per distinct `(wrapS, wrapT)` pair and
+shares it. ⚠️ **Deduplication is on the whole reference, not on the image**:
+two shapes can name one picture and clamp it differently, and keying a material
+on the picture alone would give both whichever mode was written first.
+
+### The UV transform maps too, as `KHR_texture_transform`
+
+The file's matrix is `T(0.5) * R * T(-0.5) * T(shift) * S`, which the extension
+does not have — its rotation is about the origin and its translation is
+outermost. Moving the rotation to the origin collapses the two inner
+translations into one:
+
+```
+T(0.5) * R0 * T(-0.5) * T(shift) * S  ==  T(0.5 + R0 * (shift - 0.5)) * R0 * S
+```
+
+✅ **That equivalence is arithmetic, so it is tested as arithmetic.** Both
+matrices are built and compared over a grid of coordinates for ten transforms
+taken from the disc, and the control flips the rotation's sign and requires the
+grid to disagree. Nobody here can look at a rotated texture, and "it looked
+right" is the whole of D245.
+
+⚠️ **`extensionsUsed`, never `extensionsRequired`.** A reader that ignores the
+extension draws the untransformed texture, which is what every reader did before
+this and is strictly better than refusing the file. The walker asserts it.
+
+### The mask goes in `extras`, and that is a considered choice
+
+There is no core glTF slot meaning "multiply the base colour and alpha by this
+image's alpha". `material.extras.spmMaskTexture` is a full `textureInfo` — its
+own texture, its own sampler, its own transform — so the image is a real
+`textures` entry rather than a dangling blob.
+
+- **Blender and every other reader** ignore `extras` and draw layer 0, which is
+  what they can honestly show.
+- **`dimentio`** reads it and multiplies, which is what the game does.
+- **`tests/test_gltf_materials.py`** counts an image reachable through `extras`
+  as reached, so D245's "embedded but nothing references it" check still holds
+  with masks present.
+
+⚠️ **The mask is applied before the alpha cutoff, not after.** The game
+multiplies in the TEV and only then runs the alpha compare, so a texel the base
+leaves opaque and the mask leaves clear is a hole. Testing the base's own alpha
+first would draw the shape solid and look entirely plausible.
+
+### The corpus, measured ✅
+
+| | before | after |
+|---|---|---|
+| models exported | 864 | 864 |
+| files where a primitive resolves an image | 823 | 823 |
+| shapes resolving to an image | 13,953 | 13,953 |
+| embedded images | 6,886 | **6,892** |
+| shapes drawing a second layer | 0 | **40** |
+| materials carrying a mask | 0 | **10** |
+| models whose sampler is not REPEAT/REPEAT | 0 | **672** |
+| models declaring `KHR_texture_transform` | 0 | **9** |
+| structural violations | 0 | **0** |
+
+The 40 masked shapes are exactly D243's count, on exactly its four models:
+`MOBJ_EFF_mahojin_omote` and `_ura` at 19 each, `MOBJ_EFF_queen_tornade` and
+`MOBJ_EFF_uranoko` at 1.
+
+⚠️ **10 materials, 40 shapes.** The two numbers are different things and the
+first version of the corpus test asserted 40 against the material count and
+failed. `masked_primitives` walks primitives, which is what D243 counted.
+
+### The viewer, with its control ✅
+
+`dimentio` gained `Sampling` — wrap per axis plus the transform — on every
+`Paint`, and `Paint.mask`. The control for each is the old path reproduced
+exactly on the same rasteriser, camera and geometry.
+
+**The mask**, the same shape of test D246 used: parse the real file, then clear
+every `paint.mask`.
+
+| model | unmasked (control) | masked | pixels differing |
+|---|---|---|---|
+| `MOBJ_EFF_mahojin_omote` | 920 | **500** | 569 |
+| `MOBJ_EFF_mahojin_ura` | 923 | 503 | 572 |
+| `MOBJ_EFF_queen_tornade` | 7,171 | 7,171 | 56 |
+| `MOBJ_EFF_uranoko` | 6,192 | **5,296** | 5,157 |
+
+⚠️ **`queen_tornade` draws the same number of pixels and 56 of them changed.**
+Its mask dims rather than cuts, which is why the assertion is "the frame
+changed" and "the mask never adds" rather than a pixel drop.
+
+**The wrap mode**, swept rather than named: every painted model rendered with
+its samplers forced to REPEAT against the modes it states. 672 models state
+something other than REPEAT and **32 of them render differently** — the rest
+keep every coordinate inside `[0,1]`, where all three modes agree.
+
+On a hand-built fixture — a 1×1 opaque white base, a 1×1 mask — the same
+measurement is exact: an opaque mask removes no pixels and a clear mask removes
+all of them, with the unmasked control drawing >5,000.
+
+### The cross-end check had to change, and that is worth recording ⚠️
+
+D246 held `dimentio`'s `paints().len()` against the manifest's `textures`. Those
+two were equal only because materials and images were 1:1. A mask makes a
+material reach two images, so the manifest now reports `materials` and `masked`
+alongside `textures`, and the reader is held to those. **0 disagreements across
+864 models**, and the masked count is asserted to be 10 rather than merely
+consistent — a check that only compares two numbers passes when both are zero.
+
+### Still open 🔶
+
+- **Nobody has looked at any of it.** D246 closed with the same sentence and it
+  is still true: every number above is a pixel count.
+- The rotation's *sign* is derived from `MTXRotRad`'s disassembled matrix and
+  from `KHR_texture_transform`'s stated one. The arithmetic is tested; that 45°
+  is not really -45° has no witness on this disc, because every rotating layer
+  is a radially symmetric magic circle.
+- Texture animation — the frame-offset byte — is still not played. A `.glb`
+  could carry it as several materials and an animation channel; nothing does.
+- The 41 models that name no image at all, and the 31 whose named bank the disc
+  does not carry (D245), are unchanged.

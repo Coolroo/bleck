@@ -371,7 +371,7 @@ def spans(owners: list, names: list, bindings: list | None = None) -> list:  # p
                     first=start,
                     count=index - start,
                     name=names[owner] if owner < len(names) else "",
-                    textures=(list(bound[owner].images) if owner < len(bound) else []),
+                    textures=(list(bound[owner].layers) if owner < len(bound) else []),
                 )
             )
             start = index

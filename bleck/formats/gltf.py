@@ -22,6 +22,13 @@ side, and merged there was no way to see that it was a separate object or to
 hide it. Each shape is now its own primitive, which is also the prerequisite
 for ever binding a texture per shape (D229).
 
+## Where the textures went
+
+`gltfpaint` writes the materials, samplers, textures and images. This module
+writes the geometry and calls it; the split is because a shape's texture layers
+carry a wrap mode, a UV transform and possibly a mask (D247), and none of that
+belongs beside the accessor arithmetic.
+
 ## Morph targets, sparse where sparse is smaller
 
 A pose displaces a few dozen of a *model's* vertices out of hundreds (D217), so
@@ -62,6 +69,8 @@ from __future__ import annotations
 import json
 import struct
 from dataclasses import dataclass, field
+
+from bleck.formats import gltfpaint
 
 MAGIC = 0x46546C67
 VERSION = 2
@@ -171,8 +180,10 @@ class Part:
 
     vertices: list = field(default_factory=list)  # pylint: disable=container-return
     indices: list = field(default_factory=list)  # pylint: disable=container-return
-    #: Which of the model's images this shape draws with, in texture-map order.
-    #: The first is what becomes the primitive's `baseColorTexture`.
+    #: The layers this shape draws with, in texture-map order -- `modelmat.Layer`
+    #: records, or bare image indices from a hand-built mesh. The first becomes
+    #: the primitive's `baseColorTexture` and the second, where there is one, its
+    #: alpha mask; see `gltfpaint`.
     textures: list = field(default_factory=list)  # pylint: disable=container-return
 
 
@@ -591,65 +602,21 @@ def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
     return {"attributes": attributes, "indices": indices}
 
 
-def _material(image: int) -> dict:  # pylint: disable=container-return
-    """One glTF material over one image."""
-    return {
-        "pbrMetallicRoughness": {
-            "baseColorTexture": {"index": image},
-            "metallicFactor": 0.0,
-            "roughnessFactor": 1.0,
-        },
-        # ⚠️ Game art is cut out with alpha, and the default OPAQUE mode
-        # ignores it -- every transparent pixel renders black.
-        "alphaMode": "MASK",
-        "doubleSided": True,
-    }
+def _lone(document: dict, blob: _Blob, painted: list, texture: bytes) -> None:
+    """One image over every primitive that can carry it.
 
-
-def _paint(document: dict, blob, primitives: list, parts: list, paints: list) -> None:
-    """Give each primitive the image its shape draws with.
-
-    ✅ **Per shape, not per file** (D243). A model's shapes each name their own
-    image through the layer table, so a file carries as many glTF materials as
-    its shapes reach — `e_lui_robo` writes 15 over 92 primitives.
-
-    ⚠️ A primitive with no texture coordinates gets no material at all rather
-    than an untextured one, because a reader that finds `TEXCOORD_0` missing
-    and a `baseColorTexture` present samples nothing and draws black.
-
-    ⛔ **An image no primitive reaches is not embedded** (D245). Writing every
-    image the caller decoded left ten files carrying art nothing referenced --
-    bytes a reader downloads, decodes and never draws -- and made the manifest
-    call them textured when they open bare.
+    ⚠️ **Only for a caller with no layer table at all** -- `bleck model export`
+    always has one. It keeps `write(texture=...)` working for a hand-built mesh
+    and a single PNG.
     """
-    ready = {paint.index: paint.png for paint in paints if paint.png}
-    picks = []
-    for primitive, part in zip(primitives, parts, strict=True):
-        if "TEXCOORD_0" not in primitive["attributes"]:
-            continue
-        chosen = next((index for index in part.textures if index in ready), None)
-        if chosen is not None:
-            picks.append((primitive, chosen))
-    if not picks:
-        return
-
-    at: dict[int, int] = {}
-    images: list = []
-    textures: list = []
-    materials: list = []
-    for primitive, chosen in picks:
-        if chosen not in at:
-            at[chosen] = len(materials)
-            images.append(
-                {"bufferView": blob.add(ready[chosen]), "mimeType": "image/png"}
-            )
-            textures.append({"sampler": 0, "source": len(textures)})
-            materials.append(_material(len(materials)))
-        primitive["material"] = at[chosen]
-    document["images"] = images
-    document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
-    document["textures"] = textures
-    document["materials"] = materials
+    document["images"] = [{"bufferView": blob.add(texture), "mimeType": "image/png"}]
+    document["samplers"] = [{"wrapS": gltfpaint.REPEAT, "wrapT": gltfpaint.REPEAT}]
+    document["textures"] = [{"sampler": 0, "source": 0}]
+    document["materials"] = [
+        gltfpaint.material_over(gltfpaint.Surface(image=0), texture=0)
+    ]
+    for primitive in painted:
+        primitive["material"] = 0
 
 
 def write(  # pylint: disable=too-many-positional-arguments
@@ -695,18 +662,11 @@ def write(  # pylint: disable=too-many-positional-arguments
     }
 
     if paints:
-        _paint(document, blob, primitives, parts, paints)
+        gltfpaint.paint(document, blob, primitives, parts, paints)
     else:
         painted = [p for p in primitives if "TEXCOORD_0" in p["attributes"]]
         if texture and painted:
-            document["images"] = [
-                {"bufferView": blob.add(texture), "mimeType": "image/png"}
-            ]
-            document["samplers"] = [{"wrapS": 10497, "wrapT": 10497}]
-            document["textures"] = [{"sampler": 0, "source": 0}]
-            document["materials"] = [_material(0)]
-            for primitive in painted:
-                primitive["material"] = 0
+            _lone(document, blob, painted, texture)
 
     if clips:
         _morphs(document, blob, parts, clips, sparse)
@@ -730,6 +690,12 @@ class Painting:
     primitives: int
     painted: int
     images: int
+    #: How many distinct materials the primitives name. ⚠️ **No longer the same
+    #: as `images`.** A two-layer shape's material reaches two of them (D247),
+    #: and the viewer's cross-check counts materials rather than pictures.
+    materials: int = 0
+    #: Materials carrying a second layer in `extras`.
+    masked: int = 0
 
     @property
     def textured(self) -> bool:
@@ -758,10 +724,13 @@ def painting(blob: bytes) -> Painting:
     """
     parsed = parse(blob)
     primitives = [p for mesh in parsed.get("meshes", []) for p in mesh["primitives"]]
+    materials = parsed.get("materials", [])
     return Painting(
         primitives=len(primitives),
         painted=sum(1 for p in primitives if "material" in p),
         images=len(parsed.get("images", [])),
+        materials=len(materials),
+        masked=sum(1 for m in materials if gltfpaint.MASK_KEY in m.get("extras", {})),
     )
 
 

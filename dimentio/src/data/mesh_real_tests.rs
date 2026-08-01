@@ -5,6 +5,7 @@
 //! still read `super::*` and are still `data::mesh::real_export_tests`.
 
 use super::*;
+use crate::data::texture::Wrap;
 
 fn export() -> Option<PathBuf> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -362,6 +363,11 @@ fn the_robot_binds_fifteen_images_across_sixty_eight_of_its_ninety_two_shapes() 
 /// material, both measured from the emitted bytes — so the two programs can be
 /// held to each other over the whole corpus.
 ///
+/// ⚠️ **Held to `materials`, not to `textures`** (D247). This reader decodes
+/// once per glTF material, and a two-layer shape's material reaches two images,
+/// so the two counts came apart on the four models that carry a mask. `masked`
+/// is checked separately, against the paints that carry a second layer.
+///
 /// ⚠️ An export written before those fields existed reports 0 for every model,
 /// which would make this pass vacuously. That is checked first.
 #[test]
@@ -371,29 +377,40 @@ fn every_models_images_and_painted_shapes_agree_with_the_manifest() {
         return;
     };
     let library = Library::load(&root);
-    if library.entries().iter().all(|entry| entry.textures == 0) {
-        eprintln!("this export predates the per-model texture counts; skipped");
+    if library.entries().iter().all(|entry| entry.materials == 0) {
+        eprintln!("this export predates the per-model material counts; skipped");
         return;
     }
 
     let mut several = 0;
+    let mut masked = 0;
     let mut disagreed: Vec<String> = Vec::new();
     for entry in library.entries() {
         let mesh = Mesh::load(&entry.path).expect("mesh");
         let painted = mesh.shapes().iter().filter(|s| s.paint.is_some()).count();
-        if mesh.paints().len() != entry.textures || painted != entry.painted {
+        let carries = mesh.paints().iter().filter(|p| p.mask.is_some()).count();
+        masked += carries;
+        if mesh.paints().len() != entry.materials
+            || painted != entry.painted
+            || carries != entry.masked
+        {
             disagreed.push(format!(
-                "{}: {} images / {painted} painted, manifest says {} / {}",
+                "{}: {} materials / {painted} painted / {carries} masked, manifest                  says {} / {} / {}",
                 entry.name,
                 mesh.paints().len(),
-                entry.textures,
-                entry.painted
+                entry.materials,
+                entry.painted,
+                entry.masked
             ));
         }
         if mesh.paints().len() > 1 {
             several += 1;
         }
     }
+    assert_eq!(
+        masked, 10,
+        "the disc's 40 two-layer shapes reach 10 materials (D247)"
+    );
     assert!(
         disagreed.is_empty(),
         "{} of {} models disagree, e.g. {:?}",
@@ -455,6 +472,143 @@ fn per_primitive_binding_changes_a_real_frame_against_the_single_image_path() {
         "only {changed} of {after} drawn pixels moved — \
          the two paths are near enough identical to prove nothing"
     );
+}
+
+/// **The mask reaches the frame, with the old path as its control.**
+///
+/// ✅ A two-layer shape multiplies its base by the second layer's alpha (D247).
+/// The control is this reader with `mask` cleared — exactly what it did before
+/// — so both frames come off the same rasteriser, camera and geometry, and the
+/// only difference is the second layer.
+///
+/// ⚠️ **The control is asserted first.** A control that drew nothing would
+/// report every pixel as changed and read as a triumph.
+#[test]
+fn the_second_layer_changes_a_real_frame_against_the_unmasked_path() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let size = crate::render::Size::new(256, 256);
+    let sky = crate::render::Background::DarkGrey.pixel(0, 0, size);
+    let pixels = || (0..size.height).flat_map(|y| (0..size.width).map(move |x| (x, y)));
+
+    let mut looked = 0;
+    for entry in library.entries() {
+        if entry.masked == 0 {
+            continue;
+        }
+        let raw = std::fs::read(&entry.path).expect("a masked model reads");
+        let masked = gltf::parse(&raw).expect("parses").into_mesh();
+
+        let mut plain = gltf::parse(&raw).expect("parses");
+        for paint in &mut plain.paints {
+            paint.mask = None;
+        }
+        let plain = plain.into_mesh();
+        assert_eq!(plain.paints().len(), masked.paints().len());
+
+        let view = crate::render::View {
+            camera: crate::render::Camera::fit(masked.bounds()),
+            background: crate::render::Background::DarkGrey,
+        };
+        let before = crate::render::render(&plain, &view, size);
+        let after = crate::render::render(&masked, &view, size);
+        let covered = |image: &crate::render::Image| {
+            pixels().filter(|&(x, y)| image.pixel(x, y) != sky).count()
+        };
+        let (was, now) = (covered(&before), covered(&after));
+        let changed = pixels()
+            .filter(|&(x, y)| before.pixel(x, y) != after.pixel(x, y))
+            .count();
+        println!(
+            "{}: {was} pixels unmasked, {now} masked, {changed} differ",
+            entry.name
+        );
+        assert!(was > 100, "{} control barely drew: {was}", entry.name);
+        assert!(
+            changed > 0,
+            "{}: the mask changed nothing, so it is not being applied",
+            entry.name
+        );
+        // The mask can only remove light, never add it: it multiplies.
+        assert!(
+            now <= was,
+            "{}: masking drew {now} pixels against {was} unmasked",
+            entry.name
+        );
+        looked += 1;
+    }
+    assert_eq!(looked, 4, "the disc carries four two-layer models (D247)");
+}
+
+/// **The wrap mode reaches the frame.** The same real model rendered with every
+/// sampler forced to REPEAT — which is what the exporter wrote before D247 —
+/// against the modes the file states.
+///
+/// ⚠️ Swept until one model disagrees rather than named, because which model
+/// shows it depends on where its coordinates leave [0,1]; a named file that
+/// happened to stay inside would pin nothing.
+#[test]
+fn what_the_sampler_says_changes_at_least_one_real_frame() {
+    let Some(root) = export() else {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    };
+    let library = Library::load(&root);
+    let size = crate::render::Size::new(128, 128);
+    let sky = crate::render::Background::DarkGrey.pixel(0, 0, size);
+    let pixels = || (0..size.height).flat_map(|y| (0..size.width).map(move |x| (x, y)));
+
+    let mut clamped = 0;
+    let mut differed = 0;
+    for entry in library.entries() {
+        if entry.textures == 0 {
+            continue;
+        }
+        let raw = std::fs::read(&entry.path).expect("a painted model reads");
+        let stated = gltf::parse(&raw).expect("parses");
+        if stated
+            .paints
+            .iter()
+            .all(|paint| paint.sampling.wrap_s == Wrap::Repeat)
+            && stated
+                .paints
+                .iter()
+                .all(|paint| paint.sampling.wrap_t == Wrap::Repeat)
+        {
+            continue;
+        }
+        clamped += 1;
+        let mut assumed = gltf::parse(&raw).expect("parses");
+        for paint in &mut assumed.paints {
+            paint.sampling.wrap_s = Wrap::Repeat;
+            paint.sampling.wrap_t = Wrap::Repeat;
+        }
+        let stated = stated.into_mesh();
+        let assumed = assumed.into_mesh();
+        let view = crate::render::View {
+            camera: crate::render::Camera::fit(stated.bounds()),
+            background: crate::render::Background::DarkGrey,
+        };
+        let one = crate::render::render(&assumed, &view, size);
+        let two = crate::render::render(&stated, &view, size);
+        if pixels().any(|(x, y)| one.pixel(x, y) != two.pixel(x, y)) {
+            differed += 1;
+        }
+        let drew = pixels().filter(|&(x, y)| one.pixel(x, y) != sky).count();
+        assert!(drew > 0 || stated.is_empty(), "{}", entry.name);
+    }
+    assert!(
+        clamped > 600,
+        "only {clamped} models say anything but REPEAT"
+    );
+    assert!(
+        differed > 0,
+        "not one of {clamped} models rendered differently under the mode it          states; the sampler is not reaching the rasteriser"
+    );
+    println!("{differed} of {clamped} models draw differently under their own wrap mode");
 }
 
 /// ⚠️ **The frame, on a real sparse file.** A clip that moves the positions

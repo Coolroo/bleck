@@ -238,6 +238,23 @@ with one picture stretched across all of it.
 all: every shape in them is drawn with vertex colour, which the file says
 outright. `--no-textures` skips the images entirely for smaller files.
 
+How each image is *sampled* is read from the file too. A layer states whether
+each axis clamps, repeats or mirrors, and that becomes a real glTF sampler —
+most of the game clamps, and an export that assumed repeating tiled art that was
+never meant to tile. A layer may also carry a UV offset, scale or rotation, which
+is written as `KHR_texture_transform`; Blender and three.js honour it, and a
+reader that does not simply draws the untransformed image.
+
+!!! note "40 shapes carry a second texture, and it is a mask"
+
+    Four effect models — the two `MOBJ_EFF_mahojin` magic circles,
+    `MOBJ_EFF_queen_tornade` and `MOBJ_EFF_uranoko` — have shapes that draw with
+    two layers. The second one's **alpha** multiplies the first; its colour is
+    never used. glTF has no slot that means this, so it is declared as
+    `material.extras.spmMaskTexture` and only Dimentio composites it. **In
+    Blender those shapes show the first layer**, which is as much as the format
+    can honestly say.
+
 !!! tip "Blender opens in Solid shading"
 
     Press `Z` and pick **Material Preview** — until then everything renders flat

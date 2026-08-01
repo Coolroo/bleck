@@ -173,6 +173,8 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                         corners,
                         intensity,
                         masked: surface.masked,
+                        sampling: surface.sampling,
+                        mask: surface.mask,
                     })
             }) {
                 Some(textured) => textured,

@@ -18,12 +18,21 @@
 use std::collections::HashMap;
 
 use super::gltf_accessor::{read_indices, read_scalars, read_vec2, read_vec3, view_bytes};
-use super::mesh::{Face, Paint, Parts, Shape, Uv, Vec3};
+use super::mesh::{Face, Mask, Paint, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
-use super::texture::Texture;
+use super::texture::{Sampling, Texture, Transform, Wrap};
 
 /// The four bytes every binary glTF opens with.
 pub(crate) const MAGIC: &[u8] = b"glTF";
+
+/// Where the exporter declares a shape's second layer. ⚠️ **Namespaced**, and
+/// it has to match `bleck.formats.gltfpaint.MASK_KEY` exactly — `extras` is a
+/// free-for-all shared with every other tool that has touched the file.
+pub(crate) const MASK_KEY: &str = "spmMaskTexture";
+
+/// The one glTF extension these files use. Never in `extensionsRequired`, so
+/// this reader would still load them if it ignored the transform entirely.
+pub(crate) const TRANSFORM_EXTENSION: &str = "KHR_texture_transform";
 
 /// One primitive, decoded into the slice of the model it contributes.
 struct Piece {
@@ -359,18 +368,78 @@ impl Palette {
 /// ⚠️ A decode failure yields no paint rather than an error, so one model with
 /// a broken image cannot take the whole export down. The real-export test is
 /// what catches an image the decoder has stopped understanding.
+///
+/// ⚠️ **The mask is optional in every direction.** A file written before D247
+/// carries no `extras`, and a mask whose image fails to decode leaves the base
+/// layer drawn plain rather than dropping the shape.
 fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint> {
     let material = &json["materials"][index];
-    let texture = material["pbrMetallicRoughness"]["baseColorTexture"]["index"]
+    let base = &material["pbrMetallicRoughness"]["baseColorTexture"];
+    Some(Paint {
+        texture: decode_reference(json, bin, base)?,
+        masked: material["alphaMode"].as_str() == Some("MASK"),
+        sampling: sampling(json, base),
+        mask: mask(json, bin, material),
+    })
+}
+
+/// The second layer, declared in `material.extras` because glTF has no core
+/// slot for "multiply the base by this image's alpha" (D247).
+fn mask(json: &serde_json::Value, bin: &[u8], material: &serde_json::Value) -> Option<Mask> {
+    let declared = material.get("extras")?.get(MASK_KEY)?;
+    Some(Mask {
+        texture: decode_reference(json, bin, declared)?,
+        sampling: sampling(json, declared),
+    })
+}
+
+/// One `textureInfo`, walked to its PNG bytes and decoded.
+fn decode_reference(
+    json: &serde_json::Value,
+    bin: &[u8],
+    info: &serde_json::Value,
+) -> Option<Texture> {
+    info["index"]
         .as_u64()
         .and_then(|texture| json["textures"][texture as usize]["source"].as_u64())
         .and_then(|image| json["images"][image as usize]["bufferView"].as_u64())
         .and_then(|view| view_bytes(json, bin, view as usize).ok())
-        .and_then(|bytes| Texture::decode(bytes).ok())?;
-    Some(Paint {
-        texture,
-        masked: material["alphaMode"].as_str() == Some("MASK"),
-    })
+        .and_then(|bytes| Texture::decode(bytes).ok())
+}
+
+/// How one `textureInfo` folds a coordinate: its sampler, and its transform.
+///
+/// ⛔ **The sampler's *index* is not its wrap mode.** Reading `texture.sampler`
+/// as an enum gives 0 for every real file, which is not one of the three glTF
+/// wrap constants and would silently fall back to REPEAT everywhere — the same
+/// failure as never reading it at all.
+fn sampling(json: &serde_json::Value, info: &serde_json::Value) -> Sampling {
+    let sampler = info["index"]
+        .as_u64()
+        .and_then(|texture| json["textures"][texture as usize]["sampler"].as_u64())
+        .map(|at| json["samplers"][at as usize].clone())
+        .unwrap_or(serde_json::Value::Null);
+    Sampling {
+        wrap_s: sampler["wrapS"].as_u64().map_or(Wrap::default(), Wrap::of),
+        wrap_t: sampler["wrapT"].as_u64().map_or(Wrap::default(), Wrap::of),
+        transform: transform(&info["extensions"][TRANSFORM_EXTENSION]),
+    }
+}
+
+/// A `KHR_texture_transform`, with the extension's own defaults for whatever it
+/// leaves out.
+fn transform(declared: &serde_json::Value) -> Transform {
+    let pair = |name: &str, fallback: [f32; 2]| {
+        declared[name]
+            .as_array()
+            .and_then(|found| Some([found.first()?.as_f64()?, found.get(1)?.as_f64()?]))
+            .map_or(fallback, |found| [found[0] as f32, found[1] as f32])
+    };
+    Transform {
+        offset: pair("offset", [0.0, 0.0]),
+        rotation: declared["rotation"].as_f64().unwrap_or(0.0) as f32,
+        scale: pair("scale", [1.0, 1.0]),
+    }
 }
 
 /// Building the files this reader is pointed at, in the shape
@@ -807,8 +876,9 @@ mod tests {
         let texture = &paint.texture;
         assert_eq!(texture.width(), 2);
         assert_eq!(texture.height(), 1);
-        assert_eq!(texture.sample(0.25, 0.5), RED);
-        assert_eq!(texture.sample(0.75, 0.5), GREEN);
+        let plain = crate::data::texture::Sampling::default();
+        assert_eq!(texture.sample(0.25, 0.5, &plain), RED);
+        assert_eq!(texture.sample(0.75, 0.5, &plain), GREEN);
     }
 
     /// The image sits in the same BIN chunk as the geometry, at an offset the
@@ -914,7 +984,7 @@ mod tests {
             .next()
             .and_then(|batch| batch.surface)
             .expect("a surface");
-        assert_eq!(surface.texture.sample(0.75, 0.5), GREEN);
+        assert_eq!(surface.texture.sample(0.75, 0.5, surface.sampling), GREEN);
         assert_eq!(surface.uvs.len(), mesh.positions().len());
     }
 }

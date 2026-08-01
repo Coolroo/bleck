@@ -33,7 +33,7 @@ from pathlib import Path, PurePosixPath
 from bleck.cli.types import AddCommand
 from bleck.common import exportlayout
 from bleck.common.errors import UserError
-from bleck.formats import gltf, model, png, texdecode, tpl
+from bleck.formats import gltf, gltfpaint, model, png, texdecode, tpl
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -285,7 +285,13 @@ def textures_for(base: Path, disc_path: str, mesh: model.Mesh) -> list:
     nothing references, and embedding those would grow every `.glb` for
     nothing.
     """
-    wanted = sorted({index for span in mesh.shape_spans() for index in span.textures})
+    wanted = sorted(
+        {
+            gltfpaint.surface_of(layer).image
+            for span in mesh.shape_spans()
+            for layer in span.textures
+        }
+    )
     if not wanted:
         return []
     source = base / disc_path
@@ -408,8 +414,11 @@ def _summarise(entries: list, dense: bool = False) -> None:
     dropped = sum(entry["animations_dropped"] for entry in entries)
     targets = sum(entry["targets"] for entry in entries)
     shapes = sum(entry["painted"] for entry in entries)
+    masked = sum(entry.get("masked", 0) for entry in entries)
     print(f"  {textured} carry a texture, {images} embedded image(s) in total")
     print(f"  {shapes} shape(s) resolve to one, counted in the files themselves")
+    if masked:
+        print(f"  {masked} material(s) carry a second layer, which masks the first")
     if bare:
         print(
             f"  ! {bare} name no image at all: every shape in them draws with\n"
@@ -477,6 +486,8 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "fragment": entry.mesh.coverage < WHOLE,
                 "textured": painted.textured,
                 "textures": painted.images,
+                "materials": painted.materials,
+                "masked": painted.masked,
                 "painted": painted.painted,
                 "shapes": entry.mesh.shapes,
                 "animated": bool(animation.clips),

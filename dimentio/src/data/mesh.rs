@@ -25,7 +25,7 @@ use std::path::{Path, PathBuf};
 
 use super::gltf;
 use super::morph::{Animation, ClipEntry};
-use super::texture::Texture;
+use super::texture::{Sampling, Texture};
 
 /// The file `bleck model export` writes alongside the meshes.
 const MANIFEST: &str = "models.json";
@@ -78,6 +78,19 @@ pub struct Entry {
     #[serde(default)]
     #[allow(dead_code)]
     pub textures: usize,
+    /// Distinct glTF materials the primitives name.
+    ///
+    /// ⚠️ **Not the same as `textures` any more** (D247). A two-layer shape's
+    /// material reaches two images, so `textures` exceeds this on the four
+    /// models that carry one — and this reader decodes per material, so this is
+    /// the number `paints()` can be held to.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub materials: usize,
+    /// Materials declaring a second layer in `extras`.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub masked: usize,
     #[serde(default)]
     #[allow(dead_code)]
     pub painted: usize,
@@ -407,17 +420,33 @@ impl Parts {
     }
 }
 
-/// One image a mesh draws with, and how its alpha is read.
+/// One image a mesh draws with, how it is sampled, and how its alpha is read.
 ///
-/// ⚠️ `masked` belongs to the material, not to the image: two materials can
-/// name the same PNG and treat its alpha differently, so it is held here rather
-/// than once for the whole mesh.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// ⚠️ `masked` and `sampling` belong to the material, not to the image: two
+/// materials can name the same PNG, clamp one and repeat the other, and treat
+/// its alpha differently. They are held here rather than once for the mesh.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Paint {
     pub texture: Texture,
     /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
     /// below the cutoff is not drawn at all.
     pub masked: bool,
+    /// Wrap mode and UV transform, read from the file's sampler (D247).
+    pub sampling: Sampling,
+    /// A second layer whose **alpha** multiplies this one, colour included.
+    ///
+    /// ✅ 40 shapes on the disc carry one, and glTF has no core slot that means
+    /// it — the exporter declares it in `material.extras` and this is where it
+    /// lands. ⛔ **Not a second colour layer.** The TEV program the game picks
+    /// for these shapes never samples the second image's RGB (D247).
+    pub mask: Option<Mask>,
+}
+
+/// The second layer of a two-layer shape: an image sampled for its alpha alone.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Mask {
+    pub texture: Texture,
+    pub sampling: Sampling,
 }
 
 /// One shape's faces and the surface they are painted with.
@@ -441,6 +470,8 @@ pub struct Surface<'a> {
     pub texture: &'a Texture,
     pub uvs: &'a [Uv],
     pub masked: bool,
+    pub sampling: &'a Sampling,
+    pub mask: Option<&'a Mask>,
 }
 
 impl Surface<'_> {
@@ -619,6 +650,8 @@ impl Mesh {
             texture: &paint.texture,
             uvs: self.uvs.as_deref()?,
             masked: paint.masked,
+            sampling: &paint.sampling,
+            mask: paint.mask.as_ref(),
         })
     }
 

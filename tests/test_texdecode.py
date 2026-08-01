@@ -134,15 +134,45 @@ class TestAgainstTheRealDisc:
         )
 
     def test_alpha_is_opaque_wherever_the_format_has_no_alpha(self):
-        """I4, I8, RGB565 and CMPR's opaque blocks must not invent transparency."""
+        """RGB565 and CMPR's opaque blocks must not invent transparency.
+
+        ⛔ **This test used to include `I4` and `I8` and was defending a bug**
+        (D247). Those two are not colour-only formats: the texture unit expands
+        an intensity texel to `(I, I, I, I)`, so the value reaches the TEV as
+        `GX_CC_TEXA` as well. Pinning their alpha at 255 made every intensity
+        cut-out a solid rectangle, and it would have passed forever.
+        """
         for path in self._tpls(30):
             data = path.read_bytes()
             for image in tpl.read(data):
-                if image.format not in (tpl.Format.I4, tpl.Format.I8, tpl.Format.RGB565):
+                if image.format is not tpl.Format.RGB565:
                     continue
                 pixels = texdecode.decode(data, image)
                 alphas = set(pixels.rgba[3::4])
                 assert alphas == {255}, f"{path.name} {image.describe()}: {alphas}"
+
+    def test_an_intensity_texel_is_its_own_alpha(self):
+        """✅ `I4` and `I8` expand to `(I, I, I, I)`, not `(I, I, I, 255)`.
+
+        Checked as an identity rather than as a distribution: every texel's
+        alpha equals its red, on every intensity image the disc carries.
+        """
+        looked = varied = 0
+        for path in self._tpls(30):
+            data = path.read_bytes()
+            for image in tpl.read(data):
+                if image.format not in (tpl.Format.I4, tpl.Format.I8):
+                    continue
+                pixels = texdecode.decode(data, image)
+                reds, alphas = pixels.rgba[0::4], pixels.rgba[3::4]
+                assert list(reds) == list(alphas), f"{path.name} {image.describe()}"
+                looked += 1
+                varied += len(set(alphas)) > 1
+        assert looked, "no intensity image was found to check"
+        assert varied, (
+            "every intensity image came out at one alpha, which is what the "
+            "old opaque reading produced"
+        )
 
     def test_exported_pngs_declare_the_size_they_were_asked_for(self):
         for path in self._tpls(20):

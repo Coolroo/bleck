@@ -54,7 +54,12 @@ class Shape:
     first: int
     count: int
     name: str = ""
-    #: Which of the model's materials this shape draws with, in GX texture-map
-    #: order. ✅ **Read from the shape record's layer list** (D243); empty for a
+    #: The `modelmat.Layer` records this shape draws with, in GX texture-map
+    #: order -- each naming a material, a wrap mode and a UV transform. ✅
+    #: **Read from the shape record's layer list** (D243, D247); empty for a
     #: shape that draws untextured, which is 23% of the disc's shapes.
+    #:
+    #: ⚠️ **Two entries is a base layer and an alpha mask**, not two colours
+    #: (D247). Entry 0 is `GX_TEXMAP0` and supplies the colour; entry 1's alpha
+    #: multiplies it.
     textures: list = field(default_factory=list)  # pylint: disable=container-return

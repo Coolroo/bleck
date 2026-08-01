@@ -15,7 +15,7 @@ use super::camera::Basis;
 use super::{Camera, Rgba};
 use crate::data::effects::Entry;
 use crate::data::mesh::{Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
-use crate::data::texture::Texture;
+use crate::data::texture::{Sampling, Texture};
 
 /// Half the edge of a part's quad, in the units the layout below uses.
 const HALF: f32 = 0.30;
@@ -170,6 +170,8 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
         .map(|texture| Paint {
             texture,
             masked: true,
+            sampling: Sampling::default(),
+            mask: None,
         })
         .into_iter()
         .collect();

@@ -17,12 +17,16 @@ once and the structure is what has to stay true.
 
 from __future__ import annotations
 
+import math
 import struct
 
 import pytest
 
 from bleck.formats import model, modelmat
 from tests.test_model import MODELS
+
+#: What one layer states about itself: which material, and slot 17 `+0x04`.
+LAYERS = ((1, 0), (0, 3), (1, 12))
 
 
 def a_painted_model() -> bytes:
@@ -31,18 +35,25 @@ def a_painted_model() -> bytes:
     Shape 0 draws with one layer, shape 1 with none, and shape 2 with two — the
     three cases the disc actually contains (18,982 shapes with one layer, 4,319
     with none, 40 with two).
+
+    The slot-16 table is real rather than absent, because it is real on all 870
+    models and a fixture that skipped it would exercise only the fallback.
     """
     out = bytearray(0x800)
     layers_at = 0x200
-    materials_at = layers_at + 3 * modelmat.LAYER_STRIDE
+    moves_at = layers_at - len(LAYERS) * modelmat.TRANSFORM_STRIDE
+    materials_at = layers_at + len(LAYERS) * modelmat.LAYER_STRIDE
     records_at = materials_at + 2 * modelmat.MATERIAL_STRIDE
     end = records_at + 3 * modelmat.RECORD_STRIDE
-    table = [0x180] * 17 + [layers_at, materials_at, records_at, end]
+    table = [0x100] * 16 + [moves_at, layers_at, materials_at, records_at, end]
     struct.pack_into(f">{len(table)}I", out, model.SHAPE_SECTIONS_AT, *table)
-    struct.pack_into(">3I", out, modelmat.COUNTS_AT, 3, 2, 3)
+    struct.pack_into(">3I", out, modelmat.COUNTS_AT, len(LAYERS), 2, 3)
 
-    for index, material in enumerate([1, 0, 1]):
-        struct.pack_into(">I", out, layers_at + index * modelmat.LAYER_STRIDE, material)
+    for index, (material, wrap) in enumerate(LAYERS):
+        at = layers_at + index * modelmat.LAYER_STRIDE
+        struct.pack_into(">2i", out, at, material, wrap)
+        moved = moves_at + index * modelmat.TRANSFORM_STRIDE
+        struct.pack_into(">4f", out, moved + modelmat.TRANSFORM_TRANSLATE_AT, 0, 0, 1, 1)
     for index, path in enumerate([b"art/first.tga", b"art/second.tga"]):
         at = materials_at + index * modelmat.MATERIAL_STRIDE
         struct.pack_into(">I", out, at + modelmat.MATERIAL_IMAGE_AT, index)
@@ -94,6 +105,73 @@ class TestTheLayerChain:
         at = table[19] + modelmat.RECORD_LAYERS_FROM
         struct.pack_into(">i", raw, at, 9)
         assert modelmat.read(bytes(raw)) == modelmat.Palette()
+
+    def test_each_layer_carries_its_own_wrap_mode(self):
+        """✅ Slot 17 `+0x04`, decoded per axis (D247). ⛔ It was assumed to be
+        REPEAT everywhere, and 92% of the disc's layers clamp instead."""
+        found = modelmat.read(a_painted_model())
+        assert [layer.wrap for layer in found.shapes[0].layers] == [
+            modelmat.Wrap(s=modelmat.CLAMP, t=modelmat.CLAMP)
+        ]
+        assert [layer.wrap for layer in found.shapes[2].layers] == [
+            modelmat.Wrap(s=modelmat.MIRROR, t=modelmat.MIRROR),
+            modelmat.Wrap(s=modelmat.REPEAT, t=modelmat.REPEAT),
+        ]
+
+    def test_the_transform_table_is_read_beside_the_layer_table(self):
+        found = modelmat.read(a_painted_model())
+        assert all(
+            layer.transform.is_identity
+            for binding in found.shapes
+            for layer in binding.layers
+        )
+
+    def test_a_missing_transform_table_costs_the_transform_not_the_palette(self):
+        """⚠️ Slot 16 is `layers * 24` bytes on all 870 models, so nothing on
+        the disc takes this path — but refusing a file here would trade a whole
+        model's geometry for a UV offset."""
+        raw = bytearray(a_painted_model())
+        at = model.SHAPE_SECTIONS_AT + modelmat.TRANSFORM_SLOT * 4
+        struct.pack_into(">I", raw, at, 0x104)
+        found = modelmat.read(bytes(raw))
+        assert [b.images for b in found.shapes] == [[1], [], [1, 0]]
+        assert found.shapes[0].layers[0].transform == modelmat.Transform()
+
+
+class TestTheUvTransform:
+    """Slot 16's five floats, and the branches the draw code takes over them."""
+
+    def test_the_default_record_composes_to_the_identity(self):
+        """⚠️ Asked of the result. The draw code *does* build a translation
+        matrix for the default record — `scale_v` is one of the three fields it
+        tests — and that matrix is `(0, 0)` because the V term is
+        `1 - translate_v - scale_v`."""
+        default = modelmat.Transform()
+        assert default.shifts, "the translate branch is taken at the defaults"
+        assert default.is_identity, "and composes to nothing anyway"
+
+    def test_a_rotation_turns_about_the_middle_of_the_image(self):
+        """✅ The middle of the image is the fixed point, for any angle.
+
+        `MTXTrans(0.5, 0.5)` and `MTXTrans(-0.5, -0.5)` bracket the rotation, so
+        `(0.5, 0.5)` must come out of the composed transform unmoved. A rotation
+        about the corner instead would move it for every angle but a full turn.
+        """
+        for degrees in (45.0, 61.0, 90.0, 315.0):
+            shift = modelmat.Transform(rotation=degrees)
+            assert not shift.is_identity
+            cos, sin = math.cos(shift.radians), math.sin(shift.radians)
+            here_u = cos * 0.5 + sin * 0.5 + shift.offset.u
+            here_v = -sin * 0.5 + cos * 0.5 + shift.offset.v
+            assert abs(here_u - 0.5) < 1e-9, degrees
+            assert abs(here_v - 0.5) < 1e-9, degrees
+
+    def test_a_mirrored_scale_reads_as_one(self):
+        """`OFF_doorL` and its three siblings scale U by -1."""
+        mirrored = modelmat.Transform(scale_u=-1.0)
+        assert mirrored.stretches
+        assert mirrored.scale == modelmat.Pair(u=-1.0, v=1.0)
+        assert mirrored.offset == modelmat.Pair(u=0.0, v=0.0)
 
 
 class TestAgainstTheDisc:
@@ -163,6 +241,48 @@ class TestAgainstTheDisc:
                 stray += not image.path.endswith(".tga")
         assert checked > 5000, "too few materials read to mean anything"
         assert stray == 0, f"{stray} material records do not name a .tga"
+
+    def test_the_transform_table_is_one_record_per_layer_everywhere(self):
+        """✅ **What makes slot 16 a reading rather than a fit** (D247). Its span
+        is exactly `layers * 24` on every model the disc carries, which is the
+        same shape of check `_counts_agree` makes for slots 17, 18 and 19."""
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        checked = ragged = 0
+        for _, data in self._models():
+            edges = struct.unpack_from(">21I", data, model.SHAPE_SECTIONS_AT)
+            layers = (edges[18] - edges[17]) // modelmat.LAYER_STRIDE
+            checked += 1
+            ragged += (edges[17] - edges[16]) != layers * modelmat.TRANSFORM_STRIDE
+        assert checked > 800, "the disc should hold hundreds of models"
+        assert ragged == 0, f"{ragged} of {checked} models disagree with slot 16"
+
+    def test_the_disc_clamps_far_more_often_than_it_repeats(self):
+        """⛔ **The exporter assumed REPEAT and was wrong about most of them.**
+
+        The point of the assertion is the ordering, not the exact counts: if
+        clamping ever stopped being the majority reading, `+0x04` would have
+        stopped being decoded rather than the disc having changed.
+        """
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        seen = {modelmat.CLAMP: 0, modelmat.REPEAT: 0, modelmat.MIRROR: 0}
+        default = 0
+        for _, data in self._models():
+            for binding in modelmat.read(data).shapes:
+                for layer in binding.layers:
+                    for mode in (layer.wrap.s, layer.wrap.t):
+                        if mode == modelmat.WRAP_DEFAULT:
+                            default += 1
+                        else:
+                            seen[mode] += 1
+        assert sum(seen.values()) > 10000, "too few axes read to mean anything"
+        assert seen[modelmat.CLAMP] > seen[modelmat.REPEAT] * 2
+        assert seen[modelmat.MIRROR], "the mirror bits are used, if barely"
+        assert default == 0, (
+            f"{default} axes ask for the image's own default; nothing on the "
+            "disc did before, so a new one means the flag is being misread"
+        )
 
     def test_most_shapes_are_bound_and_the_rest_say_so(self):
         """⚠️ **A shape draws bare or it does not** — asking per model was the

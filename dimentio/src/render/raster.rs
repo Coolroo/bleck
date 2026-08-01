@@ -16,8 +16,8 @@
 
 use super::camera::{Basis, Point};
 use super::{Background, Rgba, Size};
-use crate::data::mesh::{Uv, Vec3};
-use crate::data::texture::Texture;
+use crate::data::mesh::{Mask, Uv, Vec3};
+use crate::data::texture::{Sampling, Texel, Texture};
 
 /// Light that reaches a face turned fully away from it, so nothing is pure
 /// black and a silhouette still shows its shape.
@@ -102,6 +102,11 @@ pub(super) enum Paint<'a> {
         /// The material's `alphaMode` was `MASK`, so a transparent texel is a
         /// hole rather than a dark pixel.
         masked: bool,
+        /// Wrap mode and UV transform for the base image (D247).
+        sampling: &'a Sampling,
+        /// The second layer, whose alpha multiplies the base — colour and
+        /// alpha alike, which is what the game's TEV program does.
+        mask: Option<&'a Mask>,
     },
 }
 
@@ -184,6 +189,11 @@ impl Weights {
 }
 
 /// The colour a pixel takes, or `None` when a masked texel discards it.
+///
+/// ⚠️ **The mask is applied before the cutoff, not after.** The game multiplies
+/// the alphas in the TEV and only then runs the alpha compare, so a texel the
+/// base leaves opaque and the mask leaves clear is a hole (D247). Testing the
+/// base's own alpha first would draw the shape solid and look plausible.
 fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba> {
     match paint {
         Paint::Flat(colour) => Some(*colour),
@@ -192,9 +202,21 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba>
             corners,
             intensity,
             masked,
+            sampling,
+            mask,
         } => {
             let uv = weights.uv(triangle, corners);
-            let texel = texture.sample(uv.u, uv.v);
+            let mut texel = texture.sample(uv.u, uv.v, sampling);
+            if let Some(over) = mask {
+                let alpha = over.texture.sample(uv.u, uv.v, &over.sampling).a as u16;
+                let scale = |value: u8| ((value as u16 * alpha) / 255) as u8;
+                texel = Texel {
+                    r: scale(texel.r),
+                    g: scale(texel.g),
+                    b: scale(texel.b),
+                    a: scale(texel.a),
+                };
+            }
             if *masked && texel.a < ALPHA_CUTOFF {
                 return None;
             }
@@ -547,6 +569,71 @@ mod texture_tests {
         assert_eq!(covered(&image), 0, "a transparent quad was drawn anyway");
     }
 
+    /// ✅ **A second layer's alpha multiplies the first** (D247), colour and
+    /// alpha alike. Built rather than loaded, so the expected frame is exact:
+    /// the base is opaque white everywhere and only the mask decides.
+    ///
+    /// ⚠️ **The control is the same quad with no mask**, which must draw. A
+    /// test that only checked the masked frame was empty would pass on a
+    /// renderer that had stopped drawing anything.
+    #[test]
+    fn a_second_layer_masks_the_first_rather_than_replacing_it() {
+        let opaque = Texel {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        };
+        let base =
+            Texture::decode(&crate::data::texture::png(1, 1, &[opaque])).expect("a 1x1 white png");
+        let draw = |mask: Option<Mask>| {
+            let mut image = Image::filled(FRAME, Background::DarkGrey);
+            let mut depth = vec![f32::NEG_INFINITY; FRAME.pixels()];
+            raster(
+                &mut image,
+                &mut depth,
+                &[
+                    Point {
+                        x: 20.0,
+                        y: 20.0,
+                        inv_z: 0.5,
+                    },
+                    Point {
+                        x: 180.0,
+                        y: 20.0,
+                        inv_z: 0.5,
+                    },
+                    Point {
+                        x: 100.0,
+                        y: 180.0,
+                        inv_z: 0.5,
+                    },
+                ],
+                &Paint::Textured {
+                    texture: &base,
+                    corners: [Uv::new(0.5, 0.5); 3],
+                    intensity: 1.0,
+                    masked: true,
+                    sampling: &Sampling::default(),
+                    mask: mask.as_ref(),
+                },
+            );
+            covered(&image)
+        };
+        let over = |texel: Texel| {
+            Some(Mask {
+                texture: Texture::decode(&crate::data::texture::png(1, 1, &[texel]))
+                    .expect("a 1x1 mask"),
+                sampling: Sampling::default(),
+            })
+        };
+
+        let bare = draw(None);
+        assert!(bare > 5_000, "the control drew nothing: {bare}");
+        assert_eq!(draw(over(opaque)), bare, "an opaque mask removed pixels");
+        assert_eq!(draw(over(CLEAR)), 0, "a clear mask left the base drawn");
+    }
+
     /// A cut-out must not take the depth buffer with it. The near triangle is
     /// filled first and discards every pixel; move the depth write above the
     /// discard and the far triangle behind it disappears.
@@ -575,6 +662,8 @@ mod texture_tests {
                 corners: [Uv::new(0.5, 0.5); 3],
                 intensity: 1.0,
                 masked: true,
+                sampling: surface.sampling,
+                mask: surface.mask,
             },
         );
         assert_eq!(covered(&image), 0, "a transparent texel was drawn");

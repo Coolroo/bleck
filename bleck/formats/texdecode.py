@@ -22,6 +22,14 @@ game's own layout agrees with the arithmetic, for every format and every size.
 
 ⚠️ That validates the *sizes*, not the pixel order within a tile. Only looking
 at the result does that, which is what the viewer is for.
+
+## ⛔ `I4` and `I8` are not opaque
+
+The texture unit expands an intensity texel to `(I, I, I, I)` — the value
+reaches the TEV as `GX_CC_TEXA` as well as `GX_CC_TEXC`, so an intensity
+texture is its own alpha channel. Decoding one with `A = 255` makes every
+cut-out effect quad a solid rectangle and makes a two-layer shape's alpha mask
+a no-op (D247). 17 images across `files/a` are stored this way.
 """
 
 from __future__ import annotations
@@ -73,7 +81,7 @@ def _decode_i4(data: bytes, image: Image, out: bytearray) -> None:
                         image,
                         left + pair * 2 + half,
                         top + row,
-                        (level, level, level, OPAQUE),
+                        (level, level, level, level),
                     )
 
 
@@ -84,7 +92,7 @@ def _decode_i8(data: bytes, image: Image, out: bytearray) -> None:
             for column in range(8):
                 level = data[cursor]
                 cursor += 1
-                _put(out, image, left + column, top + row, (level, level, level, OPAQUE))
+                _put(out, image, left + column, top + row, (level, level, level, level))
 
 
 def _decode_ia4(data: bytes, image: Image, out: bytearray) -> None:

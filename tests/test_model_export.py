@@ -54,7 +54,7 @@ class TestTheTexturePairing:
             pytest.skip(f"no extracted disc at {MODELS}")
         base = MODELS.parent.parent
         mesh = model.mesh((MODELS / "p_wii_mario").read_bytes())
-        named = {index for span in mesh.shape_spans() for index in span.textures}
+        named = {layer.material for span in mesh.shape_spans() for layer in span.textures}
         paints = command.textures_for(base, "files/a/p_wii_mario", mesh)
         assert {paint.index for paint in paints} <= named
 
