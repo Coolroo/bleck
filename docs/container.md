@@ -1,8 +1,8 @@
 # The arm64 Linux container
 
-**Status: the image builds and the cross-compiler works. Producing a `mod.rel`
-through it does not** — three specific things break after the compiler has
-finished, and they are named below with evidence.
+**Status: the image builds, and a code mod builds through it.** Every example
+mod `container_verify.py` covers now produces a `mod.rel`, and two of the four
+are byte-identical to the same mod built by devkitPPC on Windows.
 
 This is for an Apple Silicon Mac. `.devcontainer/` holds it; everything here was
 measured by building the image and running commands inside it.
@@ -13,56 +13,80 @@ for arm64, that arm64 binaries run, and what the compiler emits. It proves
 nothing about speed, about Docker Desktop versus OrbStack, or about how macOS
 maps file ownership — those stay 🔶.
 
+⛔ **Nothing built here has been booted on a Wii or in Dolphin.** "Builds, and
+matches the reference byte for byte" is not "runs". See the last section.
+
 ---
 
-## Why arm64, and not x86 under emulation
+## The toolchain is devkitPPC, natively (D249)
 
-⛔ **devkitPPC is not an option on this machine.** Its macOS binaries are
-x86_64-only, and D26 already recorded `apt.devkitpro.org` returning 403 with
-empty arm64 package lists.
+✅ **devkitPro publishes devkitPPC for aarch64 Linux**, and has since 2020. An
+Apple Silicon host therefore gets the game's own `powerpc-eabi` ABI with no
+Rosetta, no qemu, and none of the SysV differences this page used to be about.
 
-✅ **Debian's cross-compiler is a plain apt package on arm64.** Queried against
-Debian's own `madison` API, and then installed in the image:
+```
+https://pkg.devkitpro.org/packages/linux/aarch64/dkp-linux.db.tar.gz
+    devkitppc-gcc      16.1.0-1
+    devkitppc-binutils 2.46.0-1
+```
 
-| Package | Debian stable (trixie) | arm64 listed |
-|---|---|---|
-| `gcc-powerpc-linux-gnu` | `4:14.2.0-1` | ✅ |
-| `g++-powerpc-linux-gnu` | `4:14.2.0-1` | ✅ |
-| `binutils-powerpc-linux-gnu` | `2.44-3` | ✅ |
+⚠️ **Two things make that URL look absent, and D26 was caught by both.**
+Cloudflare returns **403 to a non-browser User-Agent** — the body is a Cloudflare
+challenge page, not an error — and **directory listings are off**, so
+`/packages/linux/aarch64/` is a real 404 while every file inside it is a 200.
+Read D249 before re-deriving "devkitPro does not ship this".
 
-Source: `https://api.ftp-master.debian.org/madison?package=<name>&table=all`.
+The image takes it from **`devkitpro/devkitppc`**, upstream's own multi-arch
+docker image, pinned to an index digest so the stage resolves to whichever of
+`linux/amd64` and `linux/arm64` is being built. That is the route upstream asks
+for: *"Please do not use pacman on your CI workflows. We provide docker images
+for this purpose."* Only `devkitPPC/` and `licenses/` are copied — 289 MB — and
+not devkitARM, portlibs or wut.
 
 ✅ **Observed inside the built image:**
 
 ```
 uname -m                        aarch64
+powerpc-eabi-gcc                (devkitPPC) 16.1.0
+powerpc-eabi-g++                (devkitPPC) 16.1.0
+powerpc-eabi-ld                 GNU ld (GNU Binutils) 2.46.0.20260210
+e_machine of powerpc-eabi-gcc   183  (EM_AARCH64)
 python3 --version               Python 3.13.5
-powerpc-linux-gnu-gcc           (Debian 14.2.0-19) 14.2.0
-powerpc-linux-gnu-g++           (Debian 14.2.0-19) 14.2.0
-powerpc-linux-gnu-ld            GNU ld (GNU Binutils for Debian) 2.44
 ```
 
-14.2.0 is the version D26 measured, and trixie is the oldest Debian release that
-also ships a Python satisfying `requires-python >= 3.13`. That is why the base
-image is pinned to `debian:trixie-slim` by digest rather than to `stable`.
+That last line is the one that matters. The cross-compiler is a native arm64
+ELF, not an x86_64 binary being emulated inside an emulated container.
 
-## ⚠️ The ABI caveat, stated plainly
+### The Debian cross-compiler is still installed, and is no longer the default
 
-**Debian targets `powerpc-linux-gnu` (SysV). devkitPPC targets `powerpc-eabi`.**
-D26 flagged this and it has never been retired: `-meabi` asks for EABI
-conventions, but small-data register use and struct passing can still differ, so
-code can build cleanly and misbehave when run.
+✅ `gcc-powerpc-linux-gnu`, `g++-powerpc-linux-gnu` and
+`binutils-powerpc-linux-gnu` 14.2.0 are all plain apt packages on arm64 — that
+part of D26 is fine and the packages are still in the image, so the comparison
+in D250 can be reproduced without a second image:
 
-⚠️ **D149 records Windows + devkitPPC as the lower-risk host for code mods.**
-Nothing here changes that. A Mac user working in this container is on the SysV
-path deliberately, and should know it.
+```bash
+docker run -e BLECK_PPC_GCC=/usr/bin/powerpc-linux-gnu-gcc ...
+```
+
+⛔ **It cannot currently produce a REL.** D250 has the measurement: the whole
+difference is that devkitPPC's gcc spec injects `-T ogc.ld` into every link and
+Debian's injects nothing, so `ld -r` never merges sections. A merging linker
+script fixes two of the three failures; the third is a real `pyelf2rel`
+limitation (it packs a relocation addend unsigned, and GCC 14.2.0 emits
+`addend=-4`). Do not reach for this path expecting it to work.
+
+⚠️ **`bleck` finds the right one on its own.** `platforms/linux.py` searches
+`/opt/devkitpro/devkitPPC/bin` for `powerpc-eabi-gcc` before `/usr/bin`, and
+`toolchain.detect()` keys its flags off `eabi` versus `linux-gnu` in the name.
+The Dockerfile sets `BLECK_PPC_GCC` anyway so the choice is visible rather than
+inferred.
 
 ## What is in the container and what is not
 
 | | Where it runs | Why |
 |---|---|---|
 | `bleck` CLI, asset work, disc building | container | pure Python plus `wit` |
-| PowerPC compile and link | container | the apt cross-compiler |
+| PowerPC compile and link | container | devkitPPC for aarch64 Linux |
 | **Dolphin** | **native macOS** | GPU, window server, CoreAudio; and reading emulated memory needs a self-signed re-sign |
 | **Dimentio** | **native macOS** | attaches to Dolphin's process |
 
@@ -118,109 +142,58 @@ That is also why `scripts/ingame.py` cannot run in here. It runs natively.
 
 ---
 
-## ⛔ What does not work yet: ELF → REL
+## ELF → REL: what came out
 
-✅ **The compiler is fine.** `scripts/container_verify.py` compiles and links a
-tiny module before it tries anything else, precisely so that a page of failures
-is not misread as "there is no toolchain". That control passes. Measured inside
-the image:
-
-```
-toolchain    distro cross-compiler
-compiler     /usr/bin/powerpc-linux-gnu-gcc
-extra flags  -fno-pic -fno-PIE
-  compiler probe: OK -- EM_PPC, 13 sections
-
-=== nop:        ERROR  converting the module to a REL failed: pop from empty list
-=== mr-l:       ERROR  converting the module to a REL failed: pop from empty list
-=== goto-map:   ERROR  'I' format requires 0 <= number <= 4294967295
-=== cxx-switch: ERROR  the linker kept 2 constructor tables rather than one
-```
-
-⚠️ **The `-fno-pic -fno-PIE` that D26 called the one non-obvious requirement is
-being passed** — `bleck/backends/toolchain.py` keys it off `linux-gnu` in the
-compiler's name — and `-mgcn` correctly is not. Those are not the problem.
-
-✅ **And a REL did come out, once** — `goto-map` at `-O0` produced a valid
-5,824-byte REL v3, 70 sections, `bssSize=4`, 117 relocations. So the path is not
-categorically broken; three specific things sit in it.
-
-### 1. ⛔ No `.bss`, so `pyelf2rel` raises `IndexError`
-
-`pyelf2rel` 1.0.9 (the newest release; there is no 1.1) does:
-
-```python
-baked_bss = sorted(bss_sections, key=lambda sec: sec.header["sh_size"])
-real_bss = baked_bss.pop(-1)          # IndexError when the list is empty
-```
-
-Debian's `ld -r` **does** create an empty `.bss`, and `--gc-sections` then
-collects it. Measured directly, same object file both ways:
-
-| link | `NOBITS` sections in the output |
-|---|---|
-| `-r` | `.bss` (size 0), `.bss.zeroGlobal` |
-| `-r --gc-sections` | **none** |
-
-devkitPPC does not hit this: its link keeps a `.bss`, which is why the reference
-`nop` REL records `bssSize=0` rather than failing.
-
-### 2. ⛔ Negative relocation addends, which the REL encoder packs unsigned
-
-The blocking one. GCC 14.2.0 at `-O1`/`-O2` emits references to *four bytes
-before* an object, and `pyelf2rel` packs the addend as unsigned:
-
-```python
-return pack(">HBBI", relative_offset, t, section, addend)
-struct.error: 'I' format requires 0 <= number <= 4294967295
-```
-
-The four offenders in `nop`, read out of the ELF:
+✅ **All four mods build.** `scripts/container_verify.py` compiles and links a
+tiny module first as a control, then builds each mod in scratch and compares
+against the `mod.rel` sitting in that mod's overlay:
 
 ```
-.rela.text._prolog  off=0x0006 type=6 addend=-4 -> .data.bleck_real_main
-.rela.text._prolog  off=0x000A type=6 addend=-4 -> .rodata.bleck_hooks
-.rela.text._prolog  off=0x0012 type=4 addend=-4 -> .data.bleck_real_main
-.rela.text._prolog  off=0x0016 type=4 addend=-4 -> .rodata.bleck_hooks
+toolchain    devkitPPC
+compiler     /opt/devkitpro/devkitPPC/bin/powerpc-eabi-gcc
+extra flags  -mgcn
+  compiler probe: OK -- EM_PPC, 11 sections
+
+=== nop:        IDENTICAL
+=== mr-l:       IDENTICAL
+=== goto-map:   DIFFERENT
+=== cxx-switch: DIFFERENT
 ```
 
-Types 4 and 6 are `R_PPC_ADDR16_LO` and `R_PPC_ADDR16_HA`. This is the
-loop-strength-reduction idiom `base = array - 1`.
+⚠️ **`IDENTICAL` here required a control, and the first run did not produce
+it.** Straight out of the image, `nop` and `mr-l` came back 44 and 24 bytes
+*short*. The cause is neither arm64 nor emulation:
 
-🔶 **The value is probably representable.** A REL relocation's addend is added to
-the section base at load time, so `0xFFFFFFFC` would wrap to `base - 4`
-correctly in 32-bit arithmetic — the encoder simply refuses to write it. That
-reading is untested and the fix would be upstream's, not `bleck`'s.
+| | container image | this Windows host |
+|---|---|---|
+| `devkitppc-gcc` | 16.1.0 | 16.1.0 |
+| `binutils` | 2.46.0.20260210 | 2.46.0.20260210 |
+| `libogc_common.ld` | 2026-01-25 | newer |
 
-⛔ **Merging sections does not avoid it.** An explicit `-r` linker script that
-merged `.text*`/`.data*`/`.rodata*`/`.bss*` was tried; all four mods still failed
-here. The addend is codegen, not layout.
+The newer `devkitppc-crtls` moved `. = ALIGN(32)` *inside* the `.text`, `.sdata`
+and `.bss` output sections. That pads `.text` to a 32-byte multiple, creates a
+`.sdata` holding nothing but padding, and rounds `bssSize` up. Copy the two
+Windows `.ld` files over the container's and the sha256s match exactly. **The
+image is pinned on purpose; the skew is what pinning costs.**
 
-⛔ **Nor does `-Os`.** It links in libgcc's `_restgpr_30_x` / `_restfpr_30_x`
-register-save helpers, which cannot be in a symbol list of the game's functions
-and cannot resolve under `-nostdlib`.
+### The four results, read honestly
 
-### 3. ⛔ Two `.ctors` tables, so C++ is refused
+| mod | container | why |
+|---|---|---|
+| `nop` | **IDENTICAL** to the reference | — |
+| `mr-l` | **IDENTICAL** to the reference | — |
+| `goto-map` | DIFFERENT: `.text` 1440 vs 1376, 117 vs 104 relocations | the generated C has drifted since the reference was written |
+| `cxx-switch` | DIFFERENT: `.text` 1280 vs 1216, 107 vs 94 relocations | same |
 
-`toolchain._check_ctor_walk` requires exactly one `.ctors` output section with
-`bleck_ctors_start`/`bleck_ctors_end` at its ends. Debian's `ld -r` does not
-apply the `KEEP(*(.ctors)) KEEP(*(SORT_BY_NAME(.ctors.*)))` merge that
-devkitPPC's linker script supplies, so the build stops with:
+✅ **The drift is proven, not assumed.** Rebuilding all four on this Windows
+host with its own devkitPPC at the same commit gives sha256s that match the
+container's exactly — including `goto-map` (`1ff077ae…`) and `cxx-switch`
+(`f8c053e2…`), which are the two that disagree with the committed reference. So
+the disagreement is with the stored artifact, not between the two toolchains.
 
-    the linker kept 2 constructor tables rather than one, so the walk would
-    skip some.
-
-✅ That check is doing its job. Global C++ objects left unconstructed fail
-silently in-game, which is exactly what it exists to prevent.
-
-### What this means
-
-⚠️ **This is not an arm64 problem, and probably not new.** Nothing above depends
-on the host architecture — it is Debian's toolchain versus devkitPPC's, plus
-`pyelf2rel`. The same three would be expected on the project's own aarch64 Pi
-dev host with today's generated module. **D26 built a hand-written minimal
-`main.c`; the generated `_prolog` has grown hook tables and a constructor walk
-since, and those are what trip.** 🔶 Not confirmed on the Pi.
+⚠️ **`example-mods/*/overlay/` is git-ignored** (`.gitignore:41`), so those
+`mod.rel` files are build output on one machine, not committed artifacts. A
+fresh clone has none, and the script reports `BUILT` rather than failing.
 
 ## What the verification script does
 
@@ -229,13 +202,14 @@ uv run python scripts/container_verify.py
 uv run python scripts/container_verify.py nop cxx-switch --out /tmp/v.txt
 ```
 
-1. Detects the toolchain and prints the exact compile line, so the D26 flags are
-   visible rather than assumed. Debian's chain gets `-fno-pic -fno-PIE`;
-   `-mgcn` is devkitPPC-only and is not passed.
-2. **Runs the control** — compiles and links a three-function module.
+1. Detects the toolchain and prints the exact compile line, so what is being
+   passed is visible rather than assumed.
+2. **Runs the control** — compiles and links a three-function module. This
+   exists so a page of `pyelf2rel` failures is never misread as "there is no
+   compiler".
 3. For each mod: copies it to scratch **without its `overlay/`**, builds there,
-   and compares the result with the `mod.rel` already sitting in that mod's
-   overlay. Building in scratch is what keeps the reference intact.
+   and compares with the reference. Building in scratch is what keeps the
+   reference intact.
 4. Byte equality first; where that fails it falls through to structure — REL
    version, module id, section count, per-section size and exec flag, `bssSize`,
    alignments, entry sections, imported module ids, relocation counts and
@@ -246,18 +220,6 @@ Default selection: `nop`, `mr-l`, `goto-map`, `cxx-switch`. `cxx-switch` is the
 C++ one (D85) and is what exercises `g++`. None of them declares `code.hooks`,
 because a hook's guard word is read out of the base `main.dol` at build time and
 that needs an extracted disc.
-
-⚠️ **`example-mods/*/overlay/` is git-ignored** (`.gitignore:41`), so those
-`mod.rel` files are build output on one machine, not committed artifacts. A
-fresh clone has none, and the script reports `BUILT` rather than failing.
-
-✅ **The references on the machine this was written on came from devkitPPC
-16.1.0**, read out of the ELF's `.comment`:
-`GCC: (devkitPPC) 16.1.0`. So any byte difference has two causes mixed
-together — the toolchain, and drift in the generated C since those files were
-written. Running the script under devkitPPC gives the control that separates
-them: `nop` and `mr-l` came back **IDENTICAL**, `goto-map` and `cxx-switch`
-**DIFFERENT**, on the same commit.
 
 ---
 
@@ -280,10 +242,10 @@ cp work/upstream/spm-headers/linker/spm.eu0.lst work/symbols/
 docker build -t bleck-arm64 -f .devcontainer/Dockerfile .
 
 # Prove the arm64 toolchain is real before trusting anything built with it.
-docker run --rm -v "$PWD:/repo" -w /repo bleck-arm64 bash -lc '
+docker run --rm -v "$PWD:/repo" -w /repo bleck-arm64 bash -c '
   uname -m
-  powerpc-linux-gnu-gcc --version | head -1
-  powerpc-linux-gnu-g++ --version | head -1
+  powerpc-eabi-gcc --version | head -1
+  powerpc-eabi-g++ --version | head -1
   wit --version
   wstrt --version'
 
@@ -292,6 +254,9 @@ docker run --rm -v "$PWD:/repo" -w /repo \
   -e BLECK_SYMBOLS_DIR=/repo/work/symbols \
   bleck-arm64 python scripts/container_verify.py
 ```
+
+⚠️ **`bash -lc` breaks these.** A login shell rebuilds `PATH` from the profile
+and loses the image's, so `python` is not found. Use `bash -c`.
 
 To use it as a devcontainer instead, open the folder in VS Code and choose
 **Reopen in Container**; `.devcontainer/devcontainer.json` does the rest.
@@ -315,16 +280,25 @@ from the emulator that is supposed to boot it.
 | | |
 |---|---|
 | the image builds on arm64 | ✅ |
-| every apt package exists for arm64 | ✅ |
+| devkitPPC exists for aarch64 Linux and runs natively in it | ✅ |
 | `gcc`/`g++`/`ld` run and produce PowerPC objects | ✅ |
 | `wit` builds and runs | ✅ |
-| a REL can be produced | ✅ once, at `-O0`, for one mod |
-| a REL can be produced at the flags `bleck` uses | ⛔ three blockers above |
-| any REL built this way runs in-game | 🔶 never booted |
+| **a REL can be produced, at the flags `bleck` uses** | ✅ all four mods |
+| **the REL matches a devkitPPC build on another host, byte for byte** | ✅ all four, once the crtls versions match |
+| **any REL built this way runs in-game** | ⛔ **never booted** |
+| the Debian cross-compiler can produce a REL | ⛔ still no (D250) |
 | native Apple Silicon speed, OrbStack, macOS uid mapping | 🔶 not tested |
 | `wstrt` builds and runs, so the loader can be embedded | ✅ |
 | a disc actually built end to end in the container | 🔶 not tried — needs a ROM |
 
+⛔ **Read the third-from-bottom row before treating any of this as finished.**
+The output is bit-identical to what the Windows host produces, so the container
+carries no *extra* runtime risk — but "no extra risk" is not "proven", and
+D26's warning that structural validity is not runtime correctness has never been
+retired for either host.
+
 🔶 **Build cost, emulated:** about 5½ minutes for the apt layer alone on this
-x86 host under qemu, plus a few more for `wit` and `wstrt`. Native arm64 on the
-Mac will be substantially faster; how much is untested.
+x86 host under qemu, plus a few more for `wit` and `wstrt`. ✅ **devkitPPC costs
+one image pull, not build time** — `devkitpro/devkitppc` is a 2.49 GB download,
+after which the two `COPY --from` steps took 0.7 s and 0.0 s. Native arm64 on
+the Mac will be substantially faster; how much is untested.

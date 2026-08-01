@@ -16524,3 +16524,253 @@ consistent — a check that only compares two numbers passes when both are zero.
   could carry it as several materials and an animation channel; nothing does.
 - The 41 models that name no image at all, and the 31 whose named bank the disc
   does not carry (D245), are unchanged.
+
+---
+
+## D249 — devkitPPC ships for aarch64 Linux, and always has; the container now uses it (2026-08-01)
+
+⛔ **D26's parenthetical — "devkitPPC is unobtainable here (`apt.devkitpro.org`:
+403, empty arm64 package lists)" — is wrong on both counts and is superseded.**
+So is everything built on top of it: `container.md`'s "devkitPPC is not an
+option", `macos.md`'s blocker 2, and the working note in `CLAUDE.md` saying C++
+mods cannot be built on the Linux dev host.
+
+### ✅ The package exists, and this is what it took to see it
+
+```
+https://pkg.devkitpro.org/packages/linux/aarch64/dkp-linux.db.tar.gz
+    HTTP 200, 23,686 bytes
+    devkitppc-gcc      16.1.0-1   devkitppc-gcc-16.1.0-1-aarch64.pkg.tar.zst
+    devkitppc-binutils 2.46.0-1
+https://pkg.devkitpro.org/packages/linux/aarch64/devkitppc-gcc-16.1.0-1-aarch64.pkg.tar.zst
+    HTTP 200, 76,998,391 bytes
+```
+
+**Two things hide it, and both produce a convincing false negative:**
+
+1. ⚠️ **Cloudflare answers 403 to a non-browser User-Agent** on
+   `pkg.devkitpro.org` and `apt.devkitpro.org`. The body is
+   `<title>Attention Required! | Cloudflare</title>`, not a permissions page.
+   With a browser UA the identical URL returns 200. devkitPro's own wiki works
+   around this with `wget -U "dkp-apt" ...`, which is the tell.
+2. ⚠️ **Directory listings are off.** `/packages/`, `/packages/linux/` and
+   `/packages/linux/aarch64/` all return a real Apache 404 while files *inside*
+   them return 200. Browsing finds nothing; fetching an exact filename finds
+   everything.
+
+Also measured: `apt.devkitpro.org/dists/stable/Release` states
+`Architectures: amd64 arm64 i386`, and `binary-arm64/Packages` is populated —
+D26's "empty arm64 package lists" was the 403 body being read as a package list.
+`packages/linux/x86_64`, `packages/linux/aarch64` and `packages/windows/x86_64`
+all serve; every `macos` and `darwin` path tried returned 404, so **this entry
+says nothing about native macOS arm64** — see `macos.md`.
+
+Upstream has said so since 2020: devkitPro/pacman issue #17, WinterMute,
+2020-07-05, *"we now have aarch64 linux hosted tools"*. The pre-2020 position
+(fincs, 2019-12-03: *"We don't provide binaries for AArch64"*) is the likely
+origin of the belief, and it is six years stale.
+
+### ✅ The container takes the sanctioned route
+
+`.devcontainer/Dockerfile` copies `/opt/devkitpro/devkitPPC` out of
+`devkitpro/devkitppc`, pinned to the index digest `sha256:44cb1a92...4967`, so
+the stage resolves to whichever of its `linux/amd64` and `linux/arm64` manifests
+is being built. Upstream asks for exactly this — v6.0.2's notes say *"Please do
+not use pacman on your CI workflows. We provide docker images for this
+purpose."*
+
+Only `devkitPPC/` and `licenses/` are taken; the source image also carries
+devkitARM, portlibs and wut, none of which build anything for the Wii. 289 MB.
+
+**Measured in the rebuilt arm64 image:**
+
+```
+uname -m                                    aarch64
+powerpc-eabi-gcc --version                  (devkitPPC) 16.1.0
+powerpc-eabi-g++ --version                  (devkitPPC) 16.1.0
+powerpc-eabi-ld --version                   GNU Binutils 2.46.0.20260210
+e_machine of powerpc-eabi-gcc               183  (EM_AARCH64)
+```
+
+That last line is the one that matters: the cross-compiler is a native arm64
+ELF, not an x86_64 binary under emulation.
+
+### ✅ The RELs are byte-identical to the Windows devkitPPC build
+
+All four of `container_verify.py`'s mods now build, where all four previously
+failed. Rebuilding the same four on this Windows host with its own devkitPPC, at
+the same commit, gives the same sha256 for every one:
+
+| mod | bytes | sha256, aarch64 Linux == x86_64 Windows |
+|---|---|---|
+| `nop` | 1,356 | `72e20baf...0937d8` |
+| `mr-l` | 1,220 | `d2c11366...4921ea` |
+| `goto-map` | 3,348 | `1ff077ae...531376` |
+| `cxx-switch` | 3,384 | `f8c053e2...c10c736` |
+
+⚠️ **That equality needed a control before it appeared.** Straight out of the
+image, `nop` and `mr-l` came back 44 and 24 bytes *short* of the committed
+references, and the cause is neither the host nor the architecture:
+
+```
+--- container libogc_common.ld (2026-01-25)
++++ Windows libogc_common.ld
+-       } :text = 0
+-       . = ALIGN(32);
++               . = ALIGN(32);
++       } :text = 0
+        ... and the same move into .sdata and .bss
+```
+
+The newer `devkitppc-crtls` moved `. = ALIGN(32)` *inside* three output
+sections. That pads `.text` to a 32-byte multiple, materialises a `.sdata`
+holding nothing but 12-20 bytes of padding, and rounds `bssSize` up (4 to 32,
+36 to 64). Copying the two Windows scripts over the container's and re-running
+is what produced the table above. **The pinned image is three months old because
+that is when upstream last rebuilt it; pinning is deliberate and the skew is the
+price.**
+
+⚠️ `goto-map` and `cxx-switch` still report **DIFFERENT** against the
+`example-mods/*/overlay/` references, and that is drift in the generated C since
+those files were written, not a toolchain effect — the Windows rebuild
+disagrees with the reference in exactly the same way and agrees with the
+container byte for byte. `nop` and `mr-l` report **IDENTICAL**.
+
+### 🔶 The Raspberry Pi dev host is affected, and this is the fix there too
+
+Nothing above is specific to a container. The Pi is aarch64 Debian, so
+`packages/linux/aarch64` is its architecture, and the same devkitPPC installs
+natively:
+
+```bash
+wget -U "dkp-apt" https://apt.devkitpro.org/install-devkitpro-pacman
+chmod +x ./install-devkitpro-pacman && sudo ./install-devkitpro-pacman
+sudo dkp-pacman -S gamecube-dev
+```
+
+🔶 **Not run on the Pi** — nobody here had one to hand this session. What is ✅
+is that the aarch64 packages exist and that the identical binaries work under
+aarch64 Linux in the container. This reframes the whole thing: the Linux path
+has been on the SysV fallback for no reason since D26, and `g++` came in the
+same package all along.
+
+### Rejected alternatives
+
+- ⛔ **`dkp-pacman` inside the Dockerfile.** Upstream explicitly asks builds not
+  to, the docker image exists for this, and pacman in a build layer is
+  unpinnable.
+- ⛔ **Downloading the `.pkg.tar.zst` files directly.** Would need the whole
+  dependency closure (gcc, binutils, crtls, rules, newlib) resolved by hand and
+  re-resolved on every bump, to reproduce what one `COPY --from` does.
+- ⛔ **Dropping Debian's `gcc-powerpc-linux-gnu` from the image.** It stays, so
+  the D250 comparison can be reproduced in one image and so
+  `-e BLECK_PPC_GCC=/usr/bin/powerpc-linux-gnu-gcc` still works. It is simply no
+  longer the default.
+- ⛔ **Building devkitPPC from `devkitPro/buildscripts`.** Its newest tag
+  (`devkitPPC_r49.1`) is *older* than what pacman ships, upstream discourages it
+  (*"building from source can be a path of frustration even for seasoned
+  developers"*), and it would take a full binutils+gcc+newlib bootstrap to
+  arrive at a binary that is already published.
+
+### ⛔ Still not proven, and nothing here changes it
+
+**No REL built by any of this has been booted.** D26's warning stands verbatim:
+structural validity is not runtime correctness. What *is* new is that the
+container's output is now bit-identical to output from the toolchain the project
+already ships mods with, so the remaining risk is the same risk Windows has —
+not an extra one.
+
+---
+
+## D250 — Why the distro cross-compiler failed: one missing linker script, and one real `pyelf2rel` limit (2026-08-01)
+
+Recorded even though D249 makes it unnecessary in the container, because it is
+the answer for anyone who cannot install devkitPPC, and because one third of it
+is a genuine upstream bug that will bite again.
+
+### ✅ The cause of all three failures is a `-T` flag
+
+Reading devkitPPC's actual link line (`powerpc-eabi-gcc ... -v`) shows its spec
+file injects a linker script into **every** link, `-r` included:
+
+```
+collect2 ... -T .../powerpc-eabi/lib/ogc.ld --gc-sections -o mod.elf -e _prolog -r ...
+```
+
+Debian's `powerpc-linux-gnu-gcc` injects nothing, so `ld -r` uses its internal
+partial-link script, which does not merge input sections. That single difference
+produces all three symptoms `container.md` listed as separate problems:
+
+| symptom | why |
+|---|---|
+| no `SHT_NOBITS` section, so `baked_bss.pop(-1)` raises | nothing declares a `.bss` output section, and `--gc-sections` collects the empty input one |
+| two `.ctors` tables | no `KEEP(*(SORT_BY_NAME(.ctors.*)))` merge rule |
+| 30 ELF sections instead of 15 | `.text.*`, `.data.*` and `.rodata.*` are never merged |
+
+### ✅ A merging script fixes two of the three, measured
+
+A throwaway `-T` script — `.text`/`.rodata`/`.data`/`.sdata`/`.sbss`/`.bss`
+merges, `KEEP` on `.ctors`/`.dtors`/`.eh_frame`, and `ADDR(.bss)` referenced so
+ld keeps the empty section — relinked all four mods' existing object files:
+
+```
+nop         .bss NOBITS present      elf2rel FAILED  'I' format ...
+mr-l        .bss NOBITS present      elf2rel FAILED  'I' format ...
+goto-map    .bss NOBITS present      elf2rel FAILED  'I' format ...
+cxx-switch  .bss present, ONE .ctors elf2rel FAILED  'I' format ...
+```
+
+So failures 1 and 3 are gone. Failure 2 is not.
+
+### ⛔ The negative addend is real, and merging cannot remove it
+
+What survives, in all four:
+
+```
+0000014a  R_PPC_ADDR16_HA   .rodata - 4
+00000156  R_PPC_ADDR16_LO   .rodata - 4
+0000043e  R_PPC_ADDR16_HA   .bss - 4        (cxx-switch)
+```
+
+Before merging it read `.rodata.bleck_hooks - 4`. Merging turned
+`.data.bleck_real_main - 4` into `.data + 0` — because `bleck_needs_start`
+happens to sit in front of it — and did nothing for `bleck_hooks`, which is
+first in `.rodata` and has nothing to be offset from. **The `-4` is intrinsic**:
+it is GCC 14.2.0's induction-variable base, `array - 1`, feeding an update-form
+load, and no layout makes a reference four bytes before the first object in a
+section non-negative. devkitPPC's GCC **16.1.0 does not emit the idiom at all**
+for the same source, which is the only reason this was never seen there.
+
+🔶 **The value is representable and `pyelf2rel` simply refuses to write it.** A
+REL addend is `u32` and the loader computes `sectionBase + addend` in 32-bit
+arithmetic, so `0xFFFFFFFC` wraps to `base - 4`. `rel.py` packs it with
+`pack(">HBBI", ...)` and raises. Untested against a running loader, and it stays
+🔶 until something boots.
+
+### Rejected fixes, and why
+
+- ⛔ **Patch or vendor `pyelf2rel`.** It is **MIT** (`License-Expression: MIT`
+  in 1.0.9's metadata), so this is licence-safe — the objection is not legal. It
+  is that a one-character change (`addend & 0xFFFFFFFF`) inside a dependency
+  changes the Pi, CI and every distro user's output, and D249 removed the need.
+  The right home for it is an upstream issue.
+- ⛔ **Bias the addend in the ELF and un-bias it in the produced REL.** It would
+  work — the biased value never crosses `pyelf2rel`'s pack, and the relocation
+  stream is walkable afterwards to reverse it exactly. Rejected as ~80 lines of
+  machinery in `bleck` to route around one character in a dependency that is no
+  longer on the default path.
+- ⛔ **Pad the target sections so no symbol sits at offset 0.** Requires
+  rewriting every symbol value and every addend pointing into the padded
+  section, and adds dead bytes to every module.
+- ⛔ **`-Os`** (already recorded): links libgcc's `_restgpr_30_x` helpers, which
+  cannot resolve under `-nostdlib` against a symbol list of game functions.
+- ⛔ **Rewriting the generated `_prolog` loop to defeat the optimiser.** Would
+  fix `bleck_hooks` and nothing a mod author writes.
+
+### What this leaves
+
+⚠️ **The distro cross-compiler path is two-thirds repaired and still cannot
+produce a REL.** It is no longer the container's default, so nothing ships
+broken; `docs/code-mods.md`'s D26 recipe remains the record of what it can and
+cannot do. If it ever needs to work again, the order is: land the
+`& 0xFFFFFFFF` upstream, then add the linker script here.

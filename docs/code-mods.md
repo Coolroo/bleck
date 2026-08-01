@@ -73,7 +73,18 @@ consumes. `_prolog`/`_epilog`/`_unresolved` are the REL entry points.
 
 ---
 
-## The toolchain — ✅ working without devkitPPC
+## The toolchain — ⚠️ superseded by D249 and D250
+
+⛔ **Both halves of the paragraph below are now known to be wrong**, and it is
+kept because the flag analysis under it is still the record of what a distro
+compiler does.
+
+- devkitPPC **is** obtainable on aarch64 Linux (D249). The 403 was Cloudflare
+  answering a non-browser User-Agent, and the "empty arm64 package lists" were
+  that 403's body.
+- Debian's chain **no longer produces a valid REL** (D250). It did for D26's
+  hand-written minimal `main.c`; today's generated `_prolog` trips two things
+  its link cannot handle.
 
 devkitPPC is not obtainable here (`apt.devkitpro.org` returns 403 and empty
 arm64 package lists), but **Debian's `gcc-powerpc-linux-gnu` 14.2.0 produces a

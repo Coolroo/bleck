@@ -43,16 +43,30 @@ Only needed if you write behaviour rather than swap assets.
 
 1.  **A PowerPC cross-compiler**
 
-    devkitPPC is preferred — it targets the same ABI the game was built with:
+    Use devkitPPC — it targets the same ABI the game was built with, and it is
+    published for **both x86-64 and aarch64** Linux, so a Raspberry Pi or an
+    arm64 VM needs nothing special:
 
     ```bash
-    wget https://apt.devkitpro.org/install-devkitpro-pacman
+    wget -U "dkp-apt" https://apt.devkitpro.org/install-devkitpro-pacman
     chmod +x install-devkitpro-pacman && sudo ./install-devkitpro-pacman
     sudo dkp-pacman -S gamecube-dev
     ```
 
-    Your distro's `gcc-powerpc-linux-gnu` also works, but needs `-fno-pic -fno-PIE`
-    and rejects `-mgcn`. `bleck` detects which one it found and adjusts.
+    !!! warning "`-U "dkp-apt"` is not optional"
+
+        `apt.devkitpro.org` sits behind Cloudflare, which answers a plain
+        `wget` with **HTTP 403**. The response is a challenge page, not a
+        permissions error, and without a browser-ish User-Agent the download
+        silently gives you nothing useful.
+
+    !!! danger "Your distro's `gcc-powerpc-linux-gnu` no longer gets all the way"
+
+        It compiles and links, then fails to convert the result to a `.rel`.
+        Its GCC injects no linker script, so sections are never merged, and it
+        emits a negative relocation addend that the REL encoder refuses to
+        write. `bleck` still detects it and adjusts its flags; the build stops
+        later. Install devkitPPC.
 
 1.  **wstrt, from Wiimms SZS Toolset**
 

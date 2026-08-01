@@ -54,15 +54,21 @@ PROFILE = PlatformProfile(
             ),
         ),
         ToolKey.PPC_GCC: ToolLocation(
-            # devkitPPC's `powerpc-eabi-gcc` first: same ABI as the game.
-            # Debian's works too but needs different flags (see toolchain.py).
+            # devkitPPC's `powerpc-eabi-gcc` first: same ABI as the game, and
+            # published for aarch64 as well as x86_64. Debian's compiles with
+            # different flags (see toolchain.py) but cannot finish the REL.
             names=["powerpc-eabi-gcc", "powerpc-linux-gnu-gcc"],
             directories=["/opt/devkitpro/devkitPPC/bin", "/usr/bin"],
             hint=(
-                "install a PowerPC cross-compiler:\n"
-                "  bleck toolchain install            (devkitPPC, recommended)\n"
-                "  sudo apt install gcc-powerpc-linux-gnu   (also works)\n"
-                "  or set BLECK_PPC_GCC to its full path"
+                "install devkitPPC -- x86_64 and aarch64 are both published:\n"
+                '  wget -U "dkp-apt" '
+                "https://apt.devkitpro.org/install-devkitpro-pacman\n"
+                "  chmod +x install-devkitpro-pacman && "
+                "sudo ./install-devkitpro-pacman\n"
+                "  sudo dkp-pacman -S gamecube-dev\n"
+                "  or set BLECK_PPC_GCC to its full path.\n"
+                "  gcc-powerpc-linux-gnu compiles but cannot produce a REL "
+                "(docs/decision-log.md D250)"
             ),
         ),
     },

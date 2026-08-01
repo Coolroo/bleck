@@ -34,8 +34,9 @@ is about the *host* toolchain, not the PowerPC target.
 1. ⚠️ **`wit`'s arm64 binary is reported to be killed on launch until it is
    re-signed** (🔶, below). `wit` is required by `bleck extract` and
    `bleck build` — that is the whole disc path.
-2. ⚠️ **devkitPPC has no arm64 macOS build**, and Rosetta 2 is scheduled to go
-   away (✅ both, below). Every code mod goes through it.
+2. ⚠️ **devkitPPC has no arm64 *macOS* build**, and Rosetta 2 is scheduled to go
+   away (✅ both, below). Every code mod goes through it — **unless it goes
+   through the arm64 Linux container, where devkitPPC is native** (D249).
 3. ⚠️ **`wstrt` is x86_64-only with no universal build at all** (✅) — same
    Rosetta dependency, no upstream plan visible.
 4. ⚠️ **`scripts/ingame.py` needs Dolphin re-signed with debugging
@@ -45,18 +46,29 @@ is about the *host* toolchain, not the PowerPC target.
    user unpacks it. No signing or notarization exists today.
 6. ⚠️ **CI publishes no Intel-Mac artifact** (✅) — `macos-latest` is arm64 only.
 
-### ⚠️ Blockers 1–3 have a partial answer: [`container.md`](./container.md)
+### ✅ Blockers 1–3 are answered by [`container.md`](./container.md)
 
-An arm64 Linux devcontainer sidesteps Rosetta entirely. Debian's
-`gcc-powerpc-linux-gnu` **14.2.0** is a plain apt package on arm64 (✅ measured),
-so devkitPPC is not needed, and **`wit` builds from source and runs on arm64**
-(✅ measured) — no re-signing, because it is not a macOS binary.
+An arm64 Linux devcontainer sidesteps Rosetta entirely, and **it closes blocker
+2 outright** (D249): devkitPro publishes **devkitPPC 16.1.0 for aarch64 Linux**,
+so the container compiles with the game's own `powerpc-eabi` ABI — the same
+toolchain the Windows host uses, running as a native arm64 binary.
 
-⛔ **It does not close blocker 2.** The container gets as far as a linked
-PowerPC ELF and then fails to convert it to a REL, in three named ways. Read
-`container.md` before budgeting against it.
+| | |
+|---|---|
+| all four `container_verify.py` mods build a `mod.rel` | ✅ measured |
+| two of the four are **byte-identical** to the Windows devkitPPC build | ✅ measured |
+| the other two match the Windows build byte for byte too, and disagree only with a stale stored reference | ✅ measured |
+| `wit` and `wstrt` build from source and run on arm64 | ✅ measured — no re-signing, because they are not macOS binaries |
+
+⚠️ **This says nothing about *native* macOS devkitPPC.** `pkg.devkitpro.org`
+serves `packages/linux/x86_64`, `packages/linux/aarch64` and
+`packages/windows/x86_64`; every `macos`/`darwin` path tried returned 404, and
+macOS is distributed by a `.pkg` installer instead. The row in the tool table
+below is unchanged. The container's answer is "run Linux arm64 in a VM", not
+"devkitPro shipped an Apple Silicon build".
 
 ⛔ **Dolphin and Dimentio stay native**, so blockers 4 and 5 are untouched.
+⛔ **Nothing built in the container has been booted**, on any host.
 
 ---
 
@@ -136,7 +148,8 @@ then `BLECK_PPC_GCC`.
 |---|---|---|
 | `wit` | **yes, from v3.05a** | [wit.wiimm.de/download.html](https://wit.wiimm.de/download.html): `wit-v3.05a-r8638-mac.tar.gz` — "Mac OS universal binaries (x86_64 and arm64)", 2022-08-27. v3.04a and earlier are x86_64 |
 | `wstrt` (SZS toolset) | ⛔ **no** | [szs.wiimm.de/download.html](https://szs.wiimm.de/download.html): every macOS asset is `…-mac64.tar.gz`, "Mac OS x86_64 binaries". Latest v2.42a, 2024-03-26 |
-| `devkitPPC` | ⛔ **no** | "devkitPro provides precompiled versions … for the following Unix-like platforms: Linux (x86_64), macOS (x86_64)" ([switchbrew](https://switchbrew.org/wiki/Setting_up_Development_Environment)). `devkitPro/pacman`'s latest release is **v6.0.2, 2023-04-05**, one asset: `devkitpro-pacman-installer.pkg` |
+| `devkitPPC`, natively on macOS | ⛔ **no** | "devkitPro provides precompiled versions … for the following Unix-like platforms: Linux (x86_64), macOS (x86_64)" ([switchbrew](https://switchbrew.org/wiki/Setting_up_Development_Environment)). `devkitPro/pacman`'s latest release is **v6.0.2, 2023-04-05**, one asset: `devkitpro-pacman-installer.pkg` |
+| `devkitPPC`, in the arm64 Linux container | ✅ **yes** | `pkg.devkitpro.org/packages/linux/aarch64/dkp-linux.db.tar.gz` lists `devkitppc-gcc 16.1.0-1`, filename `…-aarch64.pkg.tar.zst` (D249). ⚠️ That URL 403s to a non-browser User-Agent and its directory has listings disabled, which is how D26 concluded the opposite |
 | Dolphin | **yes, universal** | the `dolphin` cask installs `Dolphin.app` to `/Applications`, `depends_on macos >= 11`; Dolphin's build docs describe a universal x64+ARM bundle |
 | a non-devkitPPC PowerPC cross-gcc | ⛔ **nothing packaged** | `formulae.brew.sh/api/formula/powerpc-elf-gcc.json` → 404, and no formula in homebrew-core has `powerpc` in its name. `messense/homebrew-macos-cross-toolchains` ships only `x86_64-`/`aarch64-unknown-linux-gnu` |
 
@@ -144,9 +157,12 @@ then `BLECK_PPC_GCC`.
 host's* build. A Mac owner must take **3.05a** — it is the only one with an arm64
 slice at all.
 
-⛔ **D26's escape hatch does not exist on macOS.** On Debian, `bleck` can fall
-back to `gcc-powerpc-linux-gnu` with `-fno-pic -fno-PIE`. Homebrew has no
-equivalent, so **devkitPPC is the only packaged path**, and it is x86_64.
+⛔ **D26's escape hatch does not exist on macOS**, and it no longer works
+anywhere. Homebrew packages no PowerPC cross-gcc at all, and Debian's — which
+`bleck` can still be pointed at — cannot currently produce a REL (D250). On a
+Mac the two real options are **devkitPPC under Rosetta**, natively, or
+**devkitPPC in the arm64 Linux container**, which is native arm64 and has no
+expiry date.
 
 ### ✅ Apple Silicon will not run unsigned arm64 code, and Rosetta 2 has a date
 
@@ -161,9 +177,10 @@ equivalent, so **devkitPPC is the only packaged path**, and it is x86_64.
   for old games
   ([MacRumors](https://www.macrumors.com/2026/06/10/macos-golden-gate-last-to-support-intel-apps/)).
 
-⚠️ **Read those two together.** `wstrt` and `devkitPPC` are x86_64-only, so the
-entire code-mod path on a Mac has an announced expiry unless devkitPro ships
-arm64 packages. Asset work does not.
+⚠️ **Read those two together.** `wstrt` and macOS devkitPPC are x86_64-only, so
+the *native* code-mod path on a Mac has an announced expiry. Asset work does
+not, and neither does the container — both of those tools have an arm64 Linux
+build (D249, and `wstrt` compiled from source).
 
 ### ✅ The in-game rig needs Dolphin itself re-signed
 
@@ -359,8 +376,12 @@ uv run bleck mod build coin-tick --mods-dir example-mods /tmp/mac-check/coin.wbf
 
 🔶 The open question is not whether it installs but whether an
 **x86_64-under-Rosetta gcc produces a REL `pyelf2rel` accepts** and the game
-runs. Nothing in the toolchain is architecture-sensitive in principle; nobody has
-shown it.
+runs. Nothing in the toolchain is architecture-sensitive in principle, and
+D249 showed devkitPPC on aarch64 Linux produces bytes identical to devkitPPC on
+x86_64 Windows — but nobody has run it under Rosetta.
+
+⚠️ **Skip this step if the container is acceptable.** `container.md` gets to the
+same `mod.rel` with no Rosetta and a shorter list of unknowns.
 
 ### 5. If time remains
 
@@ -526,7 +547,10 @@ Listed so the next person does not re-derive them from the same sources.
 
 1. Whether `wit` v3.05a actually runs on Apple Silicon unmodified.
 2. Whether `dolphin-tool` is in the released `Dolphin.app`.
-3. Whether devkitPPC under Rosetta 2 produces a REL that loads and runs.
+3. Whether devkitPPC under Rosetta 2 produces a REL that loads and runs. ⚠️
+   Partly retired: D249 shows aarch64-Linux devkitPPC produces bytes identical
+   to x86_64-Windows devkitPPC, so "the host architecture changes the output" is
+   no longer the worry. "Loads and runs" is still open on every host.
 4. Whether Dimentio's window opens, focuses, renders textures, and plays audio.
 5. Whether the release tarball trips Gatekeeper in practice.
 6. Whether a `universal2` PyInstaller build is achievable with our dependency
