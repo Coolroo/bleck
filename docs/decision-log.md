@@ -18261,3 +18261,74 @@ own answer, as `system` and `pansy_kirakira` (きらきら = sparkle, image 8) d
 ⛔ **Still undetermined**: `map_SOS`, `spindash`, `event_crystal`, and whether
 `robo_burner` is a flamethrower — no Brobot fire attack is documented anywhere,
 so it is more likely jet exhaust.
+
+## D262 — Dimentio's attack confirms the ramp rule, and section 12 decodes to real transforms (2026-08-02)
+
+A gameplay screenshot of Dimentio's attack: a **yellow four-pointed star with
+concave sides**, a **purple multi-petalled shuriken** at its centre, and a small
+yellow cube. Low quality, and far more useful than the Void for checking the
+decoding, because it has separable layers.
+
+`dmen_magic` draws four images, and they line up one for one:
+
+| image | | in the screenshot |
+|---|---|---|
+| 13 (64x64) | a **yellow concave quadrant** with a soft glow | ✅ one arm of the four-pointed star — mirrored round a centre it *is* that shape |
+| 65 (32x32) | greyscale bands beside a **blue-to-magenta gradient** | ✅ the **colour** of the purple shuriken |
+| 52 (128x128) | a ragged distortion ring | shared with `dmen_warp-L` |
+| 66 (8x8) | flat yellow | the small yellow cube, or a tint source |
+
+🟢 **The purple shuriken's shape is nowhere in the textures.** Its petals are
+geometry; image 65 is only the ramp that colours them. That is the third
+independent confirmation of the ⚠️ 8px-side rule from D260 — after `chaos`,
+`pure_heart` and `kamek_magic` — and this time against a *photograph of the
+screen*, not against a wiki sentence.
+
+⚠️ **The yellow star is one quadrant used four times.** Not four textures, and
+not one star texture: a single concave arm, placed four times around a centre.
+Which is exactly the thing this viewer cannot yet do.
+
+### ✅ Section 12 is translate / rotate / scale, and the values say so
+
+D258 recorded node `+0x08`/`+0x0A`/`+0x0C` as indices into section 12 vec3s for
+translate, rotate (degrees) and scale, but nothing read them. Read against
+`dmen_magic`'s own nodes:
+
+| node | rotate | scale |
+|---|---|---|
+| `AB1` child | (0, 0, 0) | (1, 1, 1) |
+| `AB1` leaf | (0, 0, 0) | **(1e-12, 1e-12, 1)** |
+| `AB2` leaf | (0, 0, 0) | **(3.5, 3.5, 1)** |
+| `AB3` leaf | **(0, 0, 360.0)** | (3.296, 3.296, 1) |
+
+✅ **An exact 360 about Z is a full spin** — the shuriken turning — and nothing
+but a rotation in degrees produces that number. **1e-12 is zero-with-a-floor**:
+a part that grows in from nothing. The Z scale is 1.0 throughout, which is what
+a flat billboard has. Four independent sanity checks, all passing, on a section
+that was previously only inferred.
+
+### ⛔ Why "layer the effects together" is not the fix on its own
+
+The suggestion was to composite several effects to get an accurate view. It
+would not work yet, and would make things worse in a specific way: the quads
+would be laid out on the **ring this viewer invents** (D257), so a richer,
+more convincing picture would be assembled out of the same fiction. A wrong
+composite is harder to disbelieve than a wrong single sprite.
+
+**The blocker is placement, not layering.** With the transforms applied,
+layering follows for free — and `dmen_magic` is the test case that proves it,
+because its four yellow quadrants must resolve into one star or the transforms
+are wrong. That is a falsifiable target, which the Void does not offer.
+
+### The order the remaining work has to happen in
+
+1. **Apply the node transforms** (task #29). Section 9's hierarchy accumulates
+   parent to child; section 12 supplies TRS; section 6 supplies a 3x4 matrix.
+   ⚠️ The **success test is the star**, not "it looks better".
+2. **Alpha blending** (task #30). Semi-transparent art currently comes out
+   solid, because the rasteriser has a cutoff and no blend (D259).
+3. **Then** layering, which by then is just drawing two effects into one scene.
+
+🔶 Section 10's curves animate ten scalars — T.xyz, R.xyz, S.xyz, alpha — so
+the 360 above is almost certainly a *per-frame sweep* rather than a fixed pose.
+Static transforms first; the curves after.
