@@ -18421,3 +18421,57 @@ effect's true geometry is on the disc and readable.
 🔶 Sections 14 and 15 are presumably normals and vertex colours (D258 called
 them `GXSetArray` NRM and CLR0), but the star's vertices carry only two indices,
 so this vertex format does not use them. Another effect's might.
+
+### ✅ The vertex format varies, and section 8's second `u16` selects it
+
+The framing above parsed **275 of 360** display lists. The other 85 were not
+malformed — they use a different vertex format, and the `u16` between the
+material index and the display-list offset is the **GX vertex descriptor**.
+
+✅ **`stride = 2 * popcount(desc & 0x7FFF)`** — every attribute is a `u16`
+index, and bit 15 is a flag rather than an attribute. With that rule, **360 of
+360 parse exactly**, consuming their declared size with nothing left over, for
+**14,648 primitives** across the bank.
+
+The bit positions are GX's own fixed attribute order, which is what makes the
+section assignments fall out:
+
+| bit | attribute | array |
+|---|---|---|
+| 0 | POS | section 13, 3 x s16 |
+| 1 | NRM | section 14 |
+| 2 | CLR0 | section 15 |
+| 3 | TEX0 | section 11, 2 x f32 |
+
+| descriptor | attributes | stride |
+|---|---|---|
+| `0x0001` | POS | 2 |
+| `0x0009` | POS, TEX0 | 4 — Dimentio's star |
+| `0x000B` | POS, NRM, TEX0 | 6 |
+| `0x000D` | POS, CLR0, TEX0 | 6 |
+| `0x800D` | as `0x000D`, plus bit 15 | 6 |
+
+🟢 This independently confirms D258's guess that sections 11/13/14/15 are the
+`GXSetArray` targets for TEX0/POS/NRM/CLR0 — reached from the opposite
+direction, by which bit of a descriptor selects which array.
+
+⚠️ **275 of 360 is exactly the kind of near-miss that reads as success.** Three
+quarters parsing, on the effect that was being examined, with the failures
+elsewhere in the bank — a reader shipped at that point would have produced
+confident garbage for a quarter of the game's effects, and only on effects
+nobody had looked at yet.
+
+### The format, complete
+
+```
+section 8 entry   u16 material · u16 vertex descriptor · u32 display-list offset
+section 3 record  u32 size · pad to 32 · GX primitives, for `size` bytes
+  primitive       u8 opcode (0xA0 = triangle fan) · u16 count · count x stride
+  vertex          one u16 index per descriptor bit, in GX attribute order
+section 13        positions, 3 x s16, stride 6
+section 11        texture coordinates, 2 x f32, stride 8
+```
+
+Nothing in the geometry path is now unknown. What remains for task #29 is
+engineering: read it in `bleck`, export it, and draw it in `dimentio` in place
+of the billboard.
