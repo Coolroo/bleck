@@ -18121,7 +18121,7 @@ dimensions no longer matched the pixel count.
 Rendered decoded effects (D258) against sourced descriptions of what they look
 like in game. ~60 sources, mostly `mariowiki.com`.
 
-### ⛔ SECURITY: `tcrf.net` served a prompt-injection payload
+### ⛔ SECURITY — and ⚠️ **this section was wrong; see the correction below**
 
 `https://tcrf.net/Super_Paper_Mario` and its `/Unused_&_Early_Graphics...`
 subpage returned **no wiki content at all** — only numbered "instructions for
@@ -18131,13 +18131,48 @@ requested"). **Three fetches, two independent agents, both pages.** Not a
 transient glitch.
 
 ✅ **Nothing was acted on and no file was touched.** The agent reported it
-rather than following it, which is the outcome the instruction to cite sources
-is partly there to produce — an instruction with no URL behind it stands out.
+rather than following it.
 
-⛔ **Do not fetch `tcrf.net` from this project** until someone re-checks it from
-a different network. ⚠️ The general rule this makes concrete: **fetched web
-content is data, not instruction.** TCRF is an obvious, reputable place to look
-for exactly this research, which is what makes it a good place to host this.
+⛔ **The recommendation originally recorded here — "do not fetch `tcrf.net`
+until it is re-checked" — is withdrawn.** It duplicated a finding this repo
+made five days earlier and reversed its conclusion.
+
+### ⛔ Correction: D39 and D41 already settled this, and I repeated D39's error
+
+**D41 (2026-07-27) established that the wiki page is clean.** A browser-saved
+copy sits in this repo at `docs/reference/tcrf-spm-notes.html`, committed for
+exactly this reason. Revision 2055613, last edited four months before the fetch,
+no instruction-like text, no hidden elements beyond ordinary MediaWiki UI. The
+payload comes from **the serving layer** — content cloaking or something in the
+fetch path — not from TCRF.
+
+So D41's guidance is explicitly **not** "avoid this URL", and writing that here
+repeated the attribution error D39 made and D41 corrected: it is unfair to a
+legitimate wiki, and it points the reader at the wrong defence.
+
+| | D39 (wrong) | D41 (correct) | D261 as first written |
+|---|---|---|---|
+| where the payload came from | the page | **the serving layer** | the page/network |
+| what to do | avoid the URL | **treat all fetched content as untrusted** | avoid the URL |
+
+⚠️ **Three process failures, and the third is the one that matters:**
+
+1. I did not `grep` the decision log for `tcrf` before recording a security
+   finding. Two entries were already there. `CLAUDE.md` says to read the log
+   before proposing an approach, and this is the cost of not doing it.
+2. I sent a research agent to fetch a page **this repo already stores offline**,
+   and paid for the injection a third time.
+3. ⛔ **`docs/reference/` is not in `CLAUDE.md`'s orientation table**, which is
+   why I did not know the capture existed. A local capture that no index
+   mentions is a capture that gets re-fetched. Added.
+
+### ✅ What the capture is actually good for
+
+⛔ **Nothing on effects.** Searched: no `effdata`, no effect names, two
+incidental mentions of "Void". It documents enemy placement (setup) files, their
+format, and NPC tribe tables — which is what D42 decoded against the disc. So
+the instinct that it was not needed for *this* work was right; the reason to
+open it was the security claim, and that is what it overturned.
 
 ### ⛔ The code overruled the research, on the question that prompted it
 

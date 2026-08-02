@@ -33,6 +33,7 @@ Modding toolkit for **Super Paper Mario** (Wii, 2007).
 | `bleck.spec` | PyInstaller build. ⚠️ Read the traps in `handoff.md` before touching it |
 | `example-mods/` | **Every mod this project has built** — worked examples and probes. Pass `--mods-dir example-mods` |
 | `mods/` | **The user's own mods.** `BLECK_MODS_DIR` defaults here. **Git-ignored** — see the rule below |
+| `docs/reference/` | **Third-party captures kept verbatim**, because the original may change or vanish. ⚠️ **Look here before fetching anything** — `tcrf-spm-notes.html` is stored precisely because fetching that URL returns a prompt-injection payload (D41) |
 | `work/upstream/spm-headers` | Cloned reference — struct layouts and addresses. Not vendored |
 | `work/roms/` | Disc images (WBFS/RVZ). Not source. Large. |
 | `work/extracted/` | `wit EXTRACT` output, one dir per build (`us0`, …). Regenerable. |
