@@ -18332,3 +18332,92 @@ are wrong. That is a falsifiable target, which the Void does not offer.
 🔶 Section 10's curves animate ten scalars — T.xyz, R.xyz, S.xyz, alpha — so
 the 360 above is almost certainly a *per-frame sweep* rather than a fixed pose.
 Static transforms first; the curves after.
+
+## D263 — Effect geometry decoded: display lists, positions and UVs (2026-08-02)
+
+Starting task #29 ("apply the node transforms") turned up the thing that made
+the task's premise wrong, and then solved a bigger problem. **The effect
+geometry is real indexed geometry**, not billboards, and all three sections it
+needs are now read.
+
+### ⛔ First, the premise was wrong
+
+The plan was: the four arms of Dimentio's yellow star come from four *nodes*, so
+applying node transforms will assemble them. Checked before building — and all
+three of `dmen_magic`'s `AB` draws point at **the same display list**,
+`0x001C80`. Not four nodes. The star is inside one draw.
+
+⚠️ Had this not been checked first, the transforms would have been implemented,
+the star still would not have appeared, and the natural conclusion would have
+been "the transforms are wrong".
+
+### ✅ Section 3 — GX display lists
+
+A record is a `u32` size, zero padding to a 32-byte boundary, then GX commands:
+
+```
+0xA0  u16 count   then count vertices        GX_DRAW_TRIANGLEFAN, vtxfmt 0
+```
+
+⚠️ **A vertex is 4 bytes — two u16 indices**, `(position, texcoord)`. Reading it
+as 8 bytes swallows the next primitive's opcode and reports one quad where there
+are four; the tell is a second `a0 00 04` sitting 16 bytes into what looked like
+vertex data.
+
+⚠️ **One display list holds several primitives.** `0x001C80` is 96 bytes and
+holds **four** 4-vertex fans.
+
+### ✅ Section 13 — positions, 3 x s16
+
+Stride **6**. Every coordinate of the star is `0` or `±320` with Z always `0`:
+a flat grid on 320-unit cells. Index 82 is `(0, 0, 0)` and appears in **all four**
+fans — the shared centre.
+
+⛔ Not 3 x f32: that reading gives `-3.4e38` and NaN. The section does not divide
+by 12 either (73,504 / 12 = 6125.33), which was the hint.
+
+### ✅ Section 11 — texture coordinates, 2 x f32
+
+Stride **8**. The star's four quads all use indices 290, 291, 289, 288 →
+`(0.028, 0.028)`, `(0.977, 0.028)`, `(0.977, 0.977)`, `(0.028, 0.977)` — one
+inset texture rect.
+
+### 🟢 And that is how the star is built
+
+| quad | corners | centre |
+|---|---|---|
+| 0 | (-320,320) (0,320) (0,0) (-320,0) | (-160, +160) |
+| 1 | (-320,-320) (-320,0) (0,0) (0,-320) | (-160, -160) |
+| 2 | (320,320) (320,0) (0,0) (0,320) | (+160, +160) |
+| 3 | (320,-320) (0,-320) (0,0) (320,0) | (+160, -160) |
+
+**A 2x2 block around the origin, every cell 320 x 320, every cell the same UVs.**
+The corner *orders* are permuted, so the identical texture rect lands mirrored in
+each cell. One concave quadrant (image 13) becomes a four-pointed star with
+concave sides — which is what the gameplay screenshot in D262 shows.
+
+✅ **Nothing here is inferred.** The positions are read, the UVs are read, and
+the arrangement follows from them arithmetically.
+
+### What this changes about task #29
+
+The task was "apply node transforms instead of the invented ring". It is really
+**"draw the real geometry"**, and the transforms are one part of that:
+
+| | source | state |
+|---|---|---|
+| geometry | section 3 display lists | ✅ decoded here |
+| positions | section 13, 3 x s16 | ✅ decoded here |
+| UVs | section 11, 2 x f32 | ✅ decoded here |
+| image + tint + wrap | sections 4/5 via 7/8 | ✅ D258 |
+| placement | section 9 nodes + section 12 TRS | ✅ read (D262), not applied |
+| animation | section 10 curves → 10 scalars | 🔶 not read |
+| blending | — | ⛔ no blending in the rasteriser (D259) |
+
+⛔ **The billboard quad in `render::effect` is now known to be a placeholder for
+something that exists**, rather than a stand-in for something unknown. Every
+effect's true geometry is on the disc and readable.
+
+🔶 Sections 14 and 15 are presumably normals and vertex colours (D258 called
+them `GXSetArray` NRM and CLR0), but the star's vertices carry only two indices,
+so this vertex format does not use them. Another effect's might.
