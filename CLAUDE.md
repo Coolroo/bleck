@@ -355,6 +355,7 @@ by a generator.
 | `check_binding.py` | Whether a button combination reached the game |
 | `dump_npcs.py` / `dump_items.py` / `dump_maps.py` / `dump_doors.py` | Regenerate a committed catalog from a running game |
 | `dump_effects.py` | **List all 174 effects** -- reads the DOL, needs no running game |
+| `effect_art.py` | **Look at an effect's own textures**, tiled at native size. `dimentio reel` says which images and when; this says what they *are* |
 | `modelscan.py` | **Read a character model, or any undecoded data file** — what `dolscan` is for the DOL. Nine subcommands: `survey`, `header`, `offsets`, `at`, `strings`, `vectors`, `streams`, `chain`, `mesh` |
 | `evtdis.py` | **Read the game's own scripts.** `--template 196` lists a template's script pointers |
 | `dump_builtins.py` | **Regenerate the language reference** in `docs-site/scripting/`. `--check` is what CI runs |

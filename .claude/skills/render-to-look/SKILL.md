@@ -144,6 +144,22 @@ states the answer twice and the two agree.
 inclusive, so sampling five frames over a 2 s effect whose second part lasts
 0.5 s gives `2, 2, 1, 1, 1`.
 
+### ⛔ A reel is the wrong tool for reading the artwork
+
+The quads are small in frame — `item_thunder` reels as a six-pixel smudge. To
+see what an effect's art actually *is*, tile its own textures at native size:
+
+```powershell
+uv run python scripts/effect_art.py map_derkness work/build/void.png
+```
+
+⚠️ **Check the dimensions before asking "does it look like X".** 19 of the 219
+bank images have a side ≤ 8px: those are **colour ramps**, and the shape comes
+from geometry. `kamek_magic` is two gradient strips and nothing else;
+`pure_heart` is a rainbow ramp, which is how one effect tints itself for each
+differently-coloured Pure Heart. 179 images are ≥32px on both sides and are
+real sprite art. **Ask the question only of those** (D258, D260).
+
 ⚠️ **A painted part cannot be found by colour**, so arrival is only checked on
 unpainted ones, and the palette repeats after six. When nothing is checkable the
 report says so rather than claiming a clean sweep.

@@ -18014,3 +18014,105 @@ the documented `-1` at material `+0x0C`. They are not a decoding failure.
 things it can mean: the parts genuinely draw nothing, or the export predates
 D258 and wants `bleck effect export` re-running. Reporting only the first would
 send someone hunting a renderer bug; only the second, hunting a disc problem.
+
+## D260 — The Void is `map_darkness_bg`, and the code names Flipside itself (2026-08-02)
+
+Asked to cross-reference decoded effects against what they look like in game,
+starting with **the Void** — the black tear in the sky over Flipside. It is not
+in `effdata`'s 139 effects. It is in the DOL, and the code identifies itself.
+
+### ✅ The chain, read off the code
+
+| | |
+|---|---|
+| `0x8017AE8C` | in `seq_mapchange.c`: `strcmp(map+0x44, "aa4_01")`, and **if it does not match**, call `map_darkness_bg(0)` |
+| `0x800B606C` | `map_darkness_bg` — creates an entity named `"map_darkness_bg"`, update function `0x800B69AC` |
+| `0x800B6164` | inside it: `strcmp` against **`mac_02`** and **`mac_12`** |
+| `0x8005FC64` | `(effect, part)` lookup — D172's runtime name composition |
+
+⚠️ **`aa4_01` is the Prologue** (`bleck maps`), so the background darkness
+spawns on **every map change except the intro** — which is when the Void begins
+to exist in the story, after the Chaos Heart is activated.
+
+🟢 **`mac_02` and `mac_12` are Flipside and Flopside**, and they are hard-coded
+in the spawner's own string block:
+
+```
+map_darkness_bg · mac_02 · mac_12 · map_derkness · A · B · C · 
+jigen_derkness · D1 · D2 · D · C0 · 
+```
+
+The branch sets one float on the entity at `+0x2C`:
+
+| map | value |
+|---|---|
+| `mac_02` / `mac_12` — Flipside, Flopside | **1.0** |
+| everywhere else | **0.96** |
+
+✅ So the Void is drawn at full size over the two hub towns and **4% smaller**
+in the worlds. Small, specific, and exactly the kind of thing nobody would
+special-case for a generic vignette.
+
+### ✅ Its artwork, through D258
+
+The spawner asks for `map_derkness` parts A/C and `jigen_derkness` parts D1/D2.
+All six references to those two strings sit inside `map_darkness_bg`'s own body,
+so nothing else on the disc uses them. Resolving them through the D258 chain:
+
+| effect | images |
+|---|---|
+| `map_derkness` | 69 (64x64), 70 (64x64), 119 (128x192), 24 (64x64) |
+| `jigen_derkness` | 69, 70, 72 (16x32), 24, 73 (128x128), 74 (64x128) |
+
+Rendered: a **black core with soft edges**, a blocky mask, **purple branching
+lightning**, and a turbulent black-and-white noise field. That is the Void.
+
+⚠️ **Confidence.** Every step above is ✅ read from the code or measured from
+the file. That the composed result *is* the Void is 🟢 — four independent things
+agree (the name, the every-map-but-the-prologue rule, the Flipside/Flopside
+special case, and purple lightning round a black core) — but **nobody has seen
+it on screen from this rig**, and the node transforms that would place these
+sprites are still unapplied. The instrument reads memory, not pixels.
+
+### ✅ A cheap predictor: an 8-pixel side means a ramp, not art
+
+Cross-referencing "does it look like X" only works on effects whose *shape* is
+in a texture. `kamek_magic` turned out to be two gradient strips, 8x128 and
+8x64, with no shape whatever; `chaos` and much of `pure_heart` are the same.
+
+Measured over the whole bank:
+
+| | images |
+|---|---|
+| a side ≤ 8px — **colour ramps** | **19** of 219 |
+| both sides ≥ 32px — **sprite art** | **179** of 219 |
+
+🟢 **So the dimensions say in advance whether an effect is eyeball-checkable.**
+`pure_heart` draws a *rainbow ramp* (8x32) — which is how one heart effect tints
+itself for each differently-coloured Pure Heart — and expecting a heart-shaped
+texture would refute a correct decoding, exactly as D258 warns for `chaos`.
+
+### ⚠️ The reel is the wrong tool for reading artwork, and that is a finding
+
+`dimentio reel` renders the composed effect, and its quads are small in frame:
+`item_thunder` came out as a six-pixel yellow smudge, unreadable. The reel
+answers *which images and when*; it does not answer *what the art is*.
+
+So the artwork is now read straight from the exported PNGs at native
+resolution, tiled and integer-scaled. ⛔ Nearest-neighbour and whole-number
+scaling only — smoothing a 16x32 sprite invents detail, and the point is to see
+what is there. ⚠️ The first version silently produced a **corrupt sheet** rather
+than failing: a 192x192 image overflowed its cell, and `bytearray` slice
+assignment past the end *appends* instead of raising, so the canvas grew and the
+dimensions no longer matched the pixel count.
+
+### Confirmed by looking
+
+| effect | predicted | rendered |
+|---|---|---|
+| `sweat` | a droplet | ✅ blue droplet with a white highlight |
+| `item_fire` | flame | ✅ orange-red swirl |
+| `item_star` | a star | ✅ yellow star point, plus a ring halo |
+| `item_thunder` | a bolt | ✅ yellow, 20 of 512 texels lit |
+| `kamek_magic` | shapes | ⛔ **wrong** — two gradient ramps |
+
