@@ -754,3 +754,210 @@ class TestTheGeometryAgainstTheRealFile:
                 painted = [d.picture for d in effdata.draws(data, effect, part)]
                 assert set(pictures) == {p for p in painted if p is not None}
                 assert len(pictures) == len(set(pictures)), "artwork must dedupe"
+
+
+class TestComposingATransform:
+    """`Transform`, without a disc."""
+
+    def test_the_identity_leaves_a_transform_alone(self):
+        one = effdata.Transform((2.0, 0, 0, 5.0, 0, 3.0, 0, 6.0, 0, 0, 4.0, 7.0))
+        assert effdata.IDENTITY.then(one) == one
+        assert one.then(effdata.IDENTITY) == one
+
+    def test_a_parent_scale_multiplies_a_child_translation(self):
+        """⚠️ The whole point of accumulating: a child's offset is expressed in
+        its parent's frame, so a parent that scales moves the child further."""
+        parent = effdata.Transform((2.0, 0, 0, 0, 0, 2.0, 0, 0, 0, 0, 2.0, 0))
+        child = effdata.Transform((1.0, 0, 0, 10.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        got = parent.then(child).values
+        assert got[3] == 20.0, "the parent's scale did not reach the child"
+
+    def test_translations_accumulate(self):
+        a = effdata.Transform((1.0, 0, 0, 3.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        b = effdata.Transform((1.0, 0, 0, 4.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        assert a.then(b).values[3] == 7.0
+
+    def test_a_zero_scale_is_flat_and_the_identity_is_not(self):
+        assert not effdata.IDENTITY.is_flat
+        flat = effdata.Transform((0.0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 1.0, 0))
+        assert flat.is_flat
+        # ⚠️ And it stays flat however it is parented: a collapsed axis cannot
+        # be recovered downstream, which is why the rest pose loses effects.
+        assert effdata.IDENTITY.then(flat).is_flat
+
+    def test_an_index_past_the_section_gives_the_identity(self):
+        data = a_file([("fire", 0, 1, 0)], ["A"])
+        assert effdata.matrix_at(data, 1 << 20) == effdata.IDENTITY
+        assert effdata.matrix_at(data, -1) == effdata.IDENTITY
+        assert effdata.vector_at(data, 1 << 20) == (0.0, 0.0, 0.0)
+
+
+@pytest.mark.gamedata
+class TestTheNodeTransforms:
+    """D265: section 6's matrix and section 12's TRS are the same transform."""
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def _nodes(self, data: bytes) -> int:
+        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        span = offsets[effdata.NODE_SECTION + 1] - offsets[effdata.NODE_SECTION]
+        return span // effdata.NODE_STRIDE
+
+    def test_the_matrix_array_is_filled_exactly(self):
+        """🟢 The fit that settles the stride: the largest index any node
+        carries is 1,348 and the section holds exactly 1,349 matrices at 48
+        bytes — zero spare, where stride 16 would leave 2,699."""
+        data = self._data()
+        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        span = offsets[effdata.MATRIX_SECTION + 1] - offsets[effdata.MATRIX_SECTION]
+        held = span // effdata.MATRIX_STRIDE
+        biggest = max(effdata.node_at(data, i).matrix for i in range(self._nodes(data)))
+        assert held == 1349
+        assert biggest == held - 1, "the array is not filled to its last entry"
+
+    def test_matrix_one_is_the_identity(self):
+        """The nesting nodes all name matrix 1, so it had better be."""
+        assert effdata.matrix_at(self._data(), 1) == effdata.IDENTITY
+
+    def test_every_translation_column_is_the_nodes_own_translate_vector(self):
+        """✅ 3,739 of 3,739 — the simplest half of the two-way agreement, and
+        the one that needs no rotation order to check."""
+        data = self._data()
+        for i in range(self._nodes(data)):
+            node = effdata.node_at(data, i)
+            m = effdata.matrix_at(data, node.matrix).values
+            translate = effdata.vector_at(data, node.translate)
+            assert (m[3], m[7], m[11]) == pytest.approx(translate, abs=1e-4), f"node {i}"
+
+    def test_the_matrix_is_the_nodes_own_trs_composed(self):
+        """✅ **The two-way agreement**, and the strongest thing said about this
+        section: section 6's matrix and section 12's translate/rotate/scale are
+        the same transform stored twice, and they agree on 3,738 of 3,739 nodes.
+
+        ⚠️ The one exception is node 3738 — the **last** in the file, whose
+        matrix, translate, rotate and scale indices are all 0 and whose scale is
+        therefore `(0, 0, 0)`. Padding, not a counter-example.
+        """
+        data = self._data()
+        total = self._nodes(data)
+        agree = [i for i in range(total) if _matches(data, effdata.node_at(data, i))]
+        assert len(agree) == total - 1
+        assert total - 1 not in agree, "the exception is not the last node"
+
+    def test_the_rotation_order_is_discriminated_not_merely_consistent(self):
+        """⛔ The check that stops `zyx` being a coincidence. 199 nodes rotate
+        on more than one axis, which is what makes the six orders tell apart —
+        `zyx` matches 3,738 where the next best manages 3,615. Without those 199
+        every order would score the same and the claim would be empty."""
+        data = self._data()
+        total = self._nodes(data)
+        multi = sum(
+            1
+            for i in range(total)
+            if sum(
+                1
+                for v in effdata.vector_at(data, effdata.node_at(data, i).rotate)
+                if abs(v) > 1e-6
+            )
+            > 1
+        )
+        assert multi > 100, f"only {multi} nodes could tell the orders apart"
+
+        best = max(
+            sum(
+                1 for i in range(total) if _matches(data, effdata.node_at(data, i), order)
+            )
+            for order in itertools.permutations("xyz")
+            if order != ("z", "y", "x")
+        )
+        assert best < total - 100, f"another order scored {best}; zyx is not special"
+
+    def test_most_of_the_rest_pose_is_flat_and_that_is_not_a_fault(self):
+        """⛔ **The finding that redefined this task** (D265). Applying the rest
+        pose without section 10's curves renders *less* than drawing every part
+        at the origin: nearly half the drawing nodes have a collapsed scale,
+        waiting for a curve to animate it up from zero.
+        """
+        data = self._data()
+        flat = live = 0
+        empty = []
+        for effect in effdata.read(data):
+            alive = 0
+            for part in effect.parts:
+                for draw in effdata.draws(data, effect, part):
+                    if draw.world.is_flat:
+                        flat += 1
+                    else:
+                        live += 1
+                        alive += 1
+            if not alive and any(
+                effdata.draws(data, effect, part) for part in effect.parts
+            ):
+                empty.append(effect.name)
+
+        # ⚠️ 2,960 draws, not the 2,956 drawing *nodes*: a section 7 group can
+        # hold more than one section 8 entry, and eight of them do.
+        assert flat + live == 2960
+        assert (flat, live) == (1308, 1652)
+        assert flat > live // 2, f"only {flat} of {flat + live} are flat"
+        assert len(empty) == 26, f"{len(empty)} effects vanish: {sorted(empty)[:6]}"
+        # ⚠️ Named, because the handoff cites this one as reeling "as a flame
+        # swirl" — posing it from the rest pose alone would lose it entirely.
+        assert "item_fire" in empty
+
+    def test_a_draw_carries_where_its_node_landed(self):
+        """The accumulation reaches the export, rather than stopping at the
+        walk. `dmen_magic`'s nodes nest three deep."""
+        data = self._data()
+        effects = {e.name: e for e in effdata.read(data)}
+        magic = effects["dmen_magic"]
+        found = [d for part in magic.parts for d in effdata.draws(data, magic, part)]
+        assert found
+        assert any(d.world != effdata.IDENTITY for d in found), "nothing accumulated"
+
+
+def _matches(data: bytes, node, order: tuple = ("z", "y", "x")) -> bool:
+    """Whether a node's TRS composes to the matrix it names."""
+    got = _compose(
+        effdata.vector_at(data, node.translate),
+        effdata.vector_at(data, node.rotate),
+        effdata.vector_at(data, node.scale),
+        order,
+    )
+    return all(
+        abs(a - b) <= 1e-3 * max(1.0, abs(a), abs(b))
+        for a, b in zip(got, effdata.matrix_at(data, node.matrix).values, strict=True)
+    )
+
+
+def _compose(translate, rotate, scale, order) -> list[float]:
+    """Translate/rotate/scale as a 3x4, rotating in `order`, degrees."""
+    turn = [1.0, 0, 0, 0, 1.0, 0, 0, 0, 1.0]
+    for which in order:
+        turn = _times(turn, _axis(which, rotate["xyz".index(which)]))
+    out: list[float] = []
+    for row in range(3):
+        out.extend(turn[row * 3 + col] * scale[col] for col in range(3))
+        out.append(translate[row])
+    return out
+
+
+def _times(a, b) -> list[float]:
+    return [
+        sum(a[r * 3 + k] * b[k * 3 + c] for k in range(3))
+        for r in range(3)
+        for c in range(3)
+    ]
+
+
+def _axis(which: str, degrees: float) -> list[float]:
+    turn = math.radians(degrees)
+    cos, sin = math.cos(turn), math.sin(turn)
+    if which == "x":
+        return [1.0, 0, 0, 0, cos, -sin, 0, sin, cos]
+    if which == "y":
+        return [cos, 0, sin, 0, 1.0, 0, -sin, 0, cos]
+    return [cos, -sin, 0, sin, cos, 0, 0, 0, 1.0]

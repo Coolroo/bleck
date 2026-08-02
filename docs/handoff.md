@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D264**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D265**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D264 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D265 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -818,20 +818,38 @@ else; pick by interest.
    that parses, renders, and is quietly one attribute short. It is counted now,
    and the count is **0** across all 360 lists. That is what caught the stride.
 
-4. 🔶 **What is left for an accurate effect view:**
-   - **Apply the node transforms** — the remaining half of the problem. Section
-     9's hierarchy accumulates parent to child, section 12 supplies TRS.
-     ✅ Verified readable (D262): `dmen_magic` gives an exact `(0, 0, 360)` Z
-     rotation and scales from `1e-12` to `3.5`, Z scale 1.0 throughout. Until
-     this lands the viewer draws an **exploded view** by part index.
-   - 🔶 Section 10's curves animate ten scalars — T.xyz, R.xyz, S.xyz, alpha.
-     Not read.
+4. ✅ **The node transforms are decoded** (D265) and ⛔ **deliberately not
+   applied.** Section 6 holds a node's local transform as a **3x4 matrix**,
+   1,349 of them at stride 48, filled exactly to node `+0x06`'s largest index.
+   Section 12's translate/rotate/scale compose to the same thing on **3,738 of
+   3,739 nodes**, rotating `zyx` in degrees — so the transform is established
+   twice from different bytes, and the matrix can be used directly without ever
+   guessing a rotation order.
+
+   ⛔ **The rest pose is unviewable, and this is the finding that matters.**
+   Applying it collapses **1,308 of 2,960 draws (44%)** to zero volume and makes
+   **26 of 139 effects vanish outright** — `item_fire` among them, which this
+   very document cites as reeling "as a flame swirl". The scale is *animated up
+   from zero*: node 1350's scale is a literal `(0,0,1)` and it carries curve
+   tags 6 and 7, which are scale X and scale Y.
+
+   ⚠️ Shipping the pose would have traded a layout **honestly labelled
+   invented** for one that is **correct and invisible**. The second is far
+   harder to notice. `Draw.world` carries the matrix and `Transform.is_flat`
+   names the problem; the viewer still draws the exploded view.
+5. 🔶 **Section 2's curve records are now the blocker** for everything above.
+   ✅ The route in is read: node `+0x10`/`+0x12` is a (start, count) into
+   section 10's 4,752 `(tag, offset)` pairs, and 🟢 **tag 0..9 selects one of
+   ten scalars** — T.xyz, R.xyz, S.xyz, alpha — confirmed against two nodes'
+   own static values. ⛔ **What is not settled is a record at an arbitrary
+   offset**: offsets land *inside* other records (`tag9@242488` sits 124 bytes
+   into `tag1@242364` and re-reads its floats), some begin with `-FLT_MAX`, and
+   the naive "header then N floats" reading accounts for a third of them.
    - ⛔ **No alpha blending in the rasteriser** (D259, task #30), so
      semi-transparent art comes out solid.
-   ⚠️ **Do not "layer effects together" before the transforms land.** The
-   shapes are real now, which makes a wrong composite *more* convincing, not
-   less.
-5. 🔶 **One display list is anomalous** (D264). `item_delete`'s is **640 units
+   ⚠️ **Do not "layer effects together" before this lands.** The shapes are
+   real now, which makes a wrong composite *more* convincing, not less.
+6. 🔶 **One display list is anomalous** (D264). `item_delete`'s is **640 units
    wide and 58,642 deep**, where the other 359 are flat or near it. ⛔ Not a
    framing error — it consumes its declared size exactly — and ⛔ not a general
    misreading of Z, since two thirds of all positions carry a real non-zero Z
@@ -841,7 +859,7 @@ else; pick by interest.
    64,108 on every axis, a depth ratio of exactly 1.0, while the effect drew
    nothing. A summary statistic that collapses the axes cannot report an axis
    being wrong.
-6. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
+7. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
    2 curves, 3 display lists, 4 textures, 5 materials, 6 matrices, 7 draws,
    8 subdraws, 9 nodes, 10 curve channels, 11 TEX0, 12 vectors, 13 POS,
    14 NRM, 15 CLR0 — the last two **measured**, not inferred (D264). ⚠️ One

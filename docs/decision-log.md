@@ -18599,3 +18599,105 @@ section 12's TRS are read (D262) and **not applied**, so the viewer draws an
 **exploded view** — parts deliberately separated so they can be told apart. Every
 draw's *shape* is now measured; its placement is not, and the reel says so on
 every run. 🔶 Section 10's curves, which would animate it, are still unread.
+
+## D265 — Node transforms decoded, and the rest pose turns out to be unviewable (2026-08-02)
+
+Task #31 was "apply the node transforms instead of the exploded view". The
+transforms decoded cleanly and **the task's premise is still wrong**, for the
+second time running: applying them without section 10's curves renders *less*
+than the exploded view does.
+
+### ✅ Section 6 is 1,349 matrices of 3x4, and node `+0x06` fills it exactly
+
+The same exact-fill argument that settled the vertex arrays (D264). The largest
+matrix index any node carries is **1,348**, and:
+
+| stride | entries | spare |
+|---|---|---|
+| 16 (D258's "four-float rows") | 4,048 | 2,699 |
+| 24 | 2,698 | 1,349 |
+| **48** | **1,349** | **0** |
+
+A 3x4 row-major matrix is 48 bytes, and index 1 — which every nesting node in
+`dmen_magic` names — reads back as **exactly the identity**. ⛔ This supersedes
+`Effect.rows`, which slices section 6 by an effect's `extra`; `extra` is the
+effect's base *node* (D258) and was never an index into section 6 at all.
+
+### 🟢 The transform is stored twice, and the two agree
+
+Section 12 holds translate/rotate/scale vectors — `3 x f32`, stride 12, 1,341
+entries against a largest index of 1,339 — reached from node `+0x08`, `+0x0A`
+and `+0x0C`. Composed, they reproduce section 6's matrix:
+
+- ✅ **The translation column equals the node's own translate vector on 3,739
+  of 3,739 nodes.** No rotation order is needed to check that half.
+- ✅ **The full matrix matches on 3,738 of 3,739**, rotating **`zyx` in
+  degrees**.
+
+⚠️ **The rotation order is discriminated, not merely consistent.** 199 nodes
+rotate on more than one axis, which is what makes the six orders tell apart:
+`zyx` scores 3,738 where the next best (`zxy`) scores 3,615. Had every rotation
+been single-axis, all six orders would have tied and "the order is zyx" would
+have been an empty claim.
+
+⚠️ The single disagreement is **node 3738 — the last in the file** — whose
+matrix, translate, rotate and scale indices are all 0, giving a scale of
+`(0,0,0)` against matrix 0's `scale(0.5, 0.5, 1)`. Padding, not a counter-example.
+
+🟢 **Two independent encodings agreeing is the strongest evidence available
+here**, and it has a practical payoff: the matrix can be used directly, so
+nothing downstream ever has to guess a rotation order.
+
+### ⛔ And yet the rest pose cannot be drawn
+
+Applying the accumulated transform to every draw:
+
+| | |
+|---|---|
+| drawing nodes | 2,956, issuing **2,960** draws |
+| **flat under the rest pose** | **1,308 (44%)** — zero determinant |
+| effects flat throughout | **26 of 139** |
+
+The vanishing effects include `item_fire`, `get_coin`, `item_dokan`,
+`dmen_warp-L` and `luigi_jump`. ⚠️ **The handoff cites `item_fire` as reeling
+"as a flame swirl"** — posing it from the rest pose alone would lose it
+entirely.
+
+This is not a fault in the reading. `dmen_magic`'s AB1 leaf scales to `1e-12`
+(D262) and node 1350's scale is a literal `(0, 0, 1)` — **the scale is animated
+up from zero**, and node 1350 carries curve tags **6 and 7**, which are scale X
+and scale Y. The rest pose is a starting point, not a pose.
+
+⛔ **So the transforms are decoded and deliberately not applied.** `Draw.world`
+carries the accumulated matrix and `Transform.is_flat` names the problem; the
+viewer still draws the exploded view. Shipping the pose alone would have traded
+a layout that is honestly labelled invented for one that is *correct and
+invisible* — and the second is much harder to notice.
+
+### ✅ What the curves need, which is now mostly identified
+
+- Node **`+0x10`** is a start and **`+0x12`** a count into section 10, whose
+  4,752 `(tag, offset)` pairs the largest index (4,750) nearly fills. 2,288
+  nodes carry a run; counts are 0..6.
+- 🟢 **Tag 0..9 selects one of ten scalars** — T.xyz, R.xyz, S.xyz, alpha — and
+  two nodes confirm it against their own static values: node 1350's static scale
+  is `(0,0,1)` and it carries tags **6, 7** (S.x, S.y); node 1351 carries tag
+  **1** (T.y, static 40, curve begins 35.64) and tag **7** (S.y, static 0.7,
+  curve begins 0.6792).
+- 🔶 **The curve record at an arbitrary offset is not settled.** Offsets land
+  *inside* other records — `tag9@242488` sits 124 bytes into `tag1@242364`'s
+  span and re-reads its floats — and some begin with `-FLT_MAX`, plainly a
+  sentinel. The naive "header then N floats" reading accounts for a third of
+  the offsets and no more.
+
+### The order the remaining work has to happen in, revised
+
+1. **Decode section 2's curve records** — the actual blocker. Until an offset
+   can be evaluated at a time, no pose is viewable.
+2. Then apply the transform per frame; `Draw.world` and `Transform` are ready.
+3. Only then is layering several effects meaningful (D262).
+
+⚠️ **Two tasks in a row have had a wrong premise that a measurement caught
+before any code was written** — #29's "four nodes make the star" (D263) and
+#31's "applying the transforms will compose the figure". Both took under an
+hour to check and would have cost a day each to discover afterwards.

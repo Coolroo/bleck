@@ -611,6 +611,24 @@ class Picture:
     """The material's own RGBA at `+0x00`, before the node's alpha is folded in."""
 
 
+#: Section 6: a node's own local transform, as a 3x4 row-major matrix of
+#: floats. ✅ Node `+0x06` reaches 1,348 and the section holds exactly 1,349 at
+#: this stride -- zero spare, the same exact-fill argument that settled the
+#: vertex arrays (D265).
+MATRIX_SECTION, MATRIX_STRIDE = 6, 48
+
+#: Section 12: translate, rotate and scale vectors, three floats each. A node's
+#: `+0x08`, `+0x0A` and `+0x0C` index it.
+VECTOR_SECTION, VECTOR_STRIDE = 12, 12
+
+#: Inside a node record, past the three indices `node_at` already reads.
+NODE_MATRIX, NODE_TRANSLATE, NODE_ROTATE, NODE_SCALE = 0x06, 0x08, 0x0A, 0x0C
+
+#: Section 10 again, reached from the other end: a node names a **run** of
+#: curve commands. 🔶 What the curves do to a node is not read -- see `Transform`.
+NODE_CURVES, NODE_CURVE_COUNT = 0x10, 0x12
+
+
 @dataclass(frozen=True)
 class Node:
     """One entry of section 9: a scene-graph node under an effect's base.
@@ -625,6 +643,90 @@ class Node:
     draw: int
     alpha: int
     billboard: int
+
+    matrix: int = 0
+    """Into section 6: this node's local transform, relative to its parent."""
+
+    translate: int = 0
+    rotate: int = 0
+    scale: int = 0
+    """Into section 12. ✅ **The same transform as `matrix`, encoded twice** --
+    see `Transform.composed`."""
+
+    curves: int = 0
+    count: int = 0
+    """A run of section 10 curve commands. 🔶 Read, and not yet acted on."""
+
+
+@dataclass(frozen=True)
+class Transform:
+    """A 3x4 row-major matrix: three rows of `(x, y, z, translation)`.
+
+    ✅ **Established twice from different bytes** (D265). Section 6 holds it
+    outright, and a node's section 12 translate/rotate/scale compose to the same
+    thing -- **3,738 of the file's 3,739 nodes agree exactly**, the one exception
+    being the last node, whose every index is zero.
+
+    ⚠️ **The rotation is `zyx` in degrees**, and that order is *discriminated*
+    rather than merely consistent: 199 nodes rotate on more than one axis, and
+    the next-best order matches 3,615 where this one matches 3,738. Nothing here
+    needs it — the matrix is used directly, which is the point of checking that
+    the two agree — but a caller animating a rotation curve will.
+    """
+
+    values: tuple
+
+    @property
+    def is_flat(self) -> bool:
+        """Whether the transform collapses volume to nothing.
+
+        ⚠️ **44% of the file's drawing nodes are flat in the rest pose**, and 26
+        of 139 effects are flat throughout it (D265). That is not a fault: the
+        scale is animated up from zero by section 10's curves. It is why
+        applying this transform *without* those curves renders less than
+        drawing every part at the origin does.
+        """
+        m = self.values
+        determinant = (
+            m[0] * (m[5] * m[10] - m[6] * m[9])
+            - m[1] * (m[4] * m[10] - m[6] * m[8])
+            + m[2] * (m[4] * m[9] - m[5] * m[8])
+        )
+        return abs(determinant) < 1e-9
+
+    def then(self, child: Transform) -> Transform:
+        """`child` applied first, then this one — parent-to-child accumulation."""
+        a, b = self.values, child.values
+        out = []
+        for row in range(3):
+            for col in range(3):
+                out.append(sum(a[row * 4 + k] * b[k * 4 + col] for k in range(3)))
+            out.append(
+                sum(a[row * 4 + k] * b[k * 4 + 3] for k in range(3)) + a[row * 4 + 3]
+            )
+        return Transform(tuple(out))
+
+
+#: What no transform at all looks like, and what an effect's root inherits.
+IDENTITY = Transform((1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0))
+
+
+def matrix_at(data: bytes, index: int) -> Transform:
+    """One section 6 matrix, or the identity when the index is out of range."""
+    start, end = _section(data, MATRIX_SECTION)
+    at = start + index * MATRIX_STRIDE
+    if index < 0 or at + MATRIX_STRIDE > end:
+        return IDENTITY
+    return Transform(struct.unpack_from(">12f", data, at))
+
+
+def vector_at(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
+    """One section 12 vector — a translate, a rotate in degrees, or a scale."""
+    start, end = _section(data, VECTOR_SECTION)
+    at = start + index * VECTOR_STRIDE
+    if index < 0 or at + VECTOR_STRIDE > end:
+        return (0.0, 0.0, 0.0)
+    return struct.unpack_from(">3f", data, at)
 
 
 def _signed(data: bytes, at: int) -> int:
@@ -647,7 +749,51 @@ def node_at(data: bytes, index: int) -> Node:
         draw=_signed(data, at + NODE_DRAW),
         alpha=data[at + NODE_ALPHA],
         billboard=data[at + NODE_BILLBOARD],
+        matrix=_signed(data, at + NODE_MATRIX),
+        translate=_signed(data, at + NODE_TRANSLATE),
+        rotate=_signed(data, at + NODE_ROTATE),
+        scale=_signed(data, at + NODE_SCALE),
+        curves=struct.unpack_from(">H", data, at + NODE_CURVES)[0],
+        count=struct.unpack_from(">H", data, at + NODE_CURVE_COUNT)[0],
     )
+
+
+@dataclass(frozen=True)
+class Placed:
+    """A node, and where it lands once its parents' transforms are applied."""
+
+    index: int
+    world: Transform
+
+
+def _placed(data: bytes, base: int, root: int) -> list[Placed]:
+    # pylint: disable=container-return
+    """`root` and everything under it, each with its accumulated transform.
+
+    The same walk as `_subtree` and with the same trap: ⚠️ **the root's own
+    sibling is not followed**, because a sibling chain runs on into the next
+    part's nodes.
+    """
+    total = _count(data, NODE_SECTION, NODE_STRIDE)
+    found: list[Placed] = []
+    seen: set = set()
+    pending = [(root, IDENTITY)]
+    while pending and len(found) < WALK_LIMIT:
+        index, parent = pending.pop()
+        if not 0 <= index < total or index in seen:
+            continue
+        seen.add(index)
+        node = node_at(data, index)
+        here = parent.then(matrix_at(data, node.matrix))
+        found.append(Placed(index, here))
+        cursor = node.child
+        while cursor != NO_INDEX and len(found) < WALK_LIMIT:
+            absolute = base + cursor
+            if not 0 <= absolute < total:
+                break
+            pending.append((absolute, here))
+            cursor = node_at(data, absolute).sibling
+    return found
 
 
 def _subtree(data: bytes, base: int, root: int) -> list[int]:
@@ -735,6 +881,15 @@ class Draw:
     offset: int
     descriptor: int
 
+    world: Transform = IDENTITY
+    """Where the issuing node lands once its parents' transforms are applied.
+
+    ⛔ **Do not pose an effect with this alone.** 44% of drawing nodes are flat
+    in the rest pose and 26 of 139 effects are flat throughout it (D265) —
+    their scale is animated up from zero by section 10's curves, which are not
+    read. Applying this without them renders *less* than drawing every part at
+    the origin."""
+
 
 def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
     # pylint: disable=container-return
@@ -749,8 +904,8 @@ def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
     found: list[Draw] = []
     groups_all = groups(data)
     entries_all = entries(data)
-    for index in _subtree(data, effect.extra, effect.extra + part.first):
-        node = node_at(data, index)
+    for placed in _placed(data, effect.extra, effect.extra + part.first):
+        node = node_at(data, placed.index)
         if not 0 <= node.draw < len(groups_all):
             continue
         group = groups_all[node.draw]
@@ -760,6 +915,7 @@ def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
                     picture=_picture(data, entry.material),
                     offset=entry.display_list,
                     descriptor=entry.descriptor,
+                    world=placed.world,
                 )
             )
     return found
