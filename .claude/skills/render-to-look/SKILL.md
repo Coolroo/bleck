@@ -118,31 +118,35 @@ cargo run --release --manifest-path dimentio/Cargo.toml -- `
 | `--size <px>` | cell edge. Default 320 |
 | `--background <s>` | as for `shot` |
 
-⛔ **The sheet shows the timeline, not the artwork.** Which image a part draws is
-still undecoded (D210 refutes six fields; D218 puts the reference one hop
-further), so every part is a flat colour from a **six-entry palette** and its
-position is a display choice. The report says so on every run. **Never quote a
-reel as "what this effect looks like."**
+✅ **The images are decoded** (D258) — five sections past the part record, not a
+field beside it, which is why seven earlier candidates were refuted. `bleck`
+resolves them into `effects.json`; run `bleck effect export` if a reel reports
+0 painted.
 
-What it settles is that the data and the renderer agree — per frame it prints
-the parts the manifest calls running, how many reached the pixels, and the area
-drawn:
+⛔ **The placement is not decoded.** Node transforms are read but not applied,
+so where a quad sits is a display choice. **Never quote a reel as "where this
+effect appears."** Its artwork, yes; its layout, no.
 
 ```
 chaos — 4 part(s), 3.00s, 181 frame(s) long
-  frame    1 at  0.000s — 4 active, 4 visible, 5.2% drawn
-  frame   69 at  1.125s — 2 active, 2 visible, 2.5% drawn
-  frame  136 at  2.250s — 1 active, 1 visible, 1.5% drawn
+  frame    1 at  0.000s — 4 active, 4 painted, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 painted, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 painted, 1.5% drawn
 ```
 
-⚠️ **`visible` is measured against `distinct`, not `active`** — the palette
-repeats after six, so a seventh part is drawn in the first one's shade and the
-pixels cannot separate them. Comparing against `active` would report a fault for
-every effect with more than six parts, forever.
+⚠️ **Do not sanity-check a decoding by "does it look like the thing".** `chaos`
+renders as grey gradient ramps — its shape lives in display-list geometry — and
+that test would have refuted the correct answer (D259). The check that worked
+was `system`, whose parts are *named after their own textures*, so the file
+states the answer twice and the two agree.
 
 ⚠️ **A part is still running at exactly its own duration.** The end is
 inclusive, so sampling five frames over a 2 s effect whose second part lasts
 0.5 s gives `2, 2, 1, 1, 1`.
+
+⚠️ **A painted part cannot be found by colour**, so arrival is only checked on
+unpainted ones, and the palette repeats after six. When nothing is checkable the
+report says so rather than claiming a clean sweep.
 
 ## What this does not replace
 

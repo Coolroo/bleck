@@ -9,18 +9,18 @@ and `model export`. Its images are the 219 in `files/eff/effdata.tpl`, which
 `texture export` already writes out — so a viewer has the effect structure from
 here and the pixels from there.
 
-⛔ **No part-to-image binding.** `Part.first` looked like the answer twice and
-is not one: its values run *sequentially* across an effect's parts, and 14 of
-704 exceed the 219 images outright.
+✅ **The part-to-image binding is decoded** (D258). `Part.first` is a node
+index relative to the effect's base, and the image is **five sections further
+on**: node → draw → subdraw → material → texture → the `effdata.tpl` index.
+Every one of all 704 parts resolves, all 219 images are referenced, and none is
+orphaned.
 
-🔶 **What it actually is** (D218, read off the draw code at `0x8005f920`): a
-**signed** index, with `0xFFFF` as a null, into a *second* array of 20-byte
-records. The fields that drive drawing live in that record, at `+0x08`,
-`+0x0A`, `+0x0E`, `+0x0F` and `+0x12` — so the image reference is one hop
-further than anything decoded here.
+⚠️ Seven earlier candidates were refuted (D210, D218) because every one of them
+was looked for in or beside the part record. The answer was never a field.
 
-Six candidates are refuted in `docs/decision-log.md` D210, so the seventh does
-not repeat one.
+⚠️ **A part draws a set of images, not one**, so `pictures` is a list. 35 parts
+draw none — their materials carry the documented `-1` — and that is a fact
+about them rather than a failure to resolve.
 """
 
 from __future__ import annotations
@@ -84,9 +84,31 @@ def cmd_show(args: argparse.Namespace) -> int:
     raise UserError(f"no effect named {args.name!r}; `bleck effect list` shows them")
 
 
+def _pictures(data: bytes, effect: effdata.Effect, part: effdata.Part) -> list[dict]:
+    # pylint: disable=container-return
+    """A part's images, as the viewer needs them.
+
+    ⚠️ **A list, because a part draws a set.** 560 of 704 draw one image, 35
+    none and the rest up to twelve, so a scalar field here would silently drop
+    the artwork of the parts that need it most.
+    """
+    return [
+        {
+            "image": picture.image,
+            "wrap": picture.wrap,
+            "red": picture.red,
+            "green": picture.green,
+            "blue": picture.blue,
+            "alpha": picture.alpha,
+        }
+        for picture in effdata.artwork(data, effect, part)
+    ]
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    raw = (registry.base_root() / EFFECT_DATA).read_bytes()
 
     entries = [
         {
@@ -99,6 +121,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                     "index": part.index,
                     "frames": part.second,
                     "seconds": round(part.seconds, 4),
+                    "pictures": _pictures(raw, effect, part),
                 }
                 for part, composed in zip(effect.parts, effect.composed(), strict=True)
             ],

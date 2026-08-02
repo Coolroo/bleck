@@ -20,7 +20,9 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use crate::data::effects::{frame_at, Entry, Library};
+use crate::data::catalog::Catalog;
+use crate::data::effects::{frame_at, image_at, Entry, Library};
+use crate::data::texture::Texture;
 use crate::render::{self, effect, Background, Camera, Image, Piece, Rgba, Size, View};
 use crate::shot::{
     blit, divided, grid_columns, measure, named_background, number, write_png, Coverage, Sheet,
@@ -75,13 +77,16 @@ pub struct Frame {
     pub time: f32,
     /// Parts the manifest says are running at `time`.
     pub active: usize,
-    /// How many of those parts can be told apart by colour at all.
+    /// How many of those carried a decoded image into this cell.
+    pub painted: usize,
+    /// How many of the **unpainted** parts can be told apart by colour.
     ///
-    /// ⚠️ **The palette holds six colours and repeats**, so a seventh part is
-    /// drawn in the first one's shade. Counting parts-whose-colour-appears
-    /// would then report seven of seven present when only one had drawn. This
-    /// is the honest ceiling on what the pixels can answer, and `visible` is
-    /// measured against it rather than against `active`.
+    /// ⚠️ **Two separate ceilings, and both bite.** A painted part is drawn in
+    /// its texture's colours, so its flat palette shade is not in the frame and
+    /// searching for it would report it missing. And the palette holds only six
+    /// colours before repeating, so a seventh unpainted part is drawn in the
+    /// first one's shade. `visible` is measured against this rather than
+    /// against `active`, which would report a fault on every textured effect.
     pub distinct: usize,
     /// How many of those distinct colours were actually found in the cell.
     ///
@@ -155,18 +160,26 @@ impl Report {
             // The ceiling is only worth naming when it bites; on the great
             // majority of effects it equals the active count and saying so
             // every line would bury the numbers that vary.
-            let ceiling = if frame.distinct < frame.active {
-                format!(" ({} tellable apart)", frame.distinct)
-            } else {
+            let unpainted = frame.active - frame.painted;
+            // Only worth a column when there is something in it. On a fully
+            // textured effect "0 of 0 plain found" is noise in every row.
+            let plain = if unpainted == 0 {
                 String::new()
+            } else if frame.distinct < unpainted {
+                format!(
+                    ", {} of {} plain found ({} tellable apart)",
+                    frame.visible, unpainted, frame.distinct
+                )
+            } else {
+                format!(", {} of {} plain found", frame.visible, unpainted)
             };
             format!(
-                "  frame {:>4} at {:>6.3}s — {} active{}, {} visible, {:.1}% drawn",
+                "  frame {:>4} at {:>6.3}s — {} active, {} painted{}, {:.1}% drawn",
                 frame.number,
                 frame.time,
                 frame.active,
-                ceiling,
-                frame.visible,
+                frame.painted,
+                plain,
                 frame.drawn * 100.0
             )
         }));
@@ -182,26 +195,41 @@ impl Report {
                 " — nothing changes across the reel"
             }
         ));
-        said.push(if self.parts_all_arrived() {
-            "every active part reached its frame".to_owned()
+        // ⚠️ Never claim a clean check that was not made. A fully textured
+        // effect has no part findable by its flat colour, so "every active part
+        // reached its frame" would be true of a reel that drew nothing.
+        let checkable: usize = self.frames.iter().map(|frame| frame.distinct).sum();
+        said.push(if checkable == 0 {
+            "no part is identifiable by colour here, so arrival was not checked \
+             — the drawn percentages are the only evidence"
+                .to_owned()
+        } else if self.parts_all_arrived() {
+            "every part identifiable by colour reached its frame".to_owned()
         } else {
-            "some active parts did not reach their frame — occluded, or missing".to_owned()
+            "some parts did not reach their frame — occluded, or missing".to_owned()
         });
         said.push(self.caveat());
         said
     }
 
-    /// ⚠️ Printed on every run, deliberately. The sheet is a grid of coloured
-    /// quads and reads as a picture of the effect; it is not one, and the run
-    /// that forgets to say so is the one whose output gets quoted later.
+    /// ⚠️ Printed on every run, deliberately. The images are measured and the
+    /// **placement is not**, and a sheet that shows real artwork in invented
+    /// positions is far more convincing than one drawn in flat colours — so the
+    /// half that is still a display choice has to be said out loud every time.
     fn caveat(&self) -> String {
-        if self.painted > 0 {
-            return format!("{} part(s) carried an image", self.painted);
+        if self.painted == 0 {
+            return format!(
+                "no part of {} carries an image — either they genuinely draw none, or this \
+                 export predates the part-to-image binding (D258); re-run `bleck effect export`",
+                self.name
+            );
         }
-        "no part carries an image: which image a part draws is not decoded \
-         (decision-log D210), so each part is a flat colour and the layout is a \
-         display choice. This shows the timeline, not the artwork."
-            .to_owned()
+        format!(
+            "{} of {} part(s) drew a decoded image (D258). ⛔ Where the quads sit is still a \
+             display choice, not a decoded scene graph — the node transforms are read but not \
+             applied, so do not read a position here as where the game puts it.",
+            self.painted, self.parts
+        )
     }
 }
 
@@ -306,7 +334,8 @@ pub fn take(request: &Request) -> Result<Report, String> {
     }
 
     let sampled = sample(entry, request.frames);
-    let built = draw(entry, &sampled, request);
+    let art = resolve_art(entry, &request.export, library.textures());
+    let built = draw(entry, &sampled, &art, request);
     write_png(&request.out, &built.sheet.pixels, built.sheet.size)?;
     Ok(Report {
         name: entry.name.clone(),
@@ -371,7 +400,28 @@ struct Built {
     painted: usize,
 }
 
-fn draw(entry: &Entry, times: &[f32], request: &Request) -> Built {
+/// Decode the image each part of `entry` draws, from the texture catalog
+/// beside the effect manifest.
+///
+/// ⚠️ A picture that cannot be read leaves its part unpainted rather than
+/// failing the run. The report counts what actually arrived, so a missing PNG
+/// shows up as a lower `painted` rather than as a crash or a silent flat quad
+/// indistinguishable from a part that genuinely draws nothing.
+fn resolve_art(entry: &Entry, root: &std::path::Path, source: &str) -> Vec<Option<Texture>> {
+    let catalog = Catalog::load(root);
+    entry
+        .parts
+        .iter()
+        .map(|part| {
+            let picture = part.pictures.first()?;
+            let at = image_at(catalog.entries(), source, picture.image)?;
+            let found = catalog.entries().get(at)?;
+            Texture::decode(&std::fs::read(&found.path).ok()?).ok()
+        })
+        .collect()
+}
+
+fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request) -> Built {
     let cell = Size::new(request.size, request.size);
     let columns = grid_columns(times.len());
     let rows = times.len().div_ceil(columns);
@@ -397,7 +447,7 @@ fn draw(entry: &Entry, times: &[f32], request: &Request) -> Built {
     let mut previous: Option<Image> = None;
 
     for (index, &time) in times.iter().enumerate() {
-        let quads = effect::quads(entry, time, &camera, None);
+        let quads = effect::quads(entry, time, &camera, Some(effect::Art { images: art }));
         for quad in &quads {
             if let Some(seen) = painted.get_mut(quad.part) {
                 *seen |= !quad.mesh.paints().is_empty();
@@ -414,16 +464,19 @@ fn draw(entry: &Entry, times: &[f32], request: &Request) -> Built {
 
         let coverage = measure(image.as_rgba(), cell, request.background);
         let present = shades(&image, request.background);
-        let wanted = deduped(
-            &quads
-                .iter()
-                .map(|quad| effect::lit(&camera, quad.part))
-                .collect::<Vec<Rgba>>(),
-        );
+        // Only the unpainted quads can be found by their flat colour; a
+        // textured one is drawn in its image's colours instead.
+        let plain: Vec<Rgba> = quads
+            .iter()
+            .filter(|quad| quad.mesh.paints().is_empty())
+            .map(|quad| effect::lit(&camera, quad.part))
+            .collect();
+        let wanted = deduped(&plain);
         frames.push(Frame {
             number: frame_at(time),
             time,
             active: quads.len(),
+            painted: quads.len() - plain.len(),
             distinct: wanted.len(),
             visible: wanted
                 .iter()
@@ -742,6 +795,7 @@ mod tests {
             number: 1,
             time: 0.0,
             active: 8,
+            painted: 0,
             distinct: 6,
             visible: 6,
             drawn: 0.1,
@@ -782,18 +836,18 @@ mod tests {
         assert!(!report.moves());
     }
 
-    /// ⛔ The standing honesty check. The day a part-to-image binding is
-    /// decoded this flips, and it must flip because the meshes changed — not
-    /// because someone edited a constant.
+    /// An export written before D258 carries no `pictures`, and must still
+    /// load — but it must not look like an effect that genuinely draws nothing.
+    /// ⚠️ The message names the command that fixes it, because "0 painted" on
+    /// its own sends someone hunting a rendering bug that is not there.
     #[test]
-    fn nothing_is_painted_and_the_report_says_so_in_words() {
+    fn an_export_predating_the_binding_says_so_rather_than_reading_as_empty() {
         let scratch = scratch_with_manifest("caveat");
         let report = take(&request(&scratch, "twopart", 3)).expect("renders");
-        assert_eq!(report.painted, 0);
+        assert_eq!(report.painted, 0, "the fixture carries no pictures");
         let last = report.lines().pop().expect("a caveat line");
-        assert!(last.contains("not decoded"), "{last}");
-        assert!(last.contains("D210"), "{last}");
-        assert!(last.contains("timeline, not the artwork"), "{last}");
+        assert!(last.contains("bleck effect export"), "{last}");
+        assert!(last.contains("D258"), "{last}");
     }
 
     #[test]
@@ -916,7 +970,15 @@ mod real_export_tests {
             report.frames
         );
         assert!(report.moves(), "the reel never changed");
-        assert_eq!(report.painted, 0, "an image appeared from nowhere");
+
+        // ⚠️ This assertion was `painted == 0` until D258, and flipped because
+        // the meshes changed rather than because the number was edited: all
+        // four of chaos's parts resolve through the five-hop chain to images
+        // 23, 15, 24 and 14 of `effdata.tpl`.
+        assert_eq!(report.painted, 4, "chaos lost its decoded images");
+        assert!(report.frames[0].painted > 0, "nothing was textured at 0s");
+        let caveat = report.lines().pop().expect("a caveat");
+        assert!(caveat.contains("display choice"), "{caveat}");
         let _ = std::fs::remove_file(out);
     }
 
@@ -931,7 +993,7 @@ mod real_export_tests {
         };
         let library = Library::load(&export);
         let folder = out_dir();
-        let (mut reeled, mut empty) = (0, 0);
+        let (mut reeled, mut empty, mut textured) = (0, 0, 0);
         for entry in library.entries() {
             let out = folder.join("sweep.png");
             let asked = Request {
@@ -949,7 +1011,19 @@ mod real_export_tests {
                         "{} drew nothing at its first frame",
                         entry.name
                     );
-                    assert_eq!(report.painted, 0, "{} painted something", entry.name);
+                    // A part carrying a picture must reach a decoded image:
+                    // that is the export and the catalog agreeing.
+                    let declared = entry
+                        .parts
+                        .iter()
+                        .filter(|part| !part.pictures.is_empty())
+                        .count();
+                    assert_eq!(
+                        report.painted, declared,
+                        "{}: {declared} part(s) declare a picture, {} were painted",
+                        entry.name, report.painted
+                    );
+                    textured += usize::from(report.painted > 0);
                     reeled += 1;
                 }
                 Err(why) => {
@@ -960,5 +1034,13 @@ mod real_export_tests {
             let _ = std::fs::remove_file(out);
         }
         assert!(reeled > 100, "only {reeled} effects reeled ({empty} empty)");
+        // ⚠️ The control on the assertion above: if every effect declared no
+        // pictures, `painted == declared` would hold everywhere at zero and
+        // the sweep would pass having verified nothing.
+        assert!(
+            textured > 100,
+            "only {textured} of {reeled} effects painted anything — the export \
+             probably predates the binding"
+        );
     }
 }

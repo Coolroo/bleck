@@ -17872,3 +17872,65 @@ reading is complete.
 **Rejected:** stopping at "section 9 node → its own fields", which is where D218
 stopped. The node holds transform and hierarchy; the texture is three sections
 further on, and no amount of staring at a 20-byte record would have produced it.
+
+## D259 — Effect sprites are semi-transparent throughout, and a cut-out mask erased them (2026-08-02)
+
+Binding D258's images into the reel made `chaos_start` **disappear**. It had
+drawn perfectly well the hour before, as a flat coloured quad.
+
+### ✅ The cause, measured
+
+The rasteriser implements glTF `alphaMode: "MASK"` with the standard cutoff of
+**128** — a texel below half alpha is discarded outright. That is right for this
+game's model textures, which are cut-out art: opaque wherever they are drawn at
+all, transparent everywhere else, with the split near the middle.
+
+Effect art is not like that. `chaos_start`'s parts bind `effdata.tpl` image 21,
+and its alpha channel measures:
+
+| image | size | format | alpha min | alpha max |
+|---|---|---|---|---|
+| 21 | 32x32 | RGB5A3 | 0 | **109** |
+| 22 | 192x192 | IA8 | 0 | 255 |
+| 16 | 16x32 | I4 | 255 | 255 |
+
+**Image 21 never reaches 128 anywhere**, so every one of its texels failed the
+compare and the sprite rendered as nothing at all. Not faint — absent.
+
+⚠️ **The failure mode is what makes this worth an entry.** The effect did not
+look wrong; it looked *finished and empty*, exactly like an effect whose parts
+legitimately draw no image — of which there are 35. A sweep asserting "every
+effect draws something at its first frame" is the only reason it surfaced, and
+it surfaced within a minute of the binding landing.
+
+### The fix, and what it is not
+
+`Paint` and `Surface` gained a `cutoff`, so the threshold is a property of the
+material rather than a constant in the rasteriser. Models keep `MASK_CUTOFF`
+(128); effect quads use `FAINT_CUTOFF` (1), keeping any texel that is not wholly
+transparent.
+
+⛔ **This is not alpha blending and must not be read as it.** There is no
+blending in this rasteriser — a texel is drawn at full strength or not at all.
+For semi-transparent art that is wrong in the *other* direction: a faint glow
+comes out solid. It is the difference between seeing the sprite and seeing
+nothing, and the constant says so where someone will find it.
+
+🔶 **Real blending is the honest fix** and is not done. Most of this bank is
+additive particle art, and additive blending is what the game's TEV does with
+it.
+
+### ✅ What the reel now shows, and one warning that paid off
+
+`sweat` renders as a blue droplet with a white highlight. `system`'s parts land
+on the noise fields and white square they are named after. All 139 effects reel,
+and every part declaring a picture reaches a decoded image.
+
+⚠️ **`chaos` renders as grey gradient ramps and noise — not a heart.** Its shape
+comes from the display lists in section 3, which nothing here draws. The
+research that decoded the chain was explicitly told to sanity-check it by asking
+whether `chaos` "looks like a heart", and it reported back that the test **would
+have refuted a correct answer**. That is the D214/D245 failure mode arriving
+again from a third direction: a confident, clean, wrong refutation. The check
+that actually worked was `system`, whose parts are *named after their own
+textures*, so the file states the answer twice and the two agree.

@@ -37,7 +37,16 @@ pub(super) const SURFACE: Rgba = Rgba::new(214, 208, 196);
 /// ⚠️ Discarded *before* the depth buffer is written, so a cut-out does not
 /// hide the geometry behind it. Write depth first and every leaf and sprite
 /// punches a hole through the model.
-const ALPHA_CUTOFF: u8 = 128;
+pub const MASK_CUTOFF: u8 = 128;
+
+/// Keep any texel that is not wholly transparent.
+///
+/// ⛔ **This is not alpha blending, and must not be read as it.** There is no
+/// blending in this rasteriser: a texel is drawn at full strength or not at
+/// all. For semi-transparent art that is wrong in the other direction — a
+/// faint glow comes out solid — but it is the difference between seeing the
+/// sprite's shape and seeing nothing at all (D259).
+pub const FAINT_CUTOFF: u8 = 1;
 
 /// An RGBA8 frame, in the layout `egui::ColorImage::from_rgba_unmultiplied`
 /// wants: four bytes per pixel, rows top to bottom.
@@ -115,6 +124,8 @@ pub(super) enum Paint<'a> {
         /// The material's `alphaMode` was `MASK`, so a transparent texel is a
         /// hole rather than a dark pixel.
         masked: bool,
+        /// The alpha a texel must reach to survive `masked`.
+        cutoff: u8,
         /// Wrap mode and UV transform for the base image (D247).
         sampling: &'a Sampling,
         /// The second layer, whose alpha multiplies the base — colour and
@@ -264,6 +275,7 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba>
             tint,
             intensity,
             masked,
+            cutoff,
             sampling,
             mask,
         } => {
@@ -286,7 +298,7 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba>
                 b: scale(texel.b, shade[2]),
                 a: scale(texel.a, shade[3]),
             };
-            if *masked && texel.a < ALPHA_CUTOFF {
+            if *masked && texel.a < *cutoff {
                 return None;
             }
             Some(Rgba::new(texel.r, texel.g, texel.b).shaded(*intensity))
@@ -684,6 +696,7 @@ mod texture_tests {
                     corners: [Uv::new(0.5, 0.5); 3],
                     intensity: 1.0,
                     masked: true,
+                    cutoff: MASK_CUTOFF,
                     sampling: &Sampling::default(),
                     mask: mask.as_ref(),
                 },
@@ -733,6 +746,7 @@ mod texture_tests {
                 corners: [Uv::new(0.5, 0.5); 3],
                 intensity: 1.0,
                 masked: true,
+                cutoff: MASK_CUTOFF,
                 sampling: surface.sampling,
                 mask: surface.mask,
             },

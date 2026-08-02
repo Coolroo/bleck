@@ -77,23 +77,30 @@ cargo run --release -- reel --effect chaos --export ../work/export --out chaos.p
 ```
 chaos — 4 part(s), 3.00s, 181 frame(s) long
 9 frame(s) sampled into 664x664
-  frame    1 at  0.000s — 4 active, 4 visible, 5.2% drawn
-  frame   69 at  1.125s — 2 active, 2 visible, 2.5% drawn
-  frame  136 at  2.250s — 1 active, 1 visible, 1.5% drawn
+  frame    1 at  0.000s — 4 active, 4 painted, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 painted, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 painted, 1.5% drawn
 2 of 8 frame pair(s) differ
-every active part reached its frame
-no part carries an image: which image a part draws is not decoded …
+4 of 4 part(s) drew a decoded image (D258)
 ```
 
-⛔ **This is the timeline, not the artwork.** Which image a part draws is not
-decoded, so each part is a flat colour from a six-entry palette and its position
-is a display choice rather than a decoded scene graph. A grid of coloured quads
-is exactly what someone would later quote as a picture of the effect, so the
-caveat is printed on every run.
+✅ **The images are real** (D258). A part's image is five sections past its
+record — node → draw → subdraw → material → texture — and `bleck` resolves it
+into the export. `sweat` renders as a blue droplet; `system`'s parts land on the
+noise fields and white square they are named after.
 
-What it *does* settle is that the manifest and the renderer agree: the parts
-called running are the parts that reach the pixels, and the drawn area falls as
-parts end.
+⛔ **Where the quads sit is not real.** The node transforms are read but not
+applied, so the placement is a deterministic display choice. That half is
+printed on every run, because a sheet showing genuine artwork in invented
+positions is far more convincing than one drawn in flat colours.
+
+⚠️ **`chaos` is grey gradient ramps, not a heart** — its shape comes from
+display-list geometry nothing here draws. Do not use "does it look right?" on an
+effect whose art is abstract; that test nearly refuted the correct decoding.
+
+What the report settles is that the manifest and the renderer agree: the parts
+called running are the parts that reach the pixels, every part declaring a
+picture gets one, and the drawn area falls as parts end.
 
 **Colour spread above 0.015 means an image reached the surface** — measured
 across 60 real models, the untextured ones reach 0.007 and the textured ones

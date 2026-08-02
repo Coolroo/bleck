@@ -24,6 +24,7 @@ pub mod wave;
 pub use background::{Background, BACKGROUNDS};
 pub use camera::Camera;
 pub use raster::Image;
+pub use raster::{FAINT_CUTOFF, MASK_CUTOFF};
 
 use crate::data::mesh::Mesh;
 use camera::{Basis, Lens};
@@ -180,6 +181,7 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                         tint,
                         intensity,
                         masked: surface.masked,
+                        cutoff: surface.cutoff,
                         sampling: surface.sampling,
                         mask: surface.mask,
                     })

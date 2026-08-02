@@ -69,11 +69,38 @@ So an effect is a named group of parts, and the game composes `<effect><part>`
 when it needs one. That is why no whole name like `chaos_C` appears anywhere on
 the disc, and why searching for one found nothing.
 
-## 🔶 What is not known
+## ✅ Which image a part draws — five hops, not a field (D258)
 
-⛔ **The link from a part to its texture.** The obvious candidate — the u16 at
-`+18` — reaches 621 against 219 images, so it is not a TPL index. Until that is
-found, this reader can say what an effect is made of but not what it looks like.
+Seven candidates were refuted because they were all looked for *near* the part
+record. The reference is five sections away:
+
+```
+part +0x10 "first" (s16, 0xFFFF null) + effect +0x28 "extra"
+  -> section  9  node      20 bytes   +0x04 -> draw, -1 for none
+  -> section  7  draw       6 bytes   start, count
+  -> section  8  subdraw    8 bytes   +0x00 -> material
+  -> section  5  material  16 bytes   +0x0C -> texture, -1 untextured
+  -> section  4  texture   28 bytes   +0x00 =  the effdata.tpl image index
+```
+
+✅ **Measured over all 704 parts**: every index lands in 0..218, **all 219
+images are referenced and none is orphaned**, and 35 parts resolve to no image
+because their materials carry the documented `-1` — not because the walk failed.
+
+⚠️ **A part draws a set, not one image.** Counting distinct images: 560 parts
+draw one, 35 none, and the rest up to twelve. `artwork` returns every
+`Picture`, so a part that draws one image twice under two tints appears twice;
+that is 14 parts, and it is why a count of `Picture`s is not a count of images.
+
+🟢 **`extra` is the effect's base node**, which is what it always was. ⛔ The
+`Effect.rows` attachment below reads it as an index into section 6 instead and
+is superseded — it predates D258 and is kept only because the viewer's layout
+still leans on it. Section 6 is 3x4 matrices reached from a node's `+0x06`.
+
+⚠️ Two later refutations that this module has **not** yet acted on: section 8's
+last four bytes are one u32 display-list offset rather than two u16 (the
+"multiple of 32" tell is GX alignment, not a stride), and section 3 is 360 GX
+display lists. See D258.
 
 ## The curves, and how they are reached
 
@@ -486,3 +513,174 @@ def header(data: bytes) -> Header:
         texture_count=struct.unpack_from(">H", data, at + TEXTURE_COUNT_AT)[0],
         stamp=_text(data[at + 4 : at + VERSION_AT]),
     )
+
+
+#: The five sections between a part and its image (D258). ⚠️ Sections 7 and 8
+#: are the `Group` and `Entry` readers above, reached from a different
+#: direction: a group is a run of entries, and an entry names a material.
+NODE_SECTION, NODE_STRIDE = 9, 20
+MATERIAL_SECTION, MATERIAL_STRIDE = 5, 16
+TEXTURE_SECTION, TEXTURE_STRIDE = 4, 28
+
+#: Inside a node record. `sibling` and `child` are **relative to the effect's
+#: own base**, not absolute -- resolving them as absolute reaches 649 of 3,739
+#: nodes and 73 of 219 images, which is a plausible partial answer and a wrong
+#: one (D258).
+NODE_SIBLING, NODE_CHILD, NODE_DRAW = 0x00, 0x02, 0x04
+NODE_ALPHA, NODE_BILLBOARD = 0x0E, 0x0F
+
+#: A material's texture reference, and a texture's image index.
+MATERIAL_TEXTURE = 0x0C
+TEXTURE_IMAGE, TEXTURE_WRAP = 0x00, 0x02
+
+#: Both nulls are -1 read as a signed 16-bit value. ⚠️ `Part.first` is read
+#: unsigned above, so its null is 0xFFFF rather than -1.
+NO_INDEX = -1
+NO_PART = 0xFFFF
+
+#: A node that pointed at itself, or a cycle, would walk forever. The file has
+#: 3,739 nodes, so nothing legitimate can visit more than that.
+WALK_LIMIT = 4096
+
+
+@dataclass(frozen=True)
+class Picture:
+    """One image a part draws, with how it is sampled and tinted.
+
+    ✅ **The end of the five-hop chain from a part to `effdata.tpl`** (D258):
+    part -> node -> draw -> subdraw -> material -> texture -> image. Every hop
+    is a fixed offset the draw code loads, and `image` is bounded by the 219 the
+    game's own loader reads out of the EFDT header.
+    """
+
+    image: int
+    """0..218, an index into `files/eff/effdata.tpl`."""
+
+    wrap: int
+    """The texture record's `+0x02`. Wrap bits, in the GX sense."""
+
+    red: int
+    green: int
+    blue: int
+    alpha: int
+    """The material's own RGBA at `+0x00`, before the node's alpha is folded in."""
+
+
+@dataclass(frozen=True)
+class Node:
+    """One entry of section 9: a scene-graph node under an effect's base.
+
+    ⚠️ `sibling` and `child` are relative to the effect's base node, and
+    `draw` is not -- it is an absolute index into section 7.
+    """
+
+    index: int
+    sibling: int
+    child: int
+    draw: int
+    alpha: int
+    billboard: int
+
+
+def _signed(data: bytes, at: int) -> int:
+    return struct.unpack_from(">h", data, at)[0]
+
+
+def _count(data: bytes, section: int, stride: int) -> int:
+    start, end = _section(data, section)
+    return max(end - start, 0) // stride
+
+
+def node_at(data: bytes, index: int) -> Node:
+    """One section 9 node, by absolute index."""
+    start, _ = _section(data, NODE_SECTION)
+    at = start + index * NODE_STRIDE
+    return Node(
+        index=index,
+        sibling=_signed(data, at + NODE_SIBLING),
+        child=_signed(data, at + NODE_CHILD),
+        draw=_signed(data, at + NODE_DRAW),
+        alpha=data[at + NODE_ALPHA],
+        billboard=data[at + NODE_BILLBOARD],
+    )
+
+
+def _subtree(data: bytes, base: int, root: int) -> list[int]:
+    # pylint: disable=container-return
+    """Absolute node indices of `root` and everything under it.
+
+    ⚠️ **The root's own sibling is not followed.** A sibling chain runs on into
+    the next part's nodes, so walking it would give one part the artwork of the
+    parts after it -- and the result would still be in range, still resolve, and
+    still look like an answer.
+    """
+    total = _count(data, NODE_SECTION, NODE_STRIDE)
+    found: list[int] = []
+    pending = [root]
+    while pending and len(found) < WALK_LIMIT:
+        index = pending.pop()
+        if not 0 <= index < total or index in found:
+            continue
+        found.append(index)
+        node = node_at(data, index)
+        # Children are relative to the effect's base, and each child's sibling
+        # chain belongs to the same subtree.
+        cursor = node.child
+        while cursor != NO_INDEX and len(found) < WALK_LIMIT:
+            absolute = base + cursor
+            if not 0 <= absolute < total:
+                break
+            pending.append(absolute)
+            cursor = node_at(data, absolute).sibling
+    return found
+
+
+def _picture(data: bytes, material: int) -> Picture | None:
+    """A material's image, or `None` when it names no texture."""
+    materials = _count(data, MATERIAL_SECTION, MATERIAL_STRIDE)
+    if not 0 <= material < materials:
+        return None
+    start, _ = _section(data, MATERIAL_SECTION)
+    at = start + material * MATERIAL_STRIDE
+    reference = _signed(data, at + MATERIAL_TEXTURE)
+    textures = _count(data, TEXTURE_SECTION, TEXTURE_STRIDE)
+    if not 0 <= reference < textures:
+        return None
+    texture_start, _ = _section(data, TEXTURE_SECTION)
+    texture_at = texture_start + reference * TEXTURE_STRIDE
+    return Picture(
+        image=_signed(data, texture_at + TEXTURE_IMAGE),
+        wrap=data[texture_at + TEXTURE_WRAP],
+        red=data[at],
+        green=data[at + 1],
+        blue=data[at + 2],
+        alpha=data[at + 3],
+    )
+
+
+def artwork(data: bytes, effect: Effect, part: Part) -> list[Picture]:
+    # pylint: disable=container-return
+    """Every image `part` draws, in the order the draw code reaches them.
+
+    ⚠️ **A part draws a set of images, not one.** 560 of 704 parts resolve to
+    exactly one, 35 to none -- their materials carry the documented null and the
+    geometry is untextured -- and the rest to as many as twelve.
+
+    ⛔ **Do not read the first as "the" image.** `system`'s parts are named
+    after their own textures and carry two apiece.
+    """
+    if part.first == NO_PART:
+        return []
+    found: list[Picture] = []
+    groups_all = groups(data)
+    entries_all = entries(data)
+    for index in _subtree(data, effect.extra, effect.extra + part.first):
+        node = node_at(data, index)
+        if not 0 <= node.draw < len(groups_all):
+            continue
+        group = groups_all[node.draw]
+        for entry in entries_all[group.start : group.start + group.count]:
+            picture = _picture(data, entry.reference)
+            if picture is not None and picture not in found:
+                found.append(picture)
+    return found

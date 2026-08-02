@@ -5,11 +5,15 @@
 //! as meshes so they can be handed to `render::scene` — there is one rasteriser
 //! in this program and this module does not contain a second one.
 //!
-//! ⛔ **No part is paired with an image here.** Which image a part draws is not
-//! decoded — six candidate fields have been refuted and the real reference is a
-//! second record array the export does not carry (`docs/decision-log.md` D210,
-//! D218). A quad is therefore drawn as a flat colour unless the window passes a
-//! `Manual` preview, which is an image a user picked for a part they picked.
+//! ✅ **A part's image is decoded** (D258) and arrives here already resolved, as
+//! `Art` — one slot per part, `None` where the part draws nothing. Nothing in
+//! this module derives the pairing; `bleck` owns that and writes it into the
+//! export, which is the same division every other format keeps.
+//!
+//! ⛔ **The placement is still a display choice, not a decoded scene graph.**
+//! The images are measured; where the quads sit is not. Section 9's node
+//! transforms are read but not yet applied, so do not read a quad's position as
+//! where the game puts it.
 
 use super::camera::Basis;
 use super::{Camera, Rgba};
@@ -40,16 +44,24 @@ const PALETTE: [Rgba; 6] = [
     Rgba::new(226, 132, 186),
 ];
 
-/// A picture the user asked to see on one part.
+/// The image each part draws, by part index.
 ///
-/// ⛔ This is not a decoded pairing and must never become one. Both the part
-/// and the image are chosen in the window, and the panel that offers them says
-/// so on screen. Deriving either end from a field a part carries would produce
-/// something that looks exactly like a measured fact and is not one.
+/// ✅ Since D258 this can be the **decoded** pairing: a part's image is five
+/// sections past its record, and `bleck` resolves it into the export. A slot of
+/// `None` is a part that draws no image, which 35 of the file's 704 genuinely
+/// do — their materials carry the documented null.
+///
+/// ⚠️ **Indexed by position in `Entry::parts`**, so a short slice leaves the
+/// parts past its end unpainted rather than shifting the artwork along by one.
 #[derive(Debug, Clone, Copy)]
-pub struct Manual<'a> {
-    pub part: usize,
-    pub image: &'a Texture,
+pub struct Art<'a> {
+    pub images: &'a [Option<Texture>],
+}
+
+impl Art<'_> {
+    fn of(&self, part: usize) -> Option<Texture> {
+        self.images.get(part).cloned().flatten()
+    }
 }
 
 /// One part of an effect, drawn.
@@ -89,20 +101,18 @@ pub fn lit(camera: &Camera, part: usize) -> Rgba {
 /// Which parts those are comes from `Entry::active_at`, the same rule that
 /// marks a row in the part table: a part runs from 0 to and including its own
 /// duration. Nothing here re-decides it.
-pub fn quads(entry: &Entry, time: f32, camera: &Camera, manual: Option<Manual<'_>>) -> Vec<Quad> {
+pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) -> Vec<Quad> {
     let basis = Basis::of(camera);
     entry
         .active_at(time)
         .into_iter()
         .map(|part| Quad {
-            // Cloned because a mesh owns its texture; only the one part the
-            // user chose ever pays for it.
+            // Cloned because a mesh owns its texture; only the parts actually
+            // running at this instant ever pay for it.
             mesh: quad(
                 &basis,
                 placement(entry, part),
-                manual
-                    .filter(|manual| manual.part == part)
-                    .map(|manual| manual.image.clone()),
+                art.and_then(|art| art.of(part)),
             ),
             colour: colour(part),
             part,
@@ -187,6 +197,7 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
         .map(|texture| Paint {
             texture,
             masked: true,
+            cutoff: super::FAINT_CUTOFF,
             sampling: Sampling::default(),
             mask: None,
         })
@@ -263,6 +274,9 @@ mod tests {
                     index,
                     frames: (seconds * 60.0) as u32 + 1,
                     seconds,
+                    // These fixtures test the layout and the timeline, so the
+                    // art arrives through `Art` rather than through the parts.
+                    pictures: Vec::new(),
                 })
                 .collect(),
             rows: (0..durations.len())
@@ -274,12 +288,12 @@ mod tests {
         }
     }
 
-    pub(super) fn shot(entry: &Entry, time: f32, manual: Option<Manual<'_>>) -> Image {
+    pub(super) fn shot(entry: &Entry, time: f32, art: Option<Art<'_>>) -> Image {
         let view = View {
             camera: Camera::fit(bounds(entry)),
             background: Background::DarkGrey,
         };
-        let drawn = quads(entry, time, &view.camera, manual);
+        let drawn = quads(entry, time, &view.camera, art);
         let pieces: Vec<Piece<'_>> = drawn
             .iter()
             .map(|quad| Piece {
@@ -434,9 +448,11 @@ mod tests {
         }
     }
 
-    /// The manual preview, which is the only way an image ever reaches a part.
+    /// An image reaching one part and not another. ⚠️ The slice is indexed by
+    /// part, so a `None` in slot 0 must leave part 0 flat rather than shifting
+    /// part 1's picture onto it.
     #[test]
-    fn a_manually_chosen_image_changes_the_pixels() {
+    fn a_bound_image_changes_the_pixels_of_its_own_part_only() {
         let entry = effect(&[1.0, 1.0]);
         let cyan = Texel {
             r: 0,
@@ -445,16 +461,10 @@ mod tests {
             a: 255,
         };
         let image = Texture::decode(&png(1, 1, &[cyan])).expect("a 1x1 png");
+        let images = [None, Some(image)];
 
         let plain = shot(&entry, 0.5, None);
-        let painted = shot(
-            &entry,
-            0.5,
-            Some(Manual {
-                part: 1,
-                image: &image,
-            }),
-        );
+        let painted = shot(&entry, 0.5, Some(Art { images: &images }));
         assert!(
             differing(&plain, &painted) > 200,
             "the chosen image changed nothing"

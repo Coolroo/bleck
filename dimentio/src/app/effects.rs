@@ -47,6 +47,10 @@ pub(super) struct Stage {
     /// Which part `chosen` is drawn on. Zero until someone moves it.
     part: usize,
     chosen: Option<Chosen>,
+    /// The decoded image for each part of the selected effect, resolved once
+    /// when the selection changes rather than per frame — decoding a PNG on
+    /// every repaint would stall the timeline it exists to animate.
+    art: Vec<Option<texture::Texture>>,
     /// Why the last image pick produced nothing, so a failed decode says so
     /// rather than looking like a viewport that ignores clicks.
     note: Option<String>,
@@ -69,12 +73,20 @@ impl Stage {
             .map(|chosen| (chosen.name.as_str(), self.part))
     }
 
-    /// What the renderer is told to paint on a part, if anything.
-    fn manual(&self) -> Option<render::effect::Manual<'_>> {
-        self.chosen.as_ref().map(|chosen| render::effect::Manual {
-            part: self.part,
-            image: &chosen.image,
-        })
+    /// What the renderer paints on each part: the decoded images (D258), with
+    /// the user's manual pick overriding one of them.
+    ///
+    /// ⚠️ The override is applied to a **copy**, so moving the preview from one
+    /// part to another does not permanently lose the decoded image underneath.
+    fn art(&self) -> Vec<Option<texture::Texture>> {
+        let mut images = self.art.clone();
+        if let Some(chosen) = &self.chosen {
+            if self.part >= images.len() {
+                images.resize(self.part + 1, None);
+            }
+            images[self.part] = Some(chosen.image.clone());
+        }
+        images
     }
 }
 
@@ -253,6 +265,34 @@ impl Viewer {
             return;
         };
         self.effects.stage.view.camera = render::Camera::fit(render::effect::bounds(entry));
+        self.effects.stage.art = Self::resolve_art(
+            entry,
+            self.catalog.entries(),
+            self.effects.library.textures(),
+        );
+    }
+
+    /// Decode the image each part of `entry` draws.
+    ///
+    /// ⚠️ A picture that cannot be read leaves its part unpainted rather than
+    /// failing the whole effect — one missing PNG in the export should cost one
+    /// quad's texture, not the viewport.
+    fn resolve_art(
+        entry: &effects::Entry,
+        catalog: &[data::catalog::Entry],
+        source: &str,
+    ) -> Vec<Option<texture::Texture>> {
+        entry
+            .parts
+            .iter()
+            .map(|part| {
+                let picture = part.pictures.first()?;
+                let at = effects::image_at(catalog, source, picture.image)?;
+                let entry = catalog.get(at)?;
+                let raw = std::fs::read(&entry.path).ok()?;
+                texture::Texture::decode(&raw).ok()
+            })
+            .collect()
     }
 
     pub(super) fn effect_detail(&mut self, ui: &mut egui::Ui) {
@@ -317,7 +357,13 @@ impl Viewer {
         Self::steer_camera(ui, &response, &mut stage.view.camera);
 
         let size = Self::frame_size(area);
-        let quads = render::effect::quads(entry, time, &stage.view.camera, stage.manual());
+        let images = stage.art();
+        let quads = render::effect::quads(
+            entry,
+            time,
+            &stage.view.camera,
+            Some(render::effect::Art { images: &images }),
+        );
         let pieces: Vec<render::Piece<'_>> = quads
             .iter()
             .map(|quad| render::Piece {

@@ -97,6 +97,31 @@ pub struct Part {
     pub frames: u32,
     #[serde(default)]
     pub seconds: f32,
+    /// The images this part draws, as `bleck` resolved them (D258).
+    ///
+    /// ⚠️ **A list, because a part draws a set.** 560 of the file's 704 parts
+    /// draw one image, 35 none, and the rest up to twelve. An export written
+    /// before the binding was decoded carries none, and `serde(default)` leaves
+    /// it empty rather than refusing to load.
+    #[serde(default)]
+    pub pictures: Vec<Picture>,
+}
+
+/// One image a part draws, and how it is tinted.
+#[derive(Debug, Deserialize, Clone, Default, PartialEq, Eq)]
+pub struct Picture {
+    /// Index into the effect system's own bank — 0..218 for `effdata.tpl`.
+    pub image: usize,
+    #[serde(default)]
+    pub wrap: u32,
+    #[serde(default)]
+    pub red: u8,
+    #[serde(default)]
+    pub green: u8,
+    #[serde(default)]
+    pub blue: u8,
+    #[serde(default)]
+    pub alpha: u8,
 }
 
 impl Part {
@@ -190,6 +215,21 @@ pub fn bank(entries: &[catalog::Entry], source: &str) -> Vec<usize> {
         .filter(|(_, entry)| entry.source == source)
         .map(|(index, _)| index)
         .collect()
+}
+
+/// The catalog position of image `image` of the effect bank, or `None`.
+///
+/// ⚠️ Matched by the **name `bleck` writes** — `<source>#<n>` — rather than by
+/// counting into `bank()`. The catalog's order is the manifest's order, and
+/// nothing guarantees the effect bank's images sit in it contiguously or in
+/// index order; taking the nth entry of the filtered list would silently pair
+/// a part with the wrong picture on any export where they do not.
+pub fn image_at(entries: &[catalog::Entry], source: &str, image: usize) -> Option<usize> {
+    if source.is_empty() {
+        return None;
+    }
+    let wanted = format!("{source}#{image}");
+    entries.iter().position(|entry| entry.name == wanted)
 }
 
 /// Why a folder produced no effects, so the window can say which.

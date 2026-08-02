@@ -15,6 +15,7 @@ from __future__ import annotations
 import itertools
 import math
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -322,3 +323,101 @@ class TestPartDuration:
                 run = [p.first for p in effect.parts[:3]]
                 assert run == [run[0], run[0] + 1, run[0] + 2], effect.name
                 break
+
+
+@dataclass(frozen=True)
+class Drawn:
+    """One part of one effect, and the images it resolves to."""
+
+    effect: str
+    part: str
+    images: list
+
+
+@pytest.mark.gamedata
+class TestTheImageChain:
+    """The five hops from a part to an `effdata.tpl` image (D258).
+
+    ⚠️ Every assertion here is a **bound the file states about itself**, not a
+    number copied out of the research that found the chain. Seven earlier
+    candidates were all "in range"; what separates this one is that it covers
+    the bank exactly and leaves nothing over.
+    """
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def _resolved(self, data: bytes) -> list[Drawn]:
+        # pylint: disable=container-return
+        return [
+            Drawn(
+                effect=effect.name,
+                part=part.name,
+                images=[p.image for p in effdata.artwork(data, effect, part)],
+            )
+            for effect in effdata.read(data)
+            for part in effect.parts
+        ]
+
+    def test_every_image_index_is_inside_the_count_the_game_reads(self):
+        """The bound that refuted five candidates reaching 522, 621 and 64,960."""
+        data = self._data()
+        limit = effdata.header(data).texture_count
+        assert limit == 219
+        for row in self._resolved(data):
+            for image in row.images:
+                assert 0 <= image < limit, f"{row.effect}{row.part} reached image {image}"
+
+    def test_the_chain_covers_the_bank_exactly_and_orphans_nothing(self):
+        """⛔ The discriminating statistic. Being *in range* is cheap -- six
+        other offsets at this stride are too, because they are mostly zero.
+        Referencing all 219 and no more is not."""
+        data = self._data()
+        limit = effdata.header(data).texture_count
+        seen = {image for row in self._resolved(data) for image in row.images}
+        assert seen == set(range(limit))
+
+    def test_a_part_that_draws_nothing_says_so_rather_than_failing_to_walk(self):
+        """⚠️ The distinction that matters: 35 parts resolve to no image because
+        their materials carry the documented -1, **not** because the traversal
+        gave up. A walk that silently found nothing would look identical here,
+        so the count is pinned."""
+        data = self._data()
+        resolved = self._resolved(data)
+        assert len(resolved) == 704
+        assert sum(1 for row in resolved if not row.images) == 35
+
+    def test_parts_named_after_their_own_textures_land_on_them(self):
+        """✅ Semantic ground truth, and the only kind available here.
+
+        `system`'s parts are named for the textures they draw, so the file
+        states the answer twice -- once in a name and once through five hops of
+        indices -- and the two agree. 216 and 217 are noise fields, 218 a plain
+        white square.
+        """
+        found = {
+            (row.effect, row.part): row.images for row in self._resolved(self._data())
+        }
+        assert found[("system", "IndTexture0")] == [216]
+        assert found[("system", "IndTexture2")] == [217]
+        assert found[("system", "ClipTexture0")] == [218]
+
+    def test_the_seven_score_digits_share_one_digit_sheet(self):
+        """A second independent check: `mini_totalscore` draws a seven-digit
+        number, and its seven digit parts all reach the same 0-9 sheet."""
+        found = {
+            (row.effect, row.part): row.images
+            for row in self._resolved(self._data())
+            if row.effect == "mini_totalscore"
+        }
+        digits = [found[("mini_totalscore", f"C{n}")] for n in range(1, 8)]
+        assert digits == [[202]] * 7
+
+    def test_a_null_part_reference_resolves_to_nothing(self):
+        """0xFFFF is the null, and it must not be walked as node 65,535."""
+        data = self._data()
+        effects = effdata.read(data)
+        empty = effdata.Part(index=0, name="none", first=effdata.NO_PART, second=1)
+        assert not effdata.artwork(data, effects[0], empty)

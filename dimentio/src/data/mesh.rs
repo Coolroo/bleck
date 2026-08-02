@@ -434,8 +434,16 @@ impl Parts {
 pub struct Paint {
     pub texture: Texture,
     /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
-    /// below the cutoff is not drawn at all.
+    /// below `cutoff` is not drawn at all.
     pub masked: bool,
+    /// The alpha a texel must reach to be drawn when `masked`.
+    ///
+    /// ⚠️ **Not always glTF's 128.** Cut-out model art is opaque wherever it is
+    /// drawn at all, so half is the right place to split it. Effect sprites are
+    /// semi-transparent throughout — `effdata.tpl` image 21 never exceeds
+    /// **109** — and a cutoff of 128 discards every texel of them, rendering
+    /// the effect invisible rather than faint (D259).
+    pub cutoff: u8,
     /// Wrap mode and UV transform, read from the file's sampler (D247).
     pub sampling: Sampling,
     /// A second layer whose **alpha** multiplies this one, colour included.
@@ -482,6 +490,7 @@ pub struct Surface<'a> {
     pub texture: &'a Texture,
     pub uvs: &'a [Uv],
     pub masked: bool,
+    pub cutoff: u8,
     pub sampling: &'a Sampling,
     pub mask: Option<&'a Mask>,
 }
@@ -664,6 +673,7 @@ impl Mesh {
             texture: &paint.texture,
             uvs: self.uvs.as_deref()?,
             masked: paint.masked,
+            cutoff: paint.cutoff,
             sampling: &paint.sampling,
             mask: paint.mask.as_ref(),
         })

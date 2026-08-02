@@ -408,6 +408,7 @@ fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint>
     Some(Paint {
         texture: decode_reference(json, bin, base)?,
         masked: material["alphaMode"].as_str() == Some("MASK"),
+        cutoff: crate::render::MASK_CUTOFF,
         sampling: sampling(json, base),
         mask: mask(json, bin, material),
     })
