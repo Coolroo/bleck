@@ -11,6 +11,7 @@ in a 16x32 sprite, and the whole point is to look at what is actually there.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import zlib
@@ -21,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bleck.formats import png  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent / "work" / "export"
-CELL = 160
+DEFAULT_CELL = 160
 PAD = 6
 BACK = (58, 60, 66, 255)
 
@@ -79,8 +80,17 @@ def images_of(effect: str) -> list:
 
 
 def main() -> int:
-    effect = sys.argv[1]
-    out = Path(sys.argv[2])
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("effect", help="as `bleck effect list` names it")
+    ap.add_argument("out", type=Path, help="where to write the PNG")
+    ap.add_argument(
+        "--cell",
+        type=int,
+        default=DEFAULT_CELL,
+        help=f"edge of one tile, in pixels (default {DEFAULT_CELL})",
+    )
+    args = ap.parse_args()
+    effect, out, cell = args.effect, args.out, max(16, args.cell)
     picked = images_of(effect)
     if not picked:
         print(f"{effect} draws no images")
@@ -94,8 +104,8 @@ def main() -> int:
 
     columns = min(len(tiles), 6)
     rows = (len(tiles) + columns - 1) // columns
-    sheet_w = columns * CELL + (columns + 1) * PAD
-    sheet_h = rows * CELL + (rows + 1) * PAD
+    sheet_w = columns * cell + (columns + 1) * PAD
+    sheet_h = rows * cell + (rows + 1) * PAD
     canvas = bytearray(bytes(BACK) * (sheet_w * sheet_h))
 
     for slot, (index, width, height, channels, pixels) in enumerate(tiles):
@@ -103,15 +113,15 @@ def main() -> int:
         # sheets, and an integer upscale alone leaves the big ones larger than
         # the cell — which silently *grew* the canvas, because bytearray slice
         # assignment past the end appends rather than raising.
-        if width <= CELL and height <= CELL:
-            scale = max(1, min(CELL // max(width, 1), CELL // max(height, 1)))
+        if width <= cell and height <= cell:
+            scale = max(1, min(cell // max(width, 1), cell // max(height, 1)))
             drawn_w, drawn_h = width * scale, height * scale
         else:
-            shrink = max(width, height) / CELL
+            shrink = max(width, height) / cell
             drawn_w = max(1, int(width / shrink))
             drawn_h = max(1, int(height / shrink))
-        left = PAD + (slot % columns) * (CELL + PAD) + (CELL - drawn_w) // 2
-        top = PAD + (slot // columns) * (CELL + PAD) + (CELL - drawn_h) // 2
+        left = PAD + (slot % columns) * (cell + PAD) + (cell - drawn_w) // 2
+        top = PAD + (slot // columns) * (cell + PAD) + (cell - drawn_h) // 2
         for y in range(drawn_h):
             sy = min(y * height // drawn_h, height - 1)
             for x in range(drawn_w):
