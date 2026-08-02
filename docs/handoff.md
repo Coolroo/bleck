@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D267**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D268**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D267 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D268 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -382,6 +382,7 @@ and it still cannot see a window, hear a speaker, or open a `.glb`.
 | **A third-party rip of Brobot as ground truth** | D236 — max Y matches to the hundredth, 100.83 both ways |
 | **A button combination runs a script** | D77, played by hand |
 | **Every disc names itself on screen** | D49 — `mod_loaded: <name>` on the title screen |
+| **Dimentio's attack *in motion*** | D268 — "the elongated mesh on one edge seems to go through every spine". ✅ The eight spine nodes' curves are staggered exactly **five frames** apart, so a retraction travels round the ring. ⚠️ The strongest check yet: a still cannot tell a rigid spin from a travelling wave, and a renderer sharing one curve across the spines would look fine in a contact sheet and lose this |
 
 ### 🟢 Confirmed against the game's own art, not a person
 

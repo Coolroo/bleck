@@ -18864,3 +18864,48 @@ the wispy cloud it is.
 game's blend mode lives somewhere in the 16-byte material record and is not
 read; alpha compositing is right for the cut-out art and may be wrong for a
 glow.
+
+## D268 — A human's description of the attack in flight matches the file exactly (2026-08-02)
+
+Watching Dimentio's attack in the air, a person reported: *"the elongated mesh
+on one of the edges of the shuriken seems to go through every spine in the
+shuriken."* A travelling wave, not a uniform spin.
+
+✅ **It is in the file, on a five-frame cadence.** `dmen_magic`'s part AB1 has
+eight spine nodes, each with its own `translate.y` curve, and their start frames
+are staggered exactly five apart:
+
+| spine node | 1365 | 1363 | 1361 | 1359 | 1357 | 1355 | 1353 | 1351 |
+|---|---|---|---|---|---|---|---|---|
+| `translate.y` span | 1..10 | 6..15 | 11..20 | 16..25 | 21..30 | 26..35 | 31..40 | 36..45 |
+| `alpha` at frame | 1 | 6 | 11 | 16 | 21 | 26 | 31 | 36 |
+
+Read the value out and the wave is plain — each spine retracts from 40 to 0 in
+turn while the others hold:
+
+```
+frame   1365   1363   1361   1359   1357
+    0  40.00  40.00  40.00  40.00  40.00
+    8   2.88  25.48  40.00  40.00  40.00
+   16   0.00   0.00  10.24  35.64  40.00
+   24   0.00   0.00   0.00   0.76  20.16
+```
+
+Part AB2's `scale.y` curves carry the same 5-frame stagger. So the shuriken does
+not spin rigidly: a retraction — and the elongation either side of it — runs
+around its eight spines, which is what was described.
+
+🟢 **This is the first time a person's account of an effect *in motion* has been
+checked against the decoding**, and it is a stronger test than the still
+screenshot of D262. A static image cannot distinguish a rigid spin from a
+travelling wave; the observation names the difference, and the file agrees.
+
+⚠️ **It also validates the per-node evaluation specifically.** A renderer that
+posed the whole part from one transform, or that shared one curve across the
+spines, would reproduce the shape and lose this entirely — and would look
+perfectly convincing in a contact sheet. `dimentio reel --frames 16` shows the
+spine count falling across frames 1, 5 and 10 as the wave passes.
+
+⚠️ **A contact sheet is the wrong instrument for it**, which is the argument for
+the GIF export and frame ranges now queued: the wave has a 5-frame period and a
+9-cell reel samples every 8 frames, so it is nearly aliased away.
