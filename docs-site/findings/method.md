@@ -113,15 +113,21 @@ for ones that are static.
 
 ## What the method cannot do
 
-⛔ **Controller input cannot be injected**, at least on this setup (D48).
+⛔ **Controller input cannot be injected into an *unattended* run** (D48).
 Dolphin's emulated Wiimote here binds to a DirectInput keyboard device, and
 DirectInput polls device state rather than reading the window message queue —
-so `SendKeys` and `PostMessage` are invisible to it. Injection would have to
-happen at driver level with a scancode. Twelve attempts produced a run
-byte-identical to the no-input one.
+so `SendKeys` and `PostMessage` are invisible to it. Twelve attempts produced a
+run byte-identical to the no-input one.
 
-Anything behind a button press therefore needs a person: using an item from a
-menu, hitting an enemy, walking through a door. Those runs are worth preparing
+⚠️ **The narrower statement is the true one.** Injection at scancode level —
+`SendInput` with `KEYEVENTF_SCANCODE` — does reach Dolphin, and the test rig can
+press buttons that way. But it needs a Windows host with an **unlocked session**
+and Dolphin in the **foreground**, so it cannot run in CI or while nobody is
+there. Recording the blanket ⛔ for as long as we did closed off
+button-triggered work that was reachable all along.
+
+So anything behind a button press still needs a person present: using an item
+from a menu, hitting an enemy, walking through a door. Those runs are worth preparing
 for with an unattended one first — a "verification boot" whose only purpose was
 to check the instrument before spending a human's twenty minutes returned four
 findings on its own (D113).

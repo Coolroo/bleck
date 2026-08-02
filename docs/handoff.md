@@ -1,14 +1,15 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-07-31, at **D238**. This is the orientation doc: what exists,
+Last updated 2026-08-01, at **D255**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D238 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D255 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
+| [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
 | [`disc-layout.md`](./disc-layout.md) | observed facts about the disc |
 | [`function-behaviour.md`](./function-behaviour.md) | what game functions do, measured by tracing them |
 | [`scripting.md`](./scripting.md) | the scripting language and its limits |
@@ -65,7 +66,7 @@ injective and stops two assets landing on one file.
 | tab | state |
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
-| **Models** | ✅ geometry, UVs, per-shape primitives, textures where the binding is known; animation plays with a clip picker, scrub bar and per-shape hiding (D222, D235, D237) |
+| **Models** | ✅ geometry, UVs, one primitive per shape, **a texture per primitive** (D246), wrap modes, UV transforms, the alpha mask (D248) and per-vertex tint (D251); animation plays with a clip picker, scrub bar and per-shape hiding (D222, D235, D237) |
 | **Effects** | 🔶 structure, part durations, transform rows, a scrubber and a viewport. ⛔ **no part→image link** (D210, D218, D219, D225) |
 | **Sounds** | 🔶 135 tracks, waveform, seek, volume, real playback through `rodio` (D227). ⛔ **nobody has heard it** |
 
@@ -103,34 +104,164 @@ model covers 4.5% of the sheet
 colour spread 0.218, neighbour step 0.059 — an image reached it
 ```
 
-- **Colour spread over 0.015 means an image reached the surface.** Measured
-  across 60 real models: untextured ones reach 0.007, textured ones start at
-  0.023 (D253). This is the check that stops a broken model producing a
-  plausible picture.
+- ⛔ **Colour spread no longer decides the verdict, and that is D251's doing.**
+  D253 calibrated it at 0.015 over 60 models — untextured 0.007, textured from
+  0.023 — and **D251 landed hours later and broke the premise**: `e_big_nok`
+  names **no image at all** and carries **ten distinct vertex colours**, so a
+  bare model now spreads as widely as a painted one. `Report::colours_vary` says
+  only "the frame is not one flat colour", which is weaker and true; the verdict
+  branches on `images`, **counted from the file**. The test that asserted a bare
+  model is one flat tint now asserts the opposite, for the recorded reason.
 - ⚠️ **A greyscale image reads as "one tint"** — `OFF_doorL` spreads 0.010.
   The verdict says so; do not read it as "untextured".
 - ⛔ **Neighbour step decides nothing.** It is printed, and the corpus refuted
   it twice: an untextured model out-steps 26 of 30 textured ones, and a
   magnified sharp texture steps like a bare cube. Read D253 before using it.
 - ⛔ **A render by the program under test is not independent of it.** For "does
-  this look right in Blender", a person is still the instrument.
+  this look right in Blender", a person is still the instrument — and that is
+  not pedantry here: `shot` shares this repo's misconceptions by construction,
+  which is exactly how its own verdict came to be wrong.
 
 ### Character models are fully readable
 
 This is the session's headline. The format in `files/a/` went from "not decoded"
-to a reference you can open: [`model-format.md`](./model-format.md).
+to a reference you can open: [`model-format.md`](./model-format.md). Everything
+below was read off **the game's own draw code**, not pattern-matched out of the
+file — that is the method, and it has now worked six times running (D206, D207,
+D240, D243, D247, D251, D252).
 
-- ✅ Positions and normals are **F32 XYZ at stride 12, indexed by `u16`** — read
-  off the game's own draw code, not pattern-matched (D207).
-- ✅ **Per-shape rebasing** took median coverage from 13.7% to **100%**, models
-  at 95%+ from 132 to 801, animated models from 12 to 202 (D224). Anything in
-  `docs/` or a docstring that still says "13.6%" or "fragment" predates it.
-- ✅ UVs are indexed **per corner** via slot 7 (D234); faces are triangulated by
-  **ear clipping**, because a fan is wrong for 14% of the disc's quads (D223).
+**Geometry — solved** (D240)
+
+- ✅ Positions and normals are **F32 XYZ at stride 12, indexed by `u16`** (D207).
+- ✅ **The word at `0x14C` is not a name pointer.** It points at a table of
+  **168-byte group records** — `char name[0x40]`, then `(base, count)` pairs for
+  positions `+0x40`, normals `+0x48`, colours `+0x50` and eight UV channels
+  `+0x58`…`+0x94`, then first shape `+0x98` and shape count `+0x9C`. The reader
+  used to print group 0's Maya name as the model's name, which is why it looked
+  like one.
+- ✅ **The file states the bases; they were being counted.** D224 advanced the
+  position base by the number of *distinct* indices a shape touched, and
+  advanced it for every shape. A block is as long as its **largest index plus
+  one**, and consecutive shapes can **share** one block.
+- ✅ The invariant that says it was read right: **the group slices tile the
+  position array exactly**, on 863 of 864 models. `OFF_hei_01b` is the one
+  exception and falls back.
+- ✅ **4,902 dropped faces across 98 models → 0.** Mean per-model
+  normal-agreement angle 3.487° → **0.269°**; models at ≥80° 24 → **0**; mean
+  coverage 98.6% → 99.8%.
+- ✅ Shape *names* fell out of the same table (D240), superseding D236: the group
+  record carries the Maya name and the run of shapes it owns.
+
+**Textures — solved** (D243, corrected and extended by D245, D247, D248)
+
+- ✅ A shape names its own image **four hops** deep, which is why D229's three
+  candidates all failed — every one tried to go straight from a shape to an
+  image:
+
+  ```
+  shape record +0x00   layer count (0, 1 or 2 — ⛔ not a boolean)
+  shape record +0x10   eight s32 layer indices, -1 where unused, stored REVERSED
+        -> slot 17     8-byte layer record: +0x00 material index, +0x04 wrap mode
+        -> slot 18     64-byte material record: +0x04 the image's index in the bank
+        -> the bank    files/a/<bank>-, a TPL
+  ```
+
+- ✅ **The bank is named in the file, at `0x44`** (D245) — it was being guessed
+  as `<model filename>-`. 69 models name a different bank and 52 have no
+  same-named file at all: `e_bari_beam` draws from `e__bari_beam-` with a
+  doubled underscore, and `e_kmoon_g`/`_w`/`_b` share one 201-image bank.
+  ⚠️ **`NAME_AT = 0x44` is still mislabelled in `model.py`** — that field is the
+  *bank's* name; the model's own is `OWN_NAME_AT = 0x04`.
+- ✅ **Wrap mode is slot 17 `+0x04`** (D247), bits 0/1 CLAMP-or-REPEAT and bits
+  2/3 overriding with MIRROR. **6,719 of 7,300 layers clamp on both axes** and
+  the exporter had written REPEAT for all of them.
+- ✅ **A two-layer shape's second layer is an alpha mask, not a second colour**
+  (D247). Shape record `+0x08` picks TEV mode 2, whose stage 1 reads only
+  `TEXA` from map 1 and multiplies both the colour and the alpha of map 0.
+  40 shapes on four models. glTF has no slot for it, so it is written as a full
+  `textureInfo` at **`material.extras.spmMaskTexture`** (D248) — Blender ignores
+  it and draws layer 0, `dimentio` multiplies. ⚠️ The mask applies *before* the
+  alpha cutoff: testing the base's own alpha first draws the shape solid and
+  looks entirely plausible.
+- ✅ **Slot 16 is the per-layer UV transform** — 24 bytes, 1:1 with the layer
+  table on all 870 models: a `u8` animation frame offset, translate, scale and a
+  rotation **in degrees about `(0.5, 0.5)`**. It becomes
+  **`KHR_texture_transform`**, always in `extensionsUsed` and never in
+  `extensionsRequired` (D248). 130 of 7,300 records are not the identity;
+  `OFF_doorL` and `OFF_doorR` scale U by **-1**, which is how one door mirrors
+  the other.
+- ✅ **823 of 864 models export textured**, 6,892 embedded images, 0 unreferenced
+  (D245, D248). ⚠️ D243's headline "781 / 6,647" was never true as stated — only
+  771 of the 781 painted a primitive.
+
+**Vertex colour — the big one** (D251)
+
+- ⛔ **The hue was never in the textures.** A census of every TPL bank under
+  `files/a` — 815 banks, **12,736 images** — is **12,678 CMPR** and **zero
+  paletted**, with zero palette-header pointers. So the leading hypothesis, a CI
+  image decoded without its TLUT, is refuted outright: a paletted image on this
+  disc would make `tpl.read` *raise*, not decode grey.
+- ✅ **Slot 5 is a per-vertex `GX_RGBA8` colour array and slot 6 its index
+  stream**, named at `0x80048594` — `GXSetVtxDesc(GX_VA_CLR0, GX_INDEX16)`,
+  `GXSetArray(GX_VA_CLR0, r15, 4)` with `r15` built from `lwz r3,356(r6)` =
+  `0x164`. TEV mode 0 is `GX_MODULATE` against `COLOR0A0`, so the texture is
+  *multiplied* by it. ⛔ **`model-format.md` listed slots 5 and 6 as 🔶 "read by
+  nothing", and that was the whole bug.**
+- ✅ Written as `COLOR_0`, VEC4 `UNSIGNED_BYTE` `normalized`. **4,609 primitives
+  across 336 models**, 146,493 vertices, 0.56 MiB corpus-wide. Omitted where
+  every vertex is opaque white (524 models).
+- ⚠️ **Read this before repeating the numbers.** The reading was **derived from
+  the game** — the draw code, and five invariants over all 864 models (every
+  model carries a colour array; zero strays; every stream reaches the array's
+  last entry; 17,290 of 17,290 group colour slices are `(0, 0)`; 18,631 of
+  18,631 shape colour corner offsets equal the position one). The third-party
+  rip was used **only to score it afterwards**: mean distance to the nearest
+  same-size rip image is **47.8 read, 87.8 white, 67.7 for a shuffled control
+  (best of 50: 59.8)**. ⛔ **Nothing here was fitted to the rip**, and a future
+  reader must not think it was — the rip cannot even see this question, because
+  D243's content matcher is z-scored and a grey copy of a coloured image scores
+  +0.996 against it.
+- 🔶 **One place the reading is not taken at face value.** Four models
+  (`e_card_fre3`, `e_zun_tail`, `n_gid_tyou`, `OFF_house_02`) store `(0,0,0,255)`
+  in *every* entry; applied literally they are black silhouettes and the game
+  draws them normally, so they are written untinted. ⛔ The gate was looked for
+  in the file and is not there — `GXSetChanCtrl`'s `GX_SRC_VTX`/`GX_SRC_REG`
+  choice comes off a *runtime* material struct, not the file record.
+
+**Animation — two defects, both in one function** (D252)
+
+- ✅ **A delta is a sixteenth of a unit.** `animPoseMain` loads `f0` once at
+  `0x80045798` and it is `0.0625`. Read raw, the median clip threw a vertex
+  **2.42 model widths** and **1,336 of 1,728 clips** threw one further than the
+  model is wide; at a sixteenth, 0.219 and 70. ⛔ The GQRs are not a second
+  scale — `mtspr 914..917` write load types 4–7 with `LD_SCALE` zero.
+- ✅ **A track is an increment, not a pose.** The incremental path at
+  `0x80045d34` applies only `cached+1..frame` and never re-copies the base
+  positions, so the two code paths can only agree if tracks accumulate. `bleck`
+  drove one target at weight 1 at a time, so every frame snapped back to rest.
+- ✅ **A hold keyframe is not a target** — 13,115 of 35,190 tracks carry no keys.
+  Folding runs keeps all 3,079 clips at 22,485 targets and 137 MB; a target per
+  keyframe cost 70 clips and 39 MB.
+- ⛔ **`curves()` is deleted**, with the `curves`, `keys` and `span` columns it
+  fed into `models.json`. **D217 refuted the D216 reading it rests on and never
+  withdrew it**, so it shipped for two months: with the key layout settled as
+  `[u8 stride, s8 dx, s8 dy, s8 dz]`, the `s16` it accumulated was `dx` as the
+  high byte and `dy` as the low byte of one number. That is not a quantity.
+  ⚠️ `mark` goes back to being a **timeline position**, superseding the D216
+  addendum.
+
+**Unchanged and still true**
+
+- ✅ **Per-shape rebasing** took median coverage from 13.7% to **100%** (D224).
+  Anything in `docs/` or a docstring that still says "13.6%" or "fragment"
+  predates it.
+- ✅ UVs are indexed **per corner** via slot 7 (D234), with their own corner
+  offset at shape `+0x4C` (D240); faces are triangulated by **ear clipping**,
+  because a fan is wrong for 14% of the disc's quads (D223).
 - ⛔ Animation is **per-vertex morphing, not skeletal** (D217). Two sessions
   went into hunting a track→joint mapping that does not exist.
 - ✅ One glTF **primitive per shape** (D237), morph targets **sparse where
-  sparse is smaller** (D238) — all 3,079 clips now export, none dropped.
+  sparse is smaller** (D238) — all 3,079 clips export, none dropped.
 
 ### A mod can change the game
 
@@ -166,6 +297,10 @@ and it still cannot see a window, hear a speaker, or open a `.glb`.
 | **`MOBJ_broken_heart` rendered its texture in Blender** | D215 addendum — mesh, UVs, embedded PNG and material |
 | **The audio rate, against a supplied reference recording** | D232 — 371 MP3 frames give 8.90 s, so 193,816 samples are 21,777 Hz, exactly half the stated 44100. Confirmed by ear afterwards (D228 addendum) |
 | **Model defects, reported from the window and each one real** | `e_genjin_b` bow-ties (D223), `e_2D_manera6` "small mimis on a big mimi" (D229), `e_bara_tib_p` bare (D234), "models rendering without materials" (D222), "Mesh file is missing" (D221), the flat export directory (D233) |
+| **`p_bibi`'s static geometry, "model looks great"** | after D240 — a person confirming the *fixed* geometry, which is the strongest thing said about the mesh |
+| **`e_lui_robo` "almost entirely white", every rivet and vent visible** | D251 — the report that found the vertex colour. ⚠️ **The white was the finding**; the detail being visible is what ruled out a decode fault |
+| **`p_bibi`'s animation, "insane, not accurate"** | D252 — the report that found the 16× scale and the missing accumulation. It had been shipping wrong for a month and no test could see it |
+| **`OFF_doorL`'s kanji, reported as suspect** | D251 — and it is the disc's own art: the bank holds 裏 and 表 as `back.tga` and `front.tga` |
 | **A third-party rip of Brobot as ground truth** | D236 — max Y matches to the hundredth, 100.83 both ways |
 | **A button combination runs a script** | D77, played by hand |
 | **Every disc names itself on screen** | D49 — `mod_loaded: <name>` on the title screen |
@@ -174,6 +309,10 @@ and it still cannot see a window, hear a speaker, or open a `.glb`.
 
 | | |
 |---|---|
+| **The fixed vertex colour, in Blender** | ⚠️ **The most load-bearing gap in this table.** `e_lui_robo` was confirmed coloured — green cap, red thrusters, brown moustache, yellow eyes, spread 0.218 → 0.760 — **by `dimentio shot` only** (D251). That is *our own renderer*, sharing our misconceptions by construction, and its own verdict was falsified the same day. Blender has not seen it |
+| **The corrected animation, by anyone** | D252 is measured entirely off the emitted bytes. The person who reported `p_bibi` as "insane" has not seen the fix |
+| **The wrap modes and UV transforms, by eye** | D248 measures 32 models rendering differently under their stated modes and tests the `KHR_texture_transform` equivalence as arithmetic. Nobody has looked. The rotation's *sign* has no witness on this disc at all — every rotating layer is a radially symmetric magic circle |
+| **The alpha mask, by eye** | 40 shapes on four models; every claim is a pixel count (D248) |
 | **Audio playback** | No test opens a device (D227). Whether sound comes out, at the right pitch, from the right offset, needs a person with ears |
 | **The sparse-morph `.glb` path in a real viewer** | All 864 files are **structurally** validated against the specification (D238) and nobody has opened a sparse one in Blender. `--dense-morphs` exists for a reader that chokes |
 | **Most of Dimentio's window** | Drag direction, panel proportions, the effects two-column split, the tooltip, the combo box, whether 219 un-virtualised thumbnails scroll comfortably (D213, D219, D225). The clipboard *write* cannot be verified in-process at all (D231) |
@@ -191,7 +330,7 @@ contradictory answers; **one reference file settled it in a single measurement**
 
 ## ⚠️ Standing traps
 
-Four are new this session and all four have already misled someone.
+Seven are new this session and every one has already misled someone.
 
 1. ⚠️ **`work/reference/` is a third-party ground-truth instrument.** It holds
    supplied rips and recordings — Brobot as OBJ/DAE (D236), the pure-heart
@@ -222,6 +361,24 @@ Four are new this session and all four have already misled someone.
 4. ⚠️ **`bleck model export` defaults to `--out work/models`**, the other three
    to `work/export` (D233). Harmless when one root meant one pile; now it splits
    the export in half and Dimentio finds no models.
+5. ⛔ **The colour of this game's art is mostly not in its textures** (D251).
+   12,678 of the 12,736 images under `files/a` are CMPR and **none is
+   paletted**; one greyscale panel is tinted per shape by slot 5's per-vertex
+   colour. So "the texture decoded grey" is the *expected* state, not a bug, and
+   the palette-indexing hypothesis it suggests is refuted outright.
+   ⚠️ **Slots 5 and 6 were documented as "read by nothing" while being the
+   answer.** A slot marked unread in `model-format.md` is a slot nobody looked
+   at, not a slot known to be empty.
+6. ⛔ **`dimentio shot`'s colour-spread verdict was falsified within hours of
+   being calibrated** (D253, broken by D251). It is now a printed number, not a
+   claim; the verdict counts `images` from the file. **Any threshold calibrated
+   on one export can be invalidated by the next fix to the exporter** — that is
+   the general form.
+7. ⚠️ **A refuted reading that is not withdrawn keeps shipping.** D217 refuted
+   D216's key layout and left `curves()` in place; it published `curves`, `keys`
+   and `span` in `models.json` for two months, and the `s16` it accumulated was
+   `dx` and `dy` packed into one big-endian number (D252). ⛔ When an entry
+   refutes another, delete the code as well as the claim.
 
 And the older ones that keep biting:
 
@@ -250,15 +407,23 @@ And the older ones that keep biting:
 **git-ignored entirely** except its `README.md` (D175). It is scratch space for
 *your* mods; write probes there freely and nothing needs cleaning up. The 31
 worked examples this documentation cites are in `example-mods/`, so pass
-`--mods-dir`, which every command accepts:
+`--mods-dir`, which every **`bleck`** command accepts:
 
 ```powershell
 uv run bleck mod check mr-l --mods-dir example-mods
-uv run python scripts/ingame.py coin-tick --words 12   # the rig reads BLECK_MODS_DIR
 ```
 
 Without it a bare `bleck mod check mr-l` reports **"no mod named 'mr-l'"**, which
 reads as a broken repo rather than a wrong path (D147).
+
+⛔ **`scripts/ingame.py` has no `--mods-dir`** (D256). It shells out to
+`bleck mod build <mod> …` without one, so the name resolves against
+`BLECK_MODS_DIR` and the failure surfaces from a nested process, which reads as
+a broken checkout rather than a missing flag. Set the variable for the call:
+
+```powershell
+$env:BLECK_MODS_DIR = "example-mods"; uv run python scripts/ingame.py coin-tick --words 12
+```
 
 When a mod earns its keep — it demonstrates a concept, or produced a finding in
 the decision log — **copy** it (do not move it) and drop the build output:
@@ -337,8 +502,38 @@ The loader code itself is GPLv3 and lives in Dolphin's config, **not** here.
 
 devkitPPC is at `C:\devkitPro\devkitPPC` — GCC 16.1.0, target `powerpc-eabi`,
 `--with-cpu=750`, newlib. Both `powerpc-eabi-g++` and `powerpc-eabi-gdb` are
-present, so C++ works here where it did not on the Pi (D85, D105), and Dolphin
-has a GDB stub if source-level debugging is ever wanted.
+present, so C++ works here, and Dolphin has a GDB stub if source-level debugging
+is ever wanted.
+
+⛔ **"devkitPPC is unobtainable on aarch64" was wrong for six years** (D249,
+superseding D26). `pkg.devkitpro.org/packages/linux/aarch64/` serves
+`devkitppc-gcc 16.1.0` — 77 MB, HTTP 200 — and always has: upstream said so in
+devkitPro/pacman #17 on 2020-07-05. Two things hid it, and each produces a
+convincing false negative:
+
+1. ⚠️ **Cloudflare answers 403 to a non-browser User-Agent.** The body is
+   `Attention Required! | Cloudflare`, not a permissions page, and D26 read it
+   as an empty arm64 package list. devkitPro's own wiki works around it with
+   `wget -U "dkp-apt" …`, which is the tell.
+2. ⚠️ **Directory listings are off.** `/packages/linux/aarch64/` returns a real
+   Apache 404 while every file inside it returns 200. Browsing finds nothing;
+   fetching an exact filename finds everything.
+
+✅ **The container now builds with it**, via `COPY --from` a pinned
+`devkitpro/devkitppc` image, and all four of `container_verify.py`'s mods come
+out **byte-identical to the Windows devkitPPC build** — `nop`, `mr-l`,
+`goto-map`, `cxx-switch`, same sha256 each. ⚠️ That equality needed the
+container's `libogc_common.ld` replaced first: a newer `devkitppc-crtls` moved
+`. = ALIGN(32)` *inside* three output sections, which pads `.text` and rounds
+`bssSize` up. ⛔ **Nothing built by any of this has been booted** — structural
+validity is not runtime correctness, and that is D26's warning verbatim.
+
+⛔ **Debian's `powerpc-linux-gnu-gcc` compiles but cannot produce a REL** (D250).
+Its gcc injects no linker script, so `ld -r` never merges sections; a throwaway
+`-T` script fixes that, and then GCC 14.2.0's `array - 1` induction base leaves
+an `R_PPC_ADDR16_HA .rodata - 4` that `pyelf2rel` packs unsigned and refuses.
+devkitPPC's GCC 16.1.0 does not emit the idiom at all. It is no longer the
+container's default; read D250 before reaching for it.
 
 `wit` (Wiimms ISO Tool 3.01a) is installed and **cannot read RVZ**. Convert once
 and work on the extracted filesystem. ⚠️ **`--align-files` and `--overwrite` are
@@ -350,7 +545,7 @@ both mandatory** on every `wit` rebuild — the first fails subtly, the second m
 ```powershell
 .\scripts\lint.ps1 --fix     # this branch's changed files -- fast
 .\scripts\lint.ps1 --full    # every file; what CI runs
-uv run pytest -q             # 1,462 tests
+uv run pytest -q             # 1,563 tests
 uv run mkdocs build --strict
 cargo test  --manifest-path dimentio/Cargo.toml
 cargo clippy --manifest-path dimentio/Cargo.toml --all-targets -- -D warnings
@@ -395,9 +590,14 @@ Three addresses give full visibility from outside the emulator, via
 | `0x8050C990` | `evtGetWork()`'s return. `gw[]` at `+0x04`, so `gw[n]` at `+4+4n` |
 | `0x80005000` | free scratch for a probe block (unused TRK interrupt table) |
 
-⛔ **Input cannot be injected** (D48): Dolphin reads a DirectInput keyboard, which
-ignores the message queue. Anything behind a button press needs a human, or
-Dolphin's TAS movie playback, which is untried.
+⚠️ **Input cannot be injected *unattended*** — the blanket form of D48 is
+over-broad. D48 ruled out `SendKeys` and `PostMessage`, because Dolphin reads a
+DirectInput keyboard and ignores the message queue. `scripts/keys.py` uses
+`SendInput` with `KEYEVENTF_SCANCODE`, which injects below that polling and does
+reach the game, and `--press` is built on it. What it needs is a **Windows host,
+an unlocked session and Dolphin in the foreground**, so CI cannot use it and
+neither can a run nobody is watching. Dolphin's TAS movie playback is still
+untried.
 
 ⚠️ **Gameplay is reached ~45 s after boot with no input.** The game runs
 `LOGO -> MAPCHANGE -> GAME`, loading `aa4_01` then `ls4_12` — its attract demo —
@@ -441,12 +641,18 @@ calls it". `callers` decodes every `bl` in the text range instead and found 178
 callers of `GXSetVtxAttrFmt` (D206). ⛔ Widening `xref` to cover branches was
 rejected: folding them together would keep the empty result silently plausible.
 
-⚠️ **r13 is `0x805B5F00`** (D218), so every small-data global is addressable by
-name. Neither `xref` nor `callers` can see an r13-relative global — the same
-blind spot, and it hid the effect code for two sessions.
+⚠️ **r13 is `0x805B5F00`** (D218) and **`_SDA2_BASE_` (r2) is `0x805B7260`**
+(D247, from the register init at `0x8000630C`), so every small-data global is
+addressable by name — that is how `animPoseMain`'s `lfs f0,-30780(r2)` was
+resolved to the `0.0625` in D252. Neither `xref` nor `callers` can see an
+r13-relative global; the same blind spot hid the effect code for two sessions.
+
+⚠️ **`dolscan.py dis` shows garbage in the paired-single routines.** The default
+decode turns `ps_merge00` into VMX nonsense, so the matrix code in D247 could
+not be read at all until it was disassembled with `objdump -EB -M 750cl`.
 
 `scripts/modelscan.py` is `dolscan` for an undecoded data file: `survey`,
-`header`, `offsets`, `at`, `strings`, `chain`.
+`header`, `offsets`, `at`, `strings`, `vectors`, `streams`, `chain`, `mesh`.
 
 ---
 
@@ -457,12 +663,17 @@ else; pick by interest.
 
 ### Assets
 
-1. ⛔ **Shape → texture binding.** Three candidates refuted: identity, section
-   slot 17, and a material index in the face record (D229, D229 addendum). Every
-   shape's UVs span the full `[0,1]` square, so a shape is not a region of an
-   atlas — each has its **own** image. 761 models export untextured because of
-   it. The per-shape primitive split (D237) is this binding's prerequisite, not
-   its answer.
+1. ✅ **Shape → texture binding is SOLVED** (D243, D245, D247, D248) — this was
+   the longest-open thread here. See the model section above. ⛔ D229's "three
+   candidates refuted, binding unknown" is superseded: all three tried to go
+   straight from a shape to an image, and the chain is four hops. What is left
+   inside it: the **frame-offset byte** at slot 16 `+0x00` steps a texture
+   animation by walking consecutive material records and a static export takes
+   frame 0 (74 layers carry 1, a handful up to 14); material modes 1 and 3–12
+   are read only as far as their TEV programs, since nothing on the disc selects
+   them; and the wrap flag's `+0x04 < 0` branch is unexercised and inexpressible
+   in glTF. 41 models name no image at all and 31 name a bank the disc does not
+   carry.
 2. ⛔ **Effect part → image binding.** Six candidates refuted (D210). 🔶 The live
    lead is D218: `Part.first` is a *signed* index, `0xFFFF` meaning none, into a
    **second** 20-byte record array whose fields at `+0x08`/`+0x0A`/`+0x0E`/
@@ -470,65 +681,77 @@ else; pick by interest.
    been established; section 7 is 17,760 bytes = 888 records of 20, untested.
 3. 🔶 **`effdata.dat`: 2 of 16 sections read** (D190, D191). 139 effects, 704
    parts, 4,048 transform rows. Nine sections remain, none with any strings.
-4. ⛔ **Which Maya shape name goes with which primitive** (D237). Names are read
-   in file order, groups are found by `first` restarting at zero, and nothing
-   binds one to the other.
-5. 🔶 **Model slots 5, 6 and 16–23** are unread; see
+4. ✅ **Which Maya shape name goes with which primitive is SOLVED** (D240),
+   superseding D236 and D237's `shape <index>` labelling. The 168-byte group
+   record carries the name *and* the run of shapes it owns, so `Shape.name` is
+   read: `e_lui_robo`'s spans come out as `marioShape`, `wallShape`, `agoShape`,
+   `L_eye|eye|eyeShape`.
+5. 🔶 **Model slots 20–23 are unread**; slots 5, 6 and 16–19 are all decoded
+   (D240, D243, D247, D251). Also open: **group record `+0xA0`** — 0 everywhere
+   except `e_lui_robo`'s `glassShape`, where it is 3 (`+0xA4` turned out to be a
+   cull mode, D247) — and **`OFF_hei_01b`**, the one model whose group table is
+   not a multiple of 168 and falls back. See
    [`model-format.md`](./model-format.md).
-6. ✅ **`curves()` is gone** (D252), along with the `curves`, `keys` and `span`
-   columns it fed into `models.json`. With the key layout settled as
-   `[u8 vertex stride, s8 dx, s8 dy, s8 dz]`, the `s16` it accumulated was
-   `dx` as the high byte and `dy` as the low byte of one number.
-   ⚠️ **The same entry fixed two live defects in the animation nobody had
-   caught for a month**: deltas are sixteenths of a unit, and a track is an
-   increment onto the pose before it rather than a pose of its own. Both are
-   stated by `animPoseMain`. Nobody has yet looked at the corrected `.glb`.
-7. ⚠️ **The ADPC seek table is undecoded** (D226 addendum, D228). It is now a
+6. 🔶 **Whether the corrected animation looks right.** D252 fixed two live
+   defects nobody had caught for a month — deltas are **sixteenths** of a unit,
+   and a track is an **increment** onto the pose before it — and every number in
+   that entry is measured off the emitted bytes. The person who reported
+   `p_bibi` as "insane, not accurate" has not seen the result. ⚠️ Also open from
+   the same report: `p_wii_mario`'s **61 one-triangle planes stacked at three
+   spots** and its one-state props (`big_hammerShape` alone makes the mesh read
+   96 units tall). Both are read exactly as the file states them; whether they
+   should be exported, hidden or merely labelled is undecided.
+7. 🔶 **Where the vertex-colour gate lives.** `GXSetChanCtrl` picks
+   `GX_SRC_VTX` or `GX_SRC_REG` off `lbz r0, 8(r22)`, and `r22` is a runtime
+   material struct rather than the file record — the material record's own
+   `+0x08` does not sort the corpus that way (D251). Until that is found, the
+   four all-black models are handled by a stated argument, not by the file.
+8. ⚠️ **The ADPC seek table is undecoded** (D226 addendum, D228). It is now a
    curiosity rather than a blocker — nothing reads it, seeking uses the decoded
    samples — but it is the one instrument that disagreed with four others and
    was believed anyway.
-8. 🔶 **`Stream.playback_rate` is fitted to two points, not decoded** (D232). It
+9. 🔶 **`Stream.playback_rate` is fitted to two points, not decoded** (D232). It
    halves a stated rate above 40000. Nothing in the DOL, `wiimario_snd.dat` or
    the RSAR encodes the rule (D230), and the threshold is 40000 rather than
    32000 precisely because only 44100 was measured.
-9. 🔶 **"Every track is stereo" may not hold** — `sys_title1_44k_lp` tests the
-   *other* way on the interleave check, correlation rising 0.837 → 0.879, which
-   is the signature of mono (D232).
-10. ⛔ **Tier 2 texture editing — replacing artwork — needs a real DXT1 encoder**
+10. 🔶 **"Every track is stereo" may not hold** — `sys_title1_44k_lp` tests the
+    *other* way on the interleave check, correlation rising 0.837 → 0.879, which
+    is the signature of mono (D232).
+11. ⛔ **Tier 2 texture editing — replacing artwork — needs a real DXT1 encoder**
     and is not started. Everything today is exact *because* it never
     re-compresses (D187, D193).
 
 ### The game
 
-11. 🔶 **The boss NPC hang.** `chaos-heart` orbits five effects for 22,350 frames
+12. 🔶 **The boss NPC hang.** `chaos-heart` orbits five effects for 22,350 frames
     with no freeze, where the boss *NPC* froze at a fixed ~2,177 (D157, D183).
     The effect path sidesteps the hang rather than explaining it.
-12. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is the
+13. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is the
     route. ⛔ `evt_pouch_check_have_item` never returns and nobody knows why.
-13. **`peek`/`poke` for `SET_RAM`/`GET_RAM`** — the language's biggest remaining
+14. **`peek`/`poke` for `SET_RAM`/`GET_RAM`** — the language's biggest remaining
     gap. ⚠️ Maps did **not** need it (D51) and doors do **not** (D103).
-14. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each. `a`,
+15. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each. `a`,
     `b`, `1`, `2` are confirmed (D68).
-15. 🔴 **US (`us0`) support is blocked on a US disc image.** `work/extracted/`
+16. 🔴 **US (`us0`) support is blocked on a US disc image.** `work/extracted/`
     holds `eu0` only.
-16. 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
+17. 🔶 **54 builtins remain unlinkable** (D61): 21 live in the game's own REL at
     REL-relative addresses, 33 have no known address anywhere.
 
 ### Shipping
 
-17. ⚠️ **The published `v0.1.0-rc1` assets were built from a commit the history
+18. ⚠️ **The published `v0.1.0-rc1` assets were built from a commit the history
     rewrite replaced**, so they no longer correspond to what the tag points at
     (D149, corrected). ✅ The tag-triggered release job itself **has** run and
     fully succeeded — `roadmap.md` said otherwise for a day and one
     `gh run list` refuted it. ⚠️ `gh release create` is not idempotent, so
     re-pointing an existing tag fails on the release step.
-18. **A GUI over the JSON API.** Any language; the contract is JSON and
+19. **A GUI over the JSON API.** Any language; the contract is JSON and
     `bleck mod schema` publishes it.
-19. **Hot reload** — designed for, not built (D37). ⛔ Reloading a rebuilt REL is
+20. **Hot reload** — designed for, not built (D37). ⛔ Reloading a rebuilt REL is
     ruled out: there is no `OSUnlink`.
-20. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
+21. 🔶 **Speed, if profiling names it.** LZ77 is ~12 s/MB (D16). The recorded
     answer is a PyO3 port of *just the compressor*, not a rewrite.
-21. **A save state.** Driving into a map leaves Mario invisible: no save, no
+22. **A save state.** Driving into a map leaves Mario invisible: no save, no
     profile (D63). `--state` exists on `bleck launch` and `ingame.py`; making one
     needs someone to play far enough and press F1.
 
@@ -540,13 +763,18 @@ else; pick by interest.
 |---|---|
 | `work/roms/` | disc images. Supply your own |
 | `work/extracted/eu0` | the PAL rev 0 base. Regenerate with `bleck extract` |
-| `work/export/`, `work/models/` | asset exports. Regenerable, and large — 123 MB of models alone |
+| `work/export/`, `work/models/` | asset exports. Regenerable, and large — 137 MB of models alone (D252) |
 | `work/reference/` | **third-party ground truth**: supplied rips and recordings. Tests skip without it |
 | `mods/` | everything except `README.md` (D175) |
 | `mods/*/overlay/` | extracted game assets and generated `mod.rel` |
 | `work/build/`, `out/` | staging and images |
 | Upstream clones | `spm-headers`, `spm-rel-loader`. Re-clone as needed |
 | `CLAUDE.md` | machine-specific working guidance, purged from history in D149 |
+
+⚠️ **`.claude/` is *not* git-ignored, and `.claude/skills/` is committed** (D254).
+So the method write-ups travel to another machine and `CLAUDE.md` does not — which
+is the reason a two-page method belongs in a skill rather than in the file every
+session reads in full.
 
 **Committed mods look empty and that is correct.** `example-mods/title-invert`
 and `example-mods/tex-koopa` have manifests but no overlays:
@@ -629,6 +857,8 @@ The section below is the narrative record. The same methods are written up as
 **project skills** — a directory each, with a `SKILL.md` an agent session loads
 on demand, so a future session does not re-derive them from the decision log.
 
+**Methods** — how to reach a true answer:
+
 | skill | reach for it when |
 |---|---|
 | `decode-by-disassembly` | a binary format, struct field or file layout resists pattern-matching. The `dolscan.py` workflow, the ⛔ `xref`-cannot-find-callers trap, and resolving `r2`/`r13` small-data loads. D206, D207, D240, D243, D247, D252 |
@@ -637,6 +867,19 @@ on demand, so a future session does not re-derive them from the decision log.
 | `render-to-look` | a model or animation export needs eyes on it and there is no screen. `dimentio shot`, its flags and its blind spots. D213, D251, D253 |
 | `ground-truth-from-reference-rips` | a decoded asset needs an external answer key. `work/reference/x/` — ⚠️ **git-ignored, present only on the machine it was supplied to**. D236, D243 |
 | `slow-command-discipline` | before running anything that costs minutes. The price list, and where each transcript already lives. D16, D70/D73/D74, D245 |
+
+**Tools and workflows** — which command, and what it lies about:
+
+| skill | reach for it when |
+|---|---|
+| `ingame-testing` | anything inside the running game needs confirming or doubting. `scripts/ingame.py`, `probe.h`, the flags, and the four ways a run lies. ⚠️ read `work/build/ingame.log`, never re-run to widen a query. D38, D40, D48, D51, D86, D147 |
+| `hunting-a-hang` | the game freezes or Dolphin exits on its own. Hook `__assert2` at `0x8019c54c` and it names its own cause in one run — four runs of bisecting did not. ⚠️ Shift-JIS. D130 |
+| `reading-the-game-live` | a value has to come out of a running function. `code.hooks` `replace`/`before`/`after`, the trace helpers, and the six things a trace physically cannot see. D94, D96, D97, D178 |
+| `catalog-dumps` | regenerating a committed catalog, or wondering where a name in `bleck`'s output came from. Which dumps need a boot and which read a file. D88, D103, D138, D171, D179 |
+| `reading-undecoded-data` | an unknown binary on the disc, or one of the game's own `evt` scripts. `modelscan.py` and `evtdis.py` — and when to escalate to `decode-by-disassembly`. D202, D204, D206, D207 |
+| `bleck-cli-workflows` | running the CLI at all. The command map, `--mods-dir example-mods`, `build` vs `mod build`, `--align-files`, and ⛔ one advertised command that does not exist. D52, D147, D233, D239 |
+| `linting-and-ci` | before finishing any Python change, or when C9001/C9002/C9003 fires. ⚠️ the default is the branch diff, so a clean run is not a clean tree. D119, D194, D242 |
+| `arm64-container` | working on Apple Silicon, or a devkitPro package looks unavailable for arm64. What the container has proven and what it has not. D249, D250 |
 
 ⚠️ These are guidance, not enforcement — `scripts/lint.py` is where a rule
 becomes a rule.

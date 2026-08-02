@@ -524,7 +524,7 @@ extern "C" void mod_prolog(void)
 
 | | |
 |---|---|
-| PowerPC cross-compiler | `gcc-powerpc-linux-gnu`, or devkitPPC. C++ also needs that toolchain's `g++` |
+| PowerPC cross-compiler | **devkitPPC.** It is published for Windows, macOS, and Linux on both x86-64 and aarch64, and C++ comes in the same package. ⚠️ A distro's `gcc-powerpc-linux-gnu` no longer gets all the way — see below |
 | `pyelf2rel` | ELF → REL conversion (pure Python, on PyPI) |
 | [`spm-headers`](https://github.com/SeekyCt/spm-headers) | Symbol lists and struct definitions |
 | [`spm-rel-loader`](https://github.com/SeekyCt/spm-rel-loader) | The Gecko loader code |
@@ -569,6 +569,17 @@ mod.rel  264 bytes
   REL v3 (13 sections)
 ```
 
+!!! danger "A distro cross-compiler no longer reaches a working `.rel`"
+
+    The commands above are kept because they document the flags, but
+    `powerpc-linux-gnu-gcc` stops two steps short today. Its GCC injects no
+    linker script, so `ld -r` never merges the input sections — no `.bss` output
+    section, two `.ctors` tables, twice the section count — and even with a
+    hand-written merging script it emits a **negative relocation addend**
+    (`R_PPC_ADDR16_HA .rodata - 4`, GCC's `array - 1` induction base) that the
+    REL encoder packs unsigned and refuses. devkitPPC's GCC does not emit that
+    idiom at all. Substitute `powerpc-eabi-gcc` and the same flags work.
+
 !!! warning
 
     **`-fno-pic -fno-PIE` is mandatory** with a distro compiler. Debian's GCC
@@ -597,5 +608,5 @@ and safe to drop.
 ??? note "Licensing"
 
     `spm-rel-loader` is **GPLv3**, including the loader code. `spm-headers` is
-    MIT except its `mod/` folder. `bleck` is currently unlicensed, so nothing
-    upstream has been vendored into it.
+    MIT except its `mod/` folder. `bleck` is **MIT**, so nothing from either
+    GPLv3 source has been vendored into it.

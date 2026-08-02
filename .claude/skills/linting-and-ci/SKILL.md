@@ -109,7 +109,13 @@ at an empty directory so every machine agrees.
 `FLOORS` puts a floor under each catalog's size (300/300/200/400) so an emptied
 or truncated catalog fails loudly. ⛔ `npccatalog.json` is bundled and
 deliberately **not** checked — its only reader, `bleck setup show`, needs a real
-setup file. D242 records `doorcatalog.json` having shipped in no binary at all.
+setup file, and a check that cannot fail on CI is worse than no check.
+
+⚠️ **D242 is why all of this reads like this.** `bleck/backends/doorcatalog.json`
+was bundled by nothing, so every released binary answered `bleck doors` with "no
+door catalog shipped with this build" — indistinguishable from a corrupt install.
+The structural guard for *that* is a separate test scanning `bleck/**/*.py` for
+`with_name("*.json")` and requiring each hit to appear in `bleck.spec`.
 
 ## `scripts/container_verify.py` — the cross-compiler gate
 

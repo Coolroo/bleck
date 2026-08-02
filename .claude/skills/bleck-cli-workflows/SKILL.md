@@ -109,6 +109,17 @@ uv run bleck effect  export --out work/export
   correctly. `--no-textures`, `--no-animation` and `--dense-morphs` are there
   for viewers that will not read sparse accessors.
 
+⚠️ There is no `texture` *edit* command yet. `scripts/tint_tpl.py <in> <out>
+--preset chaos` is the prototype for the planned declarative `tint` operation
+(`docs/plan-textures.md`): it recolours a CMPR TPL in the **endpoint domain**,
+copying the 2-bit indices untouched, so it never decodes GameCube index packing
+and never re-compresses. ⚠️ Its one hazard is the `c0 > c1` flag — DXT1 switches
+between 4-colour and 3-colour-plus-transparent on which endpoint is larger, so a
+recolour that reorders them silently changes transparency; the original ordering
+is restored after mapping. When the operation lands in `bleck`, a mod declares
+it instead of shipping the result — see the rule in `CLAUDE.md` about edits
+being data, never baked bytes.
+
 ## ⛔ `bleck toolchain install` is not a command
 
 It is advertised in **`bleck/backends/toolchain.py:100`** and in all three of

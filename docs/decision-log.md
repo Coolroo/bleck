@@ -17435,3 +17435,108 @@ a suffix and depict different things, so the suffix is not a character name.
 
 ⚠️ **This is secondary-source research; the wiki can be wrong.** Where the disc
 was read directly the write-up says ✅ *measured*, and those outrank the prose.
+
+## D256 — Fourteen skills, and four things `CLAUDE.md` said that the scripts do not (2026-08-01)
+
+D254 built six method skills and left the tool half unwritten. Both halves now
+exist, and consolidating the session's docs turned up four claims in
+`CLAUDE.md` that are wrong against the code. Each was checked by reading the
+script, not by remembering it.
+
+### ✅ The split: six methods, eight tools
+
+`.claude/skills/` holds fourteen directories, each a `SKILL.md` whose YAML
+`description` says *when* to reach for it. The two halves answer different
+questions and are kept apart deliberately:
+
+| | asks |
+|---|---|
+| **methods** — `decode-by-disassembly`, `control-every-statistic`, `verify-the-emitted-artifact`, `render-to-look`, `ground-truth-from-reference-rips`, `slow-command-discipline` | *how do I reach a true answer* |
+| **tools** — `ingame-testing`, `hunting-a-hang`, `reading-the-game-live`, `catalog-dumps`, `reading-undecoded-data`, `bleck-cli-workflows`, `linting-and-ci`, `arm64-container` | *which command, and what does it lie about* |
+
+⚠️ **A tool skill's job is the lie, not the invocation.** `--help` already
+prints the flags. What it cannot print is that `ingame.py` costs 2–3 minutes and
+already wrote its transcript, that `xref` returns nothing for a function and
+that reads as "nobody calls it", or that a catalog dump needs a booted game.
+
+⛔ **Rejected: folding these into `CLAUDE.md`.** Same argument as D254 — that
+file is read in full every session, and it is git-ignored, so it cannot travel.
+✅ **`.claude/` is not in `.gitignore`**, so the skills are committed and a fresh
+clone on another machine gets them.
+
+🔶 **Still untested as skills.** Every claim inside them is quoted from a
+verified entry; that a future session loads the *right* one is a property of the
+`description` lines and nobody has observed it.
+
+### ✅ `scripts/ingame.py` does not accept `--mods-dir`
+
+`CLAUDE.md` said `--mods-dir example-mods` is accepted by "every command". It is
+accepted by every **`bleck`** command. `ingame.py` has no such flag: `build()`
+assembles `["uv", "run", "bleck", "mod", "build", mod, image, "--force"]` and
+adds only `--output` and `--map`. The mod name therefore resolves against
+`BLECK_MODS_DIR`, which defaults to `mods/`.
+
+So the rig cannot run an example mod without setting the variable:
+
+```powershell
+$env:BLECK_MODS_DIR = "example-mods"; uv run python scripts/ingame.py coin-tick --words 12
+```
+
+⚠️ **The failure is a "no mod named" from a nested process**, which reads as a
+broken checkout rather than a missing flag — the same shape as D147, one layer
+further in.
+
+### ✅ "Controller input cannot be injected" is over-broad
+
+D48 ruled out `SendKeys` and `PostMessage`: Dolphin reads a DirectInput
+keyboard, which ignores the message queue. `CLAUDE.md` carried that forward as a
+flat ⛔ **"controller input cannot be injected"**, and `scripts/keys.py` refutes
+it — `SendInput` with `KEYEVENTF_SCANCODE` injects *below* DirectInput's polling
+and does reach the game. `ingame.py --press a b 1+2`, `--press-at` and
+`--press-gap` are built on it.
+
+⚠️ **The true statement is narrower and still binding**: it needs a Windows
+host, an unlocked session, and Dolphin in the foreground — `ingame.py` calls
+`keys.focus()` and then `keys.wait_until_foreground()` before pressing. So the
+*unattended* claim stands and CI still cannot press a button. ⛔ Recording the
+strong form cost the same kind of time D66 records: a true-but-too-wide ⛔ closes
+off work for weeks, and this one sat beside a note (D66) that already said so.
+
+### ✅ There is no `bleck disc`, `bleck emulate` or `bleck inspect`
+
+`bleck/cli/commands/` contains `disc.py`, `emulate.py` and `inspect.py`, and
+none of the three is a command. Every module exposes `register(add)` and calls
+`add(...)` at the **top level**, so the file names are an internal grouping.
+Twenty subcommands exist:
+
+```
+build   doors   effect  extract  info    items   launch  ls      lz      maps
+mod     model   pack    script   setup   sound   symbols texture unpack  verify
+```
+
+Eight nest further — `mod`, `script`, `model`, `texture`, `sound`, `effect`,
+`symbols`, `setup`. ⚠️ `bleck build` and `bleck mod build` are different
+commands, which is the one that actually catches people.
+
+### ✅ The script table was wrong in three ways
+
+- **`modelscan.py` was listed twice**, once as "read a character model" and once
+  as "read an undecoded data file". One row, and it has **nine** subcommands:
+  `survey`, `header`, `offsets`, `at`, `strings`, `vectors`, `streams`, `chain`,
+  `mesh`. Four of those — `vectors`, `streams`, `chain`, `mesh` — appeared in no
+  documentation at all, and `chain` and `mesh` are the two that did the work in
+  D212 and D207.
+- **`container_verify.py` appeared in no row**, despite being the gate D249 used
+  to prove the aarch64 toolchain byte-identical to the Windows one.
+- **`tint_tpl.py` appeared in no row**, despite being the working prototype for
+  `plan-textures.md`'s declarative `tint`.
+
+⚠️ **A tool nobody has written down is a tool that gets rebuilt.** D71 already
+records building a script to answer a question that did not matter; the cheaper
+version of that mistake is building one that already exists.
+
+### What this entry does not claim
+
+⛔ **Nothing here was measured in the running game.** These are reads of the
+repository's own source, which is the right instrument for "does this flag
+exist" and the wrong one for anything about the disc.

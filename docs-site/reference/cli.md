@@ -314,9 +314,12 @@ Key times are **frames at 60 Hz** in the file and are written to the `.glb` as
 seconds, since that is what glTF's samplers are defined in. The manifest carries
 both.
 
-Textures come from image 0 of the bank beside each model — ⚠️ **which image a
-shape actually uses is not decoded**, so a bank holding several may pair the
-wrong one.
+A pose in this format is an **increment** on the pose before it, not a
+standalone shape — the engine walks every track up to the current frame into one
+buffer — and each of its offsets is a **sixteenth** of a unit. An export
+accumulates them, so a clip plays as the game plays it. An earlier export did
+neither, and every clip threw its vertices roughly two and a half times the
+model's own width.
 
 ### `bleck effect`
 
@@ -416,9 +419,18 @@ Four angles in one image rather than four files: most model defects — a stray
 shape off to the side, a face that vanishes from behind, one part left
 untextured — only show from one direction.
 
-It also prints what it drew, including a **colour spread** figure. Above 0.015
-an image reached the surface; below it, the model is drawn in one tint, which
-means either that it carries no texture or that its texture is greyscale.
+It also prints what it drew: triangle, shape and image counts, how much of the
+sheet the model covers, and a **colour spread** figure — how far the drawn
+pixels scatter about their mean tint, with brightness divided out.
+
+!!! warning "Colour spread says the frame is not flat, and nothing more"
+
+    It cannot tell a textured model from an untextured one, because **41 models
+    carry no image at all and are coloured from their vertices** — `e_big_nok`
+    has ten distinct tints and no texture whatever. Whether an image reached the
+    surface is read from the file and printed as the image count; spread is
+    there to catch a model that came out uniformly flat when it should not have.
+    A greyscale texture reads as one tint too.
 
 !!! warning "The backdrop is never white"
 

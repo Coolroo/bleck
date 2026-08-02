@@ -128,6 +128,22 @@ $env:BLECK_MODS_DIR = "example-mods"; uv run python scripts/ingame.py coin-tick 
 Write a *new* probe under `mods/` instead — that is what it is for, it is
 git-ignored, and nothing needs cleaning up afterwards.
 
+## The one-question variant: `scripts/check_binding.py`
+
+```bash
+uv run python scripts/check_binding.py warp-combo warp_home 4 0x8010D0F0
+#                                      mod        script    idx expected
+```
+
+Reads back the address `elf2rel` actually bound a game function to. A
+`USER_FUNC` target is filled in at link time, and bound wrongly **the script
+still runs and silently does nothing** (D70). Memory reads only, `--seconds 90`,
+works on a locked machine.
+
+⚠️ Prefer the two-line test to the new tool. D71 built a whole script to read a
+bound address, correctly, to answer a question that did not matter; one extra
+`gw` write would have been more discriminating and taken minutes.
+
 ## Related
 
 - `hunting-a-hang` — when the run ends in a freeze rather than a value

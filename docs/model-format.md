@@ -20,7 +20,8 @@ Read alongside:
 | `bleck/formats/modelmat.py` | the layer, material and transform tables — which image a shape draws, how it is wrapped and where |
 | `bleck/formats/gltf.py` | the `.glb` writer |
 | `bleck/formats/gltfpaint.py` | its materials, samplers, textures and images |
-| `scripts/modelscan.py` | `survey`, `header`, `offsets`, `at`, `strings`, `chain` |
+| `scripts/modelscan.py` | `survey`, `header`, `offsets`, `at`, `strings`, `vectors`, `streams`, `chain`, `mesh` |
+| [`model-appearance.md`](./model-appearance.md) | what six of these models are *supposed* to look like, with a source per claim (D255) |
 
 ⚠️ **Some docstrings in those files are older than this page.** The
 contradictions are listed under [Where the code and the log
@@ -778,6 +779,51 @@ index is map 0. `modelmat.Binding.layers` is already in map order.
 ⚠️ **`+0x00` is a count, not a flag.** Reading it as a boolean called the disc's
 40 two-layer shapes untextured, which also cost them their UV corner offset.
 
+✅ **Which bank the index lands in is stated at `0x44`** (D245), not derived from
+the filename. **69 models name a bank other than their own name and 52 have no
+same-named file at all** — `e_bari_beam` draws from `e__bari_beam-` with a
+doubled underscore, `e_burosu_b` from `e_burosu_h-`, and `e_kmoon_g`/`_w`/`_b`
+share one 201-image bank. All 52 exported bare whatever the binding said.
+⚠️ **`NAME_AT = 0x44` is mislabelled in `model.py`**: it is the *bank's* name.
+The model's own is `OWN_NAME_AT = 0x04`, and the two agree on 795 of 864, which
+is why it read as a name for as long as it did. 31 models name a bank the disc
+does not carry at all and fall back to the old guess.
+
+✅ **Validated against the Brobot rips** (D236), two independent ways, each with
+a shuffled control: **284 of 286** matched shapes pick an image of exactly the
+reference's dimensions (controls 13.6% / 24.4% / 31.2%), and **61 of 61**
+confident content matches of the rip's own images agree (controls 38.4% /
+56.5%). 42 of 46 shapes this reading calls untextured get a flat placeholder in
+the rip; **0 of 286** textured ones do. ⚠️ The first run of the dimension test
+scored 1 of 24, because DDS stores `dwHeight` before `dwWidth` and the reader
+had them the other way round — **without the control that would have read as a
+refutation**.
+
+✅ **Each shape still has its own image** (D229). `e_2D_manera6` is a paper
+sprite built from 31 flat quads, and all 31 groups span the full `[0,1]` UV
+square — so a shape is not a *region* of an atlas. That observation was right;
+only the conclusion drawn from it, that the binding could not be found, was
+wrong.
+
+| candidate | how it died |
+|---|---|
+| ⛔ shape *i* uses texture *i* | quad aspect against texture aspect: 30–31% within 15%, against 21–24% shuffled (D229, D229 addendum) |
+| ⛔ a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked (D229) |
+| ⛔ section slot 17 read as a per-shape array | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum). Slot 17 *is* in the chain — one hop further along |
+
+**What ships:** 823 of 864 models export textured with 6,892 embedded images,
+one glTF material per distinct texture reference any shape makes — image, wrap
+mode, UV transform and mask together (D247, D248). The 41 that stay bare name no
+image at all, which the file states. ⚠️ D243 first reported 781 and 6,647; 10
+of those 781 embedded art no primitive referenced, and 52 models were reading
+the wrong texture bank (D245). ⛔ `--guess-textures` and the manifest's
+`texture_guessed` are deleted with the guesswork they described.
+
+⚠️ **The per-shape split (D237) was this binding's prerequisite, and the split
+was also hiding a bug:** `gltf._primitive` asked `mesh.is_textured` for the
+whole mesh, so the 269 models that mix textured and bare shapes wrote no UVs at
+all (D243).
+
 ### ✅ What the two layers of a two-layer shape do — SOLVED
 
 ⛔ **It is not a second colour.** Shape record `+0x08` selects a TEV program from
@@ -817,39 +863,39 @@ override either with MIRROR (2). A **negative** word means "keep the image's own
 
 ⛔ **The exporter assumed REPEAT and was wrong about 6,760 of 7,300 layers.**
 D215's "~21% of models have coordinates outside `[0,1]`, so it is tiling" was
-half right: most of it is a clamp.
+half right: most of it is a clamp. 672 models state something other than
+REPEAT/REPEAT and **32 of them render differently** for it; the rest keep every
+coordinate inside `[0,1]`, where all three modes agree (D248).
 
-Validated against the Brobot rips (D236) two independent ways, each with a
-shuffled control: **284 of 286** matched shapes pick an image of exactly the
-reference's dimensions (controls 13.6% / 24.4% / 31.2%), and **61 of 61**
-confident content matches of the rip's own images agree (controls 38.4% /
-56.5%). 42 of 46 shapes we call untextured get a flat placeholder in the rip;
-**0 of 286** textured ones do.
+### ✅ Where the colour comes from — SOLVED, and it is not the textures
 
-✅ **Each shape still has its own image** (D229). `e_2D_manera6` is a paper
-sprite built from 31 flat quads, and all 31 groups span the full `[0,1]` UV
-square — so a shape is not a *region* of an atlas. That observation was right;
-only the conclusion drawn from it, that the binding could not be found, was
-wrong.
+⛔ **The hue is mostly not in the images at all** (D251). A census of every TPL
+bank under `files/a` — **815 banks, 12,736 images** — is:
 
-| candidate | how it died |
+| format | images |
 |---|---|
-| ⛔ shape *i* uses texture *i* | quad aspect against texture aspect: 30–31% within 15%, against 21–24% shuffled (D229, D229 addendum) |
-| ⛔ a material index in the face record | word0 and word1 high halfwords are **0** in every face of every model checked (D229) |
-| ⛔ section slot 17 read as a per-shape array | 38 entries with a maximum of 31 against 32 bank images looked right; scored **23%**, *below* the 24% shuffled control (D229 addendum). Slot 17 *is* in the chain — one hop further along |
+| CMPR | **12,678** |
+| IA8 | 20 |
+| I4 | 13 |
+| IA4 | 12 |
+| RGB5A3 | 8 |
+| I8 | 3 |
+| RGB565 | 1 |
+| RGBA32 | 1 |
 
-**What ships:** 823 of 864 models export textured with 6,892 embedded images,
-one glTF material per distinct texture reference any shape makes — image, wrap
-mode, UV transform and mask together (D247, D248). The 41 that stay bare name no
-image at all, which the file states. ⚠️ D243 first reported 781 and 6,647; 10
-of those 781 embedded art no primitive referenced, and 52 models were reading
-the wrong texture bank (D245). ⛔ `--guess-textures` and the manifest's
-`texture_guessed` are deleted with the guesswork they described.
+**Zero paletted images**, and zero image-table entries carrying a palette
+pointer. So the obvious explanation for a flat, structure-preserving grey — a CI
+image decoded without its TLUT — is ruled out: `tpl.read` **refuses** an unknown
+format rather than skipping it, so a paletted image on this disc would raise.
 
-⚠️ **The per-shape split (D237) was this binding's prerequisite, and the split
-was also hiding a bug:** `gltf._primitive` asked `mesh.is_textured` for the
-whole mesh, so the 269 models that mix textured and bare shapes wrote no UVs at
-all (D243).
+The colour is in **slot 5**, per vertex; see [Slots 5 and
+6](#slots-5-and-6--the-vertex-colour-that-multiplies-the-texture). ⚠️ **The
+reading was derived from the draw code and only *scored* against a third-party
+rip afterwards** — mean distance to the nearest same-size rip image is 47.8
+read, 87.8 for the white the old export wrote, and 67.7 for a shuffled control
+whose best of 50 draws is 59.8. Nothing was fitted to the rip, and D243's
+content matcher could not have found this in the first place: it is z-scored, so
+a grey copy of a coloured image still scores +0.996 against it.
 
 ### ✅ Which Maya shape name goes with which primitive — SOLVED
 
@@ -923,17 +969,28 @@ to the counting reading. One model of 864, and nothing else about it is unusual
 code change and this is a doc task. Each is a real contradiction between a
 docstring and a later decision-log entry.
 
-✅ **The first three rows are fixed** (D240) — the coverage claim in
-`modelmesh.py`'s module, `Mesh` and `Mesh.coverage` docstrings, the same claim in
-`bleck/cli/commands/model.py`, and `Mesh.triangles()` documenting a fan where
-`_cut` ear-clips. The rest stand.
+**Closed since this table was written:**
+
+- ✅ The coverage claim in `modelmesh.py`'s module, `Mesh` and `Mesh.coverage`
+  docstrings, the same claim in `bleck/cli/commands/model.py`, and
+  `Mesh.triangles()` documenting a fan where `_cut` ear-clips — all fixed (D240).
+- ✅ `Curve.mark`'s "a **position on the timeline** rather than a duration" — the
+  seek at `0x80045560` uses field 0 as a key time, so the docstring was right and
+  D216's addendum was wrong. **The type is gone with `curves()`** (D252), so the
+  row is deleted rather than resolved.
+- ✅ `model.py`'s `NAME_AT` — D245 found it holds the *bank's* name, not the
+  model's, and the constant now carries that warning beside `OWN_NAME_AT = 0x04`.
+  The name itself is unchanged, because `is_model` and `Model.name` both read it.
+
+**Still standing.** Each is a real contradiction between a docstring and a later
+decision-log entry; fixing them is a code change and this is a doc page.
 
 | file | says | but |
 |---|---|---|
-| ~~`Curve.mark` docstring~~ | ~~"a **position on the timeline** rather than a duration"~~ | ✅ **Settled by D252 and the type is gone.** The seek at `0x80045560` uses field 0 as a key time, so the original docstring was right and D216's addendum was wrong |
-| `model.py` module docstring table | "⛔ vertices, indices, weights — **not decoded**" and "⛔ animation keyframes — not decoded" | D207/D209/D224 decode the geometry and D216/D217 the keyframes; `Model.has_geometry` and `Model.can_animate` are still hard `False` |
+| `model.py` module docstring table | "⛔ vertices, indices, weights — **not decoded**" and "⛔ animation keyframes — not decoded" | D207/D209/D224 decode the geometry, D216/D217/D252 the keyframes, and D251 the vertex colours. `Model.has_geometry` and `Model.can_animate` are still hard `False` |
 | `model.py` module docstring | "bounding box — read, and sane — **Mario is 58.7 units tall**" | 58.7 is Mario's **max Y**; his height is 73.4 (D202, D212), since min Y is −14.68 |
-| `model.py` / D235 | `Model` reads **94** clips for Mario (D203, D216) | D235 says **95** (`94 of p_wii_mario's 95 were not written`) |
+| `model.py` / D235 | `Model` reads **94** clips for Mario (D203, D216) | D235 says **95** (`94 of p_wii_mario's 95 were not written`). Nothing has re-measured it |
+| `Clip` docstring | "the pointer is real and checked; **what it points at is not decoded**, so nothing here can play one" | `modelanim.morphs()` decodes exactly that, and the whole disc's 3,079 clips export as glTF animations (D238, D252) |
 
 ⚠️ **`Model.has_geometry` and `Model.can_animate` are defensible as written** —
 the *container* holds neither, and both come from `mesh()` and `morphs()`
