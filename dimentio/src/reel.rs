@@ -5,17 +5,19 @@
 //! an effect is *when* things happen. Both write one contact sheet through the
 //! same software rasteriser, so a caller with no screen can look at either.
 //!
-//! ⛔ **This sheet shows the timeline, not the artwork.** Which image a part
-//! draws is not decoded — six candidate fields are refuted in
-//! `docs/decision-log.md` D210, and the real reference is one hop further out
-//! (D218). Every part is therefore drawn as a flat colour, and the layout is a
-//! deterministic display choice rather than a decoded scene graph. The report
-//! says so on every run, because a grid of coloured quads is exactly what
-//! someone would mistake for a picture of the effect.
+//! ✅ **The artwork is real** (D258). A part's image is five sections past its
+//! record, `bleck` resolves it into the export, and this binds it — `sweat`
+//! reels as a blue droplet.
 //!
-//! What it *can* settle is whether the effect data and the renderer agree: that
-//! the parts the manifest says are running at a time are the parts that reach
-//! the frame, and that the frame changes when a part starts or stops.
+//! ⛔ **The placement is not.** Section 9's node transforms are read but not
+//! applied, so where a quad sits is a deterministic display choice. The report
+//! says so on every run: a sheet of genuine artwork in invented positions is
+//! far more convincing than the flat coloured quads that preceded it, and so
+//! far more likely to be quoted as "where this effect appears".
+//!
+//! What it settles is that the data and the renderer agree — the parts the
+//! manifest calls running are the parts that reach the frame, every part
+//! declaring a picture gets one, and the frame changes as parts start and stop.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -114,10 +116,14 @@ pub struct Report {
     pub changes: usize,
     /// Parts that carried a real image anywhere in the reel.
     ///
-    /// ⚠️ **Counted from the meshes, not written down as zero.** It is zero
-    /// today because no part-to-image binding is decoded, and it will start
-    /// reporting the truth the day one is, with nothing here to remember to
-    /// change. A hardcoded zero would quietly outlive the limitation.
+    /// ⚠️ **Counted from the meshes, never written down.** It read zero until
+    /// D258 decoded the binding, and it started reporting the truth the day it
+    /// landed with nothing here to remember to change — the two tests asserting
+    /// zero failed loudly instead of quietly staying right. Keep it derived.
+    ///
+    /// Zero now means one of two things, and the caveat names both: the parts
+    /// genuinely draw nothing (35 of the file's 704 do), or the export predates
+    /// the binding and wants `bleck effect export` re-run.
     pub painted: usize,
 }
 
@@ -208,8 +214,28 @@ impl Report {
         } else {
             "some parts did not reach their frame — occluded, or missing".to_owned()
         });
+        if let Some(blank) = self.blank_frame() {
+            said.push(format!(
+                "⚠️ frame {blank} drew nothing though its parts carry images — much of this \
+                 bank is sparse art (one bolt lights 20 of 512 texels), and at a small --size \
+                 a quad can miss every lit texel. Re-run at --size 320 before believing it."
+            ));
+        }
         said.push(self.caveat());
         said
+    }
+
+    /// The first frame that drew nothing despite having a painted part.
+    ///
+    /// ⚠️ **Not a fault on its own.** Nearest-neighbour sampling of a sparse
+    /// sprite into a handful of pixels can land entirely on transparent texels;
+    /// `item_thunder` blanks at `--size 64` and draws at 128. Reported so the
+    /// reader raises the size rather than filing a bug against the export.
+    fn blank_frame(&self) -> Option<u32> {
+        self.frames
+            .iter()
+            .find(|frame| frame.drawn == 0.0 && frame.painted > 0)
+            .map(|frame| frame.number)
     }
 
     /// ⚠️ Printed on every run, deliberately. The images are measured and the
@@ -1000,7 +1026,11 @@ mod real_export_tests {
                 effect: entry.name.clone(),
                 export: export.clone(),
                 out: out.clone(),
-                size: 48,
+                // ⚠️ 128, not 48. Much of the bank is sparse art, and at
+                // 64 a quad can sample only transparent texels — item_thunder
+                // blanks there and draws here (D259). A sweep at a size that
+                // loses sprites would assert against its own artefact.
+                size: 128,
                 frames: 3,
                 background: Background::DarkGrey,
             };
