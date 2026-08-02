@@ -346,12 +346,21 @@ The fourth column is a **duration in frames** at 60 Hz, counted inclusively —
 single-frame, so a viewer treating the end as exclusive shows nothing at all
 for them.
 
-!!! warning "Which image a part draws is not known"
+An effect's images are the 219 in `files/eff/effdata.tpl`, which
+`bleck texture export` writes out. **Which of them a part draws is known**, and
+`effect export` records it: each part gets a `pictures` list holding the image
+index, its wrap mode and the material's RGBA tint.
 
-    An effect's images are the 219 in `files/eff/effdata.tpl`, which
-    `bleck texture export` writes out. **Nothing yet says which of them a given
-    part uses.** Six candidate fields have been ruled out; the structure,
-    timing and image bank are all readable, and the binding between them is not.
+!!! note "A part draws a set of images, not one"
+
+    560 of the 704 parts draw exactly one image; 35 draw none at all, and the
+    rest draw up to twelve. `pictures` is therefore a list, and an empty one is
+    a fact about that part rather than a gap in the data — the material says so
+    explicitly.
+
+    The reference is not a field on the part. It is five sections away:
+    `part → node → draw → subdraw → material → texture → image`, which is why
+    seven candidate fields were ruled out before it was found.
 
 ### Dimentio, and the manifests
 
@@ -437,6 +446,53 @@ pixels scatter about their mean tint, with brightness divided out.
     A texture that decoded to near-white and a texture that failed to decode
     look identical against a white page. That is the case worth catching, so the
     default backdrop is a dark checkerboard.
+
+### Rendering an effect across its timeline
+
+A model's question is what it looks like from every side. An effect's is *when*
+its parts run, so effects get their own command: one camera, several instants,
+laid out in the same grid.
+
+```bash
+cargo run --release --manifest-path dimentio/Cargo.toml --   reel --effect chaos --export work/export --out chaos.png
+```
+
+| option | |
+|---|---|
+| `--effect <name>` | which effect, as `bleck effect list` names it. Required |
+| `--out <file.png>` | where to write. Required |
+| `--export <dir>` | folder holding `effects.json`. Default `work/export` |
+| `--frames 9` | frames sampled across the effect, into one sheet |
+| `--size 320` | edge of one frame, in pixels |
+
+```
+chaos — 4 part(s), 3.00s, 181 frame(s) long
+  frame    1 at  0.000s — 4 active, 4 painted, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 painted, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 painted, 1.5% drawn
+2 of 8 frame pair(s) differ
+4 of 4 part(s) drew a decoded image
+```
+
+Frames run left to right, top to bottom, and the number of them is clamped to
+the effect's real length — nine views of a one-frame effect would be nine
+identical pictures.
+
+!!! warning "The images are real; the positions are not"
+
+    Each part is drawn with the image it actually draws. **Where the quads sit
+    is not decoded** — the effect's node transforms are read but not yet
+    applied, so the layout is a fixed, deterministic display choice. Read a reel
+    for *what* an effect draws and *when*, never for where it appears on screen.
+
+!!! note "An empty frame has three possible causes"
+
+    Five effects — `damage_star`, `sinigami_cannon`, `map_SOS`, `event_fly` and
+    `mini_gameover` — draw no image on any part, and say so. Much of the effect
+    bank is also very sparse art: one lightning sprite lights 20 of its 512
+    pixels, and at a small `--size` a quad can miss every lit one. **Re-run at
+    `--size 320` before concluding an effect is broken**; the report flags a
+    blank frame and says the same.
 
 Running `dimentio` with anything else — a folder, or nothing at all — opens the
 window as usual.

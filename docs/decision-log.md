@@ -17873,6 +17873,52 @@ reading is complete.
 stopped. The node holds transform and hierarchy; the texture is three sections
 further on, and no amount of staring at a 20-byte record would have produced it.
 
+### ✅ Reimplemented independently, and what the second pass saw
+
+The chain above was found by reading the draw code. It was then **written a
+second time**, from the disassembly rather than from the first implementation,
+as `effdata.artwork` in `bleck/formats/effdata.py`. The two agree part-for-part
+across all 704:
+
+| | first pass | `effdata.artwork` |
+|---|---|---|
+| parts resolved | 704 | 704 |
+| distinct images referenced | 219 of 219 | 219 of 219 |
+| orphaned images | 0 | 0 |
+| indices out of range | 0 | 0 |
+| parts drawing nothing | 35 | 35 |
+| images per part | `{0:35, 1:560, 2:46, 3:12, 4:16, 5:5, …}` | **identical** |
+
+⚠️ **Two implementations agreeing is not the same as one being checked twice.**
+They share a source — the same disassembly — so this rules out transcription and
+arithmetic error, not a misread of the code. The independent evidence is still
+`system`, whose parts name their own textures.
+
+### 🟢 14 parts draw the same image twice, under different tints
+
+The two passes first disagreed in the tail: `{1:546, 2:56, …}` against
+`{1:560, 2:46, …}`. Same total, same zeros, different multiplicities.
+
+The cause was **dedup policy**, not the chain: one deduplicated by image index,
+the other by the whole record — image plus wrap plus the material's RGBA. Match
+the policies and the distributions are identical.
+
+That difference is a finding rather than a nuisance: **14 parts reach the same
+image twice through different materials**, so a part can layer one texture over
+itself under two tints. A reader that dedups by image alone cannot see it, which
+is why `Picture` carries the material's colour and `artwork` returns the whole
+list.
+
+⛔ **So a count of `Picture`s is not a count of images**, and the 560/35 figures
+above are the *image* counts. Quoting them for the other is off by 14.
+
+### ✅ Shipped, not just recorded
+
+`bleck effect export` writes each part's `pictures`, and `dimentio reel` binds
+them. `sweat` renders as a blue droplet, `item_fire` as a flame swirl. That is
+the fourth independent check on the chain, and the first one a person can make
+by looking.
+
 ## D259 — Effect sprites are semi-transparent throughout, and a cut-out mask erased them (2026-08-02)
 
 Binding D258's images into the reel made `chaos_start` **disappear**. It had
@@ -17934,3 +17980,37 @@ have refuted a correct answer**. That is the D214/D245 failure mode arriving
 again from a third direction: a confident, clean, wrong refutation. The check
 that actually worked was `system`, whose parts are *named after their own
 textures*, so the file states the answer twice and the two agree.
+
+
+### ✅ A blank frame is usually the cell size, not the effect
+
+The whole-export sweep flagged `item_blizzard` and `item_thunder` for frames
+that drew nothing. Both are fine:
+
+| | | |
+|---|---|---|
+| `--size 64` | 2 blank frames each | |
+| `--size 128` | **0** | |
+| `--size 320` | **0** | |
+
+Much of this bank is **sparse** art — image 39 is a lightning bolt lighting
+**20 of its 512 texels** — and nearest-neighbour sampling into a small cell can
+land entirely on transparent ones. The quad is drawn; nothing lit falls under a
+pixel centre.
+
+⚠️ This matters because it is the *same visible symptom* as D259's erased
+sprite and as a part that legitimately draws nothing — three different causes,
+one empty frame. The reel now names the blank frame and says to re-run larger,
+and the sweep test moved from 48 to 128: **a coverage assertion at a size that
+loses sprites is asserting against its own artefact.**
+
+### ✅ Five effects genuinely draw no image at all
+
+`damage_star`, `sinigami_cannon`, `map_SOS`, `event_fly` and `mini_gameover`
+report zero painted parts, and every one of their parts declares no picture —
+the documented `-1` at material `+0x0C`. They are not a decoding failure.
+
+⚠️ **Zero painted is therefore ambiguous**, and the reel's message says both
+things it can mean: the parts genuinely draw nothing, or the export predates
+D258 and wants `bleck effect export` re-running. Reporting only the first would
+send someone hunting a renderer bug; only the second, hunting a disc problem.

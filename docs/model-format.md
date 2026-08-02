@@ -909,11 +909,13 @@ D236's "nothing binds one to the other" are both superseded.
 29 names for Mario (D202), 88 (D211), 90 face groups (D237). The regex improved
 between the first two; the third is groups, not names.
 
-### ⛔ Effect part → image binding — six candidates refuted
+### ✅ Effect part → image binding — solved, after six refutations
 
-Not this format, but the same shape of problem and it is the other thing a viewer
-cannot show. Recorded here because D210's refuted list is the model for the one
-above.
+Not this format, but the same shape of problem, and it is **the worked example
+for the section above**: six candidates died before the answer turned out not to
+be a field at all. Solved in D258 — the image is five sections past the part,
+`part → node → draw → subdraw → material → texture`. The refuted list is kept
+because *why each one died* is the reusable part.
 
 | candidate | how it died |
 |---|---|
@@ -922,11 +924,19 @@ above.
 | ⛔ the `+0x28` header word | it is section 10's offset, not a texture count (D210) |
 | ⛔ three field offsets tried in D19x | a scan of every section at nine plausible strides found **no** field in 0..218 with enough distinct entries (D210) |
 
-🔶 **The live lead** (D218): `Part.first` is a **signed** index, `0xFFFF` meaning
-none, into a *second* array of 20-byte records, and the fields that drive drawing
-live in **that** record at `+0x08`, `+0x0A`, `+0x0E`, `+0x0F`, `+0x12`. Which
-`effdata.dat` section that array is has not been established; section 7 is 17,760
-bytes = 888 records of 20, which is large enough and untested.
+✅ **How it ended** (D258). D218's lead was half right and half wrong, and both
+halves are instructive. Right: `Part.first` is a signed index with `0xFFFF` as
+its null, into a second array of 20-byte records — **section 9**, 3,739 scene
+nodes. ⛔ Wrong: those five fields do not drive drawing. `0x8005f1a8` is a
+*transform evaluator*, named by its calls to `PSMTXTrans` and `PSMTXScale`, and
+the fields are a sibling, a child, matrix and vector references, an alpha and a
+billboard flag. ⛔ Also wrong: section 7 is **2,960 records of 6**, not 888 of
+20 — the code multiplies by 6, which settles it without any counting.
+
+⚠️ **The lesson for the table above**: a lead can name the right array and still
+mislabel every field in it. The size arithmetic that looked confirmatory
+(17,760 = 888 × 20) was a coincidence, and reading the multiply in the code beat
+dividing the section size.
 
 ### 🔶 The 60 Hz clip rate
 

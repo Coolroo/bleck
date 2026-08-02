@@ -34,7 +34,8 @@ disc; `dimentio/` is a Rust/eframe window that displays what `bleck` exported.
 ```powershell
 uv run bleck texture export --out work/export   # 21,780 images, PNG
 uv run bleck model   export --out work/export   # 864 .glb + models.json
-uv run bleck effect  export --out work/export   # 139 effects + effects.json
+uv run bleck effect  export --out work/export   # 139 effects + effects.json,
+                                                #   incl. each part's images (D258)
 uv run bleck sound   export --out work/export   # 135 streams, WAV
 uv run cargo run --manifest-path dimentio/Cargo.toml -- work/export
 ```
@@ -67,7 +68,7 @@ injective and stops two assets landing on one file.
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
 | **Models** | ✅ geometry, UVs, one primitive per shape, **a texture per primitive** (D246), wrap modes, UV transforms, the alpha mask (D248) and per-vertex tint (D251); animation plays with a clip picker, scrub bar and per-shape hiding (D222, D235, D237) |
-| **Effects** | 🔶 structure, part durations, transform rows, a scrubber and a viewport. ⛔ **no part→image link** (D210, D218, D219, D225) |
+| **Effects** | ✅ structure, part durations, **the image each part draws** (D258), a scrubber and a viewport. ⛔ placement is still a display choice — node transforms are read, not applied |
 | **Sounds** | 🔶 135 tracks, waveform, seek, volume, real playback through `rodio` (D227). ⛔ **nobody has heard it** |
 
 Every asset name is copyable from any tab (D231). The model viewport is a
@@ -101,8 +102,12 @@ It prints what it drew, which is the half a caller with no screen still needs:
 rest pose
 4 angle(s) into 1026x1026
 model covers 4.5% of the sheet
-colour spread 0.218, neighbour step 0.059 — an image reached it
+colour spread 0.758, neighbour step 0.045 — an image reached it
 ```
+
+⚠️ **0.758, not the 0.218 this block used to show.** That figure predates D251
+teaching the renderer to draw `COLOR_0`, and it stayed here for a fortnight
+after the number changed. Re-measure before quoting a measurement.
 
 - ⛔ **Colour spread no longer decides the verdict, and that is D251's doing.**
   D253 calibrated it at 0.015 over 60 models — untextured 0.007, textured from
@@ -112,7 +117,7 @@ colour spread 0.218, neighbour step 0.059 — an image reached it
   only "the frame is not one flat colour", which is weaker and true; the verdict
   branches on `images`, **counted from the file**. The test that asserted a bare
   model is one flat tint now asserts the opposite, for the recorded reason.
-- ⚠️ **A greyscale image reads as "one tint"** — `OFF_doorL` spreads 0.010.
+- ⚠️ **A greyscale image reads as "one tint"** — `OFF_doorL` spreads 0.011.
   The verdict says so; do not read it as "untextured".
 - ⛔ **Neighbour step decides nothing.** It is printed, and the corpus refuted
   it twice: an untextured model out-steps 26 of 30 textured ones, and a
@@ -121,6 +126,49 @@ colour spread 0.218, neighbour step 0.059 — an image reached it
   this look right in Blender", a person is still the instrument — and that is
   not pedantry here: `shot` shares this repo's misconceptions by construction,
   which is exactly how its own verdict came to be wrong.
+
+### ⚠️ Look at an *effect* the same way: `dimentio reel`
+
+A shot is one instant of a model from several angles. A **reel** is one effect
+at several instants of its own timeline, because what there is to check about an
+effect is *when* its parts run (D257).
+
+```powershell
+cargo run --release --manifest-path dimentio/Cargo.toml -- `
+  reel --effect chaos --export work/export --out work/build/chaos.png
+```
+
+| flag | |
+|---|---|
+| `--effect <name>` | required; as `bleck effect list` names it |
+| `--out <file.png>` | required |
+| `--export <dir>` | folder holding `effects.json`. Default `work/export` |
+| `--frames 9` | frames sampled across the effect. Clamped to its real length |
+| `--size 320` | edge of one frame |
+
+```
+chaos — 4 part(s), 3.00s, 181 frame(s) long
+  frame    1 at  0.000s — 4 active, 4 painted, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 painted, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 painted, 1.5% drawn
+2 of 8 frame pair(s) differ
+4 of 4 part(s) drew a decoded image (D258)
+```
+
+- ✅ **The artwork is real** since D258. `sweat` reels as a blue droplet,
+  `item_fire` as a flame swirl.
+- ⛔ **The placement is not.** Node transforms are read but not applied, so
+  where a quad sits is a display choice. The report says so on every run —
+  genuine artwork in invented positions is far more convincing than the flat
+  quads that preceded it, and far more likely to be quoted as fact.
+- ⚠️ **Three different causes give one empty frame**, and telling them apart is
+  most of what this tool is for: a part that legitimately draws nothing (5
+  effects, D258); a sprite erased by the alpha cutoff (D259); and a sparse
+  sprite that missed every pixel because `--size` was too small. **Re-run at
+  `--size 320` before believing an effect is broken.**
+- ⛔ **Do not sanity-check a decoding by "does it look like the thing".**
+  `chaos` renders as grey gradient ramps — its shape is display-list geometry —
+  and that test would have refuted the correct answer (D258).
 
 ### Character models are fully readable
 
@@ -674,13 +722,28 @@ else; pick by interest.
    them; and the wrap flag's `+0x04 < 0` branch is unexercised and inexpressible
    in glTF. 41 models name no image at all and 31 name a bank the disc does not
    carry.
-2. ⛔ **Effect part → image binding.** Six candidates refuted (D210). 🔶 The live
-   lead is D218: `Part.first` is a *signed* index, `0xFFFF` meaning none, into a
-   **second** 20-byte record array whose fields at `+0x08`/`+0x0A`/`+0x0E`/
-   `+0x0F`/`+0x12` drive drawing. Which `effdata.dat` section that is has not
-   been established; section 7 is 17,760 bytes = 888 records of 20, untested.
-3. 🔶 **`effdata.dat`: 2 of 16 sections read** (D190, D191). 139 effects, 704
-   parts, 4,048 transform rows. Nine sections remain, none with any strings.
+2. ✅ **Effect part → image binding is SOLVED** (D258), superseding D210 and
+   D218. It is not a field: it is **five sections** past the part —
+   `part → node → draw → subdraw → material → texture → image`. All 704 parts
+   resolve, all 219 images are referenced, none is orphaned, and the 35 parts
+   reaching no image carry the documented `-1`. Implemented twice
+   independently, agreeing part-for-part. ⚠️ D218's five "drawing fields" were
+   a **scene-graph node evaluator**, and its "section 7 is 888 records of 20"
+   is wrong — the code multiplies by 6.
+   🔶 **Still open under it**: the node transforms (section 9 `+0x06` → a 3×4
+   matrix, section 12 translate/rotate/scale, alpha at `+0x0E`, a billboard
+   flag at `+0x0F`) are decoded but **not applied**, so a quad's position in
+   Dimentio remains invented. Section 10's curve `tag` selects one of ten
+   scalars — T.xyz, R.xyz, S.xyz, alpha — and driving them would give real
+   per-frame motion.
+3. 🔶 **`effdata.dat`: most sections now read** (D190, D191, D258). Decoded:
+   0 effects, 1 parts, 2 curves, 3 GX display lists, 4 textures, 5 materials,
+   6 matrices, 7 draws, 8 subdraws, 9 nodes, 10 curve channels, 12 vectors,
+   11/13/14/15 `GXSetArray` TEX0/POS/NRM/CLR0. ⚠️ Two readings in
+   `effdata.py` are **known stale and not yet fixed**: section 6 is 3×4
+   matrices rather than 4,048 four-float rows, and section 8's last four bytes
+   are one u32 display-list offset rather than two u16 (the "always a multiple
+   of 32" tell is GX alignment, not a stride).
 4. ✅ **Which Maya shape name goes with which primitive is SOLVED** (D240),
    superseding D236 and D237's `shape <index>` labelling. The 168-byte group
    record carries the name *and* the run of shapes it owns, so `Shape.name` is
@@ -864,7 +927,7 @@ on demand, so a future session does not re-derive them from the decision log.
 | `decode-by-disassembly` | a binary format, struct field or file layout resists pattern-matching. The `dolscan.py` workflow, the ⛔ `xref`-cannot-find-callers trap, and resolving `r2`/`r13` small-data loads. D206, D207, D240, D243, D247, D252 |
 | `control-every-statistic` | you are about to report or believe a percentage. Every wrong finding here was an uncontrolled number. D209, D211, D214, D229, D245, D253 |
 | `verify-the-emitted-artifact` | writing or trusting a test over anything this project exports. An export with zero materials passed 1,508 tests. D221, D234, D245, D246 |
-| `render-to-look` | a model or animation export needs eyes on it and there is no screen. `dimentio shot`, its flags and its blind spots. D213, D251, D253 |
+| `render-to-look` | a model, effect or animation export needs eyes on it and there is no screen. `dimentio shot` and `dimentio reel`, their flags and their blind spots. D213, D251, D253, D257, D259 |
 | `ground-truth-from-reference-rips` | a decoded asset needs an external answer key. `work/reference/x/` — ⚠️ **git-ignored, present only on the machine it was supplied to**. D236, D243 |
 | `slow-command-discipline` | before running anything that costs minutes. The price list, and where each transcript already lives. D16, D70/D73/D74, D245 |
 

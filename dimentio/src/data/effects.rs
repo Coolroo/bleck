@@ -6,12 +6,18 @@
 //! this whole layer, stated once in `data`'s module doc. Nothing here reads
 //! `effdata.dat`; `bleck` owns that format and is tested against a real disc.
 //!
-//! ⛔ **Which image a part draws is not decoded.** Six candidate fields have
-//! been refuted, so this module deliberately offers no way to ask. `bank`
-//! selects the effect system's *whole* image bank by disc file, which is the
-//! only link between a part and an image that can be drawn honestly. Indexing
-//! that bank by a part's index — or by any other field — would manufacture a
-//! mapping that reads as a measured fact. See `docs/decision-log.md` D210.
+//! ✅ **Which image a part draws is decoded** (D258) and arrives in the
+//! manifest as `Part::pictures`. `bleck` walks the five sections between them;
+//! nothing here re-derives it.
+//!
+//! ⚠️ **Resolve an image by name, not by counting.** `image_at` matches
+//! `<source>#<n>`, the name `bleck` writes. `bank` still exists and is still
+//! the *whole* bank in catalog order — useful for browsing, and never a
+//! mapping. Taking the nth entry of the filtered bank would pair a part with
+//! the wrong picture on any export where the catalog is not contiguous.
+//!
+//! ⛔ **The node transforms are not applied**, so nothing here says where an
+//! effect's parts belong on screen.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -197,11 +203,12 @@ pub use super::transport::Playback;
 
 /// Indices of the images that make up the effect system's bank.
 ///
-/// ⛔ This is the whole bank in catalog order, and the order carries no
-/// meaning beyond that. **No part is known to draw any particular one of
-/// these.** Do not index the result by a part's index, frame count or table
-/// position: every one of those has been tried and refuted (D210), and a
-/// wrong pairing shown in a window looks exactly like a right one.
+/// ⚠️ This is the whole bank in catalog order, for **browsing**, and the order
+/// carries no meaning beyond that. Do not index the result by a part's index,
+/// frame count or table position — every one of those was tried and refuted
+/// (D210), and a part's real image is reached by name through `image_at`
+/// instead (D258). A wrong pairing shown in a window looks exactly like a
+/// right one, and that risk did not go away when the right one was found.
 ///
 /// An export that names no bank selects nothing, rather than every image whose
 /// source happens to be blank.

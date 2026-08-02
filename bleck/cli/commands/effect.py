@@ -2,7 +2,7 @@
 
 The third thing Dimentio shows, and the least complete of them. An effect is a
 name, a list of parts, and transform rows that drive placement (D172, D173).
-All of that is read; **which image a part draws is not** (see below).
+All of that is read, **including which image each part draws** (see below).
 
 The export writes `effects.json`, the same contract shape as `texture export`
 and `model export`. Its images are the 219 in `files/eff/effdata.tpl`, which

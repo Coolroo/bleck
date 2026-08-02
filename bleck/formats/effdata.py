@@ -190,12 +190,13 @@ class Part:
     index: int
     name: str
     first: int
-    """u16 at +16. A **running index** into an undecoded section, not an image.
+    """u16 at +16. ✅ The part's **root node in section 9** (D258), relative to
+    its effect's `extra`. `NO_PART` (0xFFFF) is the null.
 
     ⛔ It reads like a texture index and is not (D210): the parts of one effect
-    carry consecutive values -- `chaosA` 0, `chaosC` 1, `chaosD` 2 -- which is
-    how `first_part` and `extra` behave, and 14 of 704 parts exceed the 219
-    images outright."""
+    carry consecutive values -- `chaosA` 0, `chaosC` 1, `chaosD` 2 -- and 14 of
+    704 exceed the 219 images outright. It *reaches* an image five sections
+    later; `artwork` walks it."""
 
     second: int
     """u16 at +18. A **duration in frames**, counted inclusively.
@@ -239,11 +240,22 @@ class Effect:
     first_part: int
     part_count: int
     extra: int
-    """A third running index, into the undecoded sections."""
+    """✅ The effect's **base node** in section 9 (D258). Every `Part.first`,
+    and every node `sibling` and `child`, is measured from here.
+
+    ⛔ Resolving those as absolute indices instead reaches 649 of 3,739 nodes
+    and 73 of 219 images -- a plausible partial answer, and a wrong one."""
 
     parts: list[Part] = field(default_factory=list)
     rows: list[Row] = field(default_factory=list)
-    """Transform rows from `extra` up to the next effect's `extra`."""
+    """⛔ **Superseded by D258**, and kept only because the viewer's layout
+    still leans on it.
+
+    This slices section 6 by `extra`, which is not an index into section 6 --
+    it is the effect's base node in section 9. Section 6 is reached from a
+    node's `+0x06` instead, and holds 3x4 matrices rather than four-float rows.
+    The floats are real and at real offsets; the **grouping by effect** is the
+    part that means nothing."""
 
     def composed(self) -> list[str]:  # pylint: disable=container-return
         """The names the game builds at runtime: effect plus each part (D172)."""

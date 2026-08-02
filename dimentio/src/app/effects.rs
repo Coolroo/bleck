@@ -16,20 +16,23 @@ use crate::render;
 /// effect it sits under.
 const BANK_THUMB: f32 = 64.0;
 
-/// Carries the standing warning that a part's image is not decoded. The same
-/// amber the model pane uses for a fragment: both say "this is less than it
-/// looks like".
+/// Carries the standing warning that a part's *placement* is not decoded. The
+/// same amber the model pane uses for a fragment: both say "this is less than
+/// it looks like".
+///
+/// The images stopped being a warning at D258; the positions did not.
 const UNDECODED: egui::Color32 = egui::Color32::from_rgb(220, 170, 90);
 
 /// Share of the detail panel the viewport takes, as a column count. Two
 /// columns: the effect on the left, the numbers behind it on the right.
 const COLUMNS: usize = 2;
 
-/// An image the user chose to preview on a part.
+/// An image the user chose to preview on a part, **overriding** the one the
+/// part really draws.
 ///
-/// ⛔ Both ends of this are choices made in the window. Nothing in the export
-/// says which image a part draws, so nothing may fill either field in from a
-/// field a part carries — see `crate::render::effect::Manual`.
+/// ⚠️ Since D258 a part arrives with its own image, so this is no longer the
+/// only way one reaches the viewport — it is a what-if. The override is
+/// applied to a copy, so moving it does not lose the decoded image beneath.
 struct Chosen {
     /// Position in the texture catalog, so the bank can mark the thumbnail.
     catalog: usize,
@@ -92,9 +95,10 @@ impl Stage {
 
 /// Everything the effect mode owns.
 ///
-/// ⛔ `bank` is the effect system's whole image bank and is never indexed by
-/// anything to do with a part. Which image a part draws is not decoded; see
-/// `crate::data::effects::bank`.
+/// ⚠️ `bank` is the effect system's whole image bank, for browsing, and is
+/// never indexed by anything a part carries. A part's own image comes from
+/// its `pictures`, resolved by name through `effects::image_at` (D258) — not
+/// by counting into this list, whose order is the manifest's.
 #[derive(Default)]
 pub(super) struct EffectPane {
     pub(super) library: data::EffectLibrary,
@@ -497,16 +501,17 @@ impl Viewer {
     /// The mark takes the colour that part's quad is drawn in, so a row and a
     /// shape in the viewport can be matched up by eye.
     ///
-    /// ⛔ A part is a name, a table position and a duration — that is
-    /// everything known about it. It is deliberately not shown beside an
-    /// image, because which image a part draws is not decoded.
+    /// ✅ Since D258 a part also names the images it draws, so they are shown
+    /// here. ⚠️ A list, not a number: 35 parts draw none and some draw twelve.
     fn part_table(ui: &mut egui::Ui, entry: &effects::Entry, time: f32) {
         ui.label(egui::RichText::new("parts").strong());
         egui::Grid::new("effect-parts")
-            .num_columns(6)
+            .num_columns(7)
             .striped(true)
             .show(ui, |ui| {
-                for heading in ["", "part", "composed", "index", "frames", "seconds"] {
+                for heading in [
+                    "", "part", "composed", "index", "frames", "seconds", "images",
+                ] {
                     ui.label(egui::RichText::new(heading).weak().small());
                 }
                 ui.end_row();
@@ -525,6 +530,22 @@ impl Viewer {
                     ui.label(egui::RichText::new(part.index.to_string()).monospace());
                     ui.label(egui::RichText::new(part.frames.to_string()).monospace());
                     ui.label(egui::RichText::new(format!("{:.3}", part.seconds)).monospace());
+                    // "none" rather than a blank cell: empty reads as data the
+                    // viewer failed to load, and this is a fact about the part
+                    // — its material carries the documented null.
+                    let images = if part.pictures.is_empty() {
+                        egui::RichText::new("none").weak().small()
+                    } else {
+                        egui::RichText::new(
+                            part.pictures
+                                .iter()
+                                .map(|picture| picture.image.to_string())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                        )
+                        .monospace()
+                    };
+                    ui.label(images);
                     ui.end_row();
                 }
             });
@@ -561,14 +582,13 @@ impl Viewer {
 
     /// The effect system's image bank, as a strip under the effect.
     ///
-    /// ⛔ **Nothing in this strip is paired with a part above, and the panel
-    /// says so.** Which image a part draws is not decoded: six candidate
-    /// fields have been refuted, so this is the bank as a whole, selected by
-    /// the disc file it comes from and shown in catalog order. Ordering it by
-    /// anything a part carries would invent a mapping.
+    /// ⚠️ **This strip is the bank as a whole, in catalog order** — it is the
+    /// browser, not the binding. A part's own image is in its `pictures` and
+    /// is shown in the part table; ordering this strip by anything a part
+    /// carries would invent a second, different mapping.
     ///
-    /// Clicking one puts it on the part the viewport is previewing. That is a
-    /// choice the user made and the labels say so; it is not a binding.
+    /// Clicking one puts it on the part the viewport is previewing, as an
+    /// override. That is a what-if the user asked for, and the label says so.
     ///
     /// ⚠️ Unlike the texture grid this is not virtualised, and can stay that
     /// way only because the bank is one disc file — 219 images — where the
@@ -591,9 +611,9 @@ impl Viewer {
                 ui.separator();
                 ui.label(
                     egui::RichText::new(
-                        "which image a part draws is not decoded — nothing here \
-                         is paired with a part. Click one to preview it on the \
-                         part you chose above.",
+                        "the whole bank, in catalog order. Each part's own \
+                         image is listed in the parts table. Click one to try \
+                         it on the part you chose above, overriding that.",
                     )
                     .color(UNDECODED)
                     .small(),

@@ -102,12 +102,14 @@ What the report settles is that the manifest and the renderer agree: the parts
 called running are the parts that reach the pixels, every part declaring a
 picture gets one, and the drawn area falls as parts end.
 
-**Colour spread above 0.015 means an image reached the surface** — measured
-across 60 real models, the untextured ones reach 0.007 and the textured ones
-start at 0.023. ⚠️ A *greyscale* image spreads like a bare model, which is why
-the verdict says "bare, or a greyscale image" and not "bare". ⛔ **Neighbour
-step decides nothing**; it is printed, and D253 records the two measurements
-that took it out of the verdict.
+⛔ **Colour spread does not separate a textured model from a bare one**, and the
+0.015 threshold this paragraph used to quote is dead. D251 taught the renderer to
+draw `COLOR_0`, and 41 models that name no image are painted entirely from their
+vertices — `e_big_nok` reaches **1.426** with nothing bound to it, against
+`e_lui_robo`'s 0.758 with fifteen images. The verdict reads the **image count**
+from the file; spread only says the frame is not one flat tint. ⚠️ A greyscale
+image still spreads like a bare model — `OFF_doorL` is 0.011. ⛔ **Neighbour step
+decides nothing**; D253 records the two measurements that took it out.
 
 Every other command line still opens the window, unchanged.
 
@@ -170,12 +172,15 @@ exclusive end would make every single-frame part invisible at every time.
 records and says which parts are running; an effect's behaviour is compiled
 PowerPC, and an approximation of an emitter would look plausible and be wrong.
 
-⛔ **Which image a part draws is not decoded**, and the window must never
-imply that it is. Six candidate fields have been refuted (`docs/decision-log.md`
-D210), so the 219 images from `files/eff/effdata.tpl` are shown as the effect
-system's bank as a whole — separate from the part list, selected by disc file,
-and labelled with that limit. Pairing a part with an image would look exactly
-like a decoded fact.
+✅ **Which image a part draws is decoded** (`docs/decision-log.md` D258), so a
+part is drawn with its own artwork and the parts table lists its image indices.
+The 219 images from `files/eff/effdata.tpl` are still shown as a bank strip —
+that is the browser, in catalog order, and clicking one previews it on a part as
+an explicit override rather than as a claim.
+
+⛔ **Where the parts sit is still not decoded.** The node transforms are read
+and not applied, so the layout is a display choice, and the window says so in
+the same amber it once used for the images.
 
 **Sounds** — the 135 tracks from `sounds.json`: a searchable, virtualised list,
 the facts `bleck` recorded about each one, play / pause / stop with a seek

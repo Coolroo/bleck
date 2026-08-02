@@ -51,12 +51,18 @@ pub const DIVIDER: Rgba = Rgba::new(120, 124, 132);
 const SHEET_PITCH: f32 = 0.35;
 
 /// Under this a frame's colours are one surface tint at different
-/// brightnesses — a flat-shaded model, or a textured one whose images did not
-/// arrive. See `Coverage::spread`.
+/// brightnesses. See `Coverage::spread`.
 ///
-/// Measured across 60 whole models of a real export: the 30 carrying no image
-/// spread at most 0.007, and the 30 carrying one spread at least 0.023, with
-/// one exception either side of nothing. This sits between them (D253).
+/// ⛔ **The calibration that chose this number no longer holds.** D253
+/// measured 60 models — the 30 with no image spread at most 0.007, the 30 with
+/// one at least 0.023 — and picked the midpoint. Then D251 taught the renderer
+/// to draw `COLOR_0`, and the untextured half moved: `e_big_nok` names no
+/// image and now spreads **1.426**, above `e_lui_robo`'s 0.758 with fifteen.
+///
+/// The threshold survives because the question it answers changed with it.
+/// It no longer means "an image reached this" — `Report` reads the image count
+/// from the file for that — only "these pixels are not one flat tint", which
+/// is still worth saying and is still true either side of 0.015.
 const FLAT_SPREAD: f32 = 0.015;
 
 pub const USAGE: &str = "\

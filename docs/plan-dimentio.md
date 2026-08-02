@@ -21,7 +21,7 @@ put in it.
 |---|---|---|
 | **Textures** | ✅ TPL parsed and decodable (D187) | **Yes, today** |
 | **Effect textures** | ✅ Same — `effdata.tpl` is 219 images | **Yes, today** |
-| **Effect definitions** | 🔶 `effdata.dat` undecoded, but *small* | Tractable |
+| **Effect definitions** | ✅ `effdata.dat` largely decoded, including which image each part draws (D258) | Done |
 | **Effect behaviour** | ✅ 174 named, ⛔ each is DOL code | List only |
 | **Models** | 🔶 Container format unidentified | No — needs research first |
 | **Animations** | 🔶 Only the *name* of a table is known | No |
@@ -188,7 +188,7 @@ three different things, and only two are reachable:
 | | |
 |---|---|
 | Its **textures** | ✅ `files/eff/effdata.tpl` (219 images), `effect.tpl` (41). Viewable as soon as Stage 1 works |
-| Its **definition** | 🔶 `effdata.dat` sits beside `effdata.tpl` and is undecoded. Almost certainly the particle/emitter parameters, and it is *one file*, not a 1,687-file family — a far smaller target than the model container |
+| Its **definition** | ✅ `effdata.dat` sits beside `effdata.tpl` and is largely decoded (D190, D191, D258): 139 effects, 704 parts, and the five-hop chain from a part to its image. ⛔ Node transforms are read but not applied, so placement is still invented |
 | Its **behaviour** | ⛔ Compiled PowerPC. A viewer cannot run it; only the game can. Listing name, address and textures is the honest ceiling |
 
 🟢 So: show every effect by name with its textures, and treat `effdata.dat` as
