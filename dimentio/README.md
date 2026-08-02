@@ -12,11 +12,16 @@ cargo run -- ../work/export        # a folder bleck exported into
 Four modes over the same folder: **Textures**, **Models**, **Effects** and
 **Sounds**.
 
-## Without a screen: `dimentio shot`
+## Without a screen: `dimentio shot` and `dimentio reel`
 
-Render a model to a PNG and exit. No window, no GPU, no display — the same
+Render straight to a PNG and exit. No window, no GPU, no display — the same
 software rasteriser the viewport draws through, writing a file instead of a
-texture handle (D253).
+texture handle (D253, D257).
+
+`shot` takes a **model** and gives you one instant from several angles. `reel`
+takes an **effect** and gives you one angle at several instants. The split
+follows what there is to check: a model's problem is its shape from some
+direction, an effect's is *when* its parts run.
 
 ```bash
 cargo run --release -- shot ../work/export/models/files/a/e_lui_robo.glb --out robo.png
@@ -46,8 +51,49 @@ learns something from it:
 rest pose
 4 angle(s) into 1026x1026
 model covers 4.5% of the sheet
-colour spread 0.218, neighbour step 0.059 — an image reached it
+colour spread 0.758, neighbour step 0.045 — an image reached it
 ```
+
+⛔ **Colour spread does not mean "an image reached it"** — 41 models name no
+image and are painted entirely by vertex colour, and `e_big_nok` is the most
+colourful thing in the export at 1.426 with nothing bound to it. The image
+count, read from the file, is what the verdict uses.
+
+### `dimentio reel` — an effect across its own timeline
+
+```bash
+cargo run --release -- reel --effect chaos --export ../work/export --out chaos.png
+```
+
+| option | |
+|---|---|
+| `--effect <name>` | which effect, as `bleck effect list` names it. Required |
+| `--out <file.png>` | where to write. Required |
+| `--export <dir>` | folder holding `effects.json`. Default `work/export` |
+| `--frames 9` | frames sampled across the effect, into one sheet |
+| `--size 320` | edge of one frame |
+| `--background checkerboard` | as above |
+
+```
+chaos — 4 part(s), 3.00s, 181 frame(s) long
+9 frame(s) sampled into 664x664
+  frame    1 at  0.000s — 4 active, 4 visible, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 visible, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 visible, 1.5% drawn
+2 of 8 frame pair(s) differ
+every active part reached its frame
+no part carries an image: which image a part draws is not decoded …
+```
+
+⛔ **This is the timeline, not the artwork.** Which image a part draws is not
+decoded, so each part is a flat colour from a six-entry palette and its position
+is a display choice rather than a decoded scene graph. A grid of coloured quads
+is exactly what someone would later quote as a picture of the effect, so the
+caveat is printed on every run.
+
+What it *does* settle is that the manifest and the renderer agree: the parts
+called running are the parts that reach the pixels, and the drawn area falls as
+parts end.
 
 **Colour spread above 0.015 means an image reached the surface** — measured
 across 60 real models, the untextured ones reach 0.007 and the textured ones

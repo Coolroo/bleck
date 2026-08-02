@@ -17540,3 +17540,335 @@ version of that mistake is building one that already exists.
 ⛔ **Nothing here was measured in the running game.** These are reads of the
 repository's own source, which is the right instrument for "does this flag
 exist" and the wrong one for anything about the disc.
+
+## D257 — Effects get a per-frame reel, and it reports the timeline rather than the artwork (2026-08-02)
+
+`dimentio shot` let an agent look at a model without a screen (D253). Effects
+needed the same, and the goal was stated that way: *screenshots of effects per
+frame, used to validate that they're working*. The result is
+**`dimentio reel`**.
+
+```
+cargo run -- reel --effect chaos --export ../work/export --out chaos.png --frames 9
+```
+
+### ✅ A separate command, not `shot --effect`
+
+A shot is **one instant from several angles**; a reel is **one angle at several
+instants**. That is not cosmetic. What there is to check about a model is its
+shape from every side — a stray shape off to one edge, a surface that vanishes
+when its back is turned. What there is to check about an effect is *when* its
+parts run. Folding both into one command would have meant `--angles` and
+`--frames` that are mutually meaningless in each mode.
+
+⚠️ `dimentio shot --effect …` is nonetheless an easy guess, so `main` answers it
+with `reel`'s usage rather than "unknown option `--effect`".
+
+The two share the sheet machinery — grid, gutter, blit, `measure`, PNG writing —
+which was made `pub` in `shot.rs` rather than copied. Two contact-sheet layouts
+would drift, and a reader comparing a model sheet against an effect sheet would
+be measuring the difference between the writers.
+
+### ⛔ What this deliberately does not show
+
+**It is not a picture of the effect.** Which image a part draws is still not
+decoded (D210 refutes six candidate fields; D218 puts the real reference one hop
+further out), so every part is drawn as a flat colour from a six-entry palette,
+and its position is a deterministic display choice rather than a decoded scene
+graph.
+
+A grid of coloured quads is *exactly* what someone would later quote as "here is
+what `chaos` looks like". So the report prints the caveat on **every run**, and
+the count of parts carrying an image is **measured from the meshes** rather than
+written down as zero — the day a binding lands it starts reporting the truth
+with nothing to remember to change. A hardcoded `0` would have outlived the
+limitation silently.
+
+### ✅ What it does settle
+
+That the effect data and the renderer agree. Per frame it reports the parts the
+manifest says are running, how many of those reached the pixels, and the share
+of the cell drawn. On `chaos` — the effect whose five-fold ring was measured
+in-game (D172, D173):
+
+```
+chaos — 4 part(s), 3.00s, 181 frame(s) long
+  frame    1 at  0.000s — 4 active, 4 visible, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 visible, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 visible, 1.5% drawn
+```
+
+4 → 2 → 1 as its parts end, with the pixels agreeing at every frame, and the
+drawn area falling with the count. A sweep test reels **every** real effect and
+asserts each one draws at its first frame.
+
+### ✅ Three things the tests caught, all in the test rather than the code
+
+1. **A part is still running at exactly its own duration.** Five samples over
+   two seconds gave `2, 2, 1, 1, 1`, not the `2, 1, 1, 1, 1` first written down.
+   The end is inclusive because the frame count is — already documented on
+   `Part::active_at`, and still got written the other way.
+
+2. ⛔ **The palette repeats after six, so the pixels cannot separate a seventh
+   part from the first.** Counting *parts whose colour appears* would report
+   seven of seven present when one had drawn. The verdict is now measured
+   against `distinct` — how many of the running parts are tellable apart at all
+   — which is the honest ceiling. Against `active` it would have reported a
+   fault for every effect with more than six parts, forever, on no evidence.
+
+3. ⛔ **The first control was wrong and failed loudly, which is the good case.**
+   It tried to force one quad behind another by pointing two parts' rows down
+   the same axis. `Camera::fit` returns a three-quarter view, so they never
+   overlapped. Reaching for the occlusion again would have meant hard-coding the
+   fit's angles into a test, which breaks silently the day the fit changes — so
+   the control is now a direct check that the counting can return *less* than it
+   was given, which a render on this layout never produces.
+
+⚠️ Point 3 is the standing pattern from the rule at the top of this file: the
+agreement between `active` and `visible` is worth nothing unless the two are
+shown to be measured separately. A `visible` that echoed `active` would have
+agreed with every frame of all 139 effects and looked like a sweep.
+
+### Rejected
+
+- ⛔ **Drawing a part with a guessed image.** Indexing the effect bank by a
+  part's index, frame count or table position would produce something that looks
+  exactly like a measured fact. This is the same refusal `data::effects` already
+  makes for the window.
+- ⛔ **Nine cells for a one-frame effect.** Sampling is clamped to the effect's
+  own length; nine identical pictures would read as an animation that is not
+  there.
+- ⛔ **Refitting the camera per frame.** A part ending would rescale the view,
+  and the rest of the effect would appear to move.
+
+### ⛔ Side finding: the `render-to-look` skill's spread table was inverted by D251
+
+Writing the reel's caveats meant re-reading the model shot's, and the skill's
+central table no longer described the tool. It said colour spread separates a
+textured model from a bare one:
+
+| | skill said | measured today |
+|---|---|---|
+| `e_big_nok` (0 images) | 0.007 | **1.426** |
+| `e_lui_robo` (15 images) | 0.218 | 0.786 |
+| `OFF_doorL` (2 images) | 0.010 | 0.011 |
+
+**The bare model is now the most colourful of the three**, because D251 taught
+the renderer to draw `COLOR_0` and 41 models that name no image are painted
+entirely by vertex colour. `shot.rs` was updated at the time and its verdict
+already keys off the image count; the skill was not, and still carried the old
+threshold table plus a flat claim that *"`dimentio` still does not read
+`COLOR_0`"* — which `render/mod.rs` had stopped being true.
+
+⚠️ **The skills travel and `CLAUDE.md` does not** (D149), so a stale skill is
+the copy that reaches another machine. D256 found four wrong statements in
+`CLAUDE.md` by reading the source; this is the same rot one directory over, and
+the lesson is the same — **a document that quotes measurements has to be re-run
+against the code, not re-read.** The numbers above were measured, not recalled.
+
+## D258 — Which image an effect part draws, and the five sections between them (2026-08-02)
+
+✅ **Verified, and it closes task #26.** The part→image link exists, it is
+**five hops** past `Part.first`, and every hop was read off the draw code rather
+than fitted to the bytes. Seven candidates had been refuted (D190, D195, D196,
+D210); none of them was a texture index because the texture index is not stored
+anywhere near a part.
+
+### The chain
+
+```
+part (section 1) +0x10  "first", s16, 0xFFFF = null
+  + effect (section 0) +0x28  "extra"          -> section  9  node, 20 bytes
+node +0x04  s16, -1 = no geometry              -> section  7  draw, 6 bytes
+draw +0x00 start, +0x02 count                  -> section  8  subdraws, 8 bytes
+subdraw +0x00  u16, x16                        -> section  5  material, 16 bytes
+material +0x0C  s16, -1 = untextured, x28      -> section  4  texture, 28 bytes
+texture +0x00  s16                             =  the effdata.tpl image index
+```
+
+⚠️ **A part draws a *set* of images, not one.** Its node subtree can hold
+several draw records and each holds several subdraws. 560 of 704 parts resolve
+to exactly one image; the widest is `mini_result A_4` at twelve.
+
+### What the code says
+
+`0x8005f920` walks an effect's parts and hands each root node to `0x8005f1a8`,
+which is the **scene-graph node evaluator** — not, as D218 read it, the place
+the drawing fields live. Its tail is where the geometry is reached:
+
+```
+8005f74c:  lha  r4,4(r30)          ; node +0x04
+8005f750:  cmpwi r4,-1
+8005f754:  beq  0x8005f7ac         ; -1 -> this node draws nothing
+8005f7a8:  bl   0x8005c47c
+```
+
+and `0x8005c47c` opens with the section-7 stride, which is what fixes the
+target:
+
+```
+8005c520:  mulli r0,r4,6           ; x 6
+8005c528:  lwz   r4,28(r3)         ; struct +0x1C = section 7
+8005c54c:  add   r14,r4,r0
+```
+
+Then per section-8 subdraw, `0x8005ccac` reaches the material and
+`0x8005d02c` reaches the texture record:
+
+```
+8005cc34:  lhz  r0,0(r14)          ; sec7 +0x00 start
+8005cc3c:  lwz  r5,32(r21)         ; struct +0x20 = section 8
+8005cc44:  slwi r4,r0,3            ; x 8
+8005ccac:  lhz  r4,0(r15)          ; sec8 +0x00
+8005ccc0:  slwi r6,r4,4            ; x 16
+8005cccc:  lwz  r7,20(r21)         ; struct +0x14 = section 5
+8005cce4:  stw  r0,652(r1)
+
+8005d030:  lha  r0,12(r3)          ; sec5 +0x0C
+8005d04c:  lwz  r4,16(r21)         ; struct +0x10 = section 4
+8005d050:  mulli r3,r0,28          ; x 28
+8005d080:  lha  r0,0(r16)          ; sec4 +0x00  <- THE IMAGE INDEX
+8005d0a4:  lbz  r4,2(r16)          ; sec4 +0x02  = wrap bits
+8005d0ac:  lwz  r5,72(r1)
+8005d0b0:  bl   0x8004caec         ; TPL bind -> GXInitTexObj / GXLoadTexObj
+```
+
+🟢 **The 16 header words are the struct.** Every access above is a fixed offset
+into the same pointer — `+0x00` section 0, `+0x04` section 1, … `+0x3C` section
+15. D199 said the loader rewrites the header in place; this is what it is
+rewriting it *for*.
+
+### The bound the search was looking for
+
+`0x8005fb80` unpacks a texture request and range-checks it against
+`effsub_wp+0x14` — the 219 D201 found:
+
+```
+8005fb88:  rlwinm r5,r3,16,17,31   ; (id >> 16) & 0x7FFF = image index
+8005fbc8:  lwz    r0,20(r8)        ; effsub_wp+0x14 = 219
+8005fbcc:  cmplw  r5,r0
+8005fbd0:  bgelr                   ; out of range -> do nothing
+```
+
+✅ `-30492(r13)` = `0x805AE7E4`, which the symbol list names **`effsub_wp`** —
+so D218's r13 = `0x805B5F00` is confirmed a second time.
+
+### The file agrees, exactly
+
+| | measured | bound | out of range |
+|---|---|---|---|
+| sec4 `+0x00` image index | 0..218, **219 distinct** | 219 | **0 of 350** |
+| sec5 `+0x0C` → sec4 | -1..349, 20 nulls | 350 | 0 of 524 |
+| sec8 `+0x00` → sec5 | 0..522, 523 distinct | 524 | 0 of 2,960 |
+| sec7 start+count → sec8 | max **2,960** | 2,960 | exact |
+| sec9 `+0x04` → sec7 | -1..2,955, 1,113 nulls | 2,960 | 0 of 3,739 |
+| `extra + part.first` → sec9 | max **3,737** | 3,739 | 0 of 704 |
+
+🟢 **All 219 images are referenced and none is orphaned.** That is the closing
+invariant: the count the game's loader reads, the count of images in the TPL,
+and the count of distinct values in section 4 are the same number, reached three
+independent ways.
+
+⚠️ **35 of 704 parts resolve to no image.** Every one of them *has* draw
+records; their materials carry `+0x0C = -1`, which is the documented null for
+untextured geometry. **Zero parts fail to reach a draw record**, so this is a
+property of the data and not a gap in the reading.
+
+### The control, because "in range" is cheap
+
+At stride 28, six other `s16` offsets also sit inside 0..218 — and they have
+**1 to 16 distinct values** because they are mostly zero. Only `+0x00` has 219.
+At strides 20, 24, 26, 30, 32 and 36 the field goes out of range and never
+covers the bank. The discriminating statistic is *distinct == 219*, not
+*in range*.
+
+### The strongest evidence is a part that names its own texture
+
+The last effect record, `system`, has parts called `EnvSpeculer0`,
+`IndTexture0`, `IndTexture1`, `IndTexture2` and `ClipTexture0`. The chain
+resolves them to images 147, **216**, 115, **217** and **218**.
+
+- 216 and 217 are **noise fields** — which is what an *indirect* texture is.
+- 218 is a **plain white square** — which is what a clip texture is.
+- `mini_totalscore`'s seven digit parts all resolve to image **202**, which is a
+  **0-9 seven-segment sheet**.
+- `sweat` → a blue droplet. `item_fire` → a flame. `dmen_explosion` → a yellow
+  starburst. `item_blizzard` → pale blue snow streaks.
+
+⚠️ **The hearts are not heart-shaped, and that is not a problem.** `chaos`
+resolves to images 23, 15, 24, 14 — 8x8 and 16x16 gradient ramps. The shape
+comes from **geometry**, not a sprite (see below), so a soft ramp is exactly
+right. Expecting a heart-shaped texture would have refuted a correct answer.
+
+### What D218's five fields actually are
+
+⛔ **They are not drawing fields.** `0x8005f1a8` is a scene-graph node
+evaluator, and `PSMTXTrans` / `PSMTXScale` at `0x8027a7b4` / `0x8027a834` name
+it. A **section-9 node**, 20 bytes, 3,739 of them:
+
+| | |
+|---|---|
+| `+0x00` s16 | **sibling**, relative to `extra`, -1 = end. Gets the *parent's* matrix |
+| `+0x02` s16 | **child**, relative to `extra`, -1 = none. Inherits the *accumulated* matrix |
+| `+0x04` s16 | → section 7 draw record, -1 = no geometry |
+| `+0x06` s16 | → section 6, **x48** — a 3x4 matrix, concatenated |
+| `+0x08` s16 | → section 12, x12 — **translation** vec3 |
+| `+0x0A` s16 | → section 12 — **rotation** vec3, degrees, X/Y/Z = axes 120/121/122 |
+| `+0x0C` s16 | → section 12 — **scale** vec3 |
+| `+0x0E` u8 | **alpha**; `a = parent x (own + 1) >> 8`. 255 in 3,127 of 3,739 |
+| `+0x0F` u8 | **billboard**; non-zero subtracts the camera's Y angle from `+0x0A`'s Y |
+| `+0x10` s16 | → section 10, first animation channel |
+| `+0x12` s16 | channel count, 0..6 |
+
+✅ Two invariants confirm the reading. Section 6 record 1 is the **exact
+identity 3x4 matrix** `[1,0,0,0, 0,1,0,0, 0,0,1,0]`. And `+0x10 + +0x12` reaches
+**4,752**, precisely section 10's record count.
+
+🟢 **Section 10's `tag` is which scalar the curve drives.** `0x8005f3cc` does
+`lwz r6,0(r4); slwi r6,r6,2; stfsx f0,r7,r6` into a **ten-float** block — and
+the tag's measured range is exactly **0..9**: translate XYZ, rotate XYZ, scale
+XYZ, alpha. D190 recorded the range and could not say what it meant.
+
+### And the rest of the file falls out with it
+
+| | |
+|---|---|
+| sec 3 | **360 GX display lists.** u32 size, padded to 32, then `0xA0` — `GX_TRIANGLEFAN`+`VTXFMT0` — at **all 360**. The size chain tiles the section exactly |
+| sec 4 | 350 texture records, 28 bytes. `+0x02` wrap bits (0/1 = repeat S/T, 2/3 = mirror), five floats at `+0x04`, `+0x18`/`+0x1A` → section 10 |
+| sec 5 | 524 materials, 16 bytes. `+0x00..03` **RGBA** (233 are opaque white), `+0x0A` enable, `+0x0C` → section 4 |
+| sec 6 | **1,349 3x4 matrices** of 48 bytes, not 4,048 rows of four floats |
+| sec 7 | 2,960 draw records of **6** bytes — ⛔ not D218's guess of 888 of 20. `+0x04` selects a blend mode via a jump table at `0x80407ef0` |
+| sec 8 | 2,960 subdraws. `+0x02` bits 1/2/3 enable NRM/CLR0/TEX0; `+0x04` is **one u32** display-list offset, not two u16 |
+| sec 11 | `GXSetArray(GX_VA_TEX0, stride 8)` at `0x8005cda4` |
+| sec 12 | 1,341 vec3 f32 |
+| sec 13 | `GXSetArray(GX_VA_POS, stride 6)` at `0x8005cd2c` |
+| sec 14 | `GXSetArray(GX_VA_NRM, stride 3)` |
+| sec 15 | `GXSetArray(GX_VA_CLR0, stride 4)` — 56 colours |
+
+⚠️ **Section 8's `+0x04` being "always a multiple of 32" was the tell and was
+read as a stride.** It is a GX display list offset, and GX display lists must be
+32-byte aligned. The three-u16 reading in `effdata.py` split a u32 in half.
+
+### Why `Part.first` looked like a running index
+
+⛔ D210 refuted it for being consecutive across an effect's parts — `chaosA` 0,
+`chaosC` 1, `chaosD` 2. It **is** consecutive, and now for a reason: each part's
+root node sits at the start of that effect's block in section 9, and `first` is
+an offset *within the block*. The observation was right; the conclusion that it
+led nowhere was not.
+
+### The method, for the sixth time
+
+⛔ Nine strides scanned across every section found no field in 0..218 with
+enough distinct values (D210) — because the field is in a section that scan
+could not have connected to a part. The disassembly reached it in one sitting.
+
+⚠️ The first walk of the node tree used **absolute** sibling/child indices and
+reached 649 of 3,739 nodes and 73 of 219 images. They are **relative to the
+effect's base**, which the argument register at `0x8005f7e8` states outright.
+The 73 would have read as a plausible partial answer; the 219 is what says the
+reading is complete.
+
+**Rejected:** stopping at "section 9 node → its own fields", which is where D218
+stopped. The node holds transform and hierarchy; the texture is three sections
+further on, and no amount of staring at a 20-byte record would have produced it.

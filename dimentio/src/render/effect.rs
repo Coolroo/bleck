@@ -67,6 +67,23 @@ pub fn colour(part: usize) -> Rgba {
     PALETTE[part % PALETTE.len()]
 }
 
+/// The colour part `part` actually lands in the frame as, once the billboard
+/// lighting has been applied — which is what a caller counting parts in a
+/// rendered image has to look for. `colour` alone never appears in a frame.
+///
+/// ⚠️ **Derived by lighting a real quad, not by writing the factor down.** A
+/// constant here would be a second copy of the shading rule and would drift
+/// from the first one silently, leaving a caller searching a frame for a shade
+/// nothing draws in. Every quad faces the camera, so one of them answers for
+/// all of them.
+pub fn lit(camera: &Camera, part: usize) -> Rgba {
+    let basis = Basis::of(camera);
+    let mesh = quad(&basis, Vec3::ZERO, None);
+    let corners = mesh.positions();
+    let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
+    colour(part).shaded(intensity)
+}
+
 /// The parts running at `time`, as camera-facing quads.
 ///
 /// Which parts those are comes from `Entry::active_at`, the same rule that
@@ -382,6 +399,26 @@ mod tests {
         let mesh = quad(&basis, Vec3::ZERO, None);
         let corners = mesh.positions();
         crate::render::raster::lighting(&basis, &[corners[0], corners[1], corners[2]])
+    }
+
+    /// ⚠️ `lit` is what a caller with no screen searches a frame for, so it has
+    /// to agree with the shade the rasteriser actually lays down. This checks it
+    /// against `billboard_light`, which derives the factor a second and
+    /// independent way — and against the pixels, which are the real authority.
+    #[test]
+    fn lit_reports_the_shade_a_part_is_really_drawn_in() {
+        let entry = effect(&[1.0, 1.0]);
+        let camera = Camera::fit(bounds(&entry));
+        let seen = shades(&shot(&entry, 0.5, None));
+        for part in 0..2 {
+            assert_eq!(lit(&camera, part), colour(part).shaded(billboard_light()));
+            assert!(
+                seen.contains(&lit(&camera, part)),
+                "part {part} is drawn as {:?}, which is not in {seen:?}",
+                lit(&camera, part)
+            );
+        }
+        assert_ne!(lit(&camera, 0), colour(0), "the light was never applied");
     }
 
     #[test]

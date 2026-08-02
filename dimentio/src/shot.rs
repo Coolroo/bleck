@@ -33,13 +33,17 @@ const DEFAULT_ANGLES: usize = 4;
 
 /// Bounds on both counts. A typo in `--size` would otherwise ask for an
 /// allocation no machine has, and the failure would be a kill, not a message.
-const SIZE_LIMIT: std::ops::RangeInclusive<usize> = 16..=4096;
+pub const SIZE_LIMIT: std::ops::RangeInclusive<usize> = 16..=4096;
 const ANGLE_LIMIT: std::ops::RangeInclusive<usize> = 1..=16;
 
 /// Pixels between cells of the contact sheet, in a colour neither background
 /// uses, so where one view ends and the next begins is never in doubt.
-const GUTTER: usize = 2;
-const DIVIDER: Rgba = Rgba::new(120, 124, 132);
+///
+/// ⚠️ Shared with `reel`, which lays frames out in the same grid. Two constants
+/// would let the two sheets drift apart, and a reader comparing a model sheet
+/// against an effect sheet would be measuring the difference.
+pub const GUTTER: usize = 2;
+pub const DIVIDER: Rgba = Rgba::new(120, 124, 132);
 
 /// How far above the horizon every view of the sheet looks from. Straight on
 /// hides the top of a model completely, and a model's top is where an
@@ -246,7 +250,7 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
     })
 }
 
-fn number(flag: &str, text: &str) -> Result<usize, String> {
+pub fn number(flag: &str, text: &str) -> Result<usize, String> {
     text.parse()
         .map_err(|_| format!("{flag} wants a whole number, not {text:?}"))
 }
@@ -254,7 +258,7 @@ fn number(flag: &str, text: &str) -> Result<usize, String> {
 /// A background by name, matched against the labels the window shows, with
 /// spaces written as dashes. Reusing them keeps the two ways of choosing a
 /// backdrop from drifting apart.
-fn named_background(name: &str) -> Result<Background, String> {
+pub fn named_background(name: &str) -> Result<Background, String> {
     let wanted = name.trim().to_lowercase().replace(' ', "-");
     render::BACKGROUNDS
         .into_iter()
@@ -328,10 +332,10 @@ fn hold(mesh: &mut Mesh, clip: usize, frame: usize) -> Result<Held, String> {
 }
 
 /// A contact sheet under construction, and what has been drawn into it.
-struct Sheet {
-    size: Size,
-    pixels: Vec<u8>,
-    coverage: Coverage,
+pub struct Sheet {
+    pub size: Size,
+    pub pixels: Vec<u8>,
+    pub coverage: Coverage,
 }
 
 /// How much of a frame the model reached, and how varied its colours were.
@@ -368,7 +372,7 @@ impl Coverage {
         self.drawn as f32 / self.total as f32
     }
 
-    fn add(&mut self, other: Self) {
+    pub fn add(&mut self, other: Self) {
         // Both measures are averaged by the pixels behind them, so a view that
         // drew almost nothing cannot swing the sheet's figures. A flat card is
         // invisible from two of four angles, and those two must not count.
@@ -501,7 +505,7 @@ fn draw(mesh: &Mesh, request: &Request) -> Sheet {
 }
 
 /// As square a grid as the count allows, widest side first.
-fn grid_columns(angles: usize) -> usize {
+pub fn grid_columns(angles: usize) -> usize {
     let mut columns = 1;
     while columns * columns < angles {
         columns += 1;
@@ -509,11 +513,11 @@ fn grid_columns(angles: usize) -> usize {
     columns.max(1)
 }
 
-fn divided(size: Size) -> Vec<u8> {
+pub fn divided(size: Size) -> Vec<u8> {
     [DIVIDER.r, DIVIDER.g, DIVIDER.b, 255].repeat(size.pixels())
 }
 
-fn blit(sheet: &mut Sheet, image: &Image, left: usize, top: usize) {
+pub fn blit(sheet: &mut Sheet, image: &Image, left: usize, top: usize) {
     let cell = image.size();
     let source = image.as_rgba();
     for y in 0..cell.height {
@@ -528,7 +532,7 @@ fn blit(sheet: &mut Sheet, image: &Image, left: usize, top: usize) {
 }
 
 /// Write RGBA8 out as a PNG, creating the folder above it if it is missing.
-fn write_png(path: &Path, pixels: &[u8], size: Size) -> Result<(), String> {
+pub fn write_png(path: &Path, pixels: &[u8], size: Size) -> Result<(), String> {
     if let Some(folder) = path
         .parent()
         .filter(|folder| !folder.as_os_str().is_empty())

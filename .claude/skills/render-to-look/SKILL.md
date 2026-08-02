@@ -1,6 +1,6 @@
 ---
 name: render-to-look
-description: Use when a model, texture or animation export needs eyes on it and you have no screen — `dimentio shot` renders a .glb to a PNG contact sheet you can read directly, instead of costing a human a day of round trip. Covers the flags, the colour-spread self-check and its blind spots.
+description: Use when a model, effect, texture or animation export needs eyes on it and you have no screen — `dimentio shot` renders a .glb to a PNG contact sheet and `dimentio reel` renders an effect across its own timeline, both readable directly instead of costing a human a day of round trip. Covers the flags, the self-checks and their blind spots.
 ---
 
 # Render to look
@@ -68,21 +68,27 @@ plausible image for a broken model is worse than none.
 **Colour spread** — RMS scatter of each drawn pixel's tint about the frame mean,
 **with luminance divided out**, because shading alone swings a bare surface from
 ambient to full and raw RGB variance cannot tell a lit grey model from a painted
-one. Threshold **0.015**, measured over 60 whole models of the real export:
+one.
 
-| | models | spread |
+⛔ **Spread no longer means "an image reached it", and the table that said so is
+gone** (D251). Once the renderer learned to draw `COLOR_0`, 41 models that name
+no image at all became vividly coloured. Measured on this export today:
+
+| model | images | spread |
 |---|---|---|
-| `textured: false` | 30 | 0.000 – **0.007** |
-| carrying an image | 30 | **0.023** – 1.559 (one at 0.000) |
+| `e_big_nok` | **0** | **1.426** |
+| `e_lui_robo` | 15 | 0.786 |
+| `OFF_doorL` | 2 | 0.011 |
 
-`e_lui_robo` reads 0.218; `e_big_nok`, no image, reads 0.007. The one crosser is
-`MOBJ_EFF_mahojin_ura`, a magic circle whose image carries no colour.
+The bare model is now the *most* colourful of the three. **`images`, read from
+the file, is the verdict**; spread only says the frame is not one flat tint,
+which is a weaker and true statement. The three verdict strings are `an image
+reached it`, `no image: drawn with vertex colour`, and `no image, and one flat
+tint`.
 
-⚠️ **Colour spread cannot see a greyscale image.** `OFF_doorL` carries two
-images and reads 0.010, under the threshold, so the verdict says *"one tint:
-bare, or a greyscale image"* rather than "bare". Both numbers are printed; the
-tool does not claim more than it measured. **Do not read a sub-threshold spread
-as "the texture binding is broken."**
+⚠️ **Spread still cannot see a greyscale image.** `OFF_doorL` carries two images
+and reads 0.011, under the 0.015 threshold. Both numbers are always printed.
+**Do not read a low spread as "the texture binding is broken."**
 
 ⛔ **"Surface detail" is reported and decides nothing.** It was meant to catch
 exactly the greyscale case, and the corpus refuted it rather than tuning it
@@ -93,12 +99,57 @@ refutations are standing tests, one asserting that an untextured model
 out-details a textured one — so if the numbers swap, the reasoning is flagged
 stale.
 
+## Effects: `dimentio reel`
+
+An effect has no shape to walk around; it has a **timeline**. So the effect
+command is one angle at several *instants*, laid out in the same grid (D257):
+
+```powershell
+cargo run --release --manifest-path dimentio/Cargo.toml -- `
+  reel --effect chaos --export work/export --out chaos.png --frames 9
+```
+
+| flag | |
+|---|---|
+| `--effect <name>` | required; as `bleck effect list` names it |
+| `--out <file.png>` | required |
+| `--export <dir>` | folder holding `effects.json`. Default `work/export` |
+| `--frames <n>` | frames sampled across the effect. Default 9, range 1–64 |
+| `--size <px>` | cell edge. Default 320 |
+| `--background <s>` | as for `shot` |
+
+⛔ **The sheet shows the timeline, not the artwork.** Which image a part draws is
+still undecoded (D210 refutes six fields; D218 puts the reference one hop
+further), so every part is a flat colour from a **six-entry palette** and its
+position is a display choice. The report says so on every run. **Never quote a
+reel as "what this effect looks like."**
+
+What it settles is that the data and the renderer agree — per frame it prints
+the parts the manifest calls running, how many reached the pixels, and the area
+drawn:
+
+```
+chaos — 4 part(s), 3.00s, 181 frame(s) long
+  frame    1 at  0.000s — 4 active, 4 visible, 5.2% drawn
+  frame   69 at  1.125s — 2 active, 2 visible, 2.5% drawn
+  frame  136 at  2.250s — 1 active, 1 visible, 1.5% drawn
+```
+
+⚠️ **`visible` is measured against `distinct`, not `active`** — the palette
+repeats after six, so a seventh part is drawn in the first one's shade and the
+pixels cannot separate them. Comparing against `active` would report a fault for
+every effect with more than six parts, forever.
+
+⚠️ **A part is still running at exactly its own duration.** The end is
+inclusive, so sampling five frames over a 2 s effect whose second part lasts
+0.5 s gives `2, 2, 1, 1, 1`.
+
 ## What this does not replace
 
-⛔ **A render by the program under test is not independent of it.** `dimentio`
-still does not read `COLOR_0` (D251), so its picture of a per-vertex-tinted
-model is the old one. The sheet shows what *the rasteriser* draws, which is not
-always what Blender draws.
+⛔ **A render by the program under test is not independent of it.** The sheet
+shows what *the rasteriser* draws, which is not always what Blender draws — and
+when the two disagree, that is a finding about one of them, not proof about the
+export.
 
 What it removes is the round trip for everything short of that: a defect visible
 in a contact sheet no longer costs a day to hear about. Still ask a person for

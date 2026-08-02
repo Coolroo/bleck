@@ -35,12 +35,18 @@
 //!
 //! # Without a screen
 //!
-//! `shot` renders a model straight to a PNG and exits, using the same software
-//! rasteriser the viewport draws through:
+//! Two commands render straight to a PNG and exit, both through the same
+//! software rasteriser the viewport draws with:
 //!
 //! ```text
 //! cargo run -- shot ../work/export/models/files/a/e_lui_robo.glb --out /tmp/robo.png
+//! cargo run -- reel --effect chaos --export ../work/export --out /tmp/chaos.png
 //! ```
+//!
+//! `shot` is one instant of a model from several angles; `reel` is one effect
+//! at several instants of its own timeline. The split is not cosmetic — what
+//! there is to check about a model is its shape from every side, and what there
+//! is to check about an effect is when its parts run.
 //!
 //! ⚠️ Every other command line still opens the window. A bare `dimentio`, and
 //! `dimentio <folder>`, behave exactly as they did. `--help` is the one
@@ -53,17 +59,29 @@ use eframe::egui;
 
 mod app;
 mod data;
+mod reel;
 mod render;
 mod shot;
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        // ⚠️ `shot --effect` is the wrong command and an easy guess, so it is
+        // answered with the right one rather than "unknown option --effect".
+        Some("shot") if args.iter().any(|arg| arg == "--effect") => {
+            eprintln!(
+                "dimentio shot renders a model. For an effect across its timeline:\n\n{}",
+                reel::USAGE
+            );
+            return ExitCode::from(2);
+        }
         Some("shot") => return shot::run(&args[1..]),
+        Some("reel") => return reel::run(&args[1..]),
         Some("-h" | "--help") => {
             println!(
-                "dimentio [<export folder>]   open the window\n\n{}",
-                shot::USAGE
+                "dimentio [<export folder>]   open the window\n\n{}\n\n{}",
+                shot::USAGE,
+                reel::USAGE
             );
             return ExitCode::SUCCESS;
         }
