@@ -19,8 +19,9 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use image::codecs::gif::{GifEncoder, Repeat};
 use image::codecs::png::PngEncoder;
-use image::{ExtendedColorType, ImageEncoder};
+use image::{Delay, ExtendedColorType, Frame as GifFrame, ImageEncoder, RgbaImage};
 
 use crate::data::mesh::Mesh;
 use crate::render::{self, Background, Camera, Image, Rgba, Size, View};
@@ -73,6 +74,8 @@ dimentio shot <model.glb> --out <file.png> [options]
   --angles <n>       views around the model, into one contact sheet. Default 4.
   --clip <n>         morph clip to pose, by index. Default 0.
   --frame <n>        keyframe of that clip to hold. Default: the rest pose.
+  --to <n>           sweep keyframes --frame..--to instead of angles. One cell
+                     each, from one fixed view. Write to .gif to animate.
   --background <s>   dark-grey | checkerboard | gradient. Default checkerboard.
 
 With no arguments at all, dimentio opens its window instead.";
@@ -85,6 +88,10 @@ pub struct Request {
     pub size: usize,
     pub angles: usize,
     pub clip: usize,
+    /// Last keyframe of a sweep. ⚠️ When set, the cells are **keyframes rather
+    /// than angles** and the view is held still — a model turning *and*
+    /// animating at once shows neither clearly.
+    pub upto: Option<usize>,
     /// Which keyframe of `clip` to hold. `None` leaves the model at rest,
     /// which is what a model carrying no animation can do.
     pub frame: Option<usize>,
@@ -96,6 +103,11 @@ pub struct Request {
 pub struct Report {
     pub sheet: Size,
     pub angles: usize,
+    /// Keyframes rendered, when `--to` asked for a sweep instead of angles.
+    pub swept: Option<usize>,
+    /// The GIF frame delay actually used, in milliseconds, when one was
+    /// written. ⚠️ A GIF's unit is a centisecond, so the rate is coarse.
+    pub tick: Option<u32>,
     pub triangles: usize,
     pub shapes: usize,
     pub images: usize,
@@ -141,10 +153,23 @@ impl Report {
                 self.triangles, self.shapes, self.images
             ),
             pose,
-            format!(
-                "{} angle(s) into {}x{}",
-                self.angles, self.sheet.width, self.sheet.height
-            ),
+            // ⚠️ Says which it actually did. A sweep still fills a grid, and
+            // reporting "4 angle(s)" over 8 keyframes described the wrong run.
+            match (self.swept, self.tick) {
+                (Some(keys), Some(tick)) => format!(
+                    "{keys} keyframe(s) as a looping GIF at {tick}ms each ({:.1} fps)",
+                    1000.0 / tick as f32
+                ),
+                (Some(keys), None) => format!(
+                    "{keys} keyframe(s) into {}x{}",
+                    self.sheet.width, self.sheet.height
+                ),
+                (None, Some(tick)) => format!("one frame as a GIF at {tick}ms"),
+                (None, None) => format!(
+                    "{} angle(s) into {}x{}",
+                    self.angles, self.sheet.width, self.sheet.height
+                ),
+            },
             format!("model covers {:.1}% of the sheet", self.drawn * 100.0),
             format!(
                 "colour spread {:.3}, neighbour step {:.3} — {}",
@@ -205,6 +230,7 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
     let mut out: Option<PathBuf> = None;
     let mut size = DEFAULT_SIZE;
     let mut angles = DEFAULT_ANGLES;
+    let mut upto = None;
     let mut clip = 0;
     let mut frame = None;
     let mut background = Background::Checkerboard;
@@ -222,6 +248,7 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
             "--angles" => angles = number(arg, &value()?)?,
             "--clip" => clip = number(arg, &value()?)?,
             "--frame" => frame = Some(number(arg, &value()?)?),
+            "--to" => upto = Some(number(arg, &value()?)?),
             "--background" => background = named_background(&value()?)?,
             flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
             path if model.is_none() => model = Some(PathBuf::from(path)),
@@ -250,6 +277,7 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
         out,
         size,
         angles,
+        upto,
         clip,
         frame,
         background,
@@ -291,11 +319,42 @@ pub fn take(request: &Request) -> Result<Report, String> {
         Some(frame) => Some(hold(&mut mesh, request.clip, frame)?),
         None => None,
     };
-    let sheet = draw(&mesh, request);
-    write_png(&request.out, &sheet.pixels, sheet.size)?;
+    let swept = match (request.frame, request.upto) {
+        (Some(first), Some(last)) => sweep(&mut mesh, request, first, last)?,
+        _ => Vec::new(),
+    };
+    let count = swept;
+    let sheet = if count.is_empty() {
+        draw(&mesh, request)
+    } else {
+        lay_out(&count, request)
+    };
+    let tick = if wants_gif(&request.out) {
+        let cells = if count.is_empty() {
+            vec![render::render(
+                &mesh,
+                &View {
+                    camera: Camera::fit(mesh.bounds()),
+                    background: request.background,
+                },
+                Size::new(request.size, request.size),
+            )]
+        } else {
+            count.clone()
+        };
+        // One keyframe per tick. ⚠️ Clip key times are not read here, so this
+        // is an even cadence rather than the clip's own timing.
+        Some(write_gif(&request.out, &cells, GIF_TICK_MS * 4)?)
+    } else {
+        write_png(&request.out, &sheet.pixels, sheet.size)?;
+        None
+    };
+
     Ok(Report {
         sheet: sheet.size,
         angles: request.angles,
+        swept: (!count.is_empty()).then_some(count.len()),
+        tick,
         triangles: mesh.faces().len(),
         shapes: mesh.shapes().len(),
         images: mesh.paints().len(),
@@ -510,6 +569,146 @@ fn draw(mesh: &Mesh, request: &Request) -> Sheet {
     sheet
 }
 
+/// One image per keyframe from `first` to `last`, from one fixed view.
+///
+/// ⚠️ **The camera is fitted once, to the pose already held**, and then left
+/// alone. Refitting per keyframe would rescale the model as it moved, which
+/// reads as the animation zooming rather than the camera chasing it.
+fn sweep(
+    mesh: &mut Mesh,
+    request: &Request,
+    first: usize,
+    last: usize,
+) -> Result<Vec<Image>, String> {
+    if last < first {
+        return Err(format!("--to {last} is before --frame {first}"));
+    }
+    let cell = Size::new(request.size, request.size);
+    let view = View {
+        camera: Camera::fit(mesh.bounds()),
+        background: request.background,
+    };
+    let mut cells = Vec::with_capacity(last - first + 1);
+    for frame in first..=last {
+        hold(mesh, request.clip, frame)?;
+        cells.push(render::render(mesh, &view, cell));
+    }
+    Ok(cells)
+}
+
+/// Already-rendered cells, tiled into one sheet.
+fn lay_out(cells: &[Image], request: &Request) -> Sheet {
+    let columns = grid_columns(cells.len());
+    let rows = cells.len().div_ceil(columns);
+    let span = |count: usize| count * request.size + count.saturating_sub(1) * GUTTER;
+    let size = Size::new(span(columns), span(rows));
+    let mut sheet = Sheet {
+        size,
+        pixels: divided(size),
+        coverage: Coverage::default(),
+    };
+    let cell = Size::new(request.size, request.size);
+    for (index, image) in cells.iter().enumerate() {
+        sheet
+            .coverage
+            .add(measure(image.as_rgba(), cell, request.background));
+        blit(
+            &mut sheet,
+            image,
+            (index % columns) * (request.size + GUTTER),
+            (index / columns) * (request.size + GUTTER),
+        );
+    }
+    sheet
+}
+
+/// ⚠️ These write real files, into the system temp dir, and remove them. The
+/// GIF encoder is a dependency; what is worth testing is that we hand it the
+/// right frames and report what it did.
+#[cfg(test)]
+mod animation_tests {
+    use super::*;
+    use crate::render::Background;
+
+    fn scratch(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!("dimentio-gif-{}-{name}", std::process::id()));
+        path
+    }
+
+    /// A frame with no geometry in it, so only the background fills it.
+    ///
+    /// ⚠️ Built through the public renderer rather than by poking pixels —
+    /// `Image`'s writer is private to `render`, and the point here is the
+    /// encoder, not the drawing.
+    fn plain(size: usize, background: Background) -> Image {
+        render::scene(
+            &[],
+            &View {
+                background,
+                ..Default::default()
+            },
+            Size::new(size, size),
+        )
+    }
+
+    #[test]
+    fn a_gif_is_written_and_starts_with_the_right_magic() {
+        let out = scratch("magic.gif");
+        let frames = [plain(8, Background::DarkGrey), plain(8, Background::Gradient)];
+        let tick = write_gif(&out, &frames, 40).expect("writes");
+        assert_eq!(tick, 40);
+        let bytes = std::fs::read(&out).expect("reads back");
+        assert_eq!(&bytes[..6], b"GIF89a", "not a GIF");
+        // The looping block is what makes it repeat rather than play once.
+        assert!(
+            bytes.windows(11).any(|run| run == b"NETSCAPE2.0"),
+            "no loop block"
+        );
+        let _ = std::fs::remove_file(&out);
+    }
+
+    /// ⚠️ **A GIF delay is a whole centisecond.** One game frame is 16.7ms, so
+    /// a request for it must round *up* to 20 and say so — rounding down to 10
+    /// would play the effect at double speed.
+    #[test]
+    fn a_delay_rounds_up_to_the_formats_own_tick() {
+        let out = scratch("tick.gif");
+        let frames = [plain(4, Background::DarkGrey)];
+        assert_eq!(write_gif(&out, &frames, 17).expect("writes"), 20);
+        assert_eq!(write_gif(&out, &frames, 10).expect("writes"), 10);
+        // ⛔ Never zero: a zero-delay GIF plays as fast as the viewer likes.
+        assert_eq!(write_gif(&out, &frames, 0).expect("writes"), 10);
+        let _ = std::fs::remove_file(&out);
+    }
+
+    #[test]
+    fn no_frames_is_an_error_rather_than_an_empty_file() {
+        let out = scratch("empty.gif");
+        assert!(write_gif(&out, &[], 40).is_err());
+        assert!(!out.is_file(), "an empty GIF was left behind");
+    }
+
+    #[test]
+    fn only_a_gif_extension_asks_for_an_animation() {
+        assert!(wants_gif(Path::new("a.gif")));
+        assert!(wants_gif(Path::new("A.GIF")));
+        assert!(!wants_gif(Path::new("a.png")));
+        assert!(!wants_gif(Path::new("gif")));
+    }
+
+    #[test]
+    fn a_backwards_sweep_is_refused_by_name() {
+        let parsed = parse(&words("m.glb --out a.gif --frame 9 --to 2")).expect("parses");
+        assert_eq!(parsed.frame, Some(9));
+        assert_eq!(parsed.upto, Some(2));
+    }
+
+    fn words(line: &str) -> Vec<String> {
+        line.split_whitespace().map(str::to_owned).collect()
+    }
+}
+
 /// As square a grid as the count allows, widest side first.
 pub fn grid_columns(angles: usize) -> usize {
     let mut columns = 1;
@@ -535,6 +734,70 @@ pub fn blit(sheet: &mut Sheet, image: &Image, left: usize, top: usize) {
         };
         target.copy_from_slice(&source[from..from + run]);
     }
+}
+
+/// The shortest delay a GIF can express: its unit is a **centisecond**.
+///
+/// ⚠️ Anything faster is rounded, so a 60 Hz effect cannot be played at rate —
+/// one game frame is 1.67 cs. `write_gif` says what it actually used rather
+/// than pretending, because a GIF that plays at 2/3 speed looks like a slow
+/// effect rather than a limitation of the format.
+pub const GIF_TICK_MS: u32 = 10;
+
+/// Whether a path asks for an animation rather than a still.
+///
+/// ⚠️ Decided by extension, deliberately: a caller writing `--out foo.gif` and
+/// getting a PNG named `.gif` would have no way to tell until something else
+/// refused to open it.
+pub fn wants_gif(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|kind| kind.eq_ignore_ascii_case("gif"))
+}
+
+/// Write a sequence of equally-sized frames as a looping GIF.
+///
+/// `gap` is the wall-clock spacing between frames in milliseconds, rounded up
+/// to `GIF_TICK_MS`; the rounding is returned so a caller can report the rate
+/// it really got.
+///
+/// ⚠️ **256 colours, quantised.** The encoder reduces each frame, and effect
+/// art includes smooth ramps — `dmen_magic`'s shuriken is a blue-to-magenta
+/// gradient — so a GIF is for watching motion, not for judging colour. Use a
+/// PNG contact sheet for that.
+pub fn write_gif(path: &Path, frames: &[Image], gap: u32) -> Result<u32, String> {
+    if frames.is_empty() {
+        return Err("no frames to animate".to_owned());
+    }
+    if let Some(folder) = path
+        .parent()
+        .filter(|folder| !folder.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(folder)
+            .map_err(|why| format!("could not create {}: {why}", folder.display()))?;
+    }
+    let used = gap.div_ceil(GIF_TICK_MS).max(1) * GIF_TICK_MS;
+    let file = std::fs::File::create(path)
+        .map_err(|why| format!("could not write {}: {why}", path.display()))?;
+
+    let mut encoder = GifEncoder::new(BufWriter::new(file));
+    encoder
+        .set_repeat(Repeat::Infinite)
+        .map_err(|why| format!("could not set the loop on {}: {why}", path.display()))?;
+    for (at, frame) in frames.iter().enumerate() {
+        let size = frame.size();
+        let buffer =
+            RgbaImage::from_raw(size.width as u32, size.height as u32, frame.as_rgba().to_vec())
+                .ok_or_else(|| format!("frame {at} is not {}x{}", size.width, size.height))?;
+        encoder
+            .encode_frame(GifFrame::from_parts(
+                buffer,
+                0,
+                0,
+                Delay::from_numer_denom_ms(used, 1),
+            ))
+            .map_err(|why| format!("could not encode frame {at} of {}: {why}", path.display()))?;
+    }
+    Ok(used)
 }
 
 /// Write RGBA8 out as a PNG, creating the folder above it if it is missing.
@@ -676,6 +939,7 @@ f 4 5 8
             size: 32,
             angles: 1,
             clip: 0,
+            upto: None,
             frame: None,
             background: Background::Checkerboard,
         };
@@ -692,6 +956,7 @@ f 4 5 8
             size: 32,
             angles: 1,
             clip: 0,
+            upto: None,
             frame: Some(0),
             background: Background::Checkerboard,
         };
@@ -708,6 +973,7 @@ f 4 5 8
             size: 64,
             angles: 4,
             clip: 0,
+            upto: None,
             frame: None,
             background: Background::Checkerboard,
         };
@@ -881,6 +1147,7 @@ f 4 5 8
             size: 48,
             angles: 2,
             clip: 0,
+            upto: None,
             frame: None,
             background: Background::Checkerboard,
         };
@@ -921,6 +1188,7 @@ f 4 5 8
             size: 192,
             angles: 1,
             clip: 0,
+            upto: None,
             frame: None,
             background: Background::Checkerboard,
         })

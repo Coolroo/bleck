@@ -465,7 +465,7 @@ pixels scatter about their mean tint, with brightness divided out.
 
 A model's question is what it looks like from every side. An effect's is *when*
 its parts run, so effects get their own command: one camera, several instants,
-laid out in the same grid.
+laid out in the same grid — or written as a looping animation.
 
 ```bash
 cargo run --release --manifest-path dimentio/Cargo.toml --   reel --effect chaos --export work/export --out chaos.png
@@ -476,8 +476,35 @@ cargo run --release --manifest-path dimentio/Cargo.toml --   reel --effect chaos
 | `--effect <name>` | which effect, as `bleck effect list` names it. Required |
 | `--out <file.png>` | where to write. Required |
 | `--export <dir>` | folder holding `effects.json`. Default `work/export` |
-| `--frames 9` | frames sampled across the effect, into one sheet |
+| `--frames 9` | frames sampled across the range, into one sheet |
+| `--from 1` / `--to 46` | game frames to sample between, 1-based and inclusive |
 | `--size 320` | edge of one frame, in pixels |
+
+!!! tip "Write to a `.gif` and it animates"
+
+    One cell per frame, looping. A model animation sweeps keyframes the same
+    way — `dimentio shot model.glb --out m.gif --clip 0 --frame 0 --to 7` walks
+    the clip from one fixed view rather than turning the model.
+
+    A contact sheet is the wrong instrument for fast motion: `dmen_magic`'s
+    spine wave has a five-frame period, and a nine-cell reel over 65 frames
+    samples every eighth one and nearly aliases it away.
+
+!!! warning "A GIF's unit is a whole centisecond"
+
+    One game frame is 1.67 cs, so a 60 Hz effect cannot play at rate — the
+    delay rounds up and the run reports the rate it really used. A GIF playing
+    at two-thirds speed otherwise reads as a slow effect.
+
+    Colour is quantised to 256 too. Use a GIF to watch motion and a PNG sheet
+    to judge colour.
+
+!!! warning "Frame 1 is often the least informative one"
+
+    Effect scales rise from zero on their own curves, so **44% of draws are
+    flat at frame 1** and 26 of the 139 effects draw nothing there at all.
+    `item_fire` needs frame 10. If an effect looks empty, move the window with
+    `--from` before believing it.
 
 ```
 chaos — 4 part(s), 3.00s, 181 frame(s) long

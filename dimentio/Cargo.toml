@@ -21,7 +21,10 @@ eframe = "0.29"
 egui_extras = { version = "0.29", features = ["image", "file"] }
 # ⚠️ `egui_extras` pulls `image` in with **no format features**, so PNG has to
 # be asked for here or every decode fails after the loader finds the bytes.
-image = { version = "0.25", default-features = false, features = ["png"] }
+# `gif` is for *writing* only -- an effect's motion is real since D266, and a
+# contact sheet samples too coarsely to show a 5-frame wave (D268). It brings
+# `gif` and `color_quant`, both MIT/Apache-2.0.
+image = { version = "0.25", default-features = false, features = ["png", "gif"] }
 # Audio output. ⚠️ `default-features = false` drops the Symphonia decoders,
 # which are MPL-2.0 and would otherwise be linked into an MIT binary for nothing:
 # `bleck` exports 16-bit PCM and `data::wav` reads it, so no decoder is needed.

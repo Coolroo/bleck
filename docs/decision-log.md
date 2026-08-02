@@ -18909,3 +18909,57 @@ spine count falling across frames 1, 5 and 10 as the wave passes.
 ⚠️ **A contact sheet is the wrong instrument for it**, which is the argument for
 the GIF export and frame ranges now queued: the wave has a 5-frame period and a
 9-cell reel samples every 8 frames, so it is nearly aliased away.
+
+## D269 — GIF output and frame ranges, because a contact sheet aliases motion (2026-08-02)
+
+Requested after D268: the shuriken's spine wave has a **five-frame period**, and
+a nine-cell reel over 65 frames samples every eighth one. The motion is real,
+decoded, rendered — and nearly invisible in the instrument used to look at it.
+
+### ✅ GIF, through the crate that already writes the PNG
+
+`image` was already a dependency for `PngEncoder`; adding its `gif` feature
+brings `gif` and `color_quant`, both MIT/Apache-2.0. ⛔ No new row in
+`THIRD-PARTY-NOTICES.md` — that file covers material shipping *inside* `bleck`,
+not Cargo dependencies, and none of `eframe`/`image`/`rodio` is listed.
+
+⛔ **Hand-writing an LZW encoder was considered and rejected.** It is a day's
+work plus palette quantisation, to replace a maintained encoder behind the same
+crate boundary the PNG writer already uses.
+
+⚠️ **A GIF delay is a whole centisecond.** One game frame is 1.67 cs, so a 60 Hz
+effect *cannot* play at rate: 16.7 ms rounds up to 20 and the effect plays at
+50 fps. The report names the rate it really used, because a GIF running at
+two-thirds speed reads as a slow effect rather than a limit of the format.
+⛔ Rounding *down* would play it at double speed, which is worse.
+
+⚠️ **Colour is quantised to 256.** `dmen_magic`'s ramp is a smooth
+blue-to-magenta gradient, so a GIF is for watching motion and a PNG sheet for
+judging colour. Both commands say which they wrote.
+
+### ✅ Frame ranges
+
+`reel` gained `--from` / `--to`, and `shot` gained `--to` for sweeping a clip's
+keyframes from one fixed view.
+
+⚠️ **Frame 1 is often the least informative frame there is**, which is new since
+D266 and inverts the old default: 44% of draws are flat at frame 1 and 26 of 139
+effects draw nothing at all there. `item_fire` needs frame 10. The usage text
+and the published reference both say so, because "the effect renders nothing"
+now has a boring explanation that used to be a bug.
+
+⚠️ **A range is clamped, not refused** — a backwards or overlong window still
+names a real frame, which is more use than an error. But ⛔ a range never yields
+more cells than it holds frames: rendering the same frame twice reads as an
+animation standing still.
+
+### ⚠️ A report that described the wrong run
+
+`shot`'s sweep filled the grid with keyframes and the report still said
+"4 angle(s) into 664x664" — the request's angle count, which the sweep had
+replaced. Caught by reading the output of the first real run rather than by a
+test. The report now branches on what it actually did.
+
+🔶 **Model sweeps use an even cadence, not the clip's own key times.** The times
+are in the manifest and are not read here, so a GIF of a clip shows the *shape*
+of the motion rather than its timing.

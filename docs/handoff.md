@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D268**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D269**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D268 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D269 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -144,8 +144,18 @@ cargo run --release --manifest-path dimentio/Cargo.toml -- `
 | `--effect <name>` | required; as `bleck effect list` names it |
 | `--out <file.png>` | required |
 | `--export <dir>` | folder holding `effects.json`. Default `work/export` |
-| `--frames 9` | frames sampled across the effect. Clamped to its real length |
+| `--frames 9` | frames sampled across the range. Clamped to its real length |
+| `--from 1` / `--to 46` | game frames to sample between, 1-based, inclusive (D269) |
 | `--size 320` | edge of one frame |
+
+✅ **Write to a `.gif` and it animates**, looping. `dimentio shot m.glb --out
+m.gif --clip 0 --frame 0 --to 7` sweeps a model clip the same way, from one
+fixed view. ⚠️ A GIF delay is a whole centisecond, so a 60 Hz effect plays at
+50 fps and the report says so.
+
+⚠️ **Frame 1 is often the least informative one** — 44% of draws are flat there
+and 26 effects draw nothing at all. Try `--from 10` before believing an effect
+is empty.
 
 ```
 dmen_magic — 6 part(s), 1.07s, 65 frame(s) long

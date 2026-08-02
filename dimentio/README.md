@@ -70,9 +70,20 @@ cargo run --release -- reel --effect chaos --export ../work/export --out chaos.p
 | `--effect <name>` | which effect, as `bleck effect list` names it. Required |
 | `--out <file.png>` | where to write. Required |
 | `--export <dir>` | folder holding `effects.json`. Default `work/export` |
-| `--frames 9` | frames sampled across the effect, into one sheet |
+| `--frames 9` | frames sampled across the range, into one sheet |
+| `--from 1` / `--to 46` | game frames to sample between, 1-based and inclusive |
 | `--size 320` | edge of one frame |
 | `--background checkerboard` | as above |
+
+**Write to a `.gif` and it animates instead**, looping, one cell per frame.
+A model sweeps keyframes the same way: `shot m.glb --out m.gif --frame 0 --to 7`.
+
+⚠️ **A GIF delay is a whole centisecond**, so a 60 Hz effect cannot play at
+rate — one game frame is 1.67 cs. The report names the rate it really used.
+
+⚠️ **Frame 1 is often the least informative one.** Effect scales rise from
+zero, so 44% of draws are flat there and 26 effects draw nothing at all. If an
+effect looks empty, try `--from 10` before believing it.
 
 ```
 chaos — 4 part(s), 3.00s, 181 frame(s) long

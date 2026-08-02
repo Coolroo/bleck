@@ -28,8 +28,8 @@ use crate::data::effects::{
 use crate::data::texture::Texture;
 use crate::render::{self, effect, Background, Camera, Image, Piece, Rgba, Size, View};
 use crate::shot::{
-    blit, divided, grid_columns, measure, named_background, number, write_png, Coverage, Sheet,
-    GUTTER, SIZE_LIMIT,
+    blit, divided, grid_columns, measure, named_background, number, wants_gif, write_gif,
+    write_png, Coverage, Sheet, GIF_TICK_MS, GUTTER, SIZE_LIMIT,
 };
 
 /// Cell edge when `--size` is not given. Smaller than a model shot's, because a
@@ -60,12 +60,19 @@ dimentio reel --effect <name> --out <file.png> [options]
   --effect <name>    which effect, as `bleck effect list` names it. Required.
   --out <file.png>   where to write. Required.
   --export <dir>     folder holding effects.json. Default work/export.
-  --frames <n>       frames sampled across the effect, into one sheet. Default 9.
+  --frames <n>       frames sampled across the range. Default 9.
+  --from <n>         first game frame to sample, 1-based. Default 1.
+  --to <n>           last game frame to sample. Default the effect's last.
   --size <n>         edge of one frame, in pixels. Default 320.
   --background <s>   dark-grey | checkerboard | gradient. Default checkerboard.
 
+Write to a .gif and the frames become a looping animation instead of a sheet.
+
 Frames run left to right, top to bottom. The effect is drawn from one fixed
-camera so the cells can be compared against each other.";
+camera so the cells can be compared against each other.
+
+An effect that draws nothing at frame 1 is usually not broken: scales rise from
+zero, so 44% of draws are flat there. Try --from 10.";
 
 /// What a run was asked for.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,6 +83,14 @@ pub struct Request {
     pub size: usize,
     pub frames: usize,
     pub background: Background,
+    /// The game frames to sample between, inclusive. `None` is the whole
+    /// timeline, which is what every existing caller gets.
+    ///
+    /// ⚠️ **Frame 0 is often the least informative one** (D266): 44% of draws
+    /// are flat there and 26 effects draw nothing at all, so "the first frames"
+    /// is frequently the wrong window to look at. `item_fire` needs frame 10.
+    pub from: Option<u32>,
+    pub upto: Option<u32>,
 }
 
 /// One cell of the reel.
@@ -156,6 +171,13 @@ pub struct Report {
     /// established (D264). Reported rather than clamped: a rule invented here
     /// to make one effect look better would quietly reshape the other 358.
     pub depth_ratio: f32,
+    /// The GIF frame delay actually used, in milliseconds, when one was
+    /// written.
+    ///
+    /// ⚠️ **A GIF's unit is a centisecond**, so a 60 Hz effect cannot play at
+    /// rate — one game frame is 1.67 cs. Reported rather than hidden: a GIF
+    /// running at 2/3 speed otherwise reads as a slow effect.
+    pub tick: Option<u32>,
 }
 
 impl Report {
@@ -186,12 +208,22 @@ impl Report {
                 "{} — {} part(s), {:.2}s, {} frame(s) long",
                 self.name, self.parts, self.seconds, self.length
             ),
-            format!(
-                "{} frame(s) sampled into {}x{}",
-                self.frames.len(),
-                self.sheet.width,
-                self.sheet.height
-            ),
+            match self.tick {
+                // ⚠️ Names the real playback rate. A GIF rounds every delay up
+                // to a centisecond, so an effect sampled faster than that plays
+                // slow — which reads as the effect being slow.
+                Some(tick) => format!(
+                    "{} frame(s) as a looping GIF at {tick}ms each ({:.1} fps)",
+                    self.frames.len(),
+                    1000.0 / tick as f32
+                ),
+                None => format!(
+                    "{} frame(s) sampled into {}x{}",
+                    self.frames.len(),
+                    self.sheet.width,
+                    self.sheet.height
+                ),
+            },
         ];
         said.extend(self.frames.iter().map(|frame| {
             // The ceiling is only worth naming when it bites; on the great
@@ -371,6 +403,8 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
     let mut size = DEFAULT_SIZE;
     let mut frames = DEFAULT_FRAMES;
     let mut background = Background::Checkerboard;
+    let mut from = None;
+    let mut upto = None;
 
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
@@ -385,6 +419,8 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
             "--export" => export = PathBuf::from(value()?),
             "--size" => size = number(arg, &value()?)?,
             "--frames" => frames = number(arg, &value()?)?,
+            "--from" => from = Some(number(arg, &value()?)? as u32),
+            "--to" => upto = Some(number(arg, &value()?)? as u32),
             "--background" => background = named_background(&value()?)?,
             flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
             extra => return Err(format!("unexpected argument {extra}")),
@@ -408,6 +444,8 @@ pub fn parse(args: &[String]) -> Result<Request, String> {
         ));
     }
     Ok(Request {
+        from,
+        upto,
         effect,
         export,
         out,
@@ -435,7 +473,7 @@ pub fn take(request: &Request) -> Result<Report, String> {
         ));
     }
 
-    let sampled = sample(entry, request.frames);
+    let sampled = sample(entry, request.frames, request.from, request.upto);
     let art = resolve_art(entry, &request.export, library.textures());
     let built = draw(
         entry,
@@ -448,7 +486,21 @@ pub fn take(request: &Request) -> Result<Report, String> {
         },
         request,
     );
-    write_png(&request.out, &built.sheet.pixels, built.sheet.size)?;
+    // ⚠️ The spacing between *sampled* frames, not one game frame — a reel of
+    // 9 cells over 65 frames plays 8x faster than the game if each cell is
+    // given one tick.
+    let gap = if sampled.len() > 1 {
+        ((sampled[1] - sampled[0]) * 1000.0).round().max(1.0) as u32
+    } else {
+        GIF_TICK_MS
+    };
+    let animated = wants_gif(&request.out);
+    let tick = if animated {
+        Some(write_gif(&request.out, &built.cells, gap)?)
+    } else {
+        write_png(&request.out, &built.sheet.pixels, built.sheet.size)?;
+        None
+    };
     Ok(Report {
         name: entry.name.clone(),
         index: entry.index,
@@ -461,6 +513,7 @@ pub fn take(request: &Request) -> Result<Report, String> {
         painted: built.painted,
         stood_in: built.stood_in,
         depth_ratio: built.depth_ratio,
+        tick,
     })
 }
 
@@ -496,19 +549,36 @@ fn unknown(library: &Library, wanted: &str) -> String {
 /// ⚠️ **Never more cells than the effect has frames.** Asking for nine views of
 /// a one-frame effect would lay out nine identical pictures, and a reader
 /// counting them would see an animation that is not there.
-fn sample(entry: &Entry, wanted: usize) -> Vec<f32> {
-    let count = wanted.clamp(1, entry.frames().max(1) as usize);
+fn sample(entry: &Entry, wanted: usize, from: Option<u32>, upto: Option<u32>) -> Vec<f32> {
+    let last = entry.frames().max(1);
+    // Frames are 1-based in the report, as the durations are, so frame 1 is
+    // time zero.
+    let first = from.unwrap_or(1).clamp(1, last);
+    let final_ = upto.unwrap_or(last).clamp(first, last);
+    let span = (final_ - first) as usize + 1;
+    let count = wanted.clamp(1, span);
+    let at = |frame: u32| (frame - 1) as f32 / FRAME_RATE;
     if count == 1 {
-        return vec![0.0];
+        return vec![at(first)];
     }
     (0..count)
-        .map(|index| entry.seconds * index as f32 / (count - 1) as f32)
+        .map(|index| {
+            let frame = first as f32
+                + (final_ - first) as f32 * index as f32 / (count - 1) as f32;
+            (frame - 1.0) / FRAME_RATE
+        })
         .collect()
 }
+
+/// The rate the game counts effect frames at, so a frame number becomes a time.
+const FRAME_RATE: f32 = 60.0;
 
 /// The sheet and everything measured while filling it.
 struct Built {
     sheet: Sheet,
+    /// Each frame on its own, kept so the same run can be written as an
+    /// animation instead of a sheet.
+    cells: Vec<Image>,
     frames: Vec<Frame>,
     changes: usize,
     painted: usize,
@@ -590,6 +660,7 @@ fn draw(
     };
 
     let mut frames = Vec::with_capacity(times.len());
+    let mut cells = Vec::with_capacity(times.len());
     let mut changes = 0;
     let mut painted = vec![false; entry.parts.len()];
     let mut stood_in = 0;
@@ -654,11 +725,13 @@ fn draw(
             (index % columns) * (request.size + GUTTER),
             (index / columns) * (request.size + GUTTER),
         );
+        cells.push(image.clone());
         previous = Some(image);
     }
 
     Built {
         sheet,
+        cells,
         frames,
         changes,
         painted: painted.iter().filter(|seen| **seen).count(),
@@ -776,6 +849,8 @@ mod tests {
             size: 64,
             frames,
             background: Background::DarkGrey,
+            from: None,
+            upto: None,
         }
     }
 
@@ -974,6 +1049,7 @@ mod tests {
             painted: 0,
             stood_in: 0,
             depth_ratio: 1.0,
+            tick: None,
         };
         assert!(
             report.parts_all_arrived(),
@@ -1065,9 +1141,9 @@ mod tests {
             parts: vec![Default::default()],
             ..Default::default()
         };
-        assert_eq!(sample(&entry, 1), vec![0.0]);
-        assert_eq!(sample(&entry, 3), vec![0.0, 0.5, 1.0]);
-        assert_eq!(sample(&entry, 5).len(), 5);
+        assert_eq!(sample(&entry, 1, None, None), vec![0.0]);
+        assert_eq!(sample(&entry, 3, None, None), vec![0.0, 0.5, 1.0]);
+        assert_eq!(sample(&entry, 5, None, None).len(), 5);
 
         let instant = Entry {
             name: "blink".into(),
@@ -1076,7 +1152,68 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(instant.frames(), 1);
-        assert_eq!(sample(&instant, 40), vec![0.0]);
+        assert_eq!(sample(&instant, 40, None, None), vec![0.0]);
+    }
+
+    /// ⚠️ **Frame 1 is time zero**, matching the report's own numbering and the
+    /// inclusive frame counts everywhere else. A range that started at 0 would
+    /// be off by one against every number the report prints.
+    #[test]
+    fn a_frame_range_samples_only_inside_itself() {
+        let entry = Entry {
+            name: "probe".into(),
+            seconds: 1.0,
+            parts: vec![Default::default()],
+            ..Default::default()
+        };
+        assert_eq!(entry.frames(), 61);
+
+        let window = sample(&entry, 3, Some(11), Some(31));
+        assert_eq!(window.len(), 3);
+        assert!((window[0] - 10.0 / 60.0).abs() < 1e-5, "{window:?}");
+        assert!((window[2] - 30.0 / 60.0).abs() < 1e-5, "{window:?}");
+
+        // One end alone still bounds the window.
+        let tail = sample(&entry, 2, Some(31), None);
+        assert!((tail[0] - 30.0 / 60.0).abs() < 1e-5, "{tail:?}");
+        assert!((tail[1] - 60.0 / 60.0).abs() < 1e-5, "{tail:?}");
+    }
+
+    /// ⛔ A range cannot ask for more cells than it holds frames, or the same
+    /// frame is rendered twice and read as an animation standing still.
+    #[test]
+    fn a_range_never_yields_more_cells_than_it_has_frames() {
+        let entry = Entry {
+            name: "probe".into(),
+            seconds: 1.0,
+            parts: vec![Default::default()],
+            ..Default::default()
+        };
+        assert_eq!(sample(&entry, 40, Some(5), Some(7)).len(), 3);
+        assert_eq!(sample(&entry, 40, Some(9), Some(9)).len(), 1);
+    }
+
+    /// A backwards or out-of-range window is clamped rather than refused: it
+    /// still names a real frame, which is more use than an error.
+    #[test]
+    fn a_reversed_or_overlong_range_is_clamped(){
+        let entry = Entry {
+            name: "probe".into(),
+            seconds: 1.0,
+            parts: vec![Default::default()],
+            ..Default::default()
+        };
+        assert_eq!(sample(&entry, 4, Some(40), Some(10)).len(), 1);
+        let past = sample(&entry, 3, Some(1), Some(9999));
+        assert!((past[2] - 60.0 / 60.0).abs() < 1e-5, "{past:?}");
+    }
+
+    #[test]
+    fn only_a_gif_extension_asks_for_an_animation() {
+        assert!(crate::shot::wants_gif(std::path::Path::new("a.gif")));
+        assert!(crate::shot::wants_gif(std::path::Path::new("A.GIF")));
+        assert!(!crate::shot::wants_gif(std::path::Path::new("a.png")));
+        assert!(!crate::shot::wants_gif(std::path::Path::new("gif")));
     }
 }
 
@@ -1121,6 +1258,8 @@ mod real_export_tests {
             size: 96,
             frames: 6,
             background: Background::DarkGrey,
+            from: None,
+            upto: None,
         })
         .expect("chaos renders");
 
@@ -1173,6 +1312,8 @@ mod real_export_tests {
                 size: 128,
                 frames: 3,
                 background: Background::DarkGrey,
+                from: None,
+                upto: None,
             };
             match take(&asked) {
                 Ok(report) => {
