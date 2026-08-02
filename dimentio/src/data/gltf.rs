@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use super::gltf_accessor::{
     read_colours, read_indices, read_scalars, read_vec2, read_vec3, view_bytes,
 };
-use super::mesh::{Face, Mask, Paint, Parts, Shape, Uv, Vec3};
+use super::mesh::{Blend, Face, Mask, Paint, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::{Sampling, Texture, Transform, Wrap};
 
@@ -407,7 +407,7 @@ fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint>
     let base = &material["pbrMetallicRoughness"]["baseColorTexture"];
     Some(Paint {
         // Model art is `MASK`: opaque where drawn at all, so nothing to blend.
-        blended: false,
+        blend: Blend::Opaque,
         texture: decode_reference(json, bin, base)?,
         masked: material["alphaMode"].as_str() == Some("MASK"),
         cutoff: crate::render::MASK_CUTOFF,

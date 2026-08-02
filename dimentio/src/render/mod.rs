@@ -176,7 +176,7 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                 surface
                     .corners(*face)
                     .map(|corners| raster::Paint::Textured {
-                        blended: surface.blended,
+                        blend: surface.blend,
                         texture: surface.texture,
                         corners,
                         tint,

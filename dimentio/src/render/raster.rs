@@ -16,7 +16,7 @@
 
 use super::camera::{Basis, Point};
 use super::{Background, Rgba, Size};
-use crate::data::mesh::{Mask, Uv, Vec3};
+use crate::data::mesh::{Blend, Mask, Uv, Vec3};
 use crate::data::texture::{Sampling, Texel, Texture};
 
 /// Light that reaches a face turned fully away from it, so nothing is pure
@@ -121,8 +121,8 @@ pub(super) enum Paint<'a> {
         tint: Tint,
         /// The flat shading term the texel is multiplied by.
         intensity: f32,
-        /// Composite onto what is there rather than replacing it.
-        blended: bool,
+        /// How to composite the texel onto what is already there.
+        blend: Blend,
         /// The material's `alphaMode` was `MASK`, so a transparent texel is a
         /// hole rather than a dark pixel.
         masked: bool,
@@ -262,6 +262,7 @@ fn tinting(tint: &Tint, triangle: &[Point; 3], weights: &Weights) -> [f32; 4] {
 pub(super) struct Fragment {
     colour: Rgba,
     alpha: u8,
+    blend: Blend,
 }
 
 /// The colour a pixel takes, or `None` when a masked texel discards it.
@@ -281,6 +282,7 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragm
                     scale(colour.b, shade[2]),
                 ),
                 alpha: 255,
+                blend: Blend::Opaque,
             })
         }
         Paint::Textured {
@@ -288,7 +290,7 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragm
             corners,
             tint,
             intensity,
-            blended,
+            blend,
             masked,
             cutoff,
             sampling,
@@ -318,7 +320,12 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragm
             }
             Some(Fragment {
                 colour: Rgba::new(texel.r, texel.g, texel.b).shaded(*intensity),
-                alpha: if *blended { texel.a } else { 255 },
+                alpha: if matches!(blend, Blend::Opaque) {
+                    255
+                } else {
+                    texel.a
+                },
+                blend: *blend,
             })
         }
     }
@@ -365,7 +372,7 @@ pub(super) fn raster(image: &mut Image, depth: &mut [f32], triangle: &[Point; 3]
             let Some(fragment) = fill(paint, triangle, &weights) else {
                 continue;
             };
-            if fragment.alpha == u8::MAX {
+            if fragment.blend == Blend::Opaque {
                 depth[slot] = near;
                 image.set(x, y, fragment.colour);
                 continue;
@@ -375,22 +382,37 @@ pub(super) fn raster(image: &mut Image, depth: &mut [f32], triangle: &[Point; 3]
             // writing depth here makes the first sprite of a stack hide every
             // one behind it, which looks exactly like the parts not running.
             let under = image.pixel(x, y);
-            let over = |a: u8, b: u8| {
-                ((a as u16 * fragment.alpha as u16
-                    + b as u16 * (255 - fragment.alpha) as u16)
-                    / 255) as u8
-            };
-            image.set(
-                x,
-                y,
-                Rgba::new(
-                    over(fragment.colour.r, under.r),
-                    over(fragment.colour.g, under.g),
-                    over(fragment.colour.b, under.b),
-                ),
-            );
+            image.set(x, y, mix(fragment.blend, fragment.colour, fragment.alpha, under));
         }
     }
+}
+
+/// One channel of a blend, in the game's own terms.
+///
+/// ⚠️ **Saturating, not wrapping.** An additive glow over a bright background
+/// overflows constantly, and wrapping turns a highlight into a dark hole — the
+/// most visible possible wrong answer.
+fn channel(blend: Blend, src: u8, alpha: u8, dst: u8) -> u8 {
+    let (src, alpha, dst) = (src as i32, alpha as i32, dst as i32);
+    let scaled = src * alpha / 255;
+    let value = match blend {
+        // Handled by the caller; here for completeness.
+        Blend::Opaque => src,
+        Blend::Alpha => scaled + dst * (255 - alpha) / 255,
+        Blend::Add => scaled + dst,
+        Blend::Subtract => dst - src,
+        // `GX_BL_INVSRCCLR` on both sides: (1 - src) * (src + dst).
+        Blend::Inverse => (255 - src) * (src + dst) / 255,
+    };
+    value.clamp(0, 255) as u8
+}
+
+fn mix(blend: Blend, src: Rgba, alpha: u8, dst: Rgba) -> Rgba {
+    Rgba::new(
+        channel(blend, src.r, alpha, dst.r),
+        channel(blend, src.g, alpha, dst.g),
+        channel(blend, src.b, alpha, dst.b),
+    )
 }
 
 fn fold_min(values: &[f32; 3]) -> f32 {
@@ -731,7 +753,7 @@ mod texture_tests {
                     },
                 ],
                 &Paint::Textured {
-                    blended: false,
+                    blend: Blend::Opaque,
                     tint: None,
                     texture: &base,
                     corners: [Uv::new(0.5, 0.5); 3],
@@ -782,7 +804,7 @@ mod texture_tests {
             &mut depth,
             &near,
             &Paint::Textured {
-                blended: false,
+                blend: Blend::Opaque,
                 tint: None,
                 texture: surface.texture,
                 corners: [Uv::new(0.5, 0.5); 3],

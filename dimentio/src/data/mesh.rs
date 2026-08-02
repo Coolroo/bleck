@@ -425,6 +425,38 @@ impl Parts {
     }
 }
 
+/// How a paint is combined with what is already in the frame.
+///
+/// ✅ **The game's own switch**, read from its draw code at `0x8005c9f8`
+/// (D270): each case is one `GXSetBlendMode` call, selected by the high byte of
+/// a section 7 group's flags.
+///
+/// 🟢 The semantic check that the reading is right: the effects asking for
+/// `Add` are `explosion`, `dmen_explosion`, `event_fire`, `event_enmagic`,
+/// `chaos_start` and `fairyn_get` — glows and flashes, every one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Blend {
+    /// Replace what is there. Model art, which is `MASK` and never blends.
+    #[default]
+    Opaque,
+    /// `src*a + dst*(1-a)`. What the effect renderer did before D270, and what
+    /// a draw whose mode is 0 keeps doing.
+    ///
+    /// ⚠️ **Mode 0 is not "opaque"** — it falls through the game's switch and
+    /// the mode comes from state `bleck` does not follow. 2,528 of 2,960 draws
+    /// are mode 0, so guessing wrong here would be wrong nearly everywhere.
+    Alpha,
+    /// `src*a + dst` — `GX_BM_BLEND` with `dst = GX_BL_ONE`. The glow blend: a
+    /// black surround contributes nothing instead of darkening what is behind.
+    Add,
+    /// `dst - src` — `GX_BM_SUBTRACT`. Six draws, in `chaos` and `event_*magic`.
+    Subtract,
+    /// `(1-src) * (src + dst)` — `GX_BM_BLEND` with both factors
+    /// `GX_BL_INVSRCCLR`. 41 draws, all electrical: `item_thunder`,
+    /// `item_biribiri`, `item_stop`.
+    Inverse,
+}
+
 /// One image a mesh draws with, how it is sampled, and how its alpha is read.
 ///
 /// ⚠️ `masked` and `sampling` belong to the material, not to the image: two
@@ -436,15 +468,14 @@ pub struct Paint {
     /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
     /// below `cutoff` is not drawn at all.
     pub masked: bool,
-    /// Composite this paint onto what is already there, rather than
-    /// replacing it.
+    /// How this paint is composited onto what is already there.
     ///
-    /// ✅ **Effect art needs it and model art does not.** glTF's `MASK` means
-    /// exactly "no blending": a cut-out texel is opaque or absent, and
-    /// blending one at its stated alpha would wash out every model on the
-    /// disc. Effect sprites are semi-transparent throughout — that is what
-    /// they are — so they carry this and models do not (D267).
-    pub blended: bool,
+    /// ✅ **Effect art needs this and model art does not.** glTF's `MASK` means
+    /// exactly "no blending": a cut-out texel is opaque or absent, and blending
+    /// one at its stated alpha would wash out every model on the disc. Effect
+    /// sprites are semi-transparent throughout, and 432 of the file's draws ask
+    /// for something other than plain alpha (D267, D270).
+    pub blend: Blend,
     /// The alpha a texel must reach to be drawn when `masked`.
     ///
     /// ⚠️ **Not always glTF's 128.** Cut-out model art is opaque wherever it is
@@ -498,7 +529,7 @@ pub struct Batch<'a> {
 pub struct Surface<'a> {
     pub texture: &'a Texture,
     pub uvs: &'a [Uv],
-    pub blended: bool,
+    pub blend: Blend,
     pub masked: bool,
     pub cutoff: u8,
     pub sampling: &'a Sampling,
@@ -682,7 +713,7 @@ impl Mesh {
         Some(Surface {
             texture: &paint.texture,
             uvs: self.uvs.as_deref()?,
-            blended: paint.blended,
+            blend: paint.blend,
             masked: paint.masked,
             cutoff: paint.cutoff,
             sampling: &paint.sampling,

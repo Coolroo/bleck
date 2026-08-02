@@ -49,13 +49,11 @@ fields, which is what fixes this layout rather than inferring it (D201):
 | +0x28 | `u16` = **219** | `lhz`, stored at `effsub_wp+0x14` |
 | +0x2C | records begin | which is why `EFFECT_STRIDE` is the header size too |
 
-🟢 **219 is exactly the number of images in `effdata.tpl`.** The game holds a
-texture count, so a texture index exists somewhere and is bounded by it — the
-first hard constraint on a search that has refuted five candidate fields.
+🟢 **219 is exactly the number of images in `effdata.tpl`** — the bound that
+refuted five candidate texture-index fields.
 
-An **effect record** is a 32-byte name then three u32s: the index of its first
-part, how many parts it has, and a third running index into something in
-sections 2-15 that is not yet identified.
+An **effect record** is a 32-byte name then three u32s: its first part, its
+part count, and its base node.
 
 ✅ **The part index and count chain exactly**: for all 138 consecutive pairs,
 `first + count` lands on the next record's `first`, and the total (704) is
@@ -95,19 +93,17 @@ part +0x10 "first" (s16, 0xFFFF null) + effect +0x28 "extra"
 images are referenced and none is orphaned**, and 35 parts resolve to no image
 because their materials carry the documented `-1` — not because the walk failed.
 
-⚠️ **A part draws a set, not one image.** Counting distinct images: 560 parts
-draw one, 35 none, and the rest up to twelve. `artwork` returns every
-`Picture`, so a part that draws one image twice under two tints appears twice;
-that is 14 parts, and it is why a count of `Picture`s is not a count of images.
+⚠️ **A part draws a set, not one image**: 560 parts draw one, 35 none, and the
+rest up to twelve. 14 draw one image twice under two tints, which is why a
+count of `Picture`s is not a count of images.
 
 🟢 **`extra` is the effect's base node**, which is what it always was. ⛔ The
-`Effect.rows` attachment below reads it as an index into section 6 instead and
-is superseded — it predates D258 and is kept only because the viewer's layout
-still leans on it. Section 6 is 3x4 matrices reached from a node's `+0x06`.
+`Effect.rows` view of section 6 that sliced it by `extra` is **deleted** (D270):
+section 6 is 1,349 3x4 matrices reached from a node's `+0x06` (D265), and
+grouping those floats per effect meant nothing.
 
-✅ Both of D258's outstanding refutations are now acted on: section 8's last
-four bytes are one `u32` display-list offset, and section 3 is 360 GX display
-lists. `draws` returns the geometry alongside the picture; see below.
+✅ Both of D258's outstanding refutations are acted on: section 8's last four
+bytes are one `u32` display-list offset, and section 3 is 360 GX display lists.
 
 ## ✅ The curves, and how a node is posed (D266)
 
@@ -157,11 +153,6 @@ vertex carries is 1,631.
 consumes its declared size exactly — and why the Z values run to +/-32,000 is
 not established.
 
-⚠️ **What a transform row *means* is not established.** They are plainly
-geometry -- 42% are unit-length vectors, and `chaos` holds an exact 72-degree
-rotation -- but which row is a rotation, which a scale, and how many belong to
-one emitter is unknown. The per-effect row counts are not multiples of three, so
-they are not simply 3x4 matrices.
 """
 
 from __future__ import annotations
@@ -183,10 +174,6 @@ EFFECT_STRIDE = 44
 EFFECT_NAME = 32
 PART_STRIDE = 20
 PART_NAME = 16
-
-#: Section 6: four big-endian floats per row. `Effect.extra` indexes it.
-TRANSFORM_SECTION = 6
-TRANSFORM_STRIDE = 16
 
 
 class EffectDataError(BleckError):
@@ -223,25 +210,6 @@ class Part:
 
 
 @dataclass(frozen=True)
-class Row:
-    """Four floats from section 6, indexed by an effect's `extra`.
-
-    ⚠️ Geometry, but of an unestablished kind. `chaos` holds an exact 72-degree
-    rotation -- 360/5, matching the five-fold ring measured in game (D172,
-    D173) -- and 42% of all rows are unit-length. That is enough to say these
-    drive placement and not enough to say how.
-    """
-
-    index: int
-    values: tuple
-
-    @property
-    def is_unit(self) -> bool:
-        x, y, z = self.values[:3]
-        return abs((x * x + y * y + z * z) ** 0.5 - 1.0) < 1e-4
-
-
-@dataclass(frozen=True)
 class Effect:
     """A named effect, and the parts it is assembled from."""
 
@@ -257,15 +225,6 @@ class Effect:
     and 73 of 219 images -- a plausible partial answer, and a wrong one."""
 
     parts: list[Part] = field(default_factory=list)
-    rows: list[Row] = field(default_factory=list)
-    """⛔ **Superseded by D258**, and kept only because the viewer's layout
-    still leans on it.
-
-    This slices section 6 by `extra`, which is not an index into section 6 --
-    it is the effect's base node in section 9. Section 6 is reached from a
-    node's `+0x06` instead, and holds 3x4 matrices rather than four-float rows.
-    The floats are real and at real offsets; the **grouping by effect** is the
-    part that means nothing."""
 
     def composed(self) -> list[str]:  # pylint: disable=container-return
         """The names the game builds at runtime: effect plus each part (D172)."""
@@ -287,8 +246,7 @@ def read(data: bytes) -> list[Effect]:  # pylint: disable=container-return
         )
 
     parts = _read_parts(data, offsets[1], offsets[2])
-    effects = _read_effects(data, offsets[0], offsets[1], parts)
-    return _attach_rows(data, offsets, effects)
+    return _read_effects(data, offsets[0], offsets[1], parts)
 
 
 def _read_parts(data: bytes, start: int, end: int) -> list[Part]:
@@ -337,46 +295,6 @@ def chains_cleanly(effects: list[Effect]) -> bool:
     )
 
 
-def _read_rows(data: bytes, start: int, end: int) -> list[Row]:
-    # pylint: disable=container-return
-    return [
-        Row(index, struct.unpack_from(">4f", data, at))
-        for index, at in enumerate(
-            range(start, end - TRANSFORM_STRIDE + 1, TRANSFORM_STRIDE)
-        )
-    ]
-
-
-def _attach_rows(data: bytes, offsets: list[int], effects: list[Effect]) -> list[Effect]:
-    # pylint: disable=container-return
-    """Give each effect the rows between its `extra` and the next one's.
-
-    ⚠️ The span is inferred from the *next* record, because no field states a
-    count. The last effect therefore takes everything remaining, which is why
-    its row list is far longer than any other and must not be read as meaning
-    that effect is enormous.
-    """
-    start = offsets[TRANSFORM_SECTION]
-    end = offsets[TRANSFORM_SECTION + 1]
-    rows = _read_rows(data, start, end)
-
-    out: list[Effect] = []
-    for index, effect in enumerate(effects):
-        stop = effects[index + 1].extra if index + 1 < len(effects) else len(rows)
-        out.append(
-            Effect(
-                index=effect.index,
-                name=effect.name,
-                first_part=effect.first_part,
-                part_count=effect.part_count,
-                extra=effect.extra,
-                parts=effect.parts,
-                rows=rows[effect.extra : stop],
-            )
-        )
-    return out
-
-
 #: Section 10: `(tag, offset)` pairs addressing section 2.
 COMMAND_SECTION = 10
 COMMAND_STRIDE = 8
@@ -410,6 +328,18 @@ GROUP_SECTION, GROUP_STRIDE = 7, 6
 ENTRY_SECTION, ENTRY_STRIDE = 8, 8
 
 
+#: What a group's `flags` high byte selects, as the switch at `0x8005c9f8`
+#: reads it. ✅ Each case is one `GXSetBlendMode` call (D270).
+#:
+#: ⚠️ **Zero is not a mode.** It falls through the switch, and the mode is then
+#: derived from state this reading does not follow — so a viewer should keep
+#: doing whatever it did before rather than inventing an opaque default.
+BLEND_DERIVED = 0
+BLEND_ADD = 4
+BLEND_SUBTRACT = 5
+BLEND_INVERSE = 6
+
+
 @dataclass(frozen=True)
 class Group:
     """A section 7 record: a run of section 8 entries, plus flags."""
@@ -418,6 +348,18 @@ class Group:
     start: int
     count: int
     flags: int
+
+    @property
+    def blend(self) -> int:
+        """How this draw is composited — the flags' **high byte** (D270).
+
+        ✅ 0, 4, 5 and 6 occur, and every one is a case of the game's own
+        `GXSetBlendMode` switch. 🟢 The semantic check: mode 4 is additive, and
+        the effects using it are `explosion`, `dmen_explosion`, `event_fire`,
+        `event_enmagic`, `chaos_start` and `fairyn_get` — glows and flashes,
+        every one. Nothing incongruous is in the set.
+        """
+        return (self.flags >> 8) & 0xFF
 
 
 @dataclass(frozen=True)
@@ -919,6 +861,9 @@ class Draw:
     offset: int
     descriptor: int
 
+    blend: int = BLEND_DERIVED
+    """How to composite this draw — see `Group.blend`."""
+
     chain: tuple = ()
     """Every node from the part's root down to the one that issued this draw.
 
@@ -962,6 +907,7 @@ def draws(
                     picture=_picture(data, entry.material),
                     offset=entry.display_list,
                     descriptor=entry.descriptor,
+                    blend=group.blend,
                     chain=placed.chain,
                     world=placed.world,
                 )

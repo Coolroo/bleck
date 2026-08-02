@@ -142,8 +142,6 @@ pub struct Entry {
     pub seconds: f32,
     #[serde(default)]
     pub parts: Vec<Part>,
-    #[serde(default)]
-    pub rows: Vec<Row>,
 }
 
 impl Entry {
@@ -220,6 +218,15 @@ pub struct Draw {
     /// evaluated at that frame and the results multiplied, parent first.
     #[serde(default)]
     pub chain: Vec<usize>,
+    /// How this draw is composited: 0 derive, 4 additive, 5 subtractive,
+    /// 6 inverse-source (D270).
+    ///
+    /// ⚠️ **0 is not "opaque".** It falls through the game's own switch and the
+    /// mode comes from state `bleck` does not follow, so a reader should keep
+    /// its existing behaviour rather than invent one. 2,528 of 2,960 draws are
+    /// 0, so guessing wrong here would be wrong nearly everywhere.
+    #[serde(default)]
+    pub blend: u32,
     /// Index into the effect system's own bank — 0..218 for `effdata.tpl` —
     /// or negative where the material names no texture.
     ///
@@ -339,37 +346,6 @@ impl Part {
         } else {
             self.composed.clone()
         }
-    }
-}
-
-/// One row of an effect's transform data: four floats, as stored.
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct Row {
-    /// Position in the file's row table, which is shared across effects.
-    #[serde(default)]
-    pub index: usize,
-    #[serde(default)]
-    pub values: Vec<f32>,
-}
-
-impl Row {
-    pub fn describe(&self) -> String {
-        self.values
-            .iter()
-            .map(|value| format!("{value:>10.5}"))
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    /// The row read as a vector. A length of 1 is what a rotation or scale row
-    /// of a transform matrix looks like, so it says whether a row is being
-    /// read the right way round without claiming what it transforms.
-    pub fn magnitude(&self) -> f32 {
-        self.values
-            .iter()
-            .map(|value| value * value)
-            .sum::<f32>()
-            .sqrt()
     }
 }
 
@@ -623,8 +599,8 @@ mod tests {
         assert_eq!(hit.parts[0].frames, 29);
         assert_eq!(hit.parts[0].describe(), "29 frames · 0.47s");
         assert_eq!(hit.describe(), "1 part(s) · 0.47s");
-        assert_eq!(hit.rows[0].index, 497);
-        assert_eq!(hit.rows[0].values, vec![0.0, 0.0, 1.0, 0.0]);
+        // ⚠️ The manifest still carries a `rows` key on older exports; an
+        // unknown key must stay tolerated rather than refusing the file.
     }
 
     #[test]
@@ -736,16 +712,6 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(bare.copy_text(), "A");
-    }
-
-    #[test]
-    fn a_transform_row_reports_its_length() {
-        let row = Row {
-            index: 498,
-            values: vec![0.30902, 0.95106, 0.0, 0.0],
-        };
-        assert!((row.magnitude() - 1.0).abs() < 1e-4, "{}", row.magnitude());
-        assert!(row.describe().contains("0.95106"), "{}", row.describe());
     }
 
     const TEXTURE_MANIFEST: &str = r#"{"schema": 1, "textures": [

@@ -74,8 +74,7 @@ def cmd_list(args: argparse.Namespace) -> int:
     effects = _read()
     shown = [e for e in effects if not args.search or args.search in e.name]
     for effect in shown[: args.limit]:
-        rows = f"{len(effect.rows):>3} row(s)" if effect.rows else "no rows"
-        print(f"{effect.name:<34} {len(effect.parts):>3} part(s)  {rows}")
+        print(f"{effect.name:<34} {len(effect.parts):>3} part(s)")
     if len(shown) > args.limit:
         print(f"... and {len(shown) - args.limit} more (raise --limit)")
     print(f"\n{len(shown)} effect(s) of {len(effects)}")
@@ -92,9 +91,6 @@ def cmd_show(args: argparse.Namespace) -> int:
             print(
                 f"  part {part.index:>4}  {composed:<32} {part.first:>4} {part.second:>4}"
             )
-        for row in effect.rows[: args.limit]:
-            values = "  ".join(f"{v:9.4f}" for v in row.values)
-            print(f"  row  {row.index:>4}  {values}{'  unit' if row.is_unit else ''}")
         return 0
     raise UserError(f"no effect named {args.name!r}; `bleck effect list` shows them")
 
@@ -169,6 +165,7 @@ def _draws(
             {
                 "mesh": index[(draw.offset, draw.descriptor)],
                 "chain": list(draw.chain),
+                "blend": draw.blend,
                 "image": picture.image if picture else NO_IMAGE,
                 "wrap": picture.wrap if picture else 0,
                 "red": picture.red if picture else 255,
@@ -260,10 +257,6 @@ def cmd_export(args: argparse.Namespace) -> int:
                 for part, composed in zip(effect.parts, effect.composed(), strict=True)
             ],
             "seconds": round(max((p.seconds for p in effect.parts), default=0.0), 4),
-            "rows": [
-                {"index": row.index, "values": [round(v, 5) for v in row.values]}
-                for row in effect.rows
-            ],
         }
         for effect in _read()
     ]

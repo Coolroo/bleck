@@ -1128,7 +1128,12 @@ mod tests {
                     [pixel[0], pixel[1], pixel[2]] != [sky.r, sky.g, sky.b]
                 })
                 .count();
-            assert!(drawn > 100, "cell at {left},{top} drew only {drawn} pixels");
+            // ⚠️ 50, not 100. The fallback layout is an even ring since D270
+            // removed the transform rows it used to read, and a ring is more
+            // compact than the four axes those rows put the fixture on — so
+            // every cell draws a little less. The property under test is that
+            // each cell rendered *something of its own*, not how big it is.
+            assert!(drawn > 50, "cell at {left},{top} drew only {drawn} pixels");
         }
         assert_eq!(report.frames.len(), 4);
     }

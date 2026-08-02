@@ -18963,3 +18963,74 @@ test. The report now branches on what it actually did.
 🔶 **Model sweeps use an even cadence, not the clip's own key times.** The times
 are in the manifest and are not read here, so a GIF of a clip shows the *shape*
 of the motion rather than its timing.
+
+## D270 — The blend mode, and the deletion of `Row` (2026-08-02)
+
+D267 left a 🔶: effect materials might want additive blending and the mode was
+not read. They do, and it is — in the same draw function D266 came from.
+
+### ✅ The mode is a six-way switch on section 7's flags
+
+At `0x8005c9f8` the game switches on a value, and every case is one
+`GXSetBlendMode` call:
+
+| value | `GXSetBlendMode(type, src, dst)` | meaning |
+|---|---|---|
+| 1 | `NONE, ONE, ZERO` + alpha-compare always | opaque |
+| 2 | `NONE, ONE, ZERO` + `GEQUAL 128` | cut-out |
+| 3 | `BLEND, SRCALPHA, INVSRCALPHA` | alpha blend |
+| **4** | `BLEND, SRCALPHA, **ONE**` | **additive** |
+| 5 | `SUBTRACT, SRCALPHA, INVSRCALPHA` | `dst - src` |
+| 6 | `BLEND, INVSRCCLR, INVSRCCLR` | `(1-src)*(src+dst)` |
+
+✅ The selector is `lbz r0,4(r14)` — the **high byte of a section 7 group's
+`flags`**. Measured over all 2,960 groups it takes only the values **0, 4, 5
+and 6**, every one inside the switch's own range.
+
+🟢 **The semantic check, which is what makes this a reading rather than a
+coincidence.** The 40 effects asking for mode 4 are `explosion`,
+`dmen_explosion`, `dmen_eye`, `event_fire`, `event_enmagic`, `event_hammer`,
+`chaos_start`, `chaos_end`, `fairyn_get`, `dimension` — glows and flashes,
+every one. Mode 6's six are `item_thunder`, `item_biribiri`, `item_stop`,
+`mini_roundstart` — electricity. Nothing incongruous is in either set.
+
+⚠️ **Zero is not "opaque", and 2,528 of 2,960 draws are zero.** It falls
+*through* the switch, and the mode then comes from state this reading does not
+follow (a flag at `effsub_wp+0x40`, and a register set earlier in the function).
+Mode 0 therefore keeps doing exactly what the viewer did before — plain alpha —
+rather than being given an invented default. Guessing wrong there would be wrong
+nearly everywhere.
+
+⚠️ **The blend is saturating, not wrapping.** An additive glow over a bright
+background overflows constantly, and wrapping turns a highlight into a dark
+hole — the most visible possible wrong answer.
+
+🟢 `explosion` now renders as a red starburst ring expanding around a white-hot
+core, which is what an explosion looks like. Under plain alpha its core was a
+grey blob.
+
+### ⛔ `Effect.rows` is deleted
+
+D258 recorded it as superseded and it shipped for two more entries, "kept only
+because the viewer's layout still leans on it". Since D266 the viewer poses from
+the node chain and nothing leans on it, so it is gone: `Row`, `_read_rows`,
+`_attach_rows`, `TRANSFORM_SECTION`, the manifest's `rows` array, the viewer's
+row table, and the fallback layout's use of it.
+
+⚠️ **This is the trap D252 recorded, caught one entry earlier than last time.**
+A refuted reading that is not withdrawn keeps shipping: `curves()` published
+three meaningless columns for two months on exactly this pattern.
+
+🟢 **The 72-degree finding survives the deletion.** D172/D173 measured a
+five-fold ring in game and that angle really is in section 6; it is now read as
+part of a real 3x4 matrix reached from a node, rather than as a "row" grouped
+under an effect that never indexed it.
+
+⚠️ The fallback layout is now an even ring by part index and nothing more. It is
+only reached by a draw with **no geometry**, which has no measured position to
+use instead.
+
+⚠️ A reel fixture's cells shrank slightly as a result — a ring is more compact
+than the four axes those rows put the fixture on — and one assertion's pixel
+floor came down with a note saying why. The property under test is that each
+cell rendered something of its own, not how large it is.

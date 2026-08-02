@@ -30,7 +30,7 @@
 use super::camera::Basis;
 use super::{Camera, Rgba};
 use crate::data::effects::{Curve, Entry, Mesh as Geometry, NodeDef};
-use crate::data::mesh::{Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
+use crate::data::mesh::{Blend, Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
 
 /// Half the edge of a part's quad, in the units the layout below uses.
@@ -248,7 +248,7 @@ pub fn colour(part: usize) -> Rgba {
 /// all of them.
 pub fn lit(camera: &Camera, part: usize) -> Rgba {
     let basis = Basis::of(camera);
-    let mesh = quad(&basis, Vec3::ZERO, HALF, None);
+    let mesh = quad(&basis, Vec3::ZERO, HALF, None, Blend::Alpha);
     let corners = mesh.positions();
     let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
     colour(part).shaded(intensity)
@@ -275,6 +275,14 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
             // running at this instant ever pay for it.
             let image = art.and_then(|art| art.of(part, draw));
             let named = entry.parts.get(part).and_then(|p| p.draws.get(draw));
+            // ✅ The game's own blend mode (D270). Mode 0 keeps plain alpha,
+            // which is what the viewer did before and what 2,528 draws use.
+            let blend = match named.map_or(0, |d| d.blend) {
+                4 => Blend::Add,
+                5 => Blend::Subtract,
+                6 => Blend::Inverse,
+                _ => Blend::Alpha,
+            };
             let shape = art.zip(named).and_then(|(art, d)| art.geometry(d.mesh));
             let world = match (art, named) {
                 (Some(art), Some(named)) => {
@@ -290,11 +298,17 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
             }
             built.push(Quad {
                 mesh: match shape {
-                    Some(geometry) => real(geometry, &world, image),
+                    Some(geometry) => real(geometry, &world, image, blend),
                     // ⛔ No geometry means no measured position either, so the
                     // stand-in keeps the exploded layout rather than pretending
                     // the origin is where it belongs.
-                    None => quad(&basis, placement(entry, part, scale), scale * HALF, image),
+                    None => quad(
+                        &basis,
+                        placement(entry, part, scale),
+                        scale * HALF,
+                        image,
+                        blend,
+                    ),
                 },
                 colour: colour(part),
                 part,
@@ -444,15 +458,10 @@ fn spread(entry: &Entry, art: Option<Art<'_>>) -> f32 {
 
 /// Where a part sits in the layout.
 ///
-/// ⛔ **The transform rows are not a decoded scene graph.** A row is four
-/// floats; most are unit length, and `chaos`'s hold an exact 72° rotation. The
-/// row at the part's own position is read as a direction and the part placed
-/// along it, which puts `chaos`'s parts on the five-fold ring measured in-game.
-/// A part with no row of its own, or whose row has no direction, falls back to
-/// an even ring by part index.
-///
-/// Both rules are deterministic and both are a layout, not a claim about what
-/// the file means. Nothing downstream may treat a quad's position as measured.
+/// ⛔ **Only reached by a draw with no geometry**, which has no measured
+/// position to use instead. Deterministic, and a layout rather than a claim
+/// about the file: nothing downstream may treat this as where the game puts a
+/// part. A draw that *has* geometry is posed by `posed` and never comes here.
 fn placement(entry: &Entry, part: usize, scale: f32) -> Vec3 {
     // ⚠️ **Nothing to explode when there is only one part.** Offsetting a lone
     // part pushes it off-centre for no gain, and a camera fitted to the result
@@ -461,23 +470,10 @@ fn placement(entry: &Entry, part: usize, scale: f32) -> Vec3 {
     if entry.parts.len() < 2 {
         return Vec3::ZERO;
     }
-    let heading = entry
-        .rows
-        .get(part)
-        .and_then(|row| direction(&row.values))
-        .unwrap_or_else(|| ring(part, entry.parts.len()));
-    heading.scaled(scale * (RING + SPREAD * part as f32))
-}
-
-/// The first three of a row's floats as a unit vector, or `None` when the row
-/// is short, is not finite, or has no length to point along.
-fn direction(values: &[f32]) -> Option<Vec3> {
-    let point = Vec3::new(*values.first()?, *values.get(1)?, *values.get(2)?);
-    if !point.x.is_finite() || !point.y.is_finite() || !point.z.is_finite() {
-        return None;
-    }
-    let unit = point.normalised();
-    (unit.length() > 0.0).then_some(unit)
+    // ⛔ An even ring by part index, and nothing more. The transform rows this
+    // used to read are deleted (D270) — they were section 6 sliced by a field
+    // that never indexed it. A draw with real geometry never reaches here.
+    ring(part, entry.parts.len()).scaled(scale * (RING + SPREAD * part as f32))
 }
 
 /// An even ring in the XY plane, by part index.
@@ -496,7 +492,7 @@ fn ring(part: usize, parts: usize) -> Vec3 {
 /// ⚠️ **Fixed in world space, unlike the billboard below.** Effect geometry is
 /// mostly flat, so orbiting to its edge legitimately shows almost nothing —
 /// that is the shape, not a part that stopped running.
-fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>) -> Mesh {
+fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, blend: Blend) -> Mesh {
     let positions: Vec<Vec3> = geometry
         .positions
         .chunks_exact(3)
@@ -527,7 +523,7 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>) -> Mesh 
             .map(|c| [c[0], c[1], c[2], c[3]])
             .collect()
     });
-    let paints: Vec<Paint> = image.map(cutout).into_iter().collect();
+    let paints: Vec<Paint> = image.map(|t| cutout(t, blend)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         shapes: vec![Shape {
@@ -550,12 +546,11 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>) -> Mesh 
 /// How an effect's bank image is sampled: cut-out art with a real alpha
 /// channel, so without the mask its transparent surround draws as a black
 /// square around the sprite.
-fn cutout(texture: Texture) -> Paint {
+fn cutout(texture: Texture, blend: Blend) -> Paint {
     Paint {
         texture,
         masked: true,
-        // ✅ Semi-transparent throughout, which is the point of the artwork.
-        blended: true,
+        blend,
         cutoff: super::FAINT_CUTOFF,
         sampling: Sampling::default(),
         mask: None,
@@ -572,10 +567,10 @@ fn cutout(texture: Texture) -> Paint {
 /// ⚠️ Built from the camera's own right and up vectors, so it must be rebuilt
 /// when the camera moves. A quad fixed in world space turns edge-on as the view
 /// orbits and disappears, which reads as a part that stopped running.
-fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>) -> Mesh {
+fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>, blend: Blend) -> Mesh {
     let right = basis.right.scaled(half);
     let up = basis.up.scaled(half);
-    let paints: Vec<Paint> = image.map(cutout).into_iter().collect();
+    let paints: Vec<Paint> = image.map(|t| cutout(t, blend)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![
@@ -618,21 +613,12 @@ fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>) -> Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::effects::{Part, Row};
+    use crate::data::effects::Part;
     use crate::data::texture::{png, Texel};
     use crate::render::fixtures::{differing, FRAME};
     use crate::render::{scene, Background, Image, Piece, Size, View};
 
-    /// Rows pointing along four different axes, so no two quads of a test
-    /// effect can land on top of each other and hide the thing being measured.
-    const AXES: [[f32; 4]; 4] = [
-        [1.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0],
-        [-1.0, 0.0, 0.0, 0.0],
-    ];
-
-    /// An effect with one part per duration given, each with a row of its own.
+    /// An effect with one part per duration given.
     fn effect(durations: &[f32]) -> Entry {
         Entry {
             name: "probe".into(),
@@ -650,12 +636,6 @@ mod tests {
                     // These fixtures test the layout and the timeline, so the
                     // art arrives through `Art` rather than through the parts.
                     draws: Vec::new(),
-                })
-                .collect(),
-            rows: (0..durations.len())
-                .map(|index| Row {
-                    index,
-                    values: AXES[index % AXES.len()].to_vec(),
                 })
                 .collect(),
         }
@@ -783,7 +763,7 @@ mod tests {
     /// first one silently: the tests below compare exact pixel values.
     fn billboard_light() -> f32 {
         let basis = Basis::of(&Camera::fit(bounds(&effect(&[1.0]), None)));
-        let mesh = quad(&basis, Vec3::ZERO, HALF, None);
+        let mesh = quad(&basis, Vec3::ZERO, HALF, None, Blend::Alpha);
         let corners = mesh.positions();
         crate::render::raster::lighting(&basis, &[corners[0], corners[1], corners[2]])
     }
@@ -884,35 +864,20 @@ mod tests {
         }
     }
 
-    /// A row of four zeroes points nowhere, and normalising it gives zero — so
-    /// every part with one would stack at the origin. The ring is the fallback.
+    /// ⛔ The rows this used to read are deleted (D270), so the fallback is now
+    /// the ring alone. What still has to hold is the property those tests were
+    /// really about: **every part gets a distinct place**, or two stack and one
+    /// is invisible.
     #[test]
-    fn a_part_whose_row_has_no_direction_falls_back_to_the_ring() {
-        let mut entry = effect(&[1.0, 1.0, 1.0]);
-        for row in &mut entry.rows {
-            row.values = vec![0.0, 0.0, 0.0, 0.0];
-        }
+    fn the_fallback_layout_gives_every_part_a_place_of_its_own() {
+        let entry = effect(&[1.0, 1.0, 1.0]);
         let places: Vec<Vec3> = (0..3).map(|part| placement(&entry, part, 1.0)).collect();
         for (index, place) in places.iter().enumerate() {
             assert!(place.length() > 0.5, "part {index} landed at the origin");
         }
         assert_ne!(places[0], places[1]);
+        assert_ne!(places[1], places[2]);
         assert_eq!(shades(&shot(&entry, 0.5, None)).len(), 3);
-    }
-
-    /// An export with no rows at all, and one whose rows are too short to read
-    /// as a direction: both fall back rather than dropping the part.
-    #[test]
-    fn an_effect_with_no_usable_rows_still_draws_every_part() {
-        let mut entry = effect(&[1.0, 1.0]);
-        entry.rows.clear();
-        assert_eq!(shades(&shot(&entry, 0.5, None)).len(), 2);
-
-        let mut short = effect(&[1.0, 1.0]);
-        for row in &mut short.rows {
-            row.values = vec![1.0];
-        }
-        assert_eq!(shades(&shot(&short, 0.5, None)).len(), 2);
     }
 
     #[test]

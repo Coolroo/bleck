@@ -112,55 +112,24 @@ class TestAgainstTheRealFile:
 
 
 @pytest.mark.gamedata
-class TestTransformRows:
-    """Section 6: 4,048 rows of four floats, indexed by each effect's `extra`."""
+class TestSectionSix:
+    """⛔ `Row` is deleted (D270). What replaced it is `Transform`, and its
+    tests live in `TestTheNodeTransforms` — section 6 is 1,349 3x4 matrices
+    reached from a node's `+0x06`, not four-float rows sliced by an effect.
 
-    def _named(self, name: str) -> effdata.Effect:
-        if not EFFDATA.is_file():
-            pytest.skip(f"no extracted disc at {EFFDATA}")
-        found = next(e for e in effdata.read(EFFDATA.read_bytes()) if e.name == name)
-        return found
+    ⚠️ **The 72-degree finding survives the deletion.** D172/D173 measured a
+    five-fold ring in game and the same angle was in these floats; that is
+    still true, and is now read as part of a real matrix rather than as a row
+    grouped under an effect that never owned it.
+    """
 
-    def _all(self) -> list[effdata.Effect]:  # pylint: disable=container-return
-        if not EFFDATA.is_file():
-            pytest.skip(f"no extracted disc at {EFFDATA}")
-        return effdata.read(EFFDATA.read_bytes())
-
-    def test_chaos_holds_an_exact_72_degree_rotation(self):
-        """🟢 360/5, and the Chaos Heart is ringed by *five* hearts (D172, D173).
-
-        Measured from the game, `chaos-heart` orbits five bodies at 72 degrees
-        apart. The same angle is sitting in the file, to float32 precision --
-        which is what says these rows drive placement rather than being noise
-        that happens to look geometric.
-        """
-        rows = self._named("chaos").rows
-        cos72, sin72 = math.cos(math.radians(72)), math.sin(math.radians(72))
-        first, second = rows[1].values, rows[2].values
-        for got, want in (
-            (first[0], cos72),
-            (first[1], sin72),
-            (second[0], -sin72),
-            (second[1], cos72),
-        ):
-            assert abs(got - want) < 1e-5, f"{got} vs {want}"
-
-    def test_every_row_of_chaos_is_a_unit_vector(self):
-        assert all(row.is_unit for row in self._named("chaos").rows)
-
-    def test_a_meaningful_share_of_all_rows_are_unit_vectors(self):
-        """⚠️ Weak by design: enough to say the section is geometry, not enough
-        to say what any single row means."""
-        every = [row for e in self._all() for row in e.rows]
-        unit = sum(row.is_unit for row in every)
-        assert len(every) > 3000
-        assert unit > len(every) // 4
-
-    def test_rows_are_not_grouped_into_3x4_matrices(self):
-        """⛔ Pinned as a negative. The obvious reading is three rows per
-        transform, and the per-effect counts refute it."""
-        counts = [len(e.rows) for e in self._all()]
-        assert any(count % 3 for count in counts)
+    def test_the_old_row_view_is_gone(self):
+        """A refuted reading that keeps shipping is the trap D252 recorded."""
+        assert not hasattr(effdata, "Row")
+        assert not hasattr(effdata, "TRANSFORM_SECTION")
+        effects = effdata.read(EFFDATA.read_bytes()) if EFFDATA.is_file() else []
+        if effects:
+            assert not hasattr(effects[0], "rows")
 
 
 @pytest.mark.gamedata

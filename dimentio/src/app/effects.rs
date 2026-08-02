@@ -350,7 +350,6 @@ impl Viewer {
             ui.separator();
             asset.inline(ui, "parts", &entry.parts.len().to_string());
             ui.separator();
-            asset.inline(ui, "rows", &entry.rows.len().to_string());
             ui.separator();
             asset.inline(
                 ui,
@@ -375,7 +374,6 @@ impl Viewer {
             egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
                 Self::part_table(ui, entry, time);
                 ui.add_space(12.0);
-                Self::row_table(ui, entry);
             });
         });
     }
@@ -593,35 +591,6 @@ impl Viewer {
                     ui.label(images);
                     ui.end_row();
                 }
-            });
-    }
-
-    /// The transform rows, folded away by default: one effect carries up to
-    /// 315 of them, which would bury the parts above.
-    fn row_table(ui: &mut egui::Ui, entry: &effects::Entry) {
-        egui::CollapsingHeader::new(format!("transform rows ({})", entry.rows.len()))
-            .default_open(false)
-            .show(ui, |ui| {
-                egui::Grid::new("effect-rows")
-                    .num_columns(3)
-                    .striped(true)
-                    .show(ui, |ui| {
-                        for row in &entry.rows {
-                            ui.label(
-                                egui::RichText::new(row.index.to_string())
-                                    .monospace()
-                                    .weak(),
-                            );
-                            ui.label(egui::RichText::new(row.describe()).monospace());
-                            ui.label(
-                                egui::RichText::new(format!("len {:.4}", row.magnitude()))
-                                    .monospace()
-                                    .weak(),
-                            )
-                            .on_hover_text("the row read as a vector");
-                            ui.end_row();
-                        }
-                    });
             });
     }
 
