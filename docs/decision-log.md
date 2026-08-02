@@ -16774,3 +16774,545 @@ produce a REL.** It is no longer the container's default, so nothing ships
 broken; `docs/code-mods.md`'s D26 recipe remains the record of what it can and
 cannot do. If it ever needs to work again, the order is: land the
 `& 0xFFFFFFFF` upstream, then add the linker script here.
+
+## D252 — The animation was 16× too big and applied one frame at a time (2026-08-01)
+
+A person opened `p_bibi.glb` in Blender, pressed Space, and reported the
+animation looked "insane, not accurate" — a smeared mess of overlapping planes.
+The static geometry of the same file had been confirmed correct after D240, so
+the fault was in the animation or in how it was expressed.
+
+**Two defects, both in the same function, both read off the DOL rather than
+fitted.** Neither is a judgement call: the game states its own arithmetic.
+
+### ⛔ A delta is a sixteenth of a unit, not a unit ✅
+
+`animPoseMain` loads its multiplier once, outside every loop:
+
+```
+80045798: c0 02 87 c4    lfs f0,-30780(r2)
+...
+80045800: ec 20 08 ba    fmadds f1,f0,f2,f1     ; dest.x += f0 * delta
+```
+
+`_SDA2_BASE_` is `0x805B7260` (D247), so `f0` is the word at `0x805AFA24`,
+which is `3d800000` — **0.0625**. `bleck` added the raw `s8` and had done since
+D217.
+
+⛔ **The quantisation registers are not the scale, and that had to be checked.**
+`mtspr 914..917` write `0x00040004`, `0x00050005`, `0x00060006`, `0x00070007`,
+so the four GQRs carry load types 4–7 with **`LD_SCALE` zero** in every one. The
+deltas come in through `psq_l f2,1(r6),1,4` — GQR4, type 6, s8, unscaled. Had
+that field been non-zero it would have been a second factor on top of `f0`.
+
+⚠️ **How wrong it was, measured across all 1,728 animated clips:**
+
+| reading | median furthest displacement, in model widths | clips over 1 width |
+|---|---|---|
+| **raw `s8`, as shipped** | **2.419** | **1,336 of 1,728** |
+| raw `s8`, accumulated | 3.509 | 1,396 |
+| `s8 / 16` | 0.151 | 26 |
+| `s8 / 16`, accumulated | **0.219** | 70 |
+
+A median pose throwing every vertex two and a half times the model's own width
+is exactly the reported picture. `p_bibi`'s worst target was 115 units on a
+28-unit model; it is now 29.
+
+### ⛔ A track is an increment, not a pose ✅
+
+The rebuild path applies tracks `0..frame` into one buffer copied from the
+model's positions:
+
+```
+800456fc: mulli r0,r26,44      ; frame * 44
+80045700: lwz   r21,40(r27)    ; &track[0]
+8004570c: addi  r20,r20,44     ; &track[frame+1]
+80045d28: blt   0x800457ac     ; while r21 < &track[frame+1]
+```
+
+✅ **The incremental path is what proves it.** At `0x80045d34`, when the cached
+frame is behind the current one, the game applies tracks `cached+1..frame` and
+**never re-copies the base positions**. Two code paths that must produce the
+same picture, and they can only agree if a track adds to what is already there.
+
+`bleck` wrote each track as an independent glTF morph target and drove one at
+weight 1 at a time, so every frame snapped back to the rest pose and took a
+single increment.
+
+### The independent witness, and the instrument that failed first
+
+⚠️ **The first oracle was useless and its control said so.** The clip record's
+box at `+0x44` (D205) scored ~1.5 for the real reading, for the accumulated
+reading *and* for a shuffled control — because on most models the box does not
+even contain the rest pose. Discarded rather than argued with.
+
+Restricted to the 554 clips whose box **does** fit the rest pose to within 20%,
+it discriminates:
+
+| reading | median fit | clips that overshoot the box |
+|---|---|---|
+| per-track | 0.1148 | 23 of 554 |
+| **accumulated** | **0.1054** | **0 of 554** |
+| accumulated, tracks reversed (control) | 0.1153 | 70 of 554 |
+
+Accumulating never leaves the box the file declares. The reversed control
+breaks it three times as often as the per-track reading does, so the *order*
+matters — which is what accumulation predicts and independence cannot.
+
+### ✅ Sparse was never the bug
+
+`--dense-morphs` and the default sparse export of `p_bibi` now produce
+**identical target values, target for target**, read back out of the emitted
+bytes by a reader written from the specification alone. D238's sparse writer is
+exonerated; it had faithfully written wrong numbers.
+
+⚠️ **The reader was validated before it was trusted.** A four-vertex `.glb` with
+three known targets — one moving vertex 1 by `(0, 5, 0)`, one moving vertex 2 by
+`(-3, 0, 0)` — reports exactly those displacements at exactly those times, in
+both encodings. Without that, "the file looks wrong" would have been a claim
+about the instrument.
+
+### ✅ A keyframe is not a morph target
+
+**13,115 of the disc's 35,190 tracks carry no keys at all.** They were dropped
+outright before; under accumulation they are hold frames and dropping one
+shortens the clip. Emitting them naively gave each its own target, which cost
+70 clips to the budget and 39 MB.
+
+So `_slots` folds a run of keyframes that draw the same picture onto one target,
+and the weight block becomes `keys × targets` rather than `targets²`. Measured
+over the full export:
+
+| | D238 | a target per keyframe | now |
+|---|---|---|---|
+| clips written / dropped | 3,079 / 0 | 3,009 / **70** | **3,079 / 0** |
+| morph targets | 22,073 | 34,699 | 22,485 |
+| `work/export/models` | 123.4 MB | 176 MB | **137 MB** |
+
+⚠️ `gltf.costs` has to mirror the folding exactly or the budget prices a
+fiction and drops clips that fit.
+
+⛔ **Rejected: folding non-consecutive matches too.** It needs every column
+compared against every earlier one, and the runs are what the hold frames
+produce anyway.
+
+### ⛔ `curves()` is deleted, and it was never in the animation path ✅
+
+Nothing it produced reached a `.glb`. It fed three `models.json` columns —
+`curves`, `keys`, `span` — that no consumer reads; `dimentio`'s `ClipEntry`
+does not even declare them.
+
+D217 already said the D216 reading was detecting correlated adjacent bytes
+rather than a real layout, and did not withdraw it. It is now worse than
+unproven: with the key layout settled as `[stride, dx, dy, dz]`, the `s16` that
+`curves()` accumulated is **`dx` as the high byte and `dy` as the low byte of
+one big-endian number**. That is not a quantity. Publishing it in a manifest as
+`span` was the D245 failure again — a number nobody had checked, presented as a
+fact.
+
+⚠️ **`mark` goes back to being a timeline position, and the D216 addendum is
+superseded.** The addendum called field 0 a per-channel duration that the tracks
+are sorted by. There are no channels. The seek at `0x80045560` scans for the
+last track whose field 0 is at or before the clock and then divides
+`(time − mark[frame]) / (mark[next] − mark[frame])` for the blend — it is a key
+time, used as one.
+
+### 🔶 `p_wii_mario`'s "bunch of stuff" is in the file, and is two things
+
+The same person reported extra geometry. It is not a decode fault; both parts
+are read exactly as the file states.
+
+1. **61 one-triangle untextured planes**, named as Maya instances
+   (`A0..A15|pPlane11`, `C0..C15|pPlane12`, `pPlaneShape1..10`), stacked at
+   **three** distinct spots — 39 at one point, 11 at another, 11 at a third.
+   The group table gives each its own 3-position block (141, 144, … 321) and
+   the blocks tile the 324-position array exactly, so the duplication is the
+   file's. 🔶 They are presumably placed apart at run time by the animation;
+   nothing has been measured that says so.
+2. **Props the game only shows in one state**: `big_hammerShape` is 40×50 units
+   and alone makes the mesh read 96 units tall where Mario's body is 28, plus
+   `awate_footShape`, `namidaShape` (tears) and the four `sp_*` speech-balloon
+   parts.
+
+🔶 Whether either should be exported, hidden, or merely labelled is undecided.
+`dimentio` can already hide a primitive, and every one of these is its own.
+
+### 🔶 Still not measured
+
+- **The 60 Hz frame rate** for clip key times is unchanged and still an
+  inference carried from `effdata` (D235). The seek compares `mark` against a
+  clock at `36(r29)`; what advances that clock has not been traced.
+- **Whether `p_bibi` now looks right.** Everything above is measured off the
+  emitted bytes. Nobody here can open a `.glb`.
+
+## D251 — Brobot is white because the tint is per-vertex, in slot 5 (2026-08-01)
+
+A person opened `e_lui_robo.glb` in Blender and reported the geometry perfect,
+the **texture detail plainly there** — rivets, vents, panel lines, a yellow
+ring — and the whole robot **near-white**. Brobot is a Luigi-themed machine and
+is red, blue, green and gold.
+
+⛔ **The leading hypothesis was palette-indexed textures, and it is refuted.**
+D247 found the draw path reaching `GXInitTexObjCI` at `0x802917ac` as well as
+`GXInitTexObj` at `0x802915a0`, so a CI image decoded without its TLUT was the
+obvious cause of a flat, structure-preserving grey. It is not what happens
+here.
+
+### The format census, so the question is settled rather than argued ✅
+
+Every TPL bank under `files/a` — 815 of them, 12,736 images:
+
+| format | value | images |
+|---|---|---|
+| CMPR | 14 | **12,678** |
+| IA8 | 3 | 20 |
+| I4 | 0 | 13 |
+| IA4 | 2 | 12 |
+| RGB5A3 | 5 | 8 |
+| I8 | 1 | 3 |
+| RGB565 | 4 | 1 |
+| RGBA32 | 6 | 1 |
+
+⛔ **Zero paletted images. Zero images carrying a palette header pointer**
+either — the second `u32` of every image-table entry is 0 on all 12,736. So
+C4/C8/C14X2 are not exercised, `texdecode` guesses nothing about them, and
+`tpl.read` **refuses** an unknown format value rather than skipping it: a
+paletted image on this disc would raise, not decode white.
+
+⚠️ **`e_lui_robo`'s bank is CMPR end to end** — all 24 images. The eight
+formats `texdecode` implements are exactly the eight the disc uses, and every
+one occurs, so none of it is guessed at. D248's I4/I8 alpha bug was real and is
+the only mishandling found.
+
+### The reference comparison, which separated decode from binding ✅
+
+`work/reference/x/Brobot` is a third-party rip carrying the real images (D236).
+Decoding `e_lui_robo-` directly — no model, no shape, no `.glb` — and comparing
+means against the rip by dimension:
+
+| bank image | ours | the rip's same-size image | |
+|---|---|---|---|
+| 9, 208x120 | (53.2, 8.8, 48.0) | `Tex_0144_0` (53.2, 8.8, 48.0) | ✅ exact |
+| 16, 200x80 | (180.7, 194.2, 197.1) | `frc.dds` (181.6, 194.1, 197.0) | ✅ exact |
+| 20, 192x120 | (34.0, 87.1, 94.9) | `Tex_0122_0` (34.1, 87.1, 94.9) | ✅ exact |
+| 17, 96x64 | (38.2, 38.2, 38.2) | `Tex_0128_0` (38.1, 38.1, 38.1) | ✅ exact, grey both ways |
+| 13, 200x80 | (243.6, 243.6, 243.6) | `red.dds` (189.0, 40.5, 41.3) | ⛔ ours is white |
+| 18, 72x80 | (114.8, 114.8, 114.8) a=172.4 | `Tex_0129_0` (90.0, 19.2, 19.5) **a=172.4** | ⛔ grey, alpha exact |
+
+⚠️ **The alpha matching to a tenth while the colour does not is the tell.** The
+tiling, the block kinds, the index packing and the punch-through alpha are all
+right; only the hue is absent. So it is neither a decode fault nor a binding
+fault — the colour is *not in the image*.
+
+The raw blocks say so outright: **968 of image 13's 1,000 CMPR blocks have both
+endpoints grey**, against **16 of 1,000** for image 16, which came out correctly
+coloured. The disc stores one greyscale panel.
+
+⚠️ **D243's content matcher could not have caught this**, and that is worth
+recording. Its 6x6 signature is z-scored over the concatenated RGB vector, so a
+grey copy of a coloured image still correlates highly — `Tex_0102.dds` scored
++0.996 against a disc image with no hue at all. It was built to answer "which
+picture" and it answered that correctly; it is blind to "what colour".
+
+### Where the colour is: `GX_VA_CLR0`, and the draw code names it ✅
+
+The same technique as D206, D240, D243 and D247 — read the code that reads the
+file. `0x80048594`, twelve instructions after the position and normal setup
+D207 quoted and directly above the texcoord branch:
+
+```
+80048594: li r3,11 ; li r4,3    GXSetVtxDesc(GX_VA_CLR0, GX_INDEX16)
+800485a4: li r4,11              GXSetVtxAttrFmt(fmt0, GX_VA_CLR0,
+800485a8: li r5,1                                GX_CLR_RGBA,
+800485ac: li r6,5                                GX_RGBA8, 0)
+800485b8: mr r4,r15 ; li r5,4   GXSetArray(GX_VA_CLR0, r15, stride 4)
+```
+
+and `r15` is built at `0x800484cc` as `lwz r3,356(r6)` — `0x164`, which is
+**slot 5** — plus a per-shape byte offset off the stack. The inner loop's
+fourth `lhz`/`sth` pair reads `lwz r7,360(r19)` — `0x168`, **slot 6** — at
+`corner + shape[0x48]`, so every corner names a position, a normal, a **colour**
+and a texcoord, in that order.
+
+⛔ **Slots 5 and 6 were listed in `model-format.md` as 🔶 "read by nothing".**
+They are the answer, and D207/D208 measured them long before the question that
+needed them was asked.
+
+### The invariants, on all 864 readable models ✅
+
+| check | result |
+|---|---|
+| models carrying a colour array | **864 / 864** |
+| colour indices landing inside their own array | **864 / 864, zero strays** |
+| streams reaching the array's *last* entry | 864 / 864 |
+| group records whose colour slice is `(0, 0)` | **17,290 / 17,290** |
+| shape records where the colour corner offset equals the position one | **18,631 / 18,631** |
+
+⚠️ **The last two are why this reads like the normal stream and not like the UV
+one.** Colours need neither a per-group base nor a separate corner offset; the
+UV stream needs both (D240), and assuming symmetry there was the D240 bug.
+Assuming asymmetry here would have been the same mistake mirrored.
+
+⚠️ **"Zero out of range" alone would prove nothing** — a long enough array
+swallows any index. It is paired with "the stream reaches the last entry",
+which a wrong slot does not.
+
+**524 of 864 models are opaque white throughout** and are unaffected. **331
+carry more than one distinct colour**; `e_lui_robo` holds 66, including
+`(198, 39, 39)`, `(98, 142, 44)`, `(0, 126, 188)` and `(204, 158, 0)`.
+
+### The prediction, and it lands on the rip ✅
+
+Texture mean times modal vertex colour, per shape, against the rip's image of
+the same size:
+
+| shape | image x tint | the rip |
+|---|---|---|
+| `pis_sitaShape1` | 40x184 x (204, 158, 0) -> (77.9, 60.4, 0.0) | `Tex_0101_3` (78.7, 60.7, 0.4) |
+| `cubeShape1` | 88x120 x (27, 181, 27) -> (18.0, 120.8, 18.0) | `Tex_0159rfy` (18.1, 122.3, 18.1) |
+| `cubeShape2` | 88x120 x (0, 126, 188) -> (0.0, 84.1, 125.4) | `Tex_0159_0` (0.5, 84.3, 127.4) |
+| `sitaShape` | 32x120 x (224, 74, 38) -> (123.0, 40.6, 20.9) | `Tex_0161_0` (123.3, 40.8, 23.4) |
+| `agoShape` | 200x80 x (181, 220, 221) -> (128.3, 167.6, 170.8) | `Tex_0088_0` (125.4, 166.6, 172.2) |
+
+The ripper baked the vertex colour into the texture it dumped, which is why the
+rip carries a `red.dds` and a `gray.dds` of the same 200x80 panel.
+
+✅ **Scored over all 67 matchable primitives, out of the emitted `.glb` and not
+out of the writer** — mean distance to the nearest same-size rip image:
+
+| | mean distance |
+|---|---|
+| **read `COLOR_0`** | **47.8** |
+| white — what the old export wrote | 87.8 |
+| shuffled control, 50 draws | 67.7 mean, **59.8 best** |
+
+The read beats every one of the 50 shuffles, and the shuffle beats plain white
+— which is what a control should look like when the *set* of colours is right
+and only the assignment is scrambled.
+
+### What is written
+
+`COLOR_0`, VEC4 of `UNSIGNED_BYTE` with `normalized: true`, per primitive. glTF
+multiplies it into the base colour, which is exactly the `GX_MODULATE` of
+`COLOR0A0` that mode 0 programs (D247) — so this needs no extension and no
+`extras`, unlike the mask.
+
+⚠️ **Omitted where every vertex is opaque white**, which the specification
+already means. 524 models write nothing and are unchanged.
+
+⚠️ **The weld key gained the colour index**, beside position, normal and UV. Two
+corners at one point with different tints are two glTF vertices; welding them
+would smooth a hard colour edge away.
+
+| | before | after |
+|---|---|---|
+| models exported | 864 | 864 |
+| files where a primitive resolves an image | 823 | 823 |
+| embedded images | 6,892 | 6,892 |
+| shapes resolving to an image | 13,953 | 13,953 |
+| **primitives carrying a tint** | **0** | **4,708** |
+| **models carrying one** | **0** | **340** |
+| structural violations | 0 | 0 |
+| **tinted vertices** | 0 | **148,073** |
+| **`COLOR_0` payload, corpus-wide** | 0 | **0.56 MiB** |
+
+⚠️ **The payload is measured, not the export directory's size.** D252 landed in
+the same working tree and moved the morph budget, so `du` over `work/export`
+cannot attribute a byte to either change. Summing every `COLOR_0` accessor's
+`count × 4` out of the emitted files can: **592,292 bytes**, which is 0.4% of
+the export.
+
+⚠️ **340, not 331.** A model whose single distinct colour is not white — black,
+or a mid grey — also gets the attribute.
+
+### `OFF_doorL`'s kanji is correct ⛔
+
+Reported as "a large 表 filling the door", suspected of being an off-by-N into
+the wrong bank because `omote` also names `MOBJ_EFF_mahojin_omote`.
+
+⛔ **It is neither.** `OFF_doorL` names its own bank `OFF_doorL-`, which holds
+exactly two 32x32 CMPR images: **裏** (*ura*, back) and **表** (*omote*, front).
+The model's own material records name the source art `maya/OFF_rot/back.tga`
+and `maya/OFF_rot/front.tga`. Shape 0 draws `back.tga` with scale U = **-1**,
+which is D247's door mirroring seen from the other side.
+
+The model is two quads and a dev marker for which face of a rotating door is
+which. The `omote`/`ura` collision with the magic circles is one Japanese word
+used twice.
+
+### `e_bari_beam` is a white ring and that is the art
+
+One 144x144 CMPR image, `hara/enemy/barian/tex/beam.tga`, mean (74, 74, 74)
+with alpha 74 — a soft ring with its own falloff. Its bank is `e__bari_beam-`
+with the doubled underscore (D245), and its one shape carries no tint. ⚠️ Not
+confirmed by eye; it is the only one of the three reports still standing on
+measurement alone.
+
+### Rejected
+
+- ⛔ **Baking the tint into each image before embedding it.** It is what the
+  rip did, and it is what `vision.md` forbids: two shapes share one image and
+  tint it differently, so baking multiplies the embedded art by the number of
+  tints and throws away the fact that the file states them separately.
+- ⛔ **`baseColorFactor` per material instead.** It is per material and the
+  colour is per *vertex* — `agoShape` alone spans several. It would also
+  collide with the material deduplication D248 keys on the whole reference.
+- ⛔ **Writing `COLOR_0` unconditionally.** Four bytes a vertex to say "multiply
+  by one" on 524 models, for a value the specification supplies by default.
+- ⛔ **Welding on the colour *value* rather than its index.** It would merge two
+  entries that happen to hold one colour, which is fewer vertices and one more
+  way for the position, normal, UV and colour keys to disagree about what a
+  vertex is.
+
+### Still open 🔶
+
+- **Nobody has looked at the fixed export yet.** Every number above is a byte
+  count or a distance; the report that started this came from a person and the
+  answer to it has not been back to one.
+- `dimentio` does not read `COLOR_0`. Its rasteriser interpolates a UV across a
+  triangle and would need to interpolate a colour the same way, which is
+  renderer work of the shape D246 and D248 did for the mask. Until then the
+  viewer draws what the old export drew, and Blender is the stronger witness.
+- Slot 6 is now read; **slots 20-23 remain undecoded**, and slot 5's alpha
+  channel is written through untested — every colour on the disc has `a = 255`
+  except where the whole entry is zero.
+
+## D253 — An agent can look at its own render: `dimentio shot` (2026-08-01)
+
+Every model defect in this repo's record was found by a person opening Blender
+and saying what they saw — D223's bow-ties, D229's "small mimis on a big mimi",
+D234's bare model, D236's stray quad, D252's "insane, not accurate" animation.
+D251 closed with **"nobody has looked at the fixed export yet"**, and that
+sentence has been true at the end of most model sessions. The round trip costs a
+day, and every hour of it is a person being asked to be a display.
+
+The renderer never needed one. `dimentio`'s viewport has been a **software
+rasteriser since D213** — a `Vec<u8>`, no GPU, no window, no driver — precisely
+because this machine cannot capture its own desktop. Nothing was reading it
+except the window.
+
+### ✅ What was built
+
+`dimentio shot` renders a model to a PNG and exits. It is a subcommand of the
+same binary; a bare `dimentio` and `dimentio <folder>` still open the window
+unchanged, and only the literal first argument `shot` diverts.
+
+```powershell
+cargo run --release --manifest-path dimentio/Cargo.toml -- `
+  shot work/export/models/files/a/e_lui_robo.glb --out shot.png
+```
+
+- **Four angles into one contact sheet**, not four files. Evenly spaced from the
+  front, 0.35 rad above the horizon. ⛔ Four hand-picked poses were rejected:
+  they stop meaning anything the moment `--angles` is not 4, and the
+  axis-aligned views are the informative ones — a flat card that vanishes
+  edge-on is a fact about the model, and two of `p_bibi`'s four cells being
+  empty is the picture saying so.
+- **Checkerboard, never white.** A texture decoding to near-white and a texture
+  that failed to decode are the same image on a white page (D251).
+- `--clip N --frame F` holds one keyframe. ⛔ **A missing clip or frame is an
+  error, not the rest pose**: a believable image of the wrong thing is the
+  failure mode this whole tool exists to prevent.
+- Camera fitted from the bounding box, so nothing is off-screen.
+
+⚠️ **It worked on the first model it was pointed at, and the first thing it
+showed was D236's stray quad** — the Mario sprite 130 units to the side of
+`e_lui_robo`, textured, plainly separate, visible in two of the four cells and
+edge-on in the other two. That took a person and a day the first time.
+
+### ✅ The control: colour spread separates painted from bare
+
+A screenshot tool that emits a plausible image for a broken model is worse than
+none, so the tool measures its own output. **Colour spread** is the RMS scatter
+of each drawn pixel's tint about the frame's mean, **with luminance divided
+out** — shading already swings a bare surface from ambient to full, so raw RGB
+variance cannot tell a lit grey model from a painted one.
+
+Measured over 60 whole models of the real export, one 192 px view each:
+
+| | models | spread range |
+|---|---|---|
+| **no image** (`textured: false`) | 30 | 0.000 – **0.007** |
+| **carrying an image** | 30 | **0.023** – 1.559, one at 0.000 |
+
+The threshold is **0.015**, between the two. The one crossing model is
+`MOBJ_EFF_mahojin_ura` at 0.000 — a magic circle whose image carries no colour.
+`e_lui_robo` reads 0.218; `e_big_nok`, which carries no image, reads 0.007.
+
+### ⛔ Surface detail looked like the better measure and the corpus refuted it
+
+The first attempt judged a frame on **neighbour step** — the mean brightness
+difference between side-by-side pixels of the model — reasoning that a painted
+surface disagrees texel by texel and a facet is smooth. It is reported, and it
+decides nothing. Two measurements killed it:
+
+- **Small facets read as texels.** `e_bari_bari` carries no image at all and
+  steps **0.099**, above 26 of the 30 textured models.
+- **Magnification reads as smooth.** `OFF_doorL` is a sharp black-on-grey kanji
+  across a quarter of the cell and steps **0.006** — what a bare cube steps —
+  because one texel covers many pixels.
+
+⚠️ The control caught this, not review. The first threshold shipped at 0.01 and
+the first run of the real-export test failed on `e_big_nok`: *"a model with no
+image read as painted: spread 0.0065, detail 0.0169"*. Both refutations are
+standing tests, one of which asserts that an untextured model out-details a
+textured one — so if the numbers ever swap, the reasoning is flagged as stale
+rather than quietly surviving.
+
+⚠️ **Colour spread cannot see a greyscale image.** `OFF_doorL` carries two
+images and reads 0.010, under the threshold, so the verdict says *"one tint:
+bare, or a greyscale image"* rather than "bare". Both numbers are printed; the
+tool does not claim more than it measured.
+
+### What this does not change
+
+- ⛔ **Still nobody has looked at the fixed export in Blender.** A render by the
+  program under test is not independent of it. What this removes is the round
+  trip for everything short of that — a defect visible in a contact sheet no
+  longer costs a day to hear about.
+- `dimentio` still does not read `COLOR_0` (D251), so its picture of a
+  per-vertex-tinted model is the old one. The sheet shows what the rasteriser
+  draws, which is not always what Blender draws.
+
+## D254 — The repeated methods are packaged as skills, not only as history (2026-08-01)
+
+✅ **Built.** Six method write-ups now live under `.claude/skills/<name>/SKILL.md`,
+each a directory with YAML frontmatter whose `description` says *when* to reach
+for it. An agent session loads one on demand; the decision log stays the
+evidence, and every skill cites the D-numbers it rests on.
+
+| skill | the method | rests on |
+|---|---|---|
+| `decode-by-disassembly` | when a format will not yield, disassemble the code that reads it | D206, D207, D240, D243, D247, D252 |
+| `control-every-statistic` | no percentage without a control through the identical code path | D209, D211, D214, D229, D245, D253 |
+| `verify-the-emitted-artifact` | test the bytes shipped, not what the writer was handed | D221, D234, D245, D246 |
+| `render-to-look` | `dimentio shot` closes the look-at-it loop without a person | D213, D251, D253 |
+| `ground-truth-from-reference-rips` | third-party rips as an answer key, with the matcher itself controlled | D236, D243 |
+| `slow-command-discipline` | the price list, and where each transcript already is | D16, D70/D73/D74, D245 |
+
+### Why a skill rather than another docs page
+
+`docs/` is chronological and now runs past 17,000 lines. A method proved across
+six entries is not discoverable from any one of them, and the entries that
+*record* a method are the ones where it failed first — D209 reads as a success
+until D211 retracts it. A skill is the settled form, loaded by name, with the
+retraction already folded in.
+
+⛔ **Rejected: moving this into `CLAUDE.md`.** That file is read in full on every
+session and is already long; a two-page method that matters on one task in five
+would be paid for on all five. It is also git-ignored (D149), so it cannot
+travel to another machine.
+
+⚠️ **`.claude/` is *not* in `.gitignore`**, so `.claude/skills/` can be
+committed and reach another machine — unlike `CLAUDE.md`, `mods/` and `work/`.
+Whether to commit it is the user's call and nothing here has been staged.
+
+### Confidence
+
+🔶 **Untested as skills.** Every claim inside them is quoted from a verified
+entry, but that a future session *reaches for the right one* is a property of
+the `description` lines and has not been observed. The failure mode to watch is
+a skill that loads for the wrong task, which costs context for nothing.
+
+⚠️ These are guidance, not enforcement. `scripts/lint.py` is where a rule
+becomes a rule; nothing in `.claude/` can fail a build.

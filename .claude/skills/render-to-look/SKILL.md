@@ -1,0 +1,106 @@
+---
+name: render-to-look
+description: Use when a model, texture or animation export needs eyes on it and you have no screen — `dimentio shot` renders a .glb to a PNG contact sheet you can read directly, instead of costing a human a day of round trip. Covers the flags, the colour-spread self-check and its blind spots.
+---
+
+# Render to look
+
+**Five rounds of controlled statistics told us less than one human screenshot.**
+
+Every model defect in this repo's record was found by a person opening Blender:
+D223's bow-ties, D229's "small mimis on a big mimi", D234's bare model, D236's
+stray quad, D252's "insane, not accurate" animation. Each round trip cost a day,
+and every hour of it was a person being asked to be a display.
+
+`dimentio`'s viewport has been a **software rasteriser since D213** — a
+`Vec<u8>`, no GPU, no window, no driver — precisely because this machine cannot
+capture its own desktop. Nothing was reading it except the window. `dimentio
+shot` (D253) reads it into a file.
+
+## The command
+
+```powershell
+cargo run --release --manifest-path dimentio/Cargo.toml -- `
+  shot work/export/models/files/a/e_lui_robo.glb --out shot.png
+```
+
+Then `Read` the PNG. That is the whole loop.
+
+| flag | |
+|---|---|
+| `--out <file.png>` | required; there is nowhere else to write |
+| `--angles <n>` | views around the model, **into one contact sheet**. Default 4, range 1–16 |
+| `--clip <n>` | morph clip to pose, by index. Default 0 |
+| `--frame <f>` | keyframe of that clip to hold. Default: the rest pose |
+| `--background <s>` | `dark-grey` \| `checkerboard` \| `gradient`. Default checkerboard |
+| `--size <px>` | cell edge. Default 512, range 16–4096 |
+
+A bare `dimentio` and `dimentio <folder>` still open the window; only the
+literal first argument `shot` diverts.
+
+## Why it is shaped this way
+
+- **Several angles into one image, not one file each.** Most defects are visible
+  from one direction only, and the file not opened is the one that showed it.
+  Views are evenly spaced from the front, 0.35 rad above the horizon — a
+  model's top is where an exporter's mistakes collect.
+  ⛔ Four hand-picked poses were rejected: they stop meaning anything the moment
+  `--angles` is not 4, and the axis-aligned views are the informative ones. A
+  flat card that vanishes edge-on is a *fact about the model*; two of `p_bibi`'s
+  four cells being empty is the picture saying so.
+- **Never white.** A texture decoding to near-white and a texture that failed to
+  decode are the same image on a white page (D251). Checkerboard by default,
+  with a `(120,124,132)` gutter in a colour neither background uses.
+- ⛔ **A missing clip or frame is an error, not the rest pose.** A believable
+  image of the wrong thing is the failure mode this tool exists to prevent.
+- Camera fitted from the bounding box, so nothing is off-screen.
+
+⚠️ It worked on the first model it was pointed at, and the first thing it showed
+was **D236's stray quad** — the Mario sprite 130 units to the side of
+`e_lui_robo`, textured, plainly separate, in two of four cells and edge-on in
+the other two. That took a person and a day the first time.
+
+## The self-check, and what it cannot see
+
+The tool measures its own output, because a screenshot tool that emits a
+plausible image for a broken model is worse than none.
+
+**Colour spread** — RMS scatter of each drawn pixel's tint about the frame mean,
+**with luminance divided out**, because shading alone swings a bare surface from
+ambient to full and raw RGB variance cannot tell a lit grey model from a painted
+one. Threshold **0.015**, measured over 60 whole models of the real export:
+
+| | models | spread |
+|---|---|---|
+| `textured: false` | 30 | 0.000 – **0.007** |
+| carrying an image | 30 | **0.023** – 1.559 (one at 0.000) |
+
+`e_lui_robo` reads 0.218; `e_big_nok`, no image, reads 0.007. The one crosser is
+`MOBJ_EFF_mahojin_ura`, a magic circle whose image carries no colour.
+
+⚠️ **Colour spread cannot see a greyscale image.** `OFF_doorL` carries two
+images and reads 0.010, under the threshold, so the verdict says *"one tint:
+bare, or a greyscale image"* rather than "bare". Both numbers are printed; the
+tool does not claim more than it measured. **Do not read a sub-threshold spread
+as "the texture binding is broken."**
+
+⛔ **"Surface detail" is reported and decides nothing.** It was meant to catch
+exactly the greyscale case, and the corpus refuted it rather than tuning it
+(D253): `e_bari_bari` carries no image and steps **0.099**, above 26 of the 30
+textured models, because small facets read as texels; `OFF_doorL` steps
+**0.006**, what a bare cube steps, because one texel covers many pixels. Both
+refutations are standing tests, one asserting that an untextured model
+out-details a textured one — so if the numbers swap, the reasoning is flagged
+stale.
+
+## What this does not replace
+
+⛔ **A render by the program under test is not independent of it.** `dimentio`
+still does not read `COLOR_0` (D251), so its picture of a per-vertex-tinted
+model is the old one. The sheet shows what *the rasteriser* draws, which is not
+always what Blender draws.
+
+What it removes is the round trip for everything short of that: a defect visible
+in a contact sheet no longer costs a day to hear about. Still ask a person for
+the final confirmation on a claim like "the animation now looks right" — and
+when you do, re-export first and check the mtime (D245).

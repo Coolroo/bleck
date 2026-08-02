@@ -74,6 +74,47 @@ Every asset name is copyable from any tab (D231). The model viewport is a
 interactive desktop, so a GPU viewport could not be validated at all, whereas a
 `Vec<u8>` is something `cargo test` can assert on (D213).
 
+### ⚠️ Look at a model without asking anyone: `dimentio shot`
+
+**Reach for this before asking a person to open Blender.** It renders a model to
+a PNG and exits — no window, no GPU, no display — through the same rasteriser
+the viewport uses (D253).
+
+```powershell
+cargo run --release --manifest-path dimentio/Cargo.toml -- `
+  shot work/export/models/files/a/e_lui_robo.glb --out work/build/robo.png
+```
+
+| flag | |
+|---|---|
+| `--out <file.png>` | required; there is no default output path |
+| `--size 512` | edge of one view |
+| `--angles 4` | views around the model, laid out as **one contact sheet** |
+| `--clip 0 --frame 4` | hold one keyframe of one morph clip |
+| `--background checkerboard` | `dark-grey`, `checkerboard` or `gradient`. ⚠️ **never white** — a texture decoding to near-white would vanish into it |
+
+It prints what it drew, which is the half a caller with no screen still needs:
+
+```
+3358 triangle(s), 92 shape(s), 15 image(s)
+rest pose
+4 angle(s) into 1026x1026
+model covers 4.5% of the sheet
+colour spread 0.218, neighbour step 0.059 — an image reached it
+```
+
+- **Colour spread over 0.015 means an image reached the surface.** Measured
+  across 60 real models: untextured ones reach 0.007, textured ones start at
+  0.023 (D253). This is the check that stops a broken model producing a
+  plausible picture.
+- ⚠️ **A greyscale image reads as "one tint"** — `OFF_doorL` spreads 0.010.
+  The verdict says so; do not read it as "untextured".
+- ⛔ **Neighbour step decides nothing.** It is printed, and the corpus refuted
+  it twice: an untextured model out-steps 26 of 30 textured ones, and a
+  magnified sharp texture steps like a bare cube. Read D253 before using it.
+- ⛔ **A render by the program under test is not independent of it.** For "does
+  this look right in Blender", a person is still the instrument.
+
 ### Character models are fully readable
 
 This is the session's headline. The format in `files/a/` went from "not decoded"
@@ -434,11 +475,14 @@ else; pick by interest.
    binds one to the other.
 5. 🔶 **Model slots 5, 6 and 16–23** are unread; see
    [`model-format.md`](./model-format.md).
-6. ⚠️ **`curves()` is a superseded reading that still ships.** D216 decoded keys
-   as `[time step, s16 delta, zero]`; D217 shows the game reads them as
-   `[u8 vertex stride, s8 dx, s8 dy, s8 dz]`, and the fourteen-fold smoothness
-   separation was detecting correlated adjacent bytes rather than confirming the
-   interpretation. Only `morphs()` reaches a `.glb`.
+6. ✅ **`curves()` is gone** (D252), along with the `curves`, `keys` and `span`
+   columns it fed into `models.json`. With the key layout settled as
+   `[u8 vertex stride, s8 dx, s8 dy, s8 dz]`, the `s16` it accumulated was
+   `dx` as the high byte and `dy` as the low byte of one number.
+   ⚠️ **The same entry fixed two live defects in the animation nobody had
+   caught for a month**: deltas are sixteenths of a unit, and a track is an
+   increment onto the pose before it rather than a pose of its own. Both are
+   stated by `animPoseMain`. Nobody has yet looked at the corrected `.glb`.
 7. ⚠️ **The ADPC seek table is undecoded** (D226 addendum, D228). It is now a
    curiosity rather than a blocker — nothing reads it, seeking uses the decoded
    samples — but it is the one instrument that disagreed with four others and
@@ -576,6 +620,26 @@ commit their `scripts/*.evt` source and `bleck mod build` regenerates `mod.rel`.
   runtime dependencies" for a while after that stopped being true.
 - ⚠️ **`rodio` is pinned to `default-features = false`** (D227). The defaults pull
   in Symphonia, which is **MPL-2.0**, and this repo is MIT.
+
+---
+
+## The methods are packaged as skills in `.claude/skills/`
+
+The section below is the narrative record. The same methods are written up as
+**project skills** — a directory each, with a `SKILL.md` an agent session loads
+on demand, so a future session does not re-derive them from the decision log.
+
+| skill | reach for it when |
+|---|---|
+| `decode-by-disassembly` | a binary format, struct field or file layout resists pattern-matching. The `dolscan.py` workflow, the ⛔ `xref`-cannot-find-callers trap, and resolving `r2`/`r13` small-data loads. D206, D207, D240, D243, D247, D252 |
+| `control-every-statistic` | you are about to report or believe a percentage. Every wrong finding here was an uncontrolled number. D209, D211, D214, D229, D245, D253 |
+| `verify-the-emitted-artifact` | writing or trusting a test over anything this project exports. An export with zero materials passed 1,508 tests. D221, D234, D245, D246 |
+| `render-to-look` | a model or animation export needs eyes on it and there is no screen. `dimentio shot`, its flags and its blind spots. D213, D251, D253 |
+| `ground-truth-from-reference-rips` | a decoded asset needs an external answer key. `work/reference/x/` — ⚠️ **git-ignored, present only on the machine it was supplied to**. D236, D243 |
+| `slow-command-discipline` | before running anything that costs minutes. The price list, and where each transcript already lives. D16, D70/D73/D74, D245 |
+
+⚠️ These are guidance, not enforcement — `scripts/lint.py` is where a rule
+becomes a rule.
 
 ---
 
