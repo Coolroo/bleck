@@ -156,6 +156,8 @@ class Vertex:
     position: int
     normal: int | None
     uv: int | None
+    colour: int | None = None
+    """Which entry of `Mesh.colours` multiplies this vertex's texture."""
 
 
 def _accessor(view: int, count: int, kind: str, component: int) -> dict:
@@ -217,6 +219,7 @@ def _weld(mesh, faces: list | None) -> Part:
                 position=corner.position,
                 normal=corner.normal,
                 uv=corner.uv if textured else None,
+                colour=corner.colour,
             )
             found = order.get(vertex)
             if found is None:
@@ -395,15 +398,27 @@ def _morph_targets(
     the same number of targets, and a pose moves one shape out of dozens —
     writing a fresh zero-filled target for the rest gave `p_wii_mario` 23,434
     accessors and a 2.9 MB JSON chunk on a 335-vertex mesh (D236).
+
+    ⚠️ **A pose that leaves a primitive where the last one did reuses that
+    target too**, which is what keeps the cost bearable now poses accumulate
+    (D252). A pose holds the whole model's displacement, so once a shape has
+    moved its target stops being empty and the blank above never applies to it
+    again — but the shape still only *changes* on the poses whose own track
+    reaches it, and that is the great majority left unwritten.
     """
     widest = max(len(part.vertices) for part in parts)
     zero = None if sparse else blob.add(b"\0" * (widest * TARGET_BYTES), ARRAY_BUFFER)
     blanks: dict[int, int] = {}
     columns: list[list[int]] = [[] for _ in parts]
+    held: list = [None] * len(parts)
     for pose in poses:
         moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
         for at, part in enumerate(parts):
             shift = _shift(part, moved)
+            if held[at] == shift and columns[at]:
+                columns[at].append(columns[at][-1])
+                continue
+            held[at] = shift
             if shift.at:
                 write = (
                     _sparse_target
@@ -422,26 +437,62 @@ def _morph_targets(
 
 @dataclass(frozen=True)
 class Slot:
-    """Where one clip's poses sit in the target list every clip shares.
+    """Which shared target each of one clip's keyframes turns on.
 
     ⚠️ **glTF has one target list per primitive, not one per animation.** Two
     clips in a file therefore drive the *same* weights, and each has to hold the
-    other's targets at zero — which is what `first` and `total` are for.
+    other's targets at zero — which is what `total` is for.
+
+    ⚠️ **A keyframe is not a target** (D252). Poses accumulate, so a clip holds
+    its shape for a beat whenever a track carries no keys, and 36% of the
+    disc's keyframes do. Those repeat the previous target rather than adding
+    one, which matters because the weight block is `keys * targets`.
     """
 
-    first: int
-    total: int
+    at: list = field(default_factory=list)  # pylint: disable=container-return
+    total: int = 0
+
+
+@dataclass(frozen=True)
+class Slots:
+    """Every keyframe's target across a file, and which poses wrote them.
+
+    `at[i]` is the target keyframe *i* turns on; `keep` names, per target, the
+    pose it was taken from.
+    """
+
+    at: list = field(default_factory=list)  # pylint: disable=container-return
+    keep: list = field(default_factory=list)  # pylint: disable=container-return
+
+
+def _slots(columns: list, poses: int) -> Slots:
+    """Fold each run of keyframes that draw the same picture into one target.
+
+    ⚠️ **Consecutive only.** Two poses far apart that happen to match are left
+    as two targets: catching those would need every column compared against
+    every earlier one, and the runs are what the hold keyframes produce.
+    """
+    at: list[int] = []
+    keep: list[int] = []
+    last: tuple | None = None
+    for index in range(poses):
+        here = tuple(column[index] for column in columns)
+        if here != last:
+            keep.append(index)
+            last = here
+        at.append(len(keep) - 1)
+    return Slots(at=at, keep=keep)
 
 
 def _weight_animation(
     blob: _Blob, accessors: list, poses: list, slot: Slot, name: str
 ) -> dict:
     # pylint: disable=container-return
-    """One pose active at a time, stepping through the clip.
+    """One target active at a time, stepping through the clip.
 
-    The game rebuilds the vertex buffer from the model each frame and adds one
-    pose's offsets to it, so the poses do not stack — weight 1 for the current
-    target and 0 for every other reproduces that.
+    The game rebuilds the vertex buffer from the model each frame and adds the
+    accumulated pose to it, so the targets do not stack — weight 1 for the
+    current one and 0 for every other reproduces that.
     """
     times = [float(pose.time) for pose in poses]
     time_view = blob.add(struct.pack(f"<{len(times)}f", *times))
@@ -451,8 +502,7 @@ def _weight_animation(
     accessors[-1]["max"] = [max(times)]
 
     weights = []
-    for index in range(len(poses)):
-        active = slot.first + index
+    for active in slot.at:
         weights += [1.0 if at == active else 0.0 for at in range(slot.total)]
     weight_view = blob.add(struct.pack(f"<{len(weights)}f", *weights))
     weight_accessor = len(accessors)
@@ -489,16 +539,18 @@ def _morphs(document: dict, blob: _Blob, parts: list, clips: list, sparse: bool)
     accessors = document["accessors"]
     poses = [pose for clip in usable for pose in clip.poses]
     columns = _morph_targets(blob, accessors, parts, poses, sparse)
+    slots = _slots(columns, len(poses))
+    total = len(slots.keep)
 
     primitives = document["meshes"][0]["primitives"]
     for primitive, column in zip(primitives, columns, strict=True):
-        primitive["targets"] = [{"POSITION": index} for index in column]
-    document["meshes"][0]["weights"] = [0.0] * len(poses)
+        primitive["targets"] = [{"POSITION": column[at]} for at in slots.keep]
+    document["meshes"][0]["weights"] = [0.0] * total
 
     animations = []
     first = 0
     for clip in usable:
-        slot = Slot(first=first, total=len(poses))
+        slot = Slot(at=slots.at[first : first + len(clip.poses)], total=total)
         animations.append(_weight_animation(blob, accessors, clip.poses, slot, clip.name))
         first += len(clip.poses)
     document["animations"] = animations
@@ -509,13 +561,18 @@ class ClipCost:
     """What one clip's morph targets add to a file, and how many it adds.
 
     ⚠️ **`body` is not the whole cost.** Every keyframe also carries a weight
-    for every target in the *file*, so a file's weight block is quadratic in
-    the total and cannot be attributed to one clip — the caller adds that term
+    for every target in the *file*, so a file's weight block is `keys *
+    targets` and cannot be attributed to one clip — the caller adds that term
     as it decides what to keep.
+
+    ⚠️ **`poses` and `keys` are different numbers** (D252). A hold keyframe
+    repeats the target before it, so it lengthens the timeline without adding
+    a target.
     """
 
     poses: int
     body: int
+    keys: int = 0
 
 
 def costs(mesh, clips: list, sparse: bool = True) -> list:  # pylint: disable=container-return
@@ -524,6 +581,11 @@ def costs(mesh, clips: list, sparse: bool = True) -> list:  # pylint: disable=co
     ⚠️ **Measured, not estimated from the vertex count.** What a target costs
     depends on which primitives the pose reaches and how much of each it moves,
     and the two encodings differ by a factor of ten on the same pose.
+
+    ⚠️ **It has to mirror `_morph_targets`' reuse or it prices a fiction.**
+    Poses accumulate, so a primitive's target repeats until its own track moves
+    again; charging for each repeat overstates a large clip several-fold and
+    the budget would drop clips that fit.
     """
     parts = _parts(mesh)
     if not parts:
@@ -532,11 +594,17 @@ def costs(mesh, clips: list, sparse: bool = True) -> list:  # pylint: disable=co
     found = []
     for clip in clips:
         body = 0
-        for pose in clip.poses:
+        held: list = [None] * len(parts)
+        distinct = 0
+        for index, pose in enumerate(clip.poses):
             moved = {vertex: (dx, dy, dz) for vertex, dx, dy, dz in pose.offsets}
-            body += reference
-            for part in parts:
+            fresh = False
+            for at, part in enumerate(parts):
                 shift = _shift(part, moved)
+                if held[at] == shift and index:
+                    continue
+                held[at] = shift
+                fresh = True
                 if not shift.at:
                     continue
                 wide = len(part.vertices)
@@ -546,18 +614,87 @@ def costs(mesh, clips: list, sparse: bool = True) -> list:  # pylint: disable=co
                     )
                 else:
                     body += DENSE_OVERHEAD + wide * TARGET_BYTES
-        found.append(ClipCost(poses=len(clip.poses), body=body))
+            if fresh:
+                distinct += 1
+                body += reference
+        found.append(ClipCost(poses=distinct, body=body, keys=len(clip.poses)))
     return found
 
 
-def weight_cost(targets: int) -> int:
+def weight_cost(targets: int, keys: int | None = None) -> int:
     """What a file's weight arrays cost once it carries `targets` of them.
 
-    ⚠️ **Quadratic.** One keyframe per target, each weighting every target:
-    256 targets cost 262 KB, 1,024 cost 4.2 MB, and 2,048 cost 16.8 MB. It is
-    the term that decides how many clips a file can hold, not the deltas.
+    ⚠️ **The dominant term above a few hundred targets**, and it is a product:
+    every keyframe carries a weight for every target. 256 targets over 256 keys
+    cost 262 KB, 1,024 over 1,024 cost 4.2 MB. It is what decides how many
+    clips a file can hold, not the deltas.
+
+    `keys` defaults to `targets`, which is the shape a file has when no clip
+    holds a pose for a second beat.
     """
-    return targets * targets * WEIGHT_BYTES + targets * WEIGHT_JSON
+    keys = targets if keys is None else keys
+    return keys * targets * WEIGHT_BYTES + targets * WEIGHT_JSON
+
+
+#: An opaque white vertex multiplies its texture by 1 in every channel, which
+#: is what a primitive with no `COLOR_0` already means.
+WHITE = (255, 255, 255, 255)
+
+
+def _tint_is_literal(colours: list) -> bool:
+    """Whether a model's colour array can be read as a plain multiply.
+
+    🔶 **The one place this reading is not taken at face value** (D251). Four
+    models — `e_card_fre3`, `e_zun_tail`, `n_gid_tyou` and `OFF_house_02` —
+    store black in **every** entry, and a literal multiply by zero would draw
+    them as black silhouettes. The game draws them normally, so whatever the
+    channel is configured with there, it is not this.
+
+    ⚠️ **A positive argument, not a convenience.** The claim is only that a
+    model multiplied to nothing everywhere cannot be right; a *shape* that is
+    black inside a model that is not stays black, because that is ordinary art
+    — 45% of `e_lui_robo`'s vertices are, and it renders correctly.
+    """
+    return any(tuple(rgba)[:3] != (0, 0, 0) for rgba in colours)
+
+
+def _colour_attribute(
+    blob: _Blob,  # pylint: disable=too-many-positional-arguments
+    accessors: list,
+    mesh,
+    part: Part,
+    attributes: dict,
+) -> None:
+    """`COLOR_0`, where the shape's vertices carry a colour that is not white.
+
+    ✅ **glTF multiplies `COLOR_0` into the base colour**, which is exactly the
+    `GX_MODULATE` the draw code programs for a one-layer shape (D247, D251).
+    Leaving it out is what made `e_lui_robo` render near-white: the disc stores
+    one greyscale panel and tints it per shape.
+
+    ⚠️ **Omitted when every vertex is opaque white**, on 524 of 864 models. The
+    specification's default is a multiply by 1, so the file draws identically
+    and does not carry four bytes per vertex to say nothing.
+    """
+    colours = getattr(mesh, "colours", None)
+    if not colours or not _tint_is_literal(colours):
+        return
+    vertices = part.vertices
+    if any(v.colour is None or v.colour >= len(colours) for v in vertices):
+        return
+    found = [colours[v.colour] for v in vertices]
+    if all(tuple(rgba) == WHITE for rgba in found):
+        return
+    data = b"".join(bytes(rgba) for rgba in found)
+    attributes["COLOR_0"] = len(accessors)
+    accessor = _accessor(
+        blob.add(data, ARRAY_BUFFER), len(vertices), "VEC4", UNSIGNED_BYTE
+    )
+    # ⚠️ Required: an unsigned-byte COLOR_0 is read as 0..1 only when the
+    # accessor says so, and a reader that took 255 literally would blow the
+    # colour out rather than leave it alone.
+    accessor["normalized"] = True
+    accessors.append(accessor)
 
 
 def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
@@ -593,6 +730,8 @@ def _primitive(blob: _Blob, accessors: list, mesh, part: Part) -> dict:
         accessors.append(
             _accessor(blob.add(data, ARRAY_BUFFER), len(vertices), "VEC2", FLOAT)
         )
+
+    _colour_attribute(blob, accessors, mesh, part, attributes)
 
     view = blob.add(
         struct.pack(f"<{len(part.indices)}I", *part.indices), ELEMENT_ARRAY_BUFFER
@@ -696,6 +835,8 @@ class Painting:
     materials: int = 0
     #: Materials carrying a second layer in `extras`.
     masked: int = 0
+    #: Primitives carrying `COLOR_0`, which multiplies their texture (D251).
+    coloured: int = 0
 
     @property
     def textured(self) -> bool:
@@ -731,6 +872,7 @@ def painting(blob: bytes) -> Painting:
         images=len(parsed.get("images", [])),
         materials=len(materials),
         masked=sum(1 for m in materials if gltfpaint.MASK_KEY in m.get("extras", {})),
+        coloured=sum(1 for p in primitives if "COLOR_0" in p["attributes"]),
     )
 
 

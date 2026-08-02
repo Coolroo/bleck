@@ -17110,20 +17110,65 @@ would smooth a hard colour edge away.
 | files where a primitive resolves an image | 823 | 823 |
 | embedded images | 6,892 | 6,892 |
 | shapes resolving to an image | 13,953 | 13,953 |
-| **primitives carrying a tint** | **0** | **4,708** |
-| **models carrying one** | **0** | **340** |
+| **primitives carrying a tint** | **0** | **4,609** |
+| **models carrying one** | **0** | **336** |
 | structural violations | 0 | 0 |
-| **tinted vertices** | 0 | **148,073** |
+| **tinted vertices** | 0 | **146,493** |
 | **`COLOR_0` payload, corpus-wide** | 0 | **0.56 MiB** |
 
 ⚠️ **The payload is measured, not the export directory's size.** D252 landed in
 the same working tree and moved the morph budget, so `du` over `work/export`
 cannot attribute a byte to either change. Summing every `COLOR_0` accessor's
-`count × 4` out of the emitted files can: **592,292 bytes**, which is 0.4% of
+`count × 4` out of the emitted files can: **585,972 bytes**, which is 0.4% of
 the export.
 
-⚠️ **340, not 331.** A model whose single distinct colour is not white — black,
-or a mid grey — also gets the attribute.
+⚠️ **336, not 331.** A model whose single distinct colour is not white — a mid
+grey, say — also gets the attribute; the four all-black models below do not.
+
+### 🔶 The one place the reading is not taken at face value: all-black
+
+⛔ **Black cannot mean "multiply by zero" everywhere.** Four models —
+`e_card_fre3`, `e_zun_tail`, `n_gid_tyou` and `OFF_house_02` — store
+`(0, 0, 0, 255)` in **every** entry of their colour array. Applied literally
+they render as black silhouettes, and the game draws them normally. So
+`gltf._tint_is_literal` writes no `COLOR_0` for a model whose array is black
+throughout, and `e_card_fre3` is a green-and-purple Fuzzy in a wire cage again.
+
+⚠️ **The argument is positive, not a convenience**: a model multiplied to
+nothing *everywhere* cannot be right. It does not extend to a shape that is
+black inside a model that is not — 44,406 vertices across the disc are black,
+3,224 of them `e_lui_robo`'s, and it renders correctly with them.
+
+⛔ **The gate was looked for in the file and is not there.** `GXSetChanCtrl` at
+`0x80291318` is reached from `0x8008a3a4` with `mat_src = GX_SRC_REG` and from
+`0x8008a3f0` with `GX_SRC_VTX`, chosen by `lbz r0, 8(r22)` — and the material
+record's own `+0x08` does not sort the corpus that way: mode 0 covers 429
+all-white models, 264 hued ones and 3 of the 4 all-black ones. `r22` is a
+runtime material struct, not the file record, and finding what fills it is
+where this thread stops.
+
+### The viewer, with its controls ✅
+
+`dimentio` reads `COLOR_0` and multiplies it in, interpolated on the same
+perspective-correct weights the UV uses. ⚠️ **A flat triangle takes an exact
+fast path** — three equal corners through the float divide drift a unit either
+way, which turns one painted panel into two near-identical colours.
+
+⚠️ **Applied on the untextured path too.** A shape with no image is drawn with
+its vertex colour alone, which is the `GX_PASSCLR` branch of the game's TEV
+(D247), so 41 models that name no image are now coloured rather than flat grey.
+
+Three tests, each with the old path as its control: one white image tinted two
+ways must draw two colours (control: one); an untextured quad must take its
+tint (control: white); and a primitive with no `COLOR_0` beside one that has it
+must keep its own — the span bug the UVs already had.
+
+⛔ **`shot`'s verdict was wrong the moment this landed, and that is a finding
+about the instrument.** It printed "an image reached it" whenever the frame
+carried more than one tint. `e_big_nok` names **no image at all** and carries
+**ten** distinct vertex colours, so spread now separates nothing; the verdict
+reads `images`, which is counted from the file. The test that asserted a bare
+model was one flat tint now asserts the opposite, for the recorded reason.
 
 ### `OFF_doorL`'s kanji is correct ⛔
 
@@ -17166,13 +17211,17 @@ measurement alone.
 
 ### Still open 🔶
 
-- **Nobody has looked at the fixed export yet.** Every number above is a byte
-  count or a distance; the report that started this came from a person and the
-  answer to it has not been back to one.
-- `dimentio` does not read `COLOR_0`. Its rasteriser interpolates a UV across a
-  triangle and would need to interpolate a colour the same way, which is
-  renderer work of the shape D246 and D248 did for the mask. Until then the
-  viewer draws what the old export drew, and Blender is the stronger witness.
+- ✅ **Looked at, with `dimentio shot`.** Before: a white robot with panel
+  lines, rivets and small yellow accents. After: a **Luigi-green cap**, red
+  thrusters, a brown moustache and yellow eyes — Brobot. The tool's own colour
+  spread went **0.218 → 0.760** on the same geometry, camera and angles.
+  ⚠️ Nobody has looked at it in *Blender*, which is the reader this repo trusts
+  precisely because we did not write it.
+- **Why `p_bibi` looked right all along**, and it is the cleanest control here:
+  it draws from a **1-image CMPR bank** and its vertex colours are **192 of 192
+  opaque white**. `e_lui_robo` draws from a **24-image CMPR bank** and is **2%
+  white**. Same format, opposite reliance on the tint — which is why a format
+  census could never have explained the difference.
 - Slot 6 is now read; **slots 20-23 remain undecoded**, and slot 5's alpha
   channel is written through untested — every colour on the disc has `a = 255`
   except where the whole entry is zero.
@@ -17316,3 +17365,73 @@ a skill that loads for the wrong task, which costs context for nothing.
 
 ⚠️ These are guidance, not enforcement. `scripts/lint.py` is where a rule
 becomes a rule; nothing in `.claude/` can fail a build.
+
+## D255 — The premise D251 rested on was never checked: what Brobot looks like (2026-08-01)
+
+D251 opened with "Brobot is a Luigi-themed machine and is red, blue, green and
+gold" and built a whole investigation on it. That sentence was an assumption
+sourced from a third-party rip's *filenames* — `red.dds`, `stache.png`,
+`eye.png` — not from any picture of the character. It happened to be right.
+
+**It is now checked.** `docs/model-appearance.md` records the canonical
+appearance of six exported models against published Nintendo artwork and
+screenshots, with a URL per claim.
+
+### ✅ Brobot is coloured, and the white render was a real defect
+
+Nintendo's [artwork](https://mario.wiki.gallery/images/1/19/Brobot.png) and an
+[in-game screenshot](https://mario.wiki.gallery/images/0/01/Brobot_Battle.png)
+agree: green cap, pale blue-grey riveted body, yellow octagonal eyes, brown
+moustache, red arm joints and thruster, cyan cockpit with Mr. L inside.
+[Brobot L-type](https://www.mariowiki.com/Brobot_L-type) shares the palette and
+differs only by having hands and feet, so ⛔ **"we were comparing against the
+wrong form" is ruled out** as an explanation for a grey render.
+
+⚠️ **D251's fix has landed and this entry does not reopen it.** Decoding
+`COLOR_0` out of the current `e_lui_robo.glb` gives the palette above —
+`0.38,0.56,0.17` cap green, `0.78,0.15,0.15` red, `0.93,0.73,0.00` eye gold.
+Anyone still seeing white-grey is looking at a stale file or a viewer ignoring
+`COLOR_0`, not at a texture fault.
+
+### ✅ Two more models are white for the same reason, and one is not
+
+- `e_bari_beam` — Barribad's energy ring (JP バリバー, "barrier";
+  [Barribad](https://www.mariowiki.com/Barribad)). A 144×144 **annulus** in
+  alpha with white RGB, tinted by two `COLOR_0` values, `0.99,1.00,0.45` and
+  `0.71,1.00,0.23`. It should be **yellow-green**. A plain white ring reads as
+  plausible, which is exactly why it went unreported.
+- `OFF_doorL` — ⛔ **not a defect.** Two quads, two 32×32 CMPR textures reading
+  **裏** and **表**, shape named `uraShape`, no `COLOR_0` at all. The kanji is
+  the disc's own art.
+- `p_bibi` — ⛔ **not a character.** A Catch Card model whose single texture is
+  Mario's card. D251 already used it as the control without saying what it was.
+
+### The method, since it generalises
+
+**A model's texture bank is evidence about where the colour lives.** Every image
+in `e_lui_robo-`, `_antena-`, `_foot-`, `_hand-`, `_hige-` and `_missile-` is
+white line-art with black outlines, plus one yellow plate and two 8×8 red dots.
+Reading the bank as a contact sheet would have said "the hue is not in the
+images" in one look, before any format census. ⛔ **The 24-image bank also
+contains six Mario sprite frames** — D236's stray quad, not a clue.
+
+🔶 **Naming is a weaker signal than it looks.** `e_lui_robo_hige` is 髭,
+moustache, and it is a separate model — so the rip's `stache.png` never belonged
+to `e_lui_robo` in the first place. Conversely `p_bibi` and `e_card_bibi` share
+a suffix and depict different things, so the suffix is not a character name.
+
+### Not established 🔶
+
+- What `OFF_` is. It is a 152-file family with `OFF_card`, `OFF_d_16pazu`
+  (sliding puzzle) and `OFF_d_four_meku` (めくる, to flip over), which reads as
+  a card or tile puzzle — but front/back labels are equally what a developer
+  places to check facing. ⛔ Do not record either without finding the loader.
+- What `e_card_bibi` depicts: a purple imp in a red-and-white striped floppy
+  cap. Not matched against the wiki bestiary.
+- Whether `e_lui_robo` is the original Brobot or the L-type.
+- What `e_2D_manera6`'s `6` selects. **Mimi is confirmed** — JP マネーラ
+  *Manēra* from 真似 ([Mimi](https://www.mariowiki.com/Mimi)) — and every clip
+  is prefixed `2D_manera_`.
+
+⚠️ **This is secondary-source research; the wiki can be wrong.** Where the disc
+was read directly the write-up says ✅ *measured*, and those outrank the prose.

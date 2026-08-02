@@ -374,6 +374,9 @@ pub(crate) struct Parts {
     pub(crate) shapes: Vec<Shape>,
     /// One per position, when the file carried `TEXCOORD_0`.
     pub(crate) uvs: Option<Vec<Uv>>,
+    /// One per position, when any primitive carried `COLOR_0`. The game
+    /// multiplies this into whatever the shape draws with (D251).
+    pub(crate) colours: Option<Vec<[u8; 4]>>,
     /// Every image some shape reaches, decoded once each. A shape's `paint`
     /// indexes this.
     pub(crate) paints: Vec<Paint>,
@@ -398,6 +401,7 @@ impl Parts {
             faces,
             shapes,
             uvs: None,
+            colours: None,
             paints: Vec::new(),
             animation: None,
         }
@@ -414,6 +418,7 @@ impl Parts {
             hidden: 0,
             bounds,
             uvs: self.uvs,
+            colours: self.colours,
             paints: self.paints,
             animation: self.animation,
         }
@@ -458,6 +463,13 @@ pub struct Mask {
 pub struct Batch<'a> {
     pub faces: &'a [Face],
     pub surface: Option<Surface<'a>>,
+    /// The whole model's vertex colours, indexed by a face's corners.
+    ///
+    /// ⚠️ **Beside `surface`, not inside it.** A shape with no image is drawn
+    /// with its vertex colour alone — the game's TEV takes the `GX_PASSCLR`
+    /// path when the layer count is zero (D247) — so a tint that lived on the
+    /// surface would be lost on exactly the 41 models that need it most.
+    pub tints: Option<&'a [[u8; 4]]>,
 }
 
 /// The texture a mesh is painted with, and the coordinates that index it.
@@ -503,6 +515,7 @@ pub struct Mesh {
     hidden: usize,
     bounds: Bounds,
     uvs: Option<Vec<Uv>>,
+    colours: Option<Vec<[u8; 4]>>,
     paints: Vec<Paint>,
     animation: Option<Animation>,
 }
@@ -637,6 +650,7 @@ impl Mesh {
                     .get(shape.first..shape.first + shape.count)
                     .unwrap_or_default(),
                 surface: self.surface_of(*shape),
+                tints: self.colours.as_deref(),
             })
     }
 

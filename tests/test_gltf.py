@@ -699,10 +699,19 @@ class TestAnimationSurvivesTheSplit:
         blob = gltf.write(mesh, clips=clips)
         document = parsed(blob)
         primitives = document["meshes"][0]["primitives"]
-        wanted = sum(len(clip.poses) for clip in clips)
+        keys = sum(len(clip.poses) for clip in clips)
         assert len(primitives) > 1, "a merged mesh cannot exercise this"
-        assert {len(p["targets"]) for p in primitives} == {wanted}
+        # ⚠️ Targets are no longer one per keyframe (D252): a hold frame
+        # repeats the previous target. What must still hold is that every
+        # primitive carries the same number and the mesh weights match.
+        widths = {len(p["targets"]) for p in primitives}
+        assert len(widths) == 1, widths
+        wanted = widths.pop()
+        assert 0 < wanted <= keys, (wanted, keys)
         assert len(document["meshes"][0]["weights"]) == wanted
+        for animation in document["animations"]:
+            sampler = animation["samplers"][0]
+            assert document["accessors"][sampler["output"]]["count"] % wanted == 0
 
         moved = [
             accessor
@@ -901,15 +910,22 @@ def _check_container(blob: bytes) -> None:
         _check_accessor(document, accessor)
 
 
-#: Bytes one element of each accessor type takes, at four bytes a component.
-ELEMENT = {"SCALAR": 4, "VEC2": 8, "VEC3": 12}
+#: Components each accessor type holds, and bytes each component type takes.
+#: ⚠️ **Both halves matter.** A `COLOR_0` is VEC4 of unsigned byte, which is
+#: four bytes an element and not sixteen (D251); the earlier table assumed four
+#: bytes per component and had no row for VEC4 at all.
+COMPONENTS = {"SCALAR": 1, "VEC2": 2, "VEC3": 3, "VEC4": 4}
+COMPONENT_BYTES = {5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4}
+
+
+def _element(accessor: dict) -> int:
+    """Bytes one element of this accessor takes."""
+    return COMPONENTS[accessor["type"]] * COMPONENT_BYTES[accessor["componentType"]]
 
 
 def _check_accessor(document: dict, accessor: dict) -> None:
     """One accessor, dense or sparse, entirely inside the views it names."""
-    wide = ELEMENT[accessor["type"]]
-    if accessor["componentType"] != gltf.FLOAT:
-        wide = accessor["count"] and 4
+    wide = _element(accessor)
     if "bufferView" in accessor:
         view = document["bufferViews"][accessor["bufferView"]]
         used = accessor.get("byteOffset", 0) + accessor["count"] * wide
@@ -927,7 +943,7 @@ def _check_accessor(document: dict, accessor: dict) -> None:
     assert sparse["count"] * width <= block["byteLength"]
     assert "target" not in block and "byteStride" not in block
     values = document["bufferViews"][sparse["values"]["bufferView"]]
-    assert sparse["count"] * ELEMENT[accessor["type"]] <= values["byteLength"]
+    assert sparse["count"] * _element(accessor) <= values["byteLength"]
     assert "target" not in values and "byteStride" not in values
 
 

@@ -12,6 +12,52 @@ cargo run -- ../work/export        # a folder bleck exported into
 Four modes over the same folder: **Textures**, **Models**, **Effects** and
 **Sounds**.
 
+## Without a screen: `dimentio shot`
+
+Render a model to a PNG and exit. No window, no GPU, no display — the same
+software rasteriser the viewport draws through, writing a file instead of a
+texture handle (D253).
+
+```bash
+cargo run --release -- shot ../work/export/models/files/a/e_lui_robo.glb --out robo.png
+```
+
+| option | |
+|---|---|
+| `--out <file.png>` | where to write. Required |
+| `--size 512` | edge of one view |
+| `--angles 4` | views around the model, laid out as one contact sheet |
+| `--clip 0 --frame 4` | hold one keyframe of one morph clip |
+| `--background checkerboard` | `dark-grey`, `checkerboard` or `gradient` |
+
+⚠️ **Four angles into one image, not four files.** Most defects show from one
+direction only — a stray shape off to the side, a face that vanishes from
+behind, one part left untextured — and the file nobody opens is the one that
+showed it.
+
+⚠️ **The backdrop is never white.** A texture that decoded to near-white and a
+texture that failed to decode are the same picture on a white page.
+
+The run also prints what it drew, so a caller that cannot see the file still
+learns something from it:
+
+```
+3358 triangle(s), 92 shape(s), 15 image(s)
+rest pose
+4 angle(s) into 1026x1026
+model covers 4.5% of the sheet
+colour spread 0.218, neighbour step 0.059 — an image reached it
+```
+
+**Colour spread above 0.015 means an image reached the surface** — measured
+across 60 real models, the untextured ones reach 0.007 and the textured ones
+start at 0.023. ⚠️ A *greyscale* image spreads like a bare model, which is why
+the verdict says "bare, or a greyscale image" and not "bare". ⛔ **Neighbour
+step decides nothing**; it is printed, and D253 records the two measurements
+that took it out of the verdict.
+
+Every other command line still opens the window, unchanged.
+
 ## ⛔ This program reads no game formats, and never should
 
 `bleck` owns every format on the disc — TPL, U8, LZ77, setup files, evt

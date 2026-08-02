@@ -199,6 +199,9 @@ fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
             Uv::new(1.0, 1.0),
             Uv::new(0.0, 1.0),
         ]),
+        // An effect part carries no vertex colour: its tint comes from the
+        // part record's own fields, not from a model file's slot 5.
+        colours: None,
         paints,
         // A billboard is built fresh from the camera each frame; there is
         // nothing to morph and nothing that would outlive one.

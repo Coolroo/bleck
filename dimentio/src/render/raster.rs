@@ -91,12 +91,25 @@ impl Image {
     }
 }
 
+/// The three vertex colours a triangle's corners carry, or nothing.
+///
+/// ✅ **glTF multiplies `COLOR_0` into the base colour**, which is the
+/// `GX_MODULATE` the game programs for a one-layer shape (D247, D251). Much of
+/// this game's art is stored greyscale and coloured here: one panel with rivets
+/// on it becomes the red, blue and green ones. Dropping it draws Brobot as a
+/// white robot with every rivet intact.
+pub(super) type Tint = Option<[[u8; 4]; 3]>;
+
 /// What fills a triangle: one flat colour, or a texture sampled across it.
 pub(super) enum Paint<'a> {
-    Flat(Rgba),
+    Flat {
+        colour: Rgba,
+        tint: Tint,
+    },
     Textured {
         texture: &'a Texture,
         corners: [Uv; 3],
+        tint: Tint,
         /// The flat shading term the texel is multiplied by.
         intensity: f32,
         /// The material's `alphaMode` was `MASK`, so a transparent texel is a
@@ -169,6 +182,34 @@ impl Weights {
     /// and the sum divided by the interpolated 1/z, which is what makes the
     /// mapping hold. The divisor is positive because every corner has already
     /// been rejected unless it sits in front of the near plane.
+    /// The vertex colour at this pixel, on the same perspective-correct
+    /// weights the UV uses. ⚠️ Interpolating it in screen space instead makes
+    /// a colour gradient slide as the camera orbits, exactly as a texture does.
+    fn tint(&self, triangle: &[Point; 3], corners: &[[u8; 4]; 3]) -> [f32; 4] {
+        // ⚠️ A flat triangle must come out exactly flat. Interpolating three
+        // equal corners still drifts a unit either way through the float
+        // divide, which turns one painted panel into two near-identical
+        // colours — visible to a palette count, and to nothing else.
+        if corners[0] == corners[1] && corners[1] == corners[2] {
+            return corners[0].map(f32::from);
+        }
+        let scaled = [
+            self.at[0] * triangle[0].inv_z,
+            self.at[1] * triangle[1].inv_z,
+            self.at[2] * triangle[2].inv_z,
+        ];
+        let total = scaled[0] + scaled[1] + scaled[2];
+        if !total.is_finite() || total <= 0.0 {
+            return corners[0].map(f32::from);
+        }
+        std::array::from_fn(|channel| {
+            (scaled[0] * f32::from(corners[0][channel])
+                + scaled[1] * f32::from(corners[1][channel])
+                + scaled[2] * f32::from(corners[2][channel]))
+                / total
+        })
+    }
+
     fn uv(&self, triangle: &[Point; 3], corners: &[Uv; 3]) -> Uv {
         let scaled = [
             self.at[0] * triangle[0].inv_z,
@@ -188,6 +229,19 @@ impl Weights {
     }
 }
 
+/// One channel multiplied by a 0..255 tint, which is what `GX_MODULATE` does.
+fn scale(value: u8, by: f32) -> u8 {
+    ((f32::from(value) * by) / 255.0).clamp(0.0, 255.0) as u8
+}
+
+/// The tint at this pixel, or an all-255 multiply-by-one where there is none.
+fn tinting(tint: &Tint, triangle: &[Point; 3], weights: &Weights) -> [f32; 4] {
+    match tint {
+        Some(corners) => weights.tint(triangle, corners),
+        None => [255.0; 4],
+    }
+}
+
 /// The colour a pixel takes, or `None` when a masked texel discards it.
 ///
 /// ⚠️ **The mask is applied before the cutoff, not after.** The game multiplies
@@ -196,10 +250,18 @@ impl Weights {
 /// base's own alpha first would draw the shape solid and look plausible.
 fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba> {
     match paint {
-        Paint::Flat(colour) => Some(*colour),
+        Paint::Flat { colour, tint } => {
+            let shade = tinting(tint, triangle, weights);
+            Some(Rgba::new(
+                scale(colour.r, shade[0]),
+                scale(colour.g, shade[1]),
+                scale(colour.b, shade[2]),
+            ))
+        }
         Paint::Textured {
             texture,
             corners,
+            tint,
             intensity,
             masked,
             sampling,
@@ -217,6 +279,13 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba>
                     a: scale(texel.a),
                 };
             }
+            let shade = tinting(tint, triangle, weights);
+            texel = Texel {
+                r: scale(texel.r, shade[0]),
+                g: scale(texel.g, shade[1]),
+                b: scale(texel.b, shade[2]),
+                a: scale(texel.a, shade[3]),
+            };
             if *masked && texel.a < ALPHA_CUTOFF {
                 return None;
             }
@@ -610,6 +679,7 @@ mod texture_tests {
                     },
                 ],
                 &Paint::Textured {
+                    tint: None,
                     texture: &base,
                     corners: [Uv::new(0.5, 0.5); 3],
                     intensity: 1.0,
@@ -658,6 +728,7 @@ mod texture_tests {
             &mut depth,
             &near,
             &Paint::Textured {
+                tint: None,
                 texture: surface.texture,
                 corners: [Uv::new(0.5, 0.5); 3],
                 intensity: 1.0,
@@ -673,7 +744,10 @@ mod texture_tests {
             &mut image,
             &mut depth,
             &far,
-            &Paint::Flat(Rgba::new(220, 30, 30)),
+            &Paint::Flat {
+                colour: Rgba::new(220, 30, 30),
+                tint: None,
+            },
         );
         assert!(
             covered(&image) > 5_000,
@@ -752,6 +826,106 @@ mod texture_tests {
                 [true, false, false]
             ],
             "the three quads did not sample red, green and blue"
+        );
+    }
+
+    /// The same mesh with every vertex tint cleared: what the viewer drew
+    /// before D251, and the control for the three tests below.
+    ///
+    /// ⚠️ **Measured with the same ruler.** A colour count that cannot tell the
+    /// tinted path from the untinted one proves nothing about either.
+    fn with_no_tint(raw: &[u8]) -> Mesh {
+        let mut parts = gltf::parse(raw).expect("fixture parses");
+        parts.colours = None;
+        parts.into_mesh()
+    }
+
+    /// ⛔ **The bug this exists for** (D251). One greyscale image, two shapes,
+    /// two tints: the disc stores one panel and colours it per shape, so the
+    /// frame must hold two colours where the old path held one.
+    #[test]
+    fn one_image_tinted_two_ways_draws_two_colours() {
+        let raw = gltf::fixtures::quads_glb(&[
+            gltf::fixtures::Quad {
+                image: Some(WHITE),
+                tint: Some([255, 0, 0, 255]),
+            },
+            gltf::fixtures::Quad {
+                image: Some(WHITE),
+                tint: Some([0, 0, 255, 255]),
+            },
+        ]);
+
+        let before = palette(&framed(&with_no_tint(&raw)));
+        assert_eq!(
+            before.len(),
+            1,
+            "the control did not reproduce the untinted path: {before:?}"
+        );
+        assert_eq!(channels(before[0]), [true, true, true], "{before:?}");
+
+        let after = palette(&framed(&loaded(&raw)));
+        assert_eq!(
+            after.len(),
+            2,
+            "the tint did not reach the frame: {after:?}"
+        );
+        let mut signatures: Vec<[bool; 3]> = after.iter().map(|p| channels(*p)).collect();
+        signatures.sort_unstable();
+        assert_eq!(
+            signatures,
+            [[false, false, true], [true, false, false]],
+            "one white panel did not come out red and blue: {after:?}"
+        );
+    }
+
+    /// ⚠️ A shape with no image is drawn with its vertex colour alone — the
+    /// `GX_PASSCLR` branch of the game's TEV (D247). 41 of 864 models name no
+    /// image at all, so a tint that only reached the textured path would leave
+    /// every one of them flat grey.
+    #[test]
+    fn an_untextured_shape_is_tinted_too() {
+        let raw = gltf::fixtures::quads_glb(&[gltf::fixtures::Quad {
+            image: None,
+            tint: Some([255, 0, 0, 255]),
+        }]);
+        let before = palette(&framed(&with_no_tint(&raw)));
+        assert_eq!(before.len(), 1, "{before:?}");
+        assert_eq!(channels(before[0]), [true, true, true], "{before:?}");
+
+        let after = palette(&framed(&loaded(&raw)));
+        assert_eq!(after.len(), 1, "{after:?}");
+        assert_eq!(
+            channels(after[0]),
+            [true, false, false],
+            "an untextured shape ignored its vertex colour: {after:?}"
+        );
+    }
+
+    /// ⚠️ **The regression guard for the 524 models that carry no tint.** A
+    /// primitive without `COLOR_0` sits beside one that has it, and must not
+    /// borrow the neighbour's — which is the span bug UVs already had.
+    #[test]
+    fn a_primitive_with_no_tint_keeps_its_own_colour() {
+        let raw = gltf::fixtures::quads_glb(&[
+            gltf::fixtures::Quad {
+                image: Some(WHITE),
+                tint: Some([255, 0, 0, 255]),
+            },
+            gltf::fixtures::Quad {
+                image: Some(WHITE),
+                tint: None,
+            },
+        ]);
+        let seen = palette(&framed(&loaded(&raw)));
+        assert_eq!(seen.len(), 2, "{seen:?}");
+        assert!(
+            seen.iter().any(|p| channels(*p) == [true, true, true]),
+            "the untinted quad was reddened by its neighbour: {seen:?}"
+        );
+        assert!(
+            seen.iter().any(|p| channels(*p) == [true, false, false]),
+            "the tinted quad was not reddened: {seen:?}"
         );
     }
 

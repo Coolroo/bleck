@@ -13,10 +13,10 @@ Read alongside:
 | | |
 |---|---|
 | `bleck/formats/model.py` | the container — name, bounds, name blocks, section table |
-| `bleck/formats/modelmesh.py` | the section table at `0x150` and its vertex arrays |
+| `bleck/formats/modelmesh.py` | the section table at `0x150` and its vertex arrays — positions, normals, colours, texture coordinates |
 | `bleck/formats/modelrebase.py` | the group and shape records — which slice of those arrays each shape indexes |
 | `bleck/formats/modelbase.py` | `Face`, `Shape`, the error type and the name field |
-| `bleck/formats/modelanim.py` | the clip table, its curves and its morph poses |
+| `bleck/formats/modelanim.py` | the clip table and its morph poses |
 | `bleck/formats/modelmat.py` | the layer, material and transform tables — which image a shape draws, how it is wrapped and where |
 | `bleck/formats/gltf.py` | the `.glb` writer |
 | `bleck/formats/gltfpaint.py` | its materials, samplers, textures and images |
@@ -121,8 +121,8 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 2 | `0x158` | 336 entries, 23 distinct | **corner → position index**, `u16` in a `u32` | ✅ D209 |
 | 3 | `0x15C` | **336 normals** | **normals**, F32 XYZ, stride 12, unit length | ✅ D207 |
 | 4 | `0x160` | 336 entries, 0..335 | **corner → normal index** | ✅ D207, D208 |
-| 5 | `0x164` | 336 entries of 4 bytes | 🔶 **vertex colours** — not floats, and paired with an identity index stream | 🔶 D208 addendum |
-| 6 | `0x168` | 490 entries | 🔶 an index stream; D208's addendum reads the colour index here | 🔶 D207, D208 |
+| 5 | `0x164` | 336 entries of 4 bytes | **vertex colours**, `GX_RGBA8`, stride 4 | ✅ D251 |
+| 6 | `0x168` | 490 entries | **corner → colour index** | ✅ D251 |
 | 7 | `0x16C` | 153 entries, 23 distinct | **corner → UV index** for channel 0, one per corner | ✅ D234 |
 | 8..14 | `0x170`+ | one offset, repeated | **UV index streams for channels 1–7**, empty on every model | ✅ D240, D247 |
 | 15 | `0x18C` | 2 floats × coordinates | **the texture-coordinate array itself** | ✅ D240, D247 |
@@ -165,10 +165,42 @@ moves, never the branches.
 by 45°, 61°, 45° and 360°; the four `OFF_door*` models scale U by **-1**, which
 is how one door mirrors the other; `MOBJ_bom` translates by -2.5.
 
-⚠️ **Slots 5 and 6 are read by nothing in `bleck`.** They are listed because
-D207 measured them, not because their meaning is settled — and D207's 490
-entries at slot 6 do not divide the 336 colours at slot 5, so the pairing D208's
-addendum proposes is not clean.
+### Slots 5 and 6 — the vertex colour that multiplies the texture
+
+⛔ **This page said slots 5 and 6 were "read by nothing" and that was the whole
+bug behind D251.** They are the per-vertex colour array and its index stream,
+and the draw code names both:
+
+```
+80048594: li r3,11 ; li r4,3    GXSetVtxDesc(GX_VA_CLR0, GX_INDEX16)
+800485a4: li r4,11 ; li r5,1    GXSetVtxAttrFmt(fmt0, GX_VA_CLR0,
+800485ac: li r6,5                                GX_CLR_RGBA, GX_RGBA8, 0)
+800485b8: mr r4,r15 ; li r5,4   GXSetArray(GX_VA_CLR0, r15, stride 4)
+```
+
+with `r15 = lwz r3,356(r6)` — `0x164`, slot 5 — and the inner loop's fourth
+`lhz`/`sth` pair reading slot 6 at `corner + shape[0x48]`.
+
+✅ **Mode 0's TEV is `GX_MODULATE` against `COLOR0A0`** (D247), so the texture
+is *multiplied* by this. ⛔ **The disc stores one greyscale panel and tints it
+per shape**: `e_lui_robo`'s 200×80 body panel decodes to a mean of 243 in all
+three channels, and the rip's `red.dds` of the same panel is (189, 40, 41) —
+which is exactly the panel times `(198, 39, 39)`, the vertex colour the file
+gives that shape. Leaving it out is why a person reported Brobot as
+"almost entirely white" with every rivet and vent plainly visible.
+
+| | |
+|---|---|
+| models carrying a colour array | **864 / 864** |
+| colour indices inside their own array | 864 / 864, **zero strays** |
+| group records whose colour slice is `(0, 0)` | **17,290 / 17,290** |
+| shape records where the colour corner offset equals the position one | **18,631 / 18,631** |
+| models that are opaque white throughout | 524 |
+| models carrying more than one distinct colour | **331** |
+
+⚠️ **Unlike UVs, colours need no per-group base and no separate corner
+offset** — the two tables above are why. Reading slot 6 like slot 4 is correct;
+reading it like slot 7 would not be.
 
 ⚠️ **A channel's length runs to the next *different* table entry.** All eight
 channel slots carry the same offset when one channel is in use, so the obvious
@@ -460,8 +492,11 @@ working buffers, then at `0x800457e4` does this per key:
 ```
 lbz   r5,0(r6)       ; byte 0 of the key
 mulli r5,r5,12       ; x 12 -- a vec3 stride
+psq_l f2,1(r6),1,4   ; dx, through GQR4: type s8, scale 0
+psq_l f3,2(r6),1,4   ; dy
+psq_l f4,3(r6),1,4   ; dz
 lfsux f1,r8,r5       ; load WITH UPDATE: the pointer advances by index*12
-fmadds f1,f0,f2,f1   ; dest.x += weight * delta
+fmadds f1,f0,f2,f1   ; dest.x += 0.0625 * delta
 stfs  f1,0(r8)       ; ... and the same for .y at +4 and .z at +8
 ```
 
@@ -474,7 +509,54 @@ Checks that confirm it (D217):
 - All **1,152** keys of `mario_S_1` resolve to vertices inside its 324-position
   array. A wrong stride would run off the end almost immediately.
 - Every `dz` is **zero**, on every key. Paper Mario is a flat character.
-- Deltas are small — max 9 units on a 73-unit-tall model.
+
+### ✅ A delta is a *sixteenth* of a unit, and a track is an *increment*
+
+Both are read off the same function and both were wrong for as long as anything
+exported (D252).
+
+**`f0` is `0.0625`.** It is loaded once, outside every loop, at `0x80045798` —
+`lfs f0,-30780(r2)` with `_SDA2_BASE_` at `0x805B7260`, so the float is the
+`3d800000` at `0x805AFA24`. ⛔ The quantisation registers are *not* the scale:
+`mtspr 914..917` write `0x00040004`, `0x00050005`, `0x00060006`, `0x00070007`,
+so the load types are 4–7 and every load scale is **zero**.
+
+⚠️ **Read raw, the median clip throws a vertex 2.42 times the model's own width**
+and 1,336 of the disc's 1,728 clips throw one further than the model is wide.
+At a sixteenth the median is **0.151** and 26 clips exceed one width. That
+measurement is what "the animation is a smeared mess" looks like from here.
+
+**A pose is every track up to it, added together.** The rebuild path walks
+tracks `0..frame` into a buffer copied from the model's own positions:
+
+```
+800456fc: mulli r0,r26,44      ; frame * 44
+80045700: lwz   r21,40(r27)    ; &track[0]
+80045708: add   r20,r21,r0
+8004570c: addi  r20,r20,44     ; &track[frame+1]
+   ...   ; apply each track's keys into the buffer at 80(r29)
+80045d20: addi  r21,r21,44
+80045d28: blt   0x800457ac     ; while r21 < &track[frame+1]
+```
+
+✅ **The incremental path is the proof.** At `0x80045d34` the game applies only
+tracks `cached+1..frame`, and it never re-copies the base positions — so it can
+only agree with the rebuild path if a track *adds* to what is already there.
+Two code paths that must produce the same picture.
+
+An independent witness agrees: the clip's own box at `+0x44`. Over the 554
+clips whose box already fits the rest pose to within 20%, the accumulated
+reading **never** leaves that box; the per-track reading leaves it on 23, and a
+control that accumulates the same tracks in reverse order leaves it on 70.
+
+⚠️ **`mark` is a timeline position after all.** The seek at `0x80045560` scans
+the track array for the last record whose field 0 is `<=` the current time, then
+divides `(time − mark[frame]) / (mark[next] − mark[frame])` for the blend. The
+D216 addendum called it a per-channel duration; under D217 there are no
+channels, and this is simply the keyframe's time.
+
+⚠️ **A zero-length track is still a keyframe** — 13,115 of the disc's 35,190 —
+and holds the pose for another beat. 36% of keyframes are these.
 
 ### The clip table and the clip record
 
@@ -531,7 +613,7 @@ inference applied to a second table — not a separate measurement**, and is mar
 🔶 for that reason (D235). The manifest carries both `frames` and `seconds` per
 clip, so the raw number is never lost.
 
-### ⚠️ `curves()` is a superseded reading that still ships
+### ⛔ `curves()` is gone, and it was never in the animation path
 
 D216 read a key as `[time step, s16 delta, zero]` and accumulated it, scoring
 0.0112 roughness against a 0.155 shuffled control — a fourteen-fold separation.
@@ -542,21 +624,23 @@ correlated deltas**, which is equally true of two independent s8 axes.
 *interpretation*, only that structure exists.** The game's own code settled which
 structure it is.
 
-`modelanim.curves()` still implements the D216 reading and the manifest still
-reports curve counts and value spans. Only `morphs()` — the D217 reading — is
-written into a `.glb`. Nothing has re-measured whether `curves()` is meaningful
-at all after D217.
+Once the key layout is `[stride, dx, dy, dz]`, what that `s16` held is not
+merely unproven — it is **`dx` in the high byte and `dy` in the low byte of one
+number**, which is nothing. `modelanim.curves()` shipped that reading for two
+months and `models.json` published `curves`, `keys` and `span` per clip from
+it. Nothing read those numbers; nothing could have used them if it had.
+Removed in D252, along with the three manifest columns.
 
 ⛔ **What a curve drives was never bound.** No field in the 44-byte track record
 ranges over anything like the 176 joint names: fields 3 and 4 are always zero, 5
-is 2 or 14, 6 is 0 or 2, 7 and 8 are 0 or 1 (D216 addendum). That question is now
+is 2 or 14, 6 is 0 or 2, 7 and 8 are 0 or 1 (D216 addendum). That question is
 moot for rendering, since the animation is not skeletal.
 
-⚠️ **`mark` is a channel duration, not a timeline position.** D216 read field 0
-of a track record as a position on a timeline because it ascends across a clip's
-tracks. The addendum corrects it: it is each channel's own duration, and the
-tracks are **sorted by it** — which is why the values ascend and why the last one
-equals the clip length.
+⛔ **The D216 addendum's `mark` is superseded.** It called field 0 a per-channel
+duration that the tracks are sorted by. There are no channels, and the seek at
+`0x80045560` uses the field as a **time**: it scans for the last track whose
+field 0 is at or before the clock, then interpolates on the gap to the next
+(D252).
 
 ---
 
@@ -612,15 +696,20 @@ defines as zeros and which occupies no bytes at all.
 
 The budget (`SPARSE = 2,048 targets / 12 MiB`, `DENSE = 256 / 2 MiB`) binds on
 the **weight block**, not the deltas: every keyframe carries a weight for every
-target in the file, so it is `targets² × 4` bytes — 8.6 MB of `p_luigi`'s 10.65 MB
-(D238). 11 MiB already drops no clip; 12 is 11 plus room for the cost model's
-worst-case error.
+target in the file, so it is `keys × targets × 4` bytes — 8.6 MB of `p_luigi`'s
+10.65 MB (D238). 11 MiB already drops no clip; 12 is 11 plus room for the cost
+model's worst-case error.
 
-| | D237 | now | `--dense-morphs` |
-|---|---|---|---|
-| clips written / dropped | 2,256 / 823 | **3,079 / 0** | 2,279 / 800 |
-| morph targets | 14,469 | 22,073 | 14,861 |
-| `work/export/models` | 74.5 MB | **123.4 MB** | 76.4 MB |
+⚠️ **`keys` and `targets` are not the same number** (D252). A hold keyframe
+repeats the target before it rather than adding one, and 36% of the disc's
+35,180 keyframes are holds — so a file carries 22,485 targets over 35,180 keys.
+Writing a target per keyframe instead dropped 70 clips and cost 39 MB.
+
+| | D237 | D238 | now | `--dense-morphs` |
+|---|---|---|---|---|
+| clips written / dropped | 2,256 / 823 | 3,079 / 0 | **3,079 / 0** | 2,279 / 800 |
+| morph targets | 14,469 | 22,073 | **22,485** | 14,861 |
+| `work/export/models` | 74.5 MB | 123.4 MB | **137 MB** | 76.4 MB |
 
 Geometry alone (`--no-animation`) is **20.6 MB** for all 864.
 
@@ -641,6 +730,23 @@ it stays reachable and D245's unreferenced-image check still holds.
 
 ⚠️ **Materials are deduplicated on the whole reference, not on the image.** Two
 shapes can name one picture and clamp it differently.
+
+✅ **The vertex colour rides as `COLOR_0`** — VEC4 of `UNSIGNED_BYTE` with
+`normalized: true`, per primitive (D251). glTF multiplies it into the base
+colour, which is `GX_MODULATE` exactly, so this needs no extension and no
+`extras`. **4,609 primitives across 336 models carry one**, tinting 146,493
+vertices for **0.56 MiB** of payload across the whole corpus.
+
+🔶 **Four models are the exception**: `e_card_fre3`, `e_zun_tail`, `n_gid_tyou`
+and `OFF_house_02` store black in *every* entry, which applied literally draws
+them as silhouettes. They are written untinted, on the argument that a model
+multiplied to nothing everywhere cannot be right — not extended to a black
+shape inside a coloured model, which is ordinary art.
+
+⚠️ **Omitted where every vertex is opaque white** — the specification already
+means a multiply by 1, and 524 models are entirely white. ⚠️ **The weld key
+gained the colour index**: two corners at one point with different tints are
+two glTF vertices, and welding them would smooth a hard colour edge away.
 
 ✅ **Structurally validated, since nobody here can open a `.glb`.** All 864 files
 re-parsed: header length equals file length, both chunks 4-byte aligned and
@@ -781,12 +887,12 @@ bytes = 888 records of 20, which is large enough and untested.
 See above. It is an inference from `effdata`'s frame counts, not a measurement of
 the model clip table. Nothing has timed a clip against the running game.
 
-### 🔶 Slots 5, 6 and 20–23
+### 🔶 Slots 20–23
 
-Vertex colours and their index stream are read by nobody, and the counts D207
-measured do not pair cleanly. ✅ Slots 16, 17, 18 and 19 are decoded (D240,
-D243, D247), as are the shape record's `+0x08` material mode and its
-`+0x30`…`+0x37` UV-channel bytes.
+✅ **Slots 5 and 6 are decoded and exported** (D251) — see above; only 20–23
+are left. Slots 16, 17, 18 and 19 are decoded too (D240, D243, D247), as are
+the shape record's `+0x08` material mode and its `+0x30`…`+0x37` UV-channel
+bytes.
 
 What remains inside the decoded ones: the frame-offset byte at slot 16 `+0x00`
 steps a texture animation by walking consecutive material records, and a static
@@ -824,7 +930,7 @@ docstring and a later decision-log entry.
 
 | file | says | but |
 |---|---|---|
-| `Curve.mark` docstring | "Ascends across a clip's tracks, so it is a **position on the timeline** rather than a duration" | **D216's addendum reverses this**: it is each channel's own duration and the tracks are sorted by it |
+| ~~`Curve.mark` docstring~~ | ~~"a **position on the timeline** rather than a duration"~~ | ✅ **Settled by D252 and the type is gone.** The seek at `0x80045560` uses field 0 as a key time, so the original docstring was right and D216's addendum was wrong |
 | `model.py` module docstring table | "⛔ vertices, indices, weights — **not decoded**" and "⛔ animation keyframes — not decoded" | D207/D209/D224 decode the geometry and D216/D217 the keyframes; `Model.has_geometry` and `Model.can_animate` are still hard `False` |
 | `model.py` module docstring | "bounding box — read, and sane — **Mario is 58.7 units tall**" | 58.7 is Mario's **max Y**; his height is 73.4 (D202, D212), since min Y is −14.68 |
 | `model.py` / D235 | `Model` reads **94** clips for Mario (D203, D216) | D235 says **95** (`94 of p_wii_mario's 95 were not written`) |
@@ -849,6 +955,12 @@ person with eyes on the artifact**:
 | ⛔ `e_genjin_b` bow-ties | D223 — the report that killed the fan |
 | ⛔ `e_2D_manera6` "a bunch of small mimis on a big mimi" | D229 — the report that killed one-image-per-model |
 | ✅ third-party rips of Brobot, as ground truth | D236 — max Y matches to the hundredth, 100.83 both ways |
+| ✅ `p_bibi` static geometry, "model looks great" | after D240 |
+| ⛔ `p_bibi` animation, "insane, not accurate" | D252 — deltas 16× too large and applied per track, not accumulated |
+| 🔶 `p_wii_mario` "looks like it has a bunch of stuff in it" | D252 — 61 one-triangle planes stacked three-deep, plus props. Read exactly as the file states them; whether they *should* be exported is undecided |
+| ⛔ `e_lui_robo` "almost entirely white", detail visible | D251 — the report that found the vertex colour |
+| ✅ `e_lui_robo` after the fix: green cap, red thrusters, brown moustache, yellow eyes | D251, via `dimentio shot`. ⚠️ Not yet seen in Blender, which is the reader we did not write |
+| ✅ `OFF_doorL` "a large kanji 表 filling the door" | D251 — reported as a suspected wrong image, and it is the art: the bank holds 裏 and 表, named `back.tga` and `front.tga` |
 
 ⚠️ **The oracle that closed D240 needed no human and no reference**: the angle
 between a face's own normal and the mean of the normals its corners name. The

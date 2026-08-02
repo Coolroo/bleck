@@ -720,94 +720,107 @@ def _uv_area(points) -> float:
     return abs((bu - au) * (cv - av) - (cu - au) * (bv - av)) / 2.0
 
 
-class TestTheCurveEncoding:
-    """⛔ The load-bearing test for animation, and the reason `curves` is
-    trusted at all.
+class TestHowTracksCompose:
+    """⛔ **A track is an increment, and its deltas are sixteenths** (D252).
 
-    A key's value is a **delta**, not an absolute. Accumulating deltas produces
-    a smooth curve; reading the same bytes as absolute values does not. Measured
-    as mean second difference over range, against a control that shuffles the
-    key array:
+    Both facts are read off `animPoseMain`, not fitted. The rebuild loop at
+    `0x800457ac` applies tracks `0..frame` into one buffer copied from the
+    model's own positions, and the incremental path at `0x80045d34` applies
+    only `cached+1..frame` on top of what is already there — two paths that can
+    only agree if a track adds to the one before it. Every `fmadds` in the key
+    loop scales by the constant at `0x80045798`, which is `0.0625`.
 
-    | reading | roughness |
-    |---|---|
-    | accumulated | **0.0112** |
-    | absolute | 0.3229 |
-    | shuffled control | 0.155 |
-
-    A fourteen-fold separation from the control (D216).
+    ⛔ D216's `curves()` is gone with them. It read a key's `dx` as the high
+    byte and its `dy` as the low byte of one big-endian `s16`; the smoothness
+    it scored was adjacent small deltas correlating, which D217 already said.
     """
 
-    def _roughness(self, sequences) -> float:
-        import statistics  # pylint: disable=import-outside-toplevel
-
-        scores = []
-        for values in sequences:
-            if len(values) < 6:
-                continue
-            span = max(values) - min(values)
-            if span < 1e-9:
-                continue
-            bends = [
-                abs(values[i + 1] - 2 * values[i] + values[i - 1])
-                for i in range(1, len(values) - 1)
-            ]
-            scores.append(statistics.mean(bends) / span)
-        return statistics.median(scores) if scores else 1.0
-
-    def test_accumulated_curves_are_far_smoother_than_shuffled_keys(self):
-        import random  # pylint: disable=import-outside-toplevel
-        import struct  # pylint: disable=import-outside-toplevel
-
-        path = MODELS / "p_wii_mario"
-        if not path.is_file():
-            pytest.skip(f"no {path}")
-        random.seed(2)
-        data = path.read_bytes()
-        found = model.read(data)
-        clip = next(c for c in found.animations if c.name == "mario_S_1")
-
-        real = [c.values for c in model.curves(data, clip)]
-        assert len(real) > 20
-
-        table = struct.unpack_from(
-            f">{model.CLIP_SECTIONS}I", data, clip.offset + model.CLIP_SECTIONS_AT
-        )
-        keys_at = clip.offset + table[model.KEY_SECTION]
-        total = (
-            table[model.KEY_SECTION + 1] - table[model.KEY_SECTION]
-        ) // model.CLIP_KEY_STRIDE
-        order = list(range(total))
-        random.shuffle(order)
-        pool = b"".join(data[keys_at + i * 4 : keys_at + i * 4 + 4] for i in order)
-        shuffled = []
-        for curve in model.curves(data, clip):
-            running = 0
-            values = []
-            for step in range(len(curve.values)):
-                running += struct.unpack_from(">h", pool, step * 4 + 1)[0]
-                values.append(running / model.KEY_SCALE)
-            shuffled.append(values)
-
-        assert self._roughness(real) < 0.05
-        assert self._roughness(real) < self._roughness(shuffled) / 3
-
-    def test_values_land_in_model_space(self):
-        """✅ Track 5 of `mario_S_1` reaches 58.8, and the model's Y bound is
-        58.7. That is what fixes the 1/256 scale rather than guessing it."""
+    def _clip(self):
         path = MODELS / "p_wii_mario"
         if not path.is_file():
             pytest.skip(f"no {path}")
         data = path.read_bytes()
         clip = next(c for c in model.read(data).animations if c.name == "mario_S_1")
-        found = model.curves(data, clip)
-        reach = max(max(abs(v) for v in c.values) for c in found)
-        assert 10.0 < reach < 1000.0, reach
+        return data, clip
+
+    def test_a_pose_holds_the_running_total_of_every_track_before_it(self):
+        """The only structural difference from reading each track alone."""
+        data, clip = self._clip()
+        poses = model.morphs(data, clip)
+        assert len(poses) > 5
+        seen = {v for v, *_ in poses[0].offsets}
+        for pose in poses[1:]:
+            here = {v for v, *_ in pose.offsets}
+            assert seen <= here, "a vertex a pose displaced cannot stop being named"
+            seen = here
+
+    def test_a_delta_of_one_key_step_is_a_sixteenth_of_a_unit(self):
+        """⚠️ Asserted against the *file*, so a changed scale fails here."""
+        import struct  # pylint: disable=import-outside-toplevel
+
+        data, clip = self._clip()
+        table = struct.unpack_from(
+            f">{model.CLIP_SECTIONS}I", data, clip.offset + model.CLIP_SECTIONS_AT
+        )
+        tracks_at = clip.offset + table[model.TRACK_SECTION]
+        keys_at = clip.offset + table[model.KEY_SECTION]
+        poses = model.morphs(data, clip)
+        # ⚠️ `mario_S_1`'s first track is empty, which is the point of keeping
+        # those: the pose it produces is a beat, not a movement.
+        index = next(i for i, pose in enumerate(poses) if pose.offsets)
+        assert index, "mario_S_1 opens on a track that displaces nothing"
+        first, length = struct.unpack_from(">2I", data, tracks_at + index * 44 + 4)
+        raw = [
+            struct.unpack_from(">3b", data, keys_at + (first + i) * 4 + 1)
+            for i in range(length)
+        ]
+        assert len(poses[index].offsets) == length
+        for (_v, dx, dy, dz), key in zip(poses[index].offsets, raw, strict=True):
+            assert (dx, dy, dz) == tuple(k * model.DELTA_SCALE for k in key)
+
+    def test_no_pose_on_the_disc_displaces_a_vertex_ten_model_widths(self):
+        """⛔ The measurement that says the scale is not a matter of taste.
+
+        Reading the deltas raw, 1,336 of the disc's 1,728 clips throw a vertex
+        further than the whole model is wide and the median is 2.42 model
+        widths — which is what "the animation is a smeared mess" looks like
+        from here. At a sixteenth the median is 0.15 (D252).
+        """
+        if not MODELS.is_dir():
+            pytest.skip(f"no extracted disc at {MODELS}")
+        worst = 0.0
+        checked = 0
+        for path in sorted(MODELS.iterdir()):
+            if not path.is_file():
+                continue
+            data = path.read_bytes()
+            if not model.is_model(data):
+                continue
+            try:
+                mesh = model.mesh(data)
+                found = model.read(data)
+            except model.ModelError:
+                continue
+            if not mesh.is_drawable or not mesh.positions:
+                continue
+            size = max(
+                max(p[a] for p in mesh.positions) - min(p[a] for p in mesh.positions)
+                for a in range(3)
+            )
+            if size < 1.0:
+                continue
+            for clip in found.animations:
+                for pose in model.morphs(data, clip):
+                    checked += 1
+                    for _v, *delta in pose.offsets:
+                        worst = max(worst, max(abs(d) for d in delta) / size)
+        assert checked > 20000, checked
+        assert worst < 10.0, worst
 
     def test_every_clip_on_the_disc_decodes_without_raising(self):
         if not MODELS.is_dir():
             pytest.skip(f"no extracted disc at {MODELS}")
-        clips = curves = 0
+        clips = poses = 0
         for path in sorted(MODELS.iterdir()):
             if not path.is_file():
                 continue
@@ -818,16 +831,16 @@ class TestTheCurveEncoding:
                 found = model.read(data)
             except model.ModelError:
                 # ⚠️ Some files fail the bounding-box check; that is `read`'s
-                # business, and skipping them keeps this about the curves.
+                # business, and skipping them keeps this about the poses.
                 continue
             for clip in found.animations:
                 clips += 1
-                curves += len(model.curves(data, clip))
+                poses += len(model.morphs(data, clip))
         assert clips > 1000, clips
-        assert curves > 5000, curves
+        assert poses > 5000, poses
 
     def test_a_clip_pointing_past_the_file_yields_nothing(self):
-        assert not model.curves(bytes(64), model.Clip(name="x", offset=0x9999))
+        assert not model.morphs(bytes(64), model.Clip(name="x", offset=0x9999))
 
 
 class TestTriangulation:

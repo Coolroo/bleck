@@ -17,13 +17,19 @@
 
 use std::collections::HashMap;
 
-use super::gltf_accessor::{read_indices, read_scalars, read_vec2, read_vec3, view_bytes};
+use super::gltf_accessor::{
+    read_colours, read_indices, read_scalars, read_vec2, read_vec3, view_bytes,
+};
 use super::mesh::{Face, Mask, Paint, Parts, Shape, Uv, Vec3};
 use super::morph::{Animation, Clip, Key, Pose};
 use super::texture::{Sampling, Texture, Transform, Wrap};
 
 /// The four bytes every binary glTF opens with.
 pub(crate) const MAGIC: &[u8] = b"glTF";
+
+/// What a vertex with no `COLOR_0` means: a multiply by one, which is the
+/// specification's default and what `bleck` omits the attribute to say.
+const WHITE: [u8; 4] = [255, 255, 255, 255];
 
 /// Where the exporter declares a shape's second layer. ⚠️ **Namespaced**, and
 /// it has to match `bleck.formats.gltfpaint.MASK_KEY` exactly — `extras` is a
@@ -39,6 +45,8 @@ struct Piece {
     positions: Vec<Vec3>,
     faces: Vec<Face>,
     uvs: Option<Vec<Uv>>,
+    /// `COLOR_0`, which multiplies whatever the shape draws with (D251).
+    colours: Option<Vec<[u8; 4]>>,
     targets: Vec<Pose>,
 }
 
@@ -69,7 +77,9 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
     let mut faces: Vec<Face> = Vec::new();
     let mut shapes: Vec<Shape> = Vec::new();
     let mut uvs: Vec<Uv> = Vec::new();
+    let mut colours: Vec<[u8; 4]> = Vec::new();
     let mut textured = false;
+    let mut tinted = false;
     let mut columns: Vec<Vec<Pose>> = Vec::new();
     let mut widths: Vec<usize> = Vec::new();
     let mut palette = Palette::default();
@@ -105,6 +115,22 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
             }
             None => uvs.extend(std::iter::repeat_n(Uv::default(), piece.positions.len())),
         }
+        // ⚠️ The same span rule as the UVs, and for the same reason: 524 of 864
+        // models carry no tint at all and most of the rest tint only some of
+        // their shapes, so an absent one is white rather than absent.
+        match piece.colours {
+            Some(found) => {
+                tinted = true;
+                colours.extend(
+                    found
+                        .iter()
+                        .copied()
+                        .chain(std::iter::repeat(WHITE))
+                        .take(piece.positions.len()),
+                );
+            }
+            None => colours.extend(std::iter::repeat_n(WHITE, piece.positions.len())),
+        }
         widths.push(piece.positions.len());
         positions.extend(piece.positions);
         columns.push(piece.targets);
@@ -117,6 +143,7 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
         faces,
         shapes,
         uvs: textured.then_some(uvs),
+        colours: tinted.then_some(colours),
         paints: palette.paints,
         animation,
     })
@@ -147,6 +174,9 @@ fn piece(
         uvs: primitive["attributes"]["TEXCOORD_0"]
             .as_u64()
             .and_then(|index| read_vec2(json, bin, index as usize).ok()),
+        colours: primitive["attributes"]["COLOR_0"]
+            .as_u64()
+            .and_then(|index| read_colours(json, bin, index as usize).ok()),
         targets: targets(json, bin, primitive),
     })
 }
@@ -630,6 +660,25 @@ pub(crate) mod fixtures {
     /// coplanar, so they take the same shading term and cannot differ for any
     /// other reason.
     pub(crate) fn painted_quads(colours: &[Option<Texel>]) -> Vec<u8> {
+        let quads: Vec<Quad> = colours
+            .iter()
+            .map(|image| Quad {
+                image: *image,
+                tint: None,
+            })
+            .collect();
+        quads_glb(&quads)
+    }
+
+    /// One quad's image and its vertex tint, either of which may be absent.
+    #[derive(Clone, Copy)]
+    pub(crate) struct Quad {
+        pub(crate) image: Option<Texel>,
+        pub(crate) tint: Option<[u8; 4]>,
+    }
+
+    /// The same coplanar quads, each optionally carrying a `COLOR_0` (D251).
+    pub(crate) fn quads_glb(quads: &[Quad]) -> Vec<u8> {
         let mut bin: Vec<u8> = Vec::new();
         let mut views: Vec<String> = Vec::new();
         let mut accessors: Vec<String> = Vec::new();
@@ -645,7 +694,8 @@ pub(crate) mod fixtures {
             views.len() - 1
         }
 
-        for (index, colour) in colours.iter().enumerate() {
+        for (index, quad) in quads.iter().enumerate() {
+            let colour = &quad.image;
             let centre = index as f32 * 6.0;
             let at = bin.len();
             push_floats(
@@ -697,6 +747,20 @@ pub(crate) mod fixtures {
                     textures.len() - 1
                 ));
                 names = format!(r#","material":{}"#, materials.len() - 1);
+            }
+
+            if let Some(tint) = quad.tint {
+                let tint_at = bin.len();
+                for _ in 0..4 {
+                    bin.extend_from_slice(&tint);
+                }
+                let held = view(&mut views, tint_at, 16);
+                let slot = accessors.len();
+                accessors.push(format!(
+                    r#"{{"bufferView":{held},"componentType":5121,"count":4,
+                        "type":"VEC4","normalized":true}}"#
+                ));
+                attributes.push_str(&format!(r#","COLOR_0":{slot}"#));
             }
 
             let indices_at = pad(&mut bin, &[0u32, 1, 2, 0, 2, 3]);

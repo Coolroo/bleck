@@ -1,4 +1,4 @@
-"""A character model's animation: the clip table, its curves and its morphs.
+"""A character model's animation: the clip table and its morph poses.
 
 Split out of `model`, which finds the clip block's bounds in the section table
 and hands them here. `Clip` lives with the decoders that consume it rather than
@@ -9,9 +9,10 @@ and this imports nothing back.
 `0x800457e4` copies the model's positions into a working buffer and adds these
 offsets to it directly; there is no joint, no matrix and nothing to bind.
 
-⚠️ **The encoding is verified; what a curve drives is not** (D216). Which node
-or property a track belongs to is unknown, so `curves` returns real numbers
-with no established meaning.
+⚠️ **A track is one keyframe's *increment*, not a whole pose** (D252). The draw
+loop applies every track from the first up to the current frame into one
+buffer, so a pose is the running total. `morphs` returns the total, which is
+what a glTF morph target holds.
 """
 
 from __future__ import annotations
@@ -58,10 +59,12 @@ CLIP_KEY_STRIDE = 4
 TRACK_SECTION = 1
 KEY_SECTION = 2
 
-#: A key's value is signed 8.8 fixed point, so an accumulated total is divided
-#: by this to reach model space. ✅ Track 5 of `mario_S_1` accumulates to 15052,
-#: and 15052/256 = 58.8 -- the model's Y bound is 58.7 (D216).
-KEY_SCALE = 256.0
+#: What the game multiplies a key's `s8` delta by before adding it to a vertex.
+#: ✅ **Measured, not inferred** (D252). `animPoseMain` loads it once at
+#: `0x80045798` -- `lfs f0,-30780(r2)`, and `_SDA2_BASE_` is `0x805B7260`, so
+#: the float is the `3d800000` at `0x805AFA24`. Every `fmadds` in the key loop
+#: scales by it, so a delta of 1 moves a vertex a sixteenth of a unit.
+DELTA_SCALE = 1.0 / 16.0
 
 
 @dataclass(frozen=True)
@@ -94,8 +97,16 @@ class Clip:
 
 
 @dataclass(frozen=True)
+class Span:
+    """Where one track's keys start, and how many there are."""
+
+    at: int
+    length: int
+
+
+@dataclass(frozen=True)
 class Morph:
-    """One pose: a sparse set of per-vertex offsets, and when it applies.
+    """One pose: where the vertices it moves sit relative to the rest pose.
 
     ⛔ **Not skeletal.** `animPoseMain` at `0x800457e4` copies the model's
     positions into a working buffer and adds these offsets to it directly --
@@ -106,7 +117,10 @@ class Morph:
 
     time: float
     offsets: list = field(default_factory=list)  # pylint: disable=container-return
-    """`(vertex, dx, dy, dz)`, in model units."""
+    """`(vertex, dx, dy, dz)` displacements from the rest pose, in model units.
+
+    ⚠️ **A total, not one track's own keys** (D252). The track this pose came
+    from carries only what changed since the one before it."""
 
     @property
     def reach(self) -> int:
@@ -116,9 +130,20 @@ class Morph:
 def morphs(data: bytes, clip: Clip) -> list:  # pylint: disable=container-return
     """A clip's poses, decoded the way the game applies them.
 
+    ✅ **A pose is every track up to it, added together** (D252). The rebuild
+    loop at `0x800457ac` walks tracks `0..frame` into one buffer that was
+    copied from the model's own positions, and the *incremental* path at
+    `0x80045d34` applies only `cached+1..frame` on top of what is already
+    there, without re-copying. Two paths that must agree, and they only can if
+    a track is an increment.
+
     ✅ Verified against `p_wii_mario`: all 1,152 keys of `mario_S_1` resolve to
     vertices inside its 324-position array, and every `dz` is zero -- which is
     what a flat character should produce (D217).
+
+    ⚠️ **A zero-length track is a keyframe too**, and 13,115 of the disc's
+    35,190 tracks are ones. It holds the pose where the previous track left it,
+    so dropping it loses a beat rather than a movement.
     """
     base = clip.offset
     if base + CLIP_SECTIONS_AT + CLIP_SECTIONS * 4 > len(data):
@@ -131,100 +156,40 @@ def morphs(data: bytes, clip: Clip) -> list:  # pylint: disable=container-return
         return []
 
     found = []
+    running: dict[int, list[float]] = {}
     for index in range(count):
         at = tracks_at + index * CLIP_TRACK_STRIDE
         if at + CLIP_TRACK_STRIDE > len(data):
             break
         time = struct.unpack_from(">f", data, at)[0]
         first, length = struct.unpack_from(">2I", data, at + 4)
-        if length < 1 or first + length > keys:
+        if first + length > keys:
             continue
-        offsets = []
-        vertex = 0
-        for step in range(length):
-            key = keys_at + (first + step) * CLIP_KEY_STRIDE
-            vertex += data[key]
-            offsets.append((vertex, *struct.unpack_from(">3b", data, key + 1)))
-        found.append(Morph(time=time, offsets=offsets))
+        _apply(data, Span(at=keys_at + first * CLIP_KEY_STRIDE, length=length), running)
+        found.append(
+            Morph(
+                time=time,
+                offsets=[(v, *total) for v, total in sorted(running.items())],
+            )
+        )
     return found
 
 
-@dataclass(frozen=True)
-class Curve:
-    """One track of a clip: times, and the values they carry.
+def _apply(data: bytes, span: Span, running: dict) -> None:
+    """Add one track's keys to the running displacement of each vertex.
 
-    ⚠️ **The encoding is verified; what the curve *drives* is not.** Which node
-    or property a track belongs to is unknown, so these are real numbers with
-    no established meaning (D216).
+    ⚠️ The vertex index restarts at zero for every track: the draw loop
+    reloads the buffer pointer from `80(r29)` before each one and then walks it
+    forward with `lfsux`.
     """
-
-    index: int
-    mark: float
-    """Field 0 of the track record. Ascends across a clip's tracks, so it is a
-    position on the timeline rather than a duration."""
-
-    times: list = field(default_factory=list)  # pylint: disable=container-return
-    values: list = field(default_factory=list)  # pylint: disable=container-return
-
-    @property
-    def span(self) -> float:
-        return max(self.values) - min(self.values) if self.values else 0.0
-
-
-def curves(data: bytes, clip: Clip) -> list:  # pylint: disable=container-return
-    """A clip's tracks, decoded from their delta-compressed keys.
-
-    Each key is four bytes: a time step, a **signed 16-bit delta**, and a zero.
-    Accumulating the deltas is what makes a curve; reading them as absolute
-    values does not.
-
-    ✅ Verified by smoothness against a shuffled control: accumulated keys score
-    0.0112 where shuffled ones score 0.155, a fourteen-fold separation (D216).
-    """
-    base = clip.offset
-    if base + CLIP_SECTIONS_AT + CLIP_SECTIONS * 4 > len(data):
-        return []
-    table = struct.unpack_from(f">{CLIP_SECTIONS}I", data, base + CLIP_SECTIONS_AT)
-    tracks_at, keys_at = base + table[TRACK_SECTION], base + table[KEY_SECTION]
-    count = (table[TRACK_SECTION + 1] - table[TRACK_SECTION]) // CLIP_TRACK_STRIDE
-    keys = (table[KEY_SECTION + 1] - table[KEY_SECTION]) // CLIP_KEY_STRIDE
-    if count <= 0 or keys <= 0:
-        return []
-
-    found = []
-    for index in range(count):
-        at = tracks_at + index * CLIP_TRACK_STRIDE
-        if at + CLIP_TRACK_STRIDE > len(data):
-            break
-        first, length = struct.unpack_from(">2I", data, at + 4)
-        if length < 2 or first + length > keys:
-            continue
-        mark = struct.unpack_from(">f", data, at)[0]
-        span = Span(at=keys_at + first * CLIP_KEY_STRIDE, length=length)
-        found.append(_curve(data, index, mark, span))
-    return found
-
-
-@dataclass(frozen=True)
-class Span:
-    """Where one track's keys start, and how many there are."""
-
-    at: int
-    length: int
-
-
-def _curve(data: bytes, index: int, mark: float, span: Span) -> Curve:
-    """One track's keys, accumulated into times and values."""
-    times, values = [], []
-    clock = 0
-    total = 0
+    vertex = 0
     for step in range(span.length):
         key = span.at + step * CLIP_KEY_STRIDE
-        clock += data[key]
-        total += struct.unpack_from(">h", data, key + 1)[0]
-        times.append(float(clock))
-        values.append(total / KEY_SCALE)
-    return Curve(index=index, mark=mark, times=times, values=values)
+        vertex += data[key]
+        deltas = struct.unpack_from(">3b", data, key + 1)
+        total = running.setdefault(vertex, [0.0, 0.0, 0.0])
+        for axis in range(3):
+            total[axis] += deltas[axis] * DELTA_SCALE
 
 
 def clips(data: bytes, start: int, end: int) -> list[Clip]:

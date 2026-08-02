@@ -65,15 +65,25 @@ FRAME_RATE = 60.0
 
 @dataclass(frozen=True)
 class ClipInfo:
-    """One animation clip of a file, decoded both ways it can be read.
+    """One animation clip of a file, as the poses it steps through.
 
-    `curves` is the track data (D216) and `poses` the per-vertex morphs (D217).
-    The manifest reports both; only `poses` can be written into a `.glb`.
+    ⛔ **The `curves` column is gone** (D252). It reported a reading that put
+    a key's `dx` in the high byte and its `dy` in the low byte of one `s16`, so
+    the counts and spans it published were numbers about nothing.
     """
 
     name: str
-    curves: list = field(default_factory=list)  # pylint: disable=container-return
     poses: list = field(default_factory=list)  # pylint: disable=container-return
+
+    @property
+    def moves(self) -> bool:
+        """Whether any pose in this clip displaces a vertex.
+
+        ⚠️ Not the same as having poses. A clip is a keyframe per track and a
+        third of the disc's tracks are empty, so a clip can carry a timeline
+        and move nothing.
+        """
+        return any(pose.offsets for pose in self.poses)
 
     @property
     def frames(self) -> float:
@@ -157,7 +167,7 @@ def _walk(base: Path, pattern: str) -> list[Found]:  # pylint: disable=container
 
 
 def _clips_of(data: bytes, mesh: model.Mesh) -> list:  # pylint: disable=container-return
-    """A file's animation clips, with their curves and their poses decoded.
+    """A file's animation clips, as the poses each one steps through.
 
     ⚠️ An unreadable header costs the clips, never the geometry -- `read` is
     stricter than `mesh` and refuses files whose bounding box does not check
@@ -165,7 +175,9 @@ def _clips_of(data: bytes, mesh: model.Mesh) -> list:  # pylint: disable=contain
 
     ⚠️ A pose reaching past the mesh's own positions is dropped here rather
     than at write time, so the count the manifest reports is the count that
-    could be written.
+    could be written. ⛔ **A pose that displaces nothing is kept**, unlike
+    before: poses accumulate now, so an empty one holds the previous pose for
+    another beat and dropping it shortens the clip.
     """
     try:
         found = model.read(data)
@@ -176,11 +188,7 @@ def _clips_of(data: bytes, mesh: model.Mesh) -> list:  # pylint: disable=contain
     for clip in found.animations:
         poses = model.morphs(data, clip)
         clips.append(
-            ClipInfo(
-                name=clip.name,
-                curves=model.curves(data, clip),
-                poses=[p for p in poses if p.offsets and p.reach < reach],
-            )
+            ClipInfo(name=clip.name, poses=[p for p in poses if p.reach < reach])
         )
     return clips
 
@@ -250,19 +258,31 @@ def fit_animations(mesh, clips: list, dense: bool = False) -> Animations:
     ⚠️ **The cost of adding a clip rises as the file fills**, because every
     keyframe already written gains a weight for each new target. So the walk
     prices each clip against the total it would produce, not against itself.
+
+    ⚠️ **Keyframes and targets grow at different rates** (D252). The weight
+    block is their product, so both have to be carried forward — a clip that is
+    mostly hold frames adds keys cheaply and targets hardly at all.
     """
     cap = DENSE if dense else SPARSE
-    usable = [clip for clip in clips if clip.poses]
+    usable = [clip for clip in clips if clip.moves]
     priced = gltf.costs(mesh, usable, sparse=not dense)
     kept: list = []
     spent = 0
     targets = 0
+    keys = 0
     for clip, cost in zip(usable, priced, strict=True):
         total = targets + cost.poses
-        grew = spent + cost.body + gltf.weight_cost(total) - gltf.weight_cost(targets)
+        ahead = keys + cost.keys
+        grew = (
+            spent
+            + cost.body
+            + gltf.weight_cost(total, ahead)
+            - gltf.weight_cost(targets, keys)
+        )
         if grew <= cap.size and total <= cap.targets:
             spent = grew
             targets = total
+            keys = ahead
             kept.append(clip)
     return Animations(clips=kept, dropped=len(usable) - len(kept), targets=targets)
 
@@ -392,9 +412,6 @@ def _clip_entry(clip: ClipInfo, written: bool) -> dict:
     """
     return {
         "name": clip.name,
-        "curves": len(clip.curves),
-        "keys": sum(len(c.times) for c in clip.curves),
-        "span": round(max((c.span for c in clip.curves), default=0.0), 3),
         "poses": len(clip.poses),
         "frames": round(clip.frames, 3),
         "seconds": round(clip.seconds, 4),
@@ -409,16 +426,18 @@ def _summarise(entries: list, dense: bool = False) -> None:
     bare = sum(1 for entry in entries if not entry["textured"])
     animated = sum(1 for entry in entries if entry["animated"])
     clips = sum(len(entry["clips"]) for entry in entries)
-    curves = sum(c["curves"] for entry in entries for c in entry["clips"])
     played = sum(entry["animations"] for entry in entries)
     dropped = sum(entry["animations_dropped"] for entry in entries)
     targets = sum(entry["targets"] for entry in entries)
     shapes = sum(entry["painted"] for entry in entries)
     masked = sum(entry.get("masked", 0) for entry in entries)
+    coloured = sum(1 for entry in entries if entry.get("coloured"))
     print(f"  {textured} carry a texture, {images} embedded image(s) in total")
     print(f"  {shapes} shape(s) resolve to one, counted in the files themselves")
     if masked:
         print(f"  {masked} material(s) carry a second layer, which masks the first")
+    if coloured:
+        print(f"  {coloured} carry vertex colour, which multiplies their texture")
     if bare:
         print(
             f"  ! {bare} name no image at all: every shape in them draws with\n"
@@ -435,7 +454,7 @@ def _summarise(entries: list, dense: bool = False) -> None:
             f"    {cap.targets} target(s) or {cap.size // 1024} KiB, whichever\n"
             f"    binds first. Each is listed in the manifest with written: false."
         )
-    print(f"  {clips} clip(s) and {curves} curve(s) listed in the manifest")
+    print(f"  {clips} clip(s) listed in the manifest")
     print("  a .glb opens in Blender, Windows 3D Viewer or any browser")
 
 
@@ -488,6 +507,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "textures": painted.images,
                 "materials": painted.materials,
                 "masked": painted.masked,
+                "coloured": painted.coloured,
                 "painted": painted.painted,
                 "shapes": entry.mesh.shapes,
                 "animated": bool(animation.clips),

@@ -165,12 +165,19 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
             // A face whose corners the UV list does not reach falls back to
             // flat, so a short TEXCOORD_0 accessor loses a triangle's texture
             // rather than the whole model.
+            // ⚠️ Read for the textured and the flat path alike. A shape
+            // with no image is drawn with its vertex colour alone, which is
+            // the `GX_PASSCLR` branch of the game's own TEV (D247, D251).
+            let tint = batch
+                .tints
+                .and_then(|all| Some([*all.get(face.a)?, *all.get(face.b)?, *all.get(face.c)?]));
             let paint = match batch.surface.and_then(|surface| {
                 surface
                     .corners(*face)
                     .map(|corners| raster::Paint::Textured {
                         texture: surface.texture,
                         corners,
+                        tint,
                         intensity,
                         masked: surface.masked,
                         sampling: surface.sampling,
@@ -178,7 +185,10 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                     })
             }) {
                 Some(textured) => textured,
-                None => raster::Paint::Flat(piece.flat.shaded(intensity)),
+                None => raster::Paint::Flat {
+                    colour: piece.flat.shaded(intensity),
+                    tint,
+                },
             };
             raster::raster(image, depth, &screen, &paint);
         }

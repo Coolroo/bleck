@@ -196,6 +196,40 @@ pub(crate) fn read_vec2(
         .collect())
 }
 
+/// One `COLOR_0` accessor, as 8-bit RGBA.
+///
+/// ⚠️ **`bleck` writes VEC4 of `UNSIGNED_BYTE`, normalized** (D251), which is
+/// the only form this reads. The specification also allows unsigned short and
+/// float, and VEC3 without alpha; refusing those is honest — a file written
+/// that way would silently draw untinted if they were quietly skipped, and no
+/// exporter this viewer reads produces one.
+pub(crate) fn read_colours(
+    json: &serde_json::Value,
+    bin: &[u8],
+    index: usize,
+) -> Result<Vec<[u8; 4]>, String> {
+    let accessor = &json["accessors"][index];
+    if accessor["type"].as_str() != Some("VEC4")
+        || accessor["componentType"].as_u64() != Some(UNSIGNED_BYTE)
+    {
+        return Err("COLOR_0 is not a VEC4 of unsigned bytes".into());
+    }
+    let read = accessor_bytes(json, bin, index)?;
+    if read.bytes.len() < read.count * 4 {
+        return Err("COLOR_0 accessor is shorter than its count".into());
+    }
+    Ok((0..read.count)
+        .map(|i| {
+            [
+                read.bytes[i * 4],
+                read.bytes[i * 4 + 1],
+                read.bytes[i * 4 + 2],
+                read.bytes[i * 4 + 3],
+            ]
+        })
+        .collect())
+}
+
 /// One `SCALAR` float accessor — keyframe times, and the weights they carry.
 pub(crate) fn read_scalars(
     json: &serde_json::Value,

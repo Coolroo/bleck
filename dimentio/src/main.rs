@@ -32,14 +32,53 @@
 //!
 //! Audio playback is the one thing here that reaches hardware, and it is
 //! confined to `app::audio`.
+//!
+//! # Without a screen
+//!
+//! `shot` renders a model straight to a PNG and exits, using the same software
+//! rasteriser the viewport draws through:
+//!
+//! ```text
+//! cargo run -- shot ../work/export/models/files/a/e_lui_robo.glb --out /tmp/robo.png
+//! ```
+//!
+//! ⚠️ Every other command line still opens the window. A bare `dimentio`, and
+//! `dimentio <folder>`, behave exactly as they did. `--help` is the one
+//! addition: opening a window is no answer to it, least of all for a caller
+//! that cannot see one.
+
+use std::process::ExitCode;
 
 use eframe::egui;
 
 mod app;
 mod data;
 mod render;
+mod shot;
 
-fn main() -> eframe::Result<()> {
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("shot") => return shot::run(&args[1..]),
+        Some("-h" | "--help") => {
+            println!(
+                "dimentio [<export folder>]   open the window\n\n{}",
+                shot::USAGE
+            );
+            return ExitCode::SUCCESS;
+        }
+        _ => {}
+    }
+    match window() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(why) => {
+            eprintln!("dimentio: {why}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn window() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1180.0, 760.0])

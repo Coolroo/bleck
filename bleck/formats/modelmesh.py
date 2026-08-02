@@ -46,6 +46,9 @@ from bleck.formats.modelrebase import (
 
 __all__ = [
     "AREA_EPSILON",
+    "COLOUR_INDEX_SLOT",
+    "COLOUR_SLOT",
+    "COLOUR_STRIDE",
     "FACE_SLOT",
     "FACE_STRIDE",
     "FULL_SECTIONS",
@@ -80,6 +83,16 @@ POSITION_SLOT = 1
 POSITION_INDEX_SLOT = 2
 NORMAL_SLOT = 3
 NORMAL_INDEX_SLOT = 4
+
+#: Per-vertex colour, and the index stream that reaches it. ✅ Named from the
+#: same draw code, which sets `GXSetVtxDesc(GX_VA_CLR0, GX_INDEX16)`,
+#: `GXSetVtxAttrFmt(fmt0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0)` and
+#: `GXSetArray(GX_VA_CLR0, table[5], 4)` at `0x80048594` (D251).
+COLOUR_SLOT = 5
+COLOUR_INDEX_SLOT = 6
+
+#: One colour is four bytes, `GX_RGBA8`.
+COLOUR_STRIDE = 4
 
 #: One texture-coordinate index per corner, in the same `u16`-in-`u32` form as
 #: slots 2 and 4. ⚠️ Its stop edge is `table[8]`, so reading it needs the wider
@@ -124,11 +137,18 @@ class Corner:
     """None when the model carries no normal stream for this corner."""
     uv: int | None = None
     """None when the model carries no texture-coordinate stream for this corner."""
+    colour: int | None = None
+    """None when the model carries no vertex-colour stream for this corner."""
 
 
 @dataclass(frozen=True)
-class Mesh:
+class Mesh:  # pylint: disable=too-many-instance-attributes
     """The vertex arrays of a whole model, as the game hands them to GX.
+
+    ⚠️ **One field per array the file carries, and the count is the format's,
+    not a choice.** GX is handed positions, normals, colours and texture
+    coordinates, each with its own index stream — grouping them would put a
+    reader one indirection away from the section table they come from.
 
     ✅ **Every shape in the file, not a fragment.** Median coverage across the
     disc is 100% and the mean 99.8%; `groups` says where each shape's faces sit
@@ -161,6 +181,17 @@ class Mesh:
     #: derived.** `e_bara_tib_p` has 64 positions and 96 UVs, so pairing a UV to
     #: a position index drops the texture on 26% of the disc's models (D234).
     corner_uvs: list = field(  # pylint: disable=container-return
+        default_factory=list
+    )
+    #: Slot 5, one `(r, g, b, a)` byte quadruple per entry.
+    #:
+    #: ⚠️ **The texture is multiplied by this, so leaving it out turns a red
+    #: panel white** (D251). The disc stores one greyscale panel and tints it
+    #: per shape; 331 of 864 models carry more than one colour and rendered
+    #: near-white without it.
+    colours: list = field(default_factory=list)  # pylint: disable=container-return
+    #: One colour index per corner, in draw order, from slot 6.
+    corner_colours: list = field(  # pylint: disable=container-return
         default_factory=list
     )
     #: Lengths of the `u16`-in-`u32` index streams, in table order.
@@ -299,11 +330,13 @@ class Mesh:
             positions = self.corner_positions[span]
             normals = self.corner_normals[span]
             uvs = self.corner_uvs[span]
+            colours = self.corner_colours[span]
             corners = [
                 Corner(
                     position=p,
                     normal=normals[i] if i < len(normals) else None,
                     uv=uvs[i] if i < len(uvs) else None,
+                    colour=colours[i] if i < len(colours) else None,
                 )
                 for i, p in enumerate(positions)
             ]
@@ -507,6 +540,8 @@ def mesh(data: bytes) -> Mesh:
         corner_positions=corner_positions,
         corner_normals=_stream(data, table, edges, NORMAL_INDEX_SLOT),
         corner_uvs=corner_uvs,
+        colours=_colours(data, table, edges),
+        corner_colours=_stream(data, table, edges, COLOUR_INDEX_SLOT),
         uvs=uvs,
         name=name,
         positions=positions,
@@ -639,6 +674,30 @@ def _stream(data: bytes, table: tuple, edges: list, slot: int) -> list:
     if stop <= start or (stop - start) % 4:
         return []
     return list(struct.unpack_from(f">{(stop - start) // 4}I", data, start))
+
+
+def _colours(data: bytes, table: tuple, edges: list) -> list:
+    # pylint: disable=container-return
+    """Slot 5, as `(r, g, b, a)` byte quadruples.
+
+    ✅ **The format is stated, not inferred** (D251). The draw code calls
+    `GXSetVtxAttrFmt(fmt0, GX_VA_CLR0, GX_CLR_RGBA, GX_RGBA8, 0)` and hands
+    `GXSetArray` a stride of 4, so an entry is four bytes in channel order.
+
+    ⚠️ **No per-group base and no separate corner offset.** Every one of the
+    disc's 17,290 group records carries `(0, 0)` for its colour slice, and the
+    colour corner offset at shape record `+0x48` equals the position one on all
+    18,631 shape records — so this reads like the normal stream rather than
+    like the UV one, which does need both (D240).
+    """
+    start, stop = table[COLOUR_SLOT], edges[COLOUR_SLOT + 1]
+    if stop <= start or (stop - start) % COLOUR_STRIDE:
+        return []
+    count = (stop - start) // COLOUR_STRIDE
+    return [
+        tuple(data[start + i * COLOUR_STRIDE : start + (i + 1) * COLOUR_STRIDE])
+        for i in range(count)
+    ]
 
 
 def _faces(data: bytes, start: int, stop: int) -> list:

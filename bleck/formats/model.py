@@ -22,12 +22,12 @@ model reader.
 
 This module is the **container**: what a file says about itself, and where its
 blocks are. The two decoders that came later sit beside it and are re-exported
-here, so `model.Mesh` and `model.curves` still resolve:
+here, so `model.Mesh` and `model.morphs` still resolve:
 
 | | |
 |---|---|
 | `bleck.formats.modelmesh` | the shape record at `0x150` and its vertex arrays |
-| `bleck.formats.modelanim` | the clip table, its curves and its morph poses |
+| `bleck.formats.modelanim` | the clip table and its morph poses |
 | `bleck.formats.modelbase` | `ModelError` and the name field, shared by all three |
 
 The seam is the file's own structure: the container locates blocks, and each
@@ -87,7 +87,7 @@ from bleck.formats.modelanim import (
     CLIP_STRIDE,
     CLIP_TRACK_STRIDE,
     COUNTED_SECTIONS,
-    KEY_SCALE,
+    DELTA_SCALE,
     KEY_SECTION,
     RECORD_COUNTS_AT,
     RECORD_SECTIONS,
@@ -95,11 +95,9 @@ from bleck.formats.modelanim import (
     RECORD_SIZE_AT,
     TRACK_SECTION,
     Clip,
-    Curve,
     Morph,
     Span,
     clips,
-    curves,
     morphs,
 )
 from bleck.formats.modelbase import FIELD, ModelError, text
@@ -141,6 +139,7 @@ __all__ = [
     "CLIP_STRIDE",
     "CLIP_TRACK_STRIDE",
     "COUNTED_SECTIONS",
+    "DELTA_SCALE",
     "FACE_SLOT",
     "FACE_STRIDE",
     "FIELD",
@@ -148,7 +147,6 @@ __all__ = [
     "GROUP_STRIDE",
     "GROUP_TABLE_AT",
     "JOINTS_FROM_END",
-    "KEY_SCALE",
     "KEY_SECTION",
     "NAME_AT",
     "NORMAL_INDEX_SLOT",
@@ -176,7 +174,6 @@ __all__ = [
     "Bounds",
     "Clip",
     "Corner",
-    "Curve",
     "Face",
     "Mesh",
     "Model",
@@ -186,7 +183,6 @@ __all__ = [
     "Slice",
     "Span",
     "bank_for",
-    "curves",
     "is_model",
     "mesh",
     "morphs",

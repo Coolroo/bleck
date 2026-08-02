@@ -245,6 +245,22 @@ never meant to tile. A layer may also carry a UV offset, scale or rotation, whic
 is written as `KHR_texture_transform`; Blender and three.js honour it, and a
 reader that does not simply draws the untransformed image.
 
+#### The texture is tinted per vertex, and the tint travels with it
+
+Much of the game's art is stored **greyscale and coloured at draw time**: one
+panel with rivets on it becomes the red one, the blue one and the green one
+depending on a colour the model stores per vertex. An export carries that as
+glTF `COLOR_0`, which every reader multiplies into the base colour — **4,609
+shapes across 336 models**. Without it Brobot renders as a white robot with all
+its detail intact and none of its paint; with it, a Luigi-green cap, red
+thrusters and a brown moustache.
+
+This is also how the **41 models that name no image at all** are drawn: the
+game colours those from the vertices alone, and so does Dimentio.
+
+Models whose vertices are all plain white carry nothing extra; that is 524 of
+the 864, and a multiply by one is what glTF already assumes.
+
 !!! note "40 shapes carry a second texture, and it is a mask"
 
     Four effect models — the two `MOBJ_EFF_mahojin` magic circles,
@@ -376,6 +392,42 @@ root.
 The manifest is still the contract, not the directory listing: a path cannot say
 what format an image was stored in, or how many faces a mesh had. Its `file`
 field is a path relative to the export root.
+
+### Rendering a model without opening anything
+
+Dimentio can also render a model straight to a PNG and exit, which needs no
+window, no GPU and no display — useful over SSH, in CI, or when you would rather
+not open a viewer to check one file:
+
+```bash
+cargo run --release --manifest-path dimentio/Cargo.toml -- \
+  shot work/export/models/files/a/p_wii_mario.glb --out mario.png
+```
+
+| option | |
+|---|---|
+| `--out <file.png>` | where to write. Required |
+| `--size 512` | edge of one view, in pixels |
+| `--angles 4` | views around the model, laid out as one contact sheet |
+| `--clip 0 --frame 4` | hold one keyframe of one animation clip |
+| `--background checkerboard` | `dark-grey`, `checkerboard` or `gradient` |
+
+Four angles in one image rather than four files: most model defects — a stray
+shape off to the side, a face that vanishes from behind, one part left
+untextured — only show from one direction.
+
+It also prints what it drew, including a **colour spread** figure. Above 0.015
+an image reached the surface; below it, the model is drawn in one tint, which
+means either that it carries no texture or that its texture is greyscale.
+
+!!! warning "The backdrop is never white"
+
+    A texture that decoded to near-white and a texture that failed to decode
+    look identical against a white page. That is the case worth catching, so the
+    default backdrop is a dark checkerboard.
+
+Running `dimentio` with anything else — a folder, or nothing at all — opens the
+window as usual.
 
 ## Archives
 
