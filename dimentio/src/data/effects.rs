@@ -7,8 +7,12 @@
 //! `effdata.dat`; `bleck` owns that format and is tested against a real disc.
 //!
 //! ✅ **Which image a part draws is decoded** (D258) and arrives in the
-//! manifest as `Part::pictures`. `bleck` walks the five sections between them;
+//! manifest as `Part::draws`. `bleck` walks the five sections between them;
 //! nothing here re-derives it.
+//!
+//! ✅ **So is the geometry** (D263, D264). A draw names a mesh in the
+//! manifest's shared `meshes` table as well as an image, so an effect's real
+//! shape is available here rather than a stand-in quad.
 //!
 //! ⚠️ **Resolve an image by name, not by counting.** `image_at` matches
 //! `<source>#<n>`, the name `bleck` writes. `bank` still exists and is still
@@ -36,6 +40,12 @@ struct Manifest {
     /// The disc file holding the effect system's images.
     #[serde(default)]
     textures: String,
+    /// Every distinct display list, shared by index across all the draws.
+    ///
+    /// ⚠️ 2,960 draws share 360 meshes, which is why they are a table here
+    /// rather than a field on each draw.
+    #[serde(default)]
+    meshes: Vec<Mesh>,
     effects: Vec<Entry>,
 }
 
@@ -103,21 +113,33 @@ pub struct Part {
     pub frames: u32,
     #[serde(default)]
     pub seconds: f32,
-    /// The images this part draws, as `bleck` resolved them (D258).
+    /// The draws this part issues, as `bleck` resolved them (D258, D263).
     ///
     /// ⚠️ **A list, because a part draws a set.** 560 of the file's 704 parts
-    /// draw one image, 35 none, and the rest up to twelve. An export written
+    /// reach one image, 35 none, and the rest up to twelve. An export written
     /// before the binding was decoded carries none, and `serde(default)` leaves
     /// it empty rather than refusing to load.
     #[serde(default)]
-    pub pictures: Vec<Picture>,
+    pub draws: Vec<Draw>,
 }
 
-/// One image a part draws, and how it is tinted.
+/// One draw a part issues: geometry, and what to paint it with.
+///
+/// ⚠️ **A draw always names a mesh and may name no image.** The two are
+/// separate hops of the same chain — a material carrying the documented `-1`
+/// still has geometry to draw, so an untextured draw is a real thing rather
+/// than a failed lookup.
 #[derive(Debug, Deserialize, Clone, Default, PartialEq, Eq)]
-pub struct Picture {
-    /// Index into the effect system's own bank — 0..218 for `effdata.tpl`.
-    pub image: usize,
+pub struct Draw {
+    /// Index into the manifest's shared `meshes` table.
+    #[serde(default)]
+    pub mesh: usize,
+    /// Index into the effect system's own bank — 0..218 for `effdata.tpl` —
+    /// or negative where the material names no texture.
+    ///
+    /// ⚠️ Signed on purpose. 0 is a real image, so it cannot double as "none".
+    #[serde(default)]
+    pub image: i32,
     #[serde(default)]
     pub wrap: u32,
     #[serde(default)]
@@ -128,6 +150,80 @@ pub struct Picture {
     pub blue: u8,
     #[serde(default)]
     pub alpha: u8,
+}
+
+impl Draw {
+    /// The bank index this draw paints with, or `None` when it paints none.
+    pub fn image(&self) -> Option<usize> {
+        (self.image >= 0).then_some(self.image as usize)
+    }
+}
+
+/// One display list, as indexed triangles (D263).
+///
+/// ⚠️ **Positions are the file's own `s16` units, unscaled.** Dimentio's star
+/// spans ±320. What one unit is in the game's world is not established, so a
+/// caller fits a camera to the bounds rather than assuming a scale.
+///
+/// ⚠️ `uvs`, `colours` and `normals` are **absent** where the display list's
+/// descriptor does not name them, which is most of the file. A reader must
+/// treat a short or empty array as "this geometry has none", not as an error.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Mesh {
+    /// Where the display list sits in section 3 of `effdata.dat`. ⚠️ Kept
+    /// because it is how a finding names one — D263's star is "the display list
+    /// at 0x001C80" — and nothing else here identifies a mesh to a reader.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub offset: u32,
+    /// The GX vertex descriptor the list was read under. ⚠️ Part of a mesh's
+    /// identity, not decoration: the same bytes under a different descriptor
+    /// are different geometry.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub descriptor: u32,
+    /// Three per vertex.
+    #[serde(default)]
+    pub positions: Vec<i32>,
+    /// Two per vertex, when present.
+    #[serde(default)]
+    pub uvs: Vec<f32>,
+    /// Four per vertex, when present.
+    #[serde(default)]
+    pub colours: Vec<u8>,
+    /// Three per vertex, when present.
+    ///
+    /// ⚠️ Read from the manifest and **not yet drawn with**: the rasteriser
+    /// lights a face from its own winding, so a per-vertex normal has nowhere
+    /// to go until it shades smoothly.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub normals: Vec<f32>,
+    /// Three per triangle, indexing the arrays above.
+    #[serde(default)]
+    pub triangles: Vec<usize>,
+}
+
+impl Mesh {
+    pub fn vertices(&self) -> usize {
+        self.positions.len() / 3
+    }
+
+    pub fn faces(&self) -> usize {
+        self.triangles.len() / 3
+    }
+
+    /// Whether every index is inside the arrays it addresses.
+    ///
+    /// ⚠️ Checked rather than trusted: a manifest is a file on disk, and a
+    /// stray index would panic the rasteriser rather than draw wrongly.
+    pub fn is_sound(&self) -> bool {
+        self.triangles.len() % 3 == 0
+            && self.positions.len() % 3 == 0
+            && self.triangles.iter().all(|&at| at < self.vertices())
+            && (self.uvs.is_empty() || self.uvs.len() == self.vertices() * 2)
+            && (self.colours.is_empty() || self.colours.len() == self.vertices() * 4)
+    }
 }
 
 impl Part {
@@ -266,6 +362,7 @@ impl Problem {
 #[derive(Default)]
 pub struct Library {
     entries: Vec<Entry>,
+    meshes: Vec<Mesh>,
     textures: String,
     problem: Option<Problem>,
 }
@@ -297,6 +394,7 @@ impl Library {
         };
         Self {
             entries: manifest.effects,
+            meshes: manifest.meshes,
             textures: manifest.textures,
             problem: None,
         }
@@ -304,6 +402,12 @@ impl Library {
 
     pub fn entries(&self) -> &[Entry] {
         &self.entries
+    }
+
+    /// The shared display-list table. Empty for an export written before the
+    /// geometry was decoded, which is what `Draw::mesh` degrades against.
+    pub fn meshes(&self) -> &[Mesh] {
+        &self.meshes
     }
 
     pub fn len(&self) -> usize {

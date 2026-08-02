@@ -18475,3 +18475,127 @@ section 11        texture coordinates, 2 x f32, stride 8
 Nothing in the geometry path is now unknown. What remains for task #29 is
 engineering: read it in `bleck`, export it, and draw it in `dimentio` in place
 of the billboard.
+
+## D264 — Effect geometry ported, and D263's normal stride refuted (2026-08-02)
+
+D263 decoded the format and proved it by rendering. This ports it: `bleck` reads
+and exports the geometry, `dimentio` draws it, and the placeholder billboard is
+gone. Two of D263's claims did not survive the port, which is the point of
+re-measuring before turning a finding into library code.
+
+### ⛔ Section 14 is `3 x s8`, not `3 x s16` — D263 is corrected
+
+D263 assigned descriptor bits 0-3 to sections 13/14/15/11 **by GX's attribute
+order**, and only two of the four were ever measured. POS and TEX0 were
+exercised by Dimentio's star and land exactly. NRM was not, and it is wrong:
+
+| reading | entries | largest index used | verdict |
+|---|---|---|---|
+| stride 6, `3 x s16` | 816 | 1,631 | ⛔ **4,598 indices out of range** |
+| stride 3, `3 x s8` | 1,632 | 1,631 | ✅ exact, zero spare |
+
+✅ **4,896 / 1,632 = 3 exactly**, and every value 0..1631 is used. The positive
+test: read as `3 x s8`, **1,632 of 1,632 are unit vectors** — raw magnitudes run
+126.61 to 128.00 against a scale of 127. That is `GX_NRM_XYZ, GX_S8`.
+
+⚠️ **The wrong reading also looked convincing.** At stride 6 as `3 x s16`,
+**738 of 816** entries come out unit-length against `1/32767` — 90%, purely from
+where the bytes fall, since a normal component's high byte is often near 127. A
+"90% of them are unit vectors" check would have confirmed the refuted reading.
+
+✅ Section 15 does hold `GX_RGBA8` at stride 4, as D263 guessed: 49 of its 56
+entries are referenced and **the last seven are all zero** — padding. The colours
+are plainly colours: `(255,0,0,255)`, `(255,255,255,255)`, `(255,128,128,255)`.
+
+⚠️ **Not every array divides by its stride**, so "the size divides exactly" is
+the wrong test to reach for. Section 13 carries **four spare bytes** past its
+12,250th position. The fit argument has to be stated in entries.
+
+### ✅ How the assignment is settled now, and why it is not GX convention
+
+The tight fit is the evidence, and `Mesh.strays` is the instrument:
+
+| bit | attribute | array | largest index | entries | spare |
+|---|---|---|---|---|---|
+| 0 | POS | 13, `3 x s16` | 12,247 | 12,250 | 2 |
+| 1 | NRM | 14, `3 x s8` | 1,631 | 1,632 | 0 |
+| 2 | CLR0 | 15, `GX_RGBA8` | 48 | 56 | 7 |
+| 3 | TEX0 | 11, `2 x f32` | 9,065 | 9,068 | 2 |
+
+⛔ **An out-of-range index used to fall back to a default silently** — the
+geometry still parsed, still rendered, and was quietly one attribute short.
+`mesh_at` now **counts** them, and the count is 0 across all 360 display lists.
+That is the check that caught the normal stride, and the reason it is a field
+rather than a one-off script.
+
+### 🔶 One display list is anomalous and unexplained
+
+`item_delete`'s display list at `0x13A80` is **640 units wide and 58,642 deep**,
+where the other 359 are flat or near it. Its first four primitives sit at a
+constant `z = -1322` and the rest carry Z values scattered across +/-32,000, with
+X and Y tracing a smooth curve throughout.
+
+⛔ **Not a framing error**: the list consumes its declared 480 bytes exactly,
+leaving 12 zero bytes, and its position indices are ordinary (3389..3432).
+⛔ **Not a general misreading of Z either**: two thirds of all referenced
+positions carry a non-zero third component, and the common values are 64, 160
+and 320 — the same grid Dimentio's star is built on.
+
+**No rule was invented to smooth it away.** `dimentio reel` reports the
+depth-to-width ratio instead, so a reader sees "92x deeper than it is wide"
+rather than an effect that mysteriously renders small.
+
+### ⚠️ A cube bounding box hid the anisotropy completely
+
+The viewer's first bounds implementation took one **radius** per part and built a
+cube from it. Under that, `item_delete` measured 64,108 on every axis — a
+depth ratio of exactly 1.0, perfectly ordinary — while the effect rendered as
+nothing at all. Measuring per axis both fixed the rendering and made the
+anomaly visible. ⛔ A summary statistic that collapses the axes cannot report an
+axis being wrong.
+
+### What shipped
+
+| | |
+|---|---|
+| `bleck/formats/effgeom.py` | **new.** The display-list reader, split out |
+| `bleck/formats/effdata.py` | `Entry` relaid as `u16, u16, u32`; `draws()` returns picture + geometry |
+| `effects.json` | schema **2**: a top-level `meshes` table, and `draws` in place of `pictures` |
+| `dimentio` | draws the real geometry; the billboard is now a marked fallback |
+
+⚠️ **`effects.json` grew from ~1 MB to 4.8 MB**, and would have been 14.3 MB
+written naively. Two things bring it down: vertices are **shared** rather than
+repeated per triangle (fans overlap heavily — every quad of the star carries the
+same centre), and an array the descriptor does not name is **left out** rather
+than filled with defaults. 2,494 of the 2,960 draws carry position and texture
+coordinate alone.
+
+⚠️ **2,960 draws share 360 display lists**, so geometry is a top-level table
+referenced by index. Inlining it per draw would be eight copies of every mesh.
+
+### 🟢 The acceptance test, passed twice
+
+D263's criterion was that `dmen_magic` must render as a four-pointed star with
+concave sides, matching a gameplay screenshot — not "it looks better". Through
+`dimentio reel` it now draws the yellow concave star, the purple shuriken petals,
+the distortion ring **and a shaded 3D cube**. ⛔ A billboard renderer cannot
+produce a shaded cube, which is what makes the screenshot proof rather than
+encouragement.
+
+### ⚠️ Two latent defects the port introduced, both found before shipping
+
+- **`active` quietly changed meaning.** It counted parts; drawing per-draw made
+  it count pieces, so a 6-part effect reported "31 active". Worse, `unpainted =
+  active - painted` then mixed the two and **underflowed** — silently in release.
+  Split into `active` (parts) and `pieces` (draws).
+- **`Art` is `Copy`**, so a `geometry()` returning `Option<&Geometry>` bound to
+  `&self` dies with the closure's own copy. It has to borrow from the slice's
+  lifetime instead.
+
+### What is still not decoded
+
+⛔ **Where one part sits relative to another.** Section 9's node transforms and
+section 12's TRS are read (D262) and **not applied**, so the viewer draws an
+**exploded view** — parts deliberately separated so they can be told apart. Every
+draw's *shape* is now measured; its placement is not, and the reel says so on
+every run. 🔶 Section 10's curves, which would animate it, are still unread.

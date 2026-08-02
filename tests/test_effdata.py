@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import effdata
+from bleck.formats import effdata, effgeom
 
 REPO = Path(__file__).resolve().parent.parent
 EFFDATA = REPO / "work" / "extracted" / "eu0" / "files" / "eff" / "effdata.dat"
@@ -237,19 +237,34 @@ class TestGroupsAndEntries:
         last = groups[-1]
         assert max(last.start + last.count, len(groups)) == len(records)
 
-    def test_every_entry_offset_is_a_multiple_of_32(self):
-        """⚠️ What says field 3 is a byte offset into a 32-byte-strided table
-        rather than an arbitrary number."""
-        assert all(e.offset % 32 == 0 for e in effdata.entries(self._data()))
+    def test_every_display_list_offset_is_aligned_and_inside_section_3(self):
+        """⚠️ The 32 is GX display-list alignment, not a record stride.
+
+        Reading it as a stride is what made the old four-`u16` layout look
+        right: an offset divisible by 32 is equally consistent with both, and
+        only the *upper* one distinguishes them. As two `u16` the offset tops
+        out at 64,960; as one `u32` it reaches 350,944, and section 3 is
+        350,976 bytes long — which the two-`u16` reading could never fill.
+        """
+        data = self._data()
+        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        size = offsets[effgeom.DISPLAY_SECTION + 1] - offsets[effgeom.DISPLAY_SECTION]
+        records = effdata.entries(data)
+        assert all(e.display_list % effgeom.DISPLAY_ALIGN == 0 for e in records)
+        assert all(0 <= e.display_list < size for e in records)
+        assert max(e.display_list for e in records) > 0xFFFF
 
     def test_the_entry_fields_stay_in_their_measured_ranges(self):
-        """🔶 Shape only. None of these fields has an established meaning, and
-        pinning the ranges is what would make a future change visible."""
+        """The three fields of a draw, pinned at what the file holds."""
         records = effdata.entries(self._data())
         assert len(records) == 2960
-        assert max(e.reference for e in records) == 522
-        assert len({e.kind for e in records}) == 9
-        assert max(e.variant for e in records) == 5
+        assert max(e.material for e in records) == 522
+        assert len({e.descriptor for e in records}) == 9
+        # ⚠️ Bit 15 aside, no descriptor names an attribute past TEX0 — which
+        # is what lets `ATTRIBUTE_SECTIONS` cover four bits and stop.
+        assert all(
+            e.descriptor & effgeom.DESCRIPTOR_ATTRIBUTES <= 0b1111 for e in records
+        )
 
 
 @pytest.mark.gamedata
@@ -421,3 +436,321 @@ class TestTheImageChain:
         effects = effdata.read(data)
         empty = effdata.Part(index=0, name="none", first=effdata.NO_PART, second=1)
         assert not effdata.artwork(data, effects[0], empty)
+
+
+def a_display_list(fans: list[list[int]], attributes: int) -> bytes:
+    """One section 3 record: a `u32` size, padding to 32, then triangle fans.
+
+    `fans` gives each primitive's vertex indices; every attribute of a vertex
+    takes the same index, which is what makes a test's expected geometry
+    readable at a glance.
+    """
+    body = bytearray()
+    for fan in fans:
+        body += struct.pack(">BH", effgeom.TRIANGLE_FAN, len(fan))
+        for index in fan:
+            body += struct.pack(f">{attributes}H", *([index] * attributes))
+    record = bytearray(struct.pack(">I", len(body)))
+    record += b"\x00" * (effgeom.DISPLAY_ALIGN - len(record))
+    record += body
+    # ⚠️ The trailing pad matters: a reader that runs past the declared size
+    # must stop on the zero rather than read it as an opcode.
+    record += b"\x00" * ((-len(record)) % effgeom.DISPLAY_ALIGN)
+    return bytes(record)
+
+
+def a_geometry_file(fans: list[list[int]], descriptor: int) -> bytes:
+    """A file holding one display list and the arrays it indexes.
+
+    Position `n` is `(n, 10n, 100n)` and texture coordinate `n` is `(n, -n)`,
+    so an index resolved against the wrong section produces a number no
+    assertion here would accept.
+    """
+    mask = effgeom.DESCRIPTOR_ATTRIBUTES
+    bits = [b for b in range(15) if descriptor & mask & (1 << b)]
+    count = max((i for fan in fans for i in fan), default=0) + 1
+
+    blocks = {
+        3: a_display_list(fans, len(bits)),
+        11: b"".join(struct.pack(">2f", float(n), float(-n)) for n in range(count)),
+        13: b"".join(struct.pack(">3h", n, 10 * n, 100 * n) for n in range(count)),
+        14: b"".join(struct.pack(">3b", 127, 0, 0) for _ in range(count)),
+        15: b"".join(struct.pack(">4B", n, n, n, 255) for n in range(count)),
+    }
+
+    offsets, cursor = [], effdata.HEADER_SIZE
+    for section in range(effdata.SECTIONS):
+        offsets.append(cursor)
+        cursor += len(blocks.get(section, b""))
+    out = bytearray(struct.pack(f">{effdata.SECTIONS}I", *offsets))
+    for section in range(effdata.SECTIONS):
+        out += blocks.get(section, b"")
+    return bytes(out)
+
+
+class TestTheDisplayListReader:
+    """`mesh_at`, without a disc. Every array holds a different pattern, so a
+    misresolved attribute cannot pass by looking plausible."""
+
+    def test_a_fan_becomes_triangles_sharing_its_first_vertex(self):
+        data = a_geometry_file([[0, 1, 2, 3]], 0b1001)
+        mesh = effgeom.mesh_at(data, 0, 0b1001)
+        assert len(mesh.primitives) == 1
+        assert mesh.primitives[0].kind == effgeom.TRIANGLE_FAN
+        assert len(mesh.primitives[0].vertices) == 4
+
+        triangles = mesh.triangles()
+        assert len(triangles) == 2, "a 4-vertex fan is two triangles"
+        assert [(t.a.x, t.b.x, t.c.x) for t in triangles] == [(0, 1, 2), (0, 2, 3)]
+
+    def test_each_descriptor_bit_reads_its_own_array(self):
+        """⚠️ The shape of the check that caught the normal stride: every array
+        holds a different pattern, so resolving one against another's stride
+        gives a value none of these assertions accepts."""
+        data = a_geometry_file([[0, 1, 2]], 0b1111)
+        vertex = effgeom.mesh_at(data, 0, 0b1111).primitives[0].vertices[2]
+        assert (vertex.x, vertex.y, vertex.z) == (2, 20, 200)
+        assert (vertex.u, vertex.v) == (2.0, -2.0)
+        assert (vertex.nx, vertex.ny, vertex.nz) == (1.0, 0.0, 0.0)
+        assert (vertex.red, vertex.green, vertex.blue, vertex.alpha) == (2, 2, 2, 255)
+
+    def test_an_absent_attribute_keeps_a_default_that_does_not_erase_the_art(self):
+        """⚠️ White, not black. A vertex colour is modulated against the
+        texture, so a zeroed default would black out every untinted draw — and
+        2,494 of the file's 2,960 draws name no colour at all."""
+        data = a_geometry_file([[0, 1, 2]], 0b1001)
+        vertex = effgeom.mesh_at(data, 0, 0b1001).primitives[0].vertices[1]
+        assert (vertex.red, vertex.green, vertex.blue, vertex.alpha) == (255,) * 4
+        assert (vertex.nx, vertex.ny, vertex.nz) == (0.0, 0.0, 0.0)
+        assert (vertex.x, vertex.u) == (1, 1.0)
+
+    def test_the_stride_follows_the_descriptor_rather_than_being_assumed(self):
+        """⛔ The 275-of-360 bug in miniature. Bytes holding four attributes,
+        read as two, run the reader into the middle of a vertex — so it must
+        not report the same geometry as the right descriptor does."""
+        four = a_geometry_file([[0, 1, 2, 3], [1, 2, 3, 0]], 0b1111)
+        right = effgeom.mesh_at(four, 0, 0b1111)
+        assert len(right.primitives) == 2
+        assert len(right.triangles()) == 4
+        assert len(effgeom.mesh_at(four, 0, 0b1001).triangles()) != 4
+
+    def test_bit_15_takes_no_index(self):
+        """✅ It is a flag, not an attribute. Counting it stretches the stride
+        by two bytes a vertex and swallows the following opcode."""
+        data = a_geometry_file([[0, 1, 2, 3]], 0b1001)
+        plain = effgeom.mesh_at(data, 0, 0b1001)
+        flagged = effgeom.mesh_at(data, 0, 0x8000 | 0b1001)
+        assert len(flagged.triangles()) == len(plain.triangles()) == 2
+        assert flagged.triangles()[0].a.x == plain.triangles()[0].a.x
+
+    def test_a_truncated_file_returns_what_it_read_rather_than_raising(self):
+        """A damaged `effdata.dat` is not a reason to refuse the 359 display
+        lists around the damaged one."""
+        data = a_geometry_file([[0, 1, 2, 3], [0, 1, 2]], 0b1001)
+        mesh = effgeom.mesh_at(data[: len(data) - 40], 0, 0b1001)
+        assert len(mesh.primitives) <= 2
+
+    def test_an_offset_past_the_section_gives_an_empty_mesh(self):
+        data = a_geometry_file([[0, 1, 2]], 0b1001)
+        assert not effgeom.mesh_at(data, 1 << 20, 0b1001).primitives
+
+    def test_a_descriptor_naming_nothing_gives_an_empty_mesh(self):
+        """⚠️ A zero stride would loop forever on a fan of any length."""
+        data = a_geometry_file([[0, 1, 2]], 0b1001)
+        assert not effgeom.mesh_at(data, 0, 0).primitives
+
+    def test_a_primitive_kind_the_file_never_uses_is_not_triangulated(self):
+        """⛔ Fan triangulation applied to a strip produces geometry that
+        renders and is wrong. Better to draw nothing."""
+        corners = [effgeom.Vertex(x=n) for n in range(4)]
+        assert not effgeom.Primitive(0x98, corners).triangles()
+        assert len(effgeom.Primitive(effgeom.TRIANGLE_FAN, corners).triangles()) == 2
+
+
+@pytest.mark.gamedata
+class TestTheGeometryAgainstTheRealFile:
+    """D263 and D264, re-measured. Every number here was a claim first."""
+
+    def _data(self) -> bytes:
+        if not EFFDATA.is_file():
+            pytest.skip(f"no extracted disc at {EFFDATA}")
+        return EFFDATA.read_bytes()
+
+    def _offsets(self, data: bytes) -> list[int]:
+        # pylint: disable=container-return
+        """The section table, with the file's own end appended — section 15 has
+        no following offset to bound it."""
+        table = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        return [*table, len(data)]
+
+    def test_every_display_list_parses_exactly(self):
+        """✅ 360 of 360, 14,648 primitives, 58,381 vertices.
+
+        ⛔ **The near-miss is the danger.** Ignoring the descriptor parses 275
+        — three quarters, including the effect that was under examination, with
+        the failures confined to effects nobody had opened. Pinning the totals
+        is what makes that a visible regression rather than a plausible result.
+        """
+        shared = effdata.meshes(self._data())
+        assert len(shared) == 360
+        assert sum(len(m.primitives) for m in shared) == 14648
+        assert sum(len(p.vertices) for m in shared for p in m.primitives) == 58381
+        assert all(m.primitives for m in shared), "a display list read as empty"
+
+    def test_a_display_list_consumes_its_size_with_only_padding_left_over(self):
+        """⛔ The discriminating check. A wrong stride still parses *something*
+        — it stops short of the declared size or overruns it, and a reader that
+        only counts primitives cannot tell the difference."""
+        data = self._data()
+        start = self._offsets(data)[effgeom.DISPLAY_SECTION]
+        mask = effgeom.DESCRIPTOR_ATTRIBUTES
+        for mesh in effdata.meshes(data):
+            base = start + mesh.offset
+            size = struct.unpack_from(">I", data, base)[0]
+            stride = 2 * bin(mesh.descriptor & mask).count("1")
+            read = sum(3 + len(p.vertices) * stride for p in mesh.primitives)
+            assert read <= size, f"{mesh.offset:#x} overran its declared size"
+            body = base + effgeom.DISPLAY_ALIGN
+            trailing = data[body + read : body + size]
+            assert set(trailing) <= {0}, f"{mesh.offset:#x} left {len(trailing)} unread"
+
+    def test_no_index_ever_falls_outside_the_array_its_bit_names(self):
+        """⛔ **The test that refuted D263's normal stride**, and the reason
+        `Mesh.strays` exists at all.
+
+        An out-of-range index is not a crash — the attribute keeps its default
+        and the geometry parses, renders and looks fine, one attribute short.
+        Under the assumed stride-6 reading of section 14 this counted 4,598.
+        Zero is the only acceptable answer, and it has to be *counted* to be
+        seen.
+        """
+        shared = effdata.meshes(self._data())
+        assert sum(m.strays for m in shared) == 0
+        assert any(m.descriptor & (1 << 1) for m in shared), (
+            "no display list used a normal, so this proves nothing"
+        )
+
+    def test_section_14_divides_by_three_and_not_by_six(self):
+        """⛔ The arithmetic underneath it. 4,896 is 1,632 x 3 exactly; at the
+        stride-6 reading it would hold 816 normals, and vertices index up to
+        1,631."""
+        offsets = self._offsets(self._data())
+        size = offsets[effgeom.NORMAL_SECTION + 1] - offsets[effgeom.NORMAL_SECTION]
+        assert size == 4896
+        assert size % effgeom.NORMAL_STRIDE == 0
+        assert size // effgeom.NORMAL_STRIDE == 1632
+
+    def test_the_arrays_are_padded_rather_than_ending_on_an_exact_entry(self):
+        """⚠️ Not every section divides by its stride, so "it divides exactly"
+        is the wrong test to reach for. Section 13 carries **four spare bytes**
+        past its 12,250th position — which is why the fit argument below is
+        stated in entries, not in bytes."""
+        offsets = self._offsets(self._data())
+        leftover = {
+            section: (offsets[section + 1] - offsets[section]) % stride
+            for section, stride in (
+                (effgeom.POSITION_SECTION, effgeom.POSITION_STRIDE),
+                (effgeom.NORMAL_SECTION, effgeom.NORMAL_STRIDE),
+                (effgeom.COLOUR_SECTION, effgeom.COLOUR_STRIDE),
+                (effgeom.TEXCOORD_SECTION, effgeom.TEXCOORD_STRIDE),
+            )
+        }
+        assert leftover == {
+            effgeom.POSITION_SECTION: 4,
+            effgeom.NORMAL_SECTION: 0,
+            effgeom.COLOUR_SECTION: 0,
+            effgeom.TEXCOORD_SECTION: 0,
+        }
+
+    def test_the_position_and_texcoord_arrays_are_filled_to_within_two_entries(self):
+        """🟢 The fit that settles the assignment, and the reason it is not
+        merely GX convention: POS's largest index is 12,247 against 12,250
+        entries and TEX0's is 9,065 against 9,068 — two spare each, where the
+        next-best candidate section leaves thousands."""
+        data = self._data()
+        offsets = self._offsets(data)
+        held = {
+            effgeom.POSITION_SECTION: effgeom.POSITION_STRIDE,
+            effgeom.TEXCOORD_SECTION: effgeom.TEXCOORD_STRIDE,
+        }
+        counts = {
+            section: (offsets[section + 1] - offsets[section]) // stride
+            for section, stride in held.items()
+        }
+        assert counts == {effgeom.POSITION_SECTION: 12250, effgeom.TEXCOORD_SECTION: 9068}
+
+    def test_every_normal_is_a_unit_vector(self):
+        """✅ 1,632 of 1,632, which is what says section 14 is `3 x s8`.
+
+        ⚠️ The refuted reading also looked convincing: at stride 6 as `3 x s16`,
+        738 of 816 come out unit-length against 1/32767 — 90%, purely from
+        where the bytes happen to fall.
+        """
+        data = self._data()
+        offsets = self._offsets(data)
+        start = offsets[effgeom.NORMAL_SECTION]
+        size = offsets[effgeom.NORMAL_SECTION + 1] - start
+        count = size // effgeom.NORMAL_STRIDE
+        assert count == 1632
+
+        for n in range(count):
+            at = start + n * effgeom.NORMAL_STRIDE
+            x, y, z = struct.unpack_from(">3b", data, at)
+            length = math.sqrt(x * x + y * y + z * z) / effgeom.NORMAL_SCALE
+            assert abs(length - 1.0) < 0.05, f"normal {n} has length {length}"
+
+    def test_dimentios_star_is_four_quads_meeting_at_the_origin(self):
+        """🟢 The acceptance test, against a gameplay screenshot (D262, D263).
+
+        `dmen_magic`'s draws point at one display list holding four 320-unit
+        quads that meet at the origin, every one carrying the same inset
+        texture rect. One concave quadrant mirrored per cell is the
+        four-pointed star with concave sides the screenshot shows.
+        """
+        data = self._data()
+        effects = {e.name: e for e in effdata.read(data)}
+        magic = effects["dmen_magic"]
+
+        found = [d for part in magic.parts for d in effdata.draws(data, magic, part)]
+        star = [d for d in found if d.offset == 0x001C80]
+        assert star, f"no draw at 0x001C80 among {sorted({d.offset for d in found})}"
+        assert {d.descriptor for d in star} == {0x0009}, "position and texcoord"
+
+        mesh = effgeom.mesh_at(data, 0x001C80, 0x0009)
+        assert len(mesh.primitives) == 4
+        assert all(len(p.vertices) == 4 for p in mesh.primitives)
+
+        corners = {(v.x, v.y, v.z) for p in mesh.primitives for v in p.vertices}
+        grid = {(x, y, 0) for x in (-320, 0, 320) for y in (-320, 0, 320)}
+        assert corners == grid, "a 2x2 block of 320-unit cells around the origin"
+
+        centre = [1 for p in mesh.primitives if any(v.x == v.y == 0 for v in p.vertices)]
+        assert len(centre) == 4, "every quad touches the shared centre"
+
+        # ⚠️ One inset rect shared by all four cells: the mirroring is in the
+        # corner *order*, not in four different sets of coordinates.
+        rect = {
+            (round(v.u, 3), round(v.v, 3)) for p in mesh.primitives for v in p.vertices
+        }
+        assert rect == {(0.028, 0.028), (0.977, 0.028), (0.977, 0.977), (0.028, 0.977)}
+
+    def test_every_draw_names_a_mesh_the_shared_table_holds(self):
+        """The export refers to geometry by index, so a draw naming a mesh the
+        table does not hold would silently paint the wrong shape."""
+        data = self._data()
+        held = {(m.offset, m.descriptor) for m in effdata.meshes(data)}
+        for effect in effdata.read(data):
+            for part in effect.parts:
+                for draw in effdata.draws(data, effect, part):
+                    assert (draw.offset, draw.descriptor) in held
+
+    def test_artwork_is_the_deduplicated_pictures_of_the_draws(self):
+        """`artwork` dedupes and `draws` does not, so the one is exactly the
+        other's distinct pictures — and no image appears from nowhere."""
+        data = self._data()
+        for effect in effdata.read(data):
+            for part in effect.parts:
+                pictures = effdata.artwork(data, effect, part)
+                painted = [d.picture for d in effdata.draws(data, effect, part)]
+                assert set(pictures) == {p for p in painted if p is not None}
+                assert len(pictures) == len(set(pictures)), "artwork must dedupe"

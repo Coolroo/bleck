@@ -22,11 +22,19 @@ that disagree completely and are the same thing.
 | 0 | 6,176 | ✅ **139 effect records**, 44 bytes each |
 | 1 | 14,080 | ✅ **704 part records**, 20 bytes each |
 | 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats |
+| 3 | 350,976 | ✅ **360 GX display lists** (D263) |
+| 4 | 9,824 | ✅ **351 texture records**, 28 bytes each |
+| 5 | 8,384 | ✅ **524 material records**, 16 bytes each |
 | 6 | 64,768 | ✅ **4,048 transform rows**, four floats each |
 | 7 | 17,760 | ✅ **2,960 `(start, count, flags)`** records, 6 bytes each |
-| 8 | 23,680 | ✅ **2,960 records**, 8 bytes: index, type, kind, offset |
+| 8 | 23,680 | ✅ **2,960 draws**, 8 bytes: material, descriptor, display list |
+| 9 | 74,784 | ✅ **3,739 scene-graph nodes**, 20 bytes each |
 | 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 |
-| 3-5, 9, 11-15 | ~650 KB | 🔶 binary; no structure established |
+| 11 | 72,544 | ✅ **9,068 texture coordinates**, `2 x f32` |
+| 12 | 16,096 | ✅ **1,006 translate/rotate/scale vectors** |
+| 13 | 73,504 | ✅ **12,250 positions**, `3 x s16` |
+| 14 | 4,896 | ✅ **1,632 normals**, `3 x s8` (D264) |
+| 15 | 224 | ✅ **56 vertex colours**, `GX_RGBA8` (D264) |
 
 ### The EFDT block, as the game's own loader reads it
 
@@ -97,10 +105,9 @@ that is 14 parts, and it is why a count of `Picture`s is not a count of images.
 is superseded — it predates D258 and is kept only because the viewer's layout
 still leans on it. Section 6 is 3x4 matrices reached from a node's `+0x06`.
 
-⚠️ Two later refutations that this module has **not** yet acted on: section 8's
-last four bytes are one u32 display-list offset rather than two u16 (the
-"multiple of 32" tell is GX alignment, not a stride), and section 3 is 360 GX
-display lists. See D258.
+✅ Both of D258's outstanding refutations are now acted on: section 8's last
+four bytes are one `u32` display-list offset, and section 3 is 360 GX display
+lists. `draws` returns the geometry alongside the picture; see below.
 
 ## The curves, and how they are reached
 
@@ -126,27 +133,37 @@ runs 1..621 with 53 distinct values, the same shape as a part record's second
 Section 7 is 2,960 records of `(u16 start, u16 count, u16 flags)`, and the
 start/count chain the same way the effect records do: ✅ **2,958 of 2,959**
 consecutive pairs satisfy `start + count == next start`, for an implied total of
-2,960. Nearly every count is 1 — eight records break that, which is what makes
-the chain visible at all.
+2,960. Nearly every count is 1 — eight break that, which makes the chain visible.
 
-Section 8 is **2,960 records of 8 bytes**, the exact count section 7 implies, as
-four `u16`:
+Section 8 is **2,960 records of 8 bytes**, the exact count section 7 implies —
+`u16 material`, `u16 vertex descriptor`, `u32 display-list offset` (D263). ⛔ The
+four-`u16` reading is superseded: "always a multiple of 32" was taken for a
+record stride and is GX display-list alignment, so the last two are one number.
 
-| field | range | |
-|---|---|---|
-| 0 | 0..522, 523 distinct | an index into something with 523 entries |
-| 1 | 9 distinct values | a type |
-| 2 | 0..5 | a small enum |
-| 3 | 0..64,960 | ⚠️ **always a multiple of 32** |
+## ✅ The geometry (D263, D264)
 
-⚠️ Field 3 being wholly divisible by 32 is what says it is a byte offset into a
-32-byte-strided table, using about 2,030 entries. 🔶 **Which section it targets
-is not settled** — 9, 11 and 13 would each be 86-90% filled by it, and none of
-those is the tight near-miss that settled section 2 (D195). Guessing between
-them on fill alone would be exactly the kind of plausible-and-unchecked
-inference this file has avoided so far.
+An effect is **real indexed geometry**, not a billboard. `mesh_at` reads it and
+states the framing; each descriptor bit names an array, and the evidence for
+which is the fit:
 
-⛔ **The remaining sections.** ~650 KB, no strings.
+| bit | attribute | array | evidence |
+|---|---|---|---|
+| 0 | POS | section 13, `3 x s16` | max index 12,247 of 12,250 |
+| 1 | NRM | section 14, `3 x s8` | 1,632 of 1,632 unit length |
+| 2 | CLR0 | section 15, `GX_RGBA8` | 49 used, the last 7 zero padding |
+| 3 | TEX0 | section 11, `2 x f32` | max index 9,065 of 9,068 |
+
+⚠️ **Two readings that look right and are not.** Ignoring the descriptor and
+assuming a 4-byte vertex parses **275 of 360**, with the failures confined to
+effects nobody had opened. And reading section 14 at stride 6 as `3 x s16`
+makes **738 of 816** entries unit-length against `1/32767`, a coincidence of
+where the bytes fall: 4,896 divides by 3, not by 6, and the largest index any
+vertex carries is 1,631.
+
+🔶 **One display list is anomalous.** `item_delete`'s is 640 units wide and
+58,642 deep, where 359 others are flat or near it. The framing is right — it
+consumes its declared size exactly — and why the Z values run to +/-32,000 is
+not established.
 
 ⚠️ **What a transform row *means* is not established.** They are plainly
 geometry -- 42% are unit-length vectors, and `chaos` holds an exact 72-degree
@@ -450,26 +467,42 @@ class Group:
 
 @dataclass(frozen=True)
 class Entry:
-    """A section 8 record. Only its shape is established, not its meaning."""
+    """A section 8 record: one draw — a material, and the geometry to draw.
+
+    ✅ **Eight bytes as `u16, u16, u32`** (D263), superseding the four-`u16`
+    reading this class used to carry. The last two `u16` are one offset, and
+    the "always a multiple of 32" tell was GX display-list alignment rather
+    than a record stride.
+    """
 
     index: int
-    reference: int
-    """0..522. Indexes something with 523 entries; which is unknown."""
+    material: int
+    """0..522, an index into section 5. `_picture` resolves it to an image."""
 
-    kind: int
-    """One of nine values."""
+    descriptor: int
+    """The GX vertex descriptor: which attributes each vertex of the display
+    list carries, one bit each in GX's own order.
 
-    variant: int
-    """0..5."""
+    ✅ Nine values occur, and every one is a subset of POS/NRM/CLR0/TEX0 plus
+    bit 15 (D263). ⚠️ **Bit 15 is a flag, not an attribute** -- it takes no
+    index, so masking it out is what makes the stride come out right."""
 
-    offset: int
-    """⚠️ Always a multiple of 32, so a byte offset into a 32-byte-strided
-    table. 🔶 Which section holds that table is not established."""
+    display_list: int
+    """Byte offset into section 3, always a multiple of `DISPLAY_ALIGN`.
+
+    ⚠️ 2,960 entries share **360** display lists, so geometry is worth reading
+    once and referring to, not once per entry."""
 
 
 def _section(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
     offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
-    return offsets[index], offsets[index + 1]
+    # ⚠️ The last section has no following offset to bound it. Reading one past
+    # the table would raise on section 15, which is the vertex colour array and
+    # is read below -- so the file's own end is the bound.
+    end = offsets[index + 1] if index + 1 < SECTIONS else len(data)
+    # ⚠️ Clamped to what is actually there. A truncated file still carries a
+    # full section table, so the table's own end is a claim rather than a fact.
+    return min(offsets[index], len(data)), min(end, len(data))
 
 
 def groups(data: bytes) -> list[Group]:  # pylint: disable=container-return
@@ -485,7 +518,7 @@ def entries(data: bytes) -> list[Entry]:  # pylint: disable=container-return
     """Section 8, in file order. Section 7's start/count addresses these."""
     start, end = _section(data, ENTRY_SECTION)
     return [
-        Entry(index, *struct.unpack_from(">4H", data, at))
+        Entry(index, *struct.unpack_from(">HHI", data, at))
         for index, at in enumerate(range(start, end - ENTRY_STRIDE + 1, ENTRY_STRIDE))
     ]
 
@@ -670,6 +703,68 @@ def _picture(data: bytes, material: int) -> Picture | None:
     )
 
 
+#: The display-list reader lives next door: it needs none of the effect, part
+#: or node machinery above, and this module was the repo's first to pass
+#: pylint's 1,000-line ceiling. `draws` below is what pairs the two.
+from bleck.formats.effgeom import (  # noqa: E402  pylint: disable=wrong-import-position
+    Mesh,
+    mesh_at,
+)
+
+
+def meshes(data: bytes) -> list[Mesh]:  # pylint: disable=container-return
+    """Every distinct display list the entries name, in a stable order.
+
+    ⚠️ **360 meshes for 2,960 entries.** Reading one per entry would be eight
+    times the work and eight times the export, for the same geometry.
+    """
+    wanted = sorted({(entry.display_list, entry.descriptor) for entry in entries(data)})
+    return [mesh_at(data, offset, descriptor) for offset, descriptor in wanted]
+
+
+@dataclass(frozen=True)
+class Draw:
+    """One section 8 entry resolved: what to draw, and what to draw it with.
+
+    ⚠️ `picture` is `None` for a material naming no texture -- 35 parts are
+    untextured and that is a fact about them, not a failed walk. `offset` and
+    `descriptor` always name a mesh, because every entry carries geometry.
+    """
+
+    picture: Picture | None
+    offset: int
+    descriptor: int
+
+
+def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
+    # pylint: disable=container-return
+    """Every draw `part` issues, in the order the draw code reaches them.
+
+    ⚠️ **Not deduplicated.** Two draws sharing a material and differing only in
+    geometry are two draws, and collapsing them loses half the shape. `artwork`
+    dedupes, because it answers a different question.
+    """
+    if part.first == NO_PART:
+        return []
+    found: list[Draw] = []
+    groups_all = groups(data)
+    entries_all = entries(data)
+    for index in _subtree(data, effect.extra, effect.extra + part.first):
+        node = node_at(data, index)
+        if not 0 <= node.draw < len(groups_all):
+            continue
+        group = groups_all[node.draw]
+        for entry in entries_all[group.start : group.start + group.count]:
+            found.append(
+                Draw(
+                    picture=_picture(data, entry.material),
+                    offset=entry.display_list,
+                    descriptor=entry.descriptor,
+                )
+            )
+    return found
+
+
 def artwork(data: bytes, effect: Effect, part: Part) -> list[Picture]:
     # pylint: disable=container-return
     """Every image `part` draws, in the order the draw code reaches them.
@@ -681,18 +776,8 @@ def artwork(data: bytes, effect: Effect, part: Part) -> list[Picture]:
     ⛔ **Do not read the first as "the" image.** `system`'s parts are named
     after their own textures and carry two apiece.
     """
-    if part.first == NO_PART:
-        return []
     found: list[Picture] = []
-    groups_all = groups(data)
-    entries_all = entries(data)
-    for index in _subtree(data, effect.extra, effect.extra + part.first):
-        node = node_at(data, index)
-        if not 0 <= node.draw < len(groups_all):
-            continue
-        group = groups_all[node.draw]
-        for entry in entries_all[group.start : group.start + group.count]:
-            picture = _picture(data, entry.reference)
-            if picture is not None and picture not in found:
-                found.append(picture)
+    for draw in draws(data, effect, part):
+        if draw.picture is not None and draw.picture not in found:
+            found.append(draw.picture)
     return found

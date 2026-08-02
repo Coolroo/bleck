@@ -1,23 +1,30 @@
 //! An effect's running parts, as geometry the rasteriser can draw.
 //!
-//! One camera-facing quad per part that is running at the scrubber's position,
-//! laid out from the effect's transform rows. The quads go back to the caller
-//! as meshes so they can be handed to `render::scene` — there is one rasteriser
-//! in this program and this module does not contain a second one.
+//! One piece per draw issued by a part running at the scrubber's position. The
+//! pieces go back to the caller as meshes so they can be handed to
+//! `render::scene` — there is one rasteriser in this program and this module
+//! does not contain a second one.
 //!
-//! ✅ **A part's image is decoded** (D258) and arrives here already resolved, as
-//! `Art` — one slot per part, `None` where the part draws nothing. Nothing in
-//! this module derives the pairing; `bleck` owns that and writes it into the
-//! export, which is the same division every other format keeps.
+//! ✅ **A part's image is decoded** (D258) and so is **its geometry** (D263):
+//! both arrive already resolved, as `Art`. Nothing in this module derives
+//! either; `bleck` owns the format and writes them into the export, which is
+//! the same division every other format keeps.
 //!
-//! ⛔ **The placement is still a display choice, not a decoded scene graph.**
-//! The images are measured; where the quads sit is not. Section 9's node
-//! transforms are read but not yet applied, so do not read a quad's position as
-//! where the game puts it.
+//! ⚠️ **A camera-facing quad is now the fallback, not the rendering.** An
+//! export predating D263 carries no `meshes`, and a draw that names one the
+//! manifest does not hold falls back to a billboard so the part still appears.
+//! ⛔ Do not read a billboard as an effect's shape — it means the geometry was
+//! missing, which the caller's report says out loud.
+//!
+//! ⛔ **The placement between parts is still a display choice.** Each draw's
+//! *shape* is measured; where one part sits relative to another is not, because
+//! section 9's node transforms are read but not applied. The layout below is an
+//! **exploded view** — deliberately separated so the parts can be told apart —
+//! and nothing downstream may read a piece's position as where the game puts it.
 
 use super::camera::Basis;
 use super::{Camera, Rgba};
-use crate::data::effects::Entry;
+use crate::data::effects::{Entry, Mesh as Geometry};
 use crate::data::mesh::{Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
 
@@ -44,33 +51,57 @@ const PALETTE: [Rgba; 6] = [
     Rgba::new(226, 132, 186),
 ];
 
-/// The image each part draws, by part index.
+/// What each draw paints with, and the geometry it paints.
 ///
-/// ✅ Since D258 this can be the **decoded** pairing: a part's image is five
-/// sections past its record, and `bleck` resolves it into the export. A slot of
-/// `None` is a part that draws no image, which 35 of the file's 704 genuinely
-/// do — their materials carry the documented null.
+/// ✅ Since D258 the image is the **decoded** pairing — five sections past the
+/// part record — and since D263 the geometry is decoded too. `bleck` resolves
+/// both into the export; nothing here re-derives either.
 ///
-/// ⚠️ **Indexed by position in `Entry::parts`**, so a short slice leaves the
-/// parts past its end unpainted rather than shifting the artwork along by one.
+/// ⚠️ **`images` is indexed by part, then by draw within that part**, so a short
+/// slice leaves the draws past its end unpainted rather than shifting the
+/// artwork along by one. A slot of `None` is a draw that paints no image, which
+/// the file's untextured materials genuinely do.
 #[derive(Debug, Clone, Copy)]
 pub struct Art<'a> {
-    pub images: &'a [Option<Texture>],
+    pub images: &'a [Vec<Option<Texture>>],
+    /// The manifest's shared display-list table, indexed by `Draw::mesh`.
+    /// Empty for an export predating the geometry, which falls back.
+    pub meshes: &'a [Geometry],
 }
 
-impl Art<'_> {
-    fn of(&self, part: usize) -> Option<Texture> {
-        self.images.get(part).cloned().flatten()
+impl<'a> Art<'a> {
+    fn of(&self, part: usize, draw: usize) -> Option<Texture> {
+        self.images.get(part)?.get(draw).cloned().flatten()
+    }
+
+    /// The geometry a draw names, or `None` when the manifest does not hold it
+    /// or holds it malformed.
+    ///
+    /// ⚠️ Soundness is checked here rather than trusted: a manifest is a file
+    /// on disk, and a stray index would panic the rasteriser.
+    ///
+    /// ⚠️ The result borrows from the **table**, not from `self` — `Art` is
+    /// `Copy`, so a copy made inside a closure would otherwise own the
+    /// reference and die at the end of it.
+    fn geometry(&self, at: usize) -> Option<&'a Geometry> {
+        self.meshes
+            .get(at)
+            .filter(|mesh| mesh.is_sound() && mesh.faces() > 0)
     }
 }
 
-/// One part of an effect, drawn.
+/// One draw of an effect, ready for the rasteriser.
 pub struct Quad {
     pub mesh: Mesh,
-    /// The flat colour the quad takes when it carries no image.
+    /// The flat colour the piece takes when it carries no image.
     pub colour: Rgba,
     /// Which of the effect's parts this is, as an index into `Entry::parts`.
     pub part: usize,
+    /// ⚠️ **True when this is a stand-in billboard rather than the effect's own
+    /// shape** — the draw named no mesh the manifest holds. A caller reporting
+    /// what it drew has to be able to say so, because a billboard looks like a
+    /// deliberate sprite and is not.
+    pub stood_in: bool,
 }
 
 /// The colour a part is drawn in, so the table beside the viewport can mark a
@@ -90,34 +121,47 @@ pub fn colour(part: usize) -> Rgba {
 /// all of them.
 pub fn lit(camera: &Camera, part: usize) -> Rgba {
     let basis = Basis::of(camera);
-    let mesh = quad(&basis, Vec3::ZERO, None);
+    let mesh = quad(&basis, Vec3::ZERO, HALF, None);
     let corners = mesh.positions();
     let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
     colour(part).shaded(intensity)
 }
 
-/// The parts running at `time`, as camera-facing quads.
+/// Every draw issued by a part running at `time`.
 ///
 /// Which parts those are comes from `Entry::active_at`, the same rule that
 /// marks a row in the part table: a part runs from 0 to and including its own
 /// duration. Nothing here re-decides it.
+///
+/// ⚠️ **A part with no draws still produces one piece.** An export predating
+/// the decoding carries none, and dropping those parts would turn a stale
+/// export into an effect that renders as nothing at all.
 pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) -> Vec<Quad> {
     let basis = Basis::of(camera);
-    entry
-        .active_at(time)
-        .into_iter()
-        .map(|part| Quad {
+    let scale = spread(entry, art);
+    let mut built = Vec::new();
+    for part in entry.active_at(time) {
+        let at = placement(entry, part, scale);
+        let count = entry.parts.get(part).map_or(0, |p| p.draws.len());
+        for draw in 0..count.max(1) {
             // Cloned because a mesh owns its texture; only the parts actually
             // running at this instant ever pay for it.
-            mesh: quad(
-                &basis,
-                placement(entry, part),
-                art.and_then(|art| art.of(part)),
-            ),
-            colour: colour(part),
-            part,
-        })
-        .collect()
+            let image = art.and_then(|art| art.of(part, draw));
+            let shape = art
+                .zip(entry.parts.get(part).and_then(|p| p.draws.get(draw)))
+                .and_then(|(art, draw)| art.geometry(draw.mesh));
+            built.push(Quad {
+                mesh: match shape {
+                    Some(geometry) => real(geometry, at, image),
+                    None => quad(&basis, at, scale * HALF, image),
+                },
+                colour: colour(part),
+                part,
+                stood_in: shape.is_none(),
+            });
+        }
+    }
+    built
 }
 
 /// The box the whole layout occupies, running or not.
@@ -125,25 +169,116 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
 /// Every part counts, not just the ones active now, so a camera fitted to this
 /// stays put as parts start and stop instead of jumping each time the timeline
 /// crosses a duration.
-pub fn bounds(entry: &Entry) -> Bounds {
-    let mut span = Bounds {
+pub fn bounds(entry: &Entry, art: Option<Art<'_>>) -> Bounds {
+    let scale = spread(entry, art);
+    let mut span: Option<Bounds> = None;
+    for part in 0..entry.parts.len().max(1) {
+        let at = placement(entry, part, scale);
+        let draws = entry
+            .parts
+            .get(part)
+            .map(|p| p.draws.as_slice())
+            .unwrap_or_default();
+        let mut here: Option<Bounds> = None;
+        for geometry in draws
+            .iter()
+            .filter_map(|draw| art.and_then(|art| art.geometry(draw.mesh)))
+        {
+            here = Some(union(here, box_of(geometry, at)));
+        }
+        // No geometry means a stand-in billboard, which is a cube of side
+        // `2 * scale * HALF` about its placement.
+        let corner = Vec3::new(scale * HALF, scale * HALF, scale * HALF);
+        let here = here.unwrap_or(Bounds {
+            min: at - corner,
+            max: at + corner,
+        });
+        span = Some(union(span, here));
+    }
+    span.unwrap_or(Bounds {
         min: Vec3::new(-HALF, -HALF, -HALF),
         max: Vec3::new(HALF, HALF, HALF),
-    };
-    for part in 0..entry.parts.len() {
-        let at = placement(entry, part);
-        span.min = Vec3::new(
-            span.min.x.min(at.x - HALF),
-            span.min.y.min(at.y - HALF),
-            span.min.z.min(at.z - HALF),
-        );
-        span.max = Vec3::new(
-            span.max.x.max(at.x + HALF),
-            span.max.y.max(at.y + HALF),
-            span.max.z.max(at.z + HALF),
-        );
+    })
+}
+
+/// ⚠️ **Per axis, not a radius.** A single reach used for all three collapses
+/// to a cube, which hides exactly the anisotropy a caller needs to see: one
+/// display list of the file's 360 is 640 units wide and 58,642 deep, and as a
+/// cube it reports as perfectly ordinary (D264).
+fn box_of(geometry: &Geometry, at: Vec3) -> Bounds {
+    let mut span: Option<Bounds> = None;
+    for p in geometry.positions.chunks_exact(3) {
+        let point = at + Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32);
+        span = Some(union(
+            span,
+            Bounds {
+                min: point,
+                max: point,
+            },
+        ));
     }
-    span
+    span.unwrap_or(Bounds {
+        min: at,
+        max: at,
+    })
+}
+
+fn union(so_far: Option<Bounds>, here: Bounds) -> Bounds {
+    match so_far {
+        None => here,
+        Some(box_) => Bounds {
+            min: Vec3::new(
+                box_.min.x.min(here.min.x),
+                box_.min.y.min(here.min.y),
+                box_.min.z.min(here.min.z),
+            ),
+            max: Vec3::new(
+                box_.max.x.max(here.max.x),
+                box_.max.y.max(here.max.y),
+                box_.max.z.max(here.max.z),
+            ),
+        },
+    }
+}
+
+/// How far a display list reaches **in the plane the layout separates parts
+/// in**, which is not the same as how far it reaches overall.
+///
+/// ⚠️ Measured in XY on purpose. One display list of the file's 360 is 640
+/// units wide and 58,642 deep (D264); scaling the exploded layout by its full
+/// 3D reach would fling every part of that effect a hundred widths apart and
+/// leave a fitted camera framing empty space.
+fn flat_extent(geometry: &Geometry) -> f32 {
+    geometry
+        .positions
+        .chunks_exact(3)
+        .map(|p| {
+            let (x, y) = (p[0] as f32, p[1] as f32);
+            (x * x + y * y).sqrt()
+        })
+        .fold(0.0, f32::max)
+        .max(1.0)
+}
+
+/// The unit the exploded layout is measured in.
+///
+/// ⚠️ **Derived from the geometry, never fixed.** Effect positions are the
+/// file's own `s16` units — Dimentio's star spans ±320 — while the fallback
+/// billboard is built at a fraction of one. A constant offset would either
+/// stack every real mesh on the origin or fling every billboard out of frame.
+fn spread(entry: &Entry, art: Option<Art<'_>>) -> f32 {
+    let biggest = entry
+        .parts
+        .iter()
+        .flat_map(|part| part.draws.iter())
+        .filter_map(|draw| art.and_then(|art| art.geometry(draw.mesh)))
+        .map(flat_extent)
+        .fold(0.0_f32, f32::max);
+    if biggest > 0.0 {
+        biggest
+    } else {
+        1.0
+    }
 }
 
 /// Where a part sits in the layout.
@@ -157,13 +292,20 @@ pub fn bounds(entry: &Entry) -> Bounds {
 ///
 /// Both rules are deterministic and both are a layout, not a claim about what
 /// the file means. Nothing downstream may treat a quad's position as measured.
-fn placement(entry: &Entry, part: usize) -> Vec3 {
+fn placement(entry: &Entry, part: usize, scale: f32) -> Vec3 {
+    // ⚠️ **Nothing to explode when there is only one part.** Offsetting a lone
+    // part pushes it off-centre for no gain, and a camera fitted to the result
+    // frames mostly empty space — which is how `item_delete` came to render as
+    // nothing at all.
+    if entry.parts.len() < 2 {
+        return Vec3::ZERO;
+    }
     let heading = entry
         .rows
         .get(part)
         .and_then(|row| direction(&row.values))
         .unwrap_or_else(|| ring(part, entry.parts.len()));
-    heading.scaled(RING + SPREAD * part as f32)
+    heading.scaled(scale * (RING + SPREAD * part as f32))
 }
 
 /// The first three of a row's floats as a unit vector, or `None` when the row
@@ -183,26 +325,94 @@ fn ring(part: usize, parts: usize) -> Vec3 {
     Vec3::new(cos, sin, 0.0)
 }
 
-/// A quad centred on `at` and square to the camera.
+/// A display list, as the rasteriser's own mesh, centred on `at`.
+///
+/// ✅ **This is the effect's real shape** (D263) — indexed triangles out of the
+/// file, in the file's own units. Nothing is scaled or reoriented: the camera
+/// fits itself to the bounds, so a guessed conversion here would be a second,
+/// invisible scale on top of the one the viewer already applies.
+///
+/// ⚠️ **Fixed in world space, unlike the billboard below.** Effect geometry is
+/// mostly flat, so orbiting to its edge legitimately shows almost nothing —
+/// that is the shape, not a part that stopped running.
+fn real(geometry: &Geometry, at: Vec3, image: Option<Texture>) -> Mesh {
+    let positions: Vec<Vec3> = geometry
+        .positions
+        .chunks_exact(3)
+        .map(|p| at + Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32))
+        .collect();
+    let faces: Vec<Face> = geometry
+        .triangles
+        .chunks_exact(3)
+        .map(|t| Face {
+            a: t[0],
+            b: t[1],
+            c: t[2],
+        })
+        .collect();
+    let uvs = (geometry.uvs.len() == positions.len() * 2).then(|| {
+        geometry
+            .uvs
+            .chunks_exact(2)
+            .map(|c| Uv::new(c[0], c[1]))
+            .collect()
+    });
+    // ✅ Section 15's vertex colours, where the descriptor names them. The game
+    // modulates them into the texture, which is what `colours` means here too.
+    let colours = (geometry.colours.len() == positions.len() * 4).then(|| {
+        geometry
+            .colours
+            .chunks_exact(4)
+            .map(|c| [c[0], c[1], c[2], c[3]])
+            .collect()
+    });
+    let paints: Vec<Paint> = image.map(cutout).into_iter().collect();
+    let paint = (!paints.is_empty()).then_some(0);
+    Parts {
+        shapes: vec![Shape {
+            first: 0,
+            count: faces.len(),
+            visible: true,
+            paint,
+        }],
+        positions,
+        faces,
+        uvs,
+        colours,
+        paints,
+        // Section 10's curves would animate this; they are not read (D263).
+        animation: None,
+    }
+    .into_mesh()
+}
+
+/// How an effect's bank image is sampled: cut-out art with a real alpha
+/// channel, so without the mask its transparent surround draws as a black
+/// square around the sprite.
+fn cutout(texture: Texture) -> Paint {
+    Paint {
+        texture,
+        masked: true,
+        cutoff: super::FAINT_CUTOFF,
+        sampling: Sampling::default(),
+        mask: None,
+    }
+}
+
+/// A quad of edge `2 * half` centred on `at` and square to the camera.
+///
+/// ⚠️ **The fallback, not the rendering.** It stands in for a draw whose
+/// geometry the manifest does not hold — an export predating D263, or a mesh
+/// index it cannot resolve — so that the part still appears rather than
+/// vanishing. `Quad::stood_in` marks every one.
 ///
 /// ⚠️ Built from the camera's own right and up vectors, so it must be rebuilt
 /// when the camera moves. A quad fixed in world space turns edge-on as the view
 /// orbits and disappears, which reads as a part that stopped running.
-fn quad(basis: &Basis, at: Vec3, image: Option<Texture>) -> Mesh {
-    let right = basis.right.scaled(HALF);
-    let up = basis.up.scaled(HALF);
-    // A bank image is cut-out art with a real alpha channel; without the mask
-    // its transparent surround is drawn as a black square around the sprite.
-    let paints: Vec<Paint> = image
-        .map(|texture| Paint {
-            texture,
-            masked: true,
-            cutoff: super::FAINT_CUTOFF,
-            sampling: Sampling::default(),
-            mask: None,
-        })
-        .into_iter()
-        .collect();
+fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>) -> Mesh {
+    let right = basis.right.scaled(half);
+    let up = basis.up.scaled(half);
+    let paints: Vec<Paint> = image.map(cutout).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![
@@ -276,7 +486,7 @@ mod tests {
                     seconds,
                     // These fixtures test the layout and the timeline, so the
                     // art arrives through `Art` rather than through the parts.
-                    pictures: Vec::new(),
+                    draws: Vec::new(),
                 })
                 .collect(),
             rows: (0..durations.len())
@@ -290,7 +500,7 @@ mod tests {
 
     pub(super) fn shot(entry: &Entry, time: f32, art: Option<Art<'_>>) -> Image {
         let view = View {
-            camera: Camera::fit(bounds(entry)),
+            camera: Camera::fit(bounds(entry, art)),
             background: Background::DarkGrey,
         };
         let drawn = quads(entry, time, &view.camera, art);
@@ -409,8 +619,8 @@ mod tests {
     /// would be a second copy of the lighting rule, and it would drift from the
     /// first one silently: the tests below compare exact pixel values.
     fn billboard_light() -> f32 {
-        let basis = Basis::of(&Camera::fit(bounds(&effect(&[1.0]))));
-        let mesh = quad(&basis, Vec3::ZERO, None);
+        let basis = Basis::of(&Camera::fit(bounds(&effect(&[1.0]), None)));
+        let mesh = quad(&basis, Vec3::ZERO, HALF, None);
         let corners = mesh.positions();
         crate::render::raster::lighting(&basis, &[corners[0], corners[1], corners[2]])
     }
@@ -422,7 +632,7 @@ mod tests {
     #[test]
     fn lit_reports_the_shade_a_part_is_really_drawn_in() {
         let entry = effect(&[1.0, 1.0]);
-        let camera = Camera::fit(bounds(&entry));
+        let camera = Camera::fit(bounds(&entry, None));
         let seen = shades(&shot(&entry, 0.5, None));
         for part in 0..2 {
             assert_eq!(lit(&camera, part), colour(part).shaded(billboard_light()));
@@ -461,10 +671,17 @@ mod tests {
             a: 255,
         };
         let image = Texture::decode(&png(1, 1, &[cyan])).expect("a 1x1 png");
-        let images = [None, Some(image)];
+        let images = [vec![None], vec![Some(image)]];
 
         let plain = shot(&entry, 0.5, None);
-        let painted = shot(&entry, 0.5, Some(Art { images: &images }));
+        let painted = shot(
+            &entry,
+            0.5,
+            Some(Art {
+                images: &images,
+                meshes: &[],
+            }),
+        );
         assert!(
             differing(&plain, &painted) > 200,
             "the chosen image changed nothing"
@@ -498,7 +715,7 @@ mod tests {
             0
         );
         for part in 0..3 {
-            assert_eq!(placement(&entry, part), placement(&entry, part));
+            assert_eq!(placement(&entry, part, 1.0), placement(&entry, part, 1.0));
         }
     }
 
@@ -510,7 +727,7 @@ mod tests {
         for row in &mut entry.rows {
             row.values = vec![0.0, 0.0, 0.0, 0.0];
         }
-        let places: Vec<Vec3> = (0..3).map(|part| placement(&entry, part)).collect();
+        let places: Vec<Vec3> = (0..3).map(|part| placement(&entry, part, 1.0)).collect();
         for (index, place) in places.iter().enumerate() {
             assert!(place.length() > 0.5, "part {index} landed at the origin");
         }
@@ -537,7 +754,7 @@ mod tests {
     fn a_zero_sized_frame_is_empty_rather_than_a_panic() {
         let entry = effect(&[1.0]);
         let view = View {
-            camera: Camera::fit(bounds(&entry)),
+            camera: Camera::fit(bounds(&entry, None)),
             background: Background::DarkGrey,
         };
         let drawn = quads(&entry, 0.0, &view.camera, None);
@@ -621,7 +838,7 @@ mod real_export_tests {
             .expect("chaos is in every export");
         assert_eq!(entry.parts.len(), 4);
 
-        let places: Vec<Vec3> = (0..4).map(|part| placement(entry, part)).collect();
+        let places: Vec<Vec3> = (0..4).map(|part| placement(entry, part, 1.0)).collect();
         for (one, place) in places.iter().enumerate() {
             for (two, other) in places.iter().enumerate().skip(one + 1) {
                 assert!(

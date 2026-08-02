@@ -50,10 +50,14 @@ pub(super) struct Stage {
     /// Which part `chosen` is drawn on. Zero until someone moves it.
     part: usize,
     chosen: Option<Chosen>,
-    /// The decoded image for each part of the selected effect, resolved once
-    /// when the selection changes rather than per frame — decoding a PNG on
-    /// every repaint would stall the timeline it exists to animate.
-    art: Vec<Option<texture::Texture>>,
+    /// The decoded image for each **draw** of each part of the selected
+    /// effect, resolved once when the selection changes rather than per frame
+    /// — decoding a PNG on every repaint would stall the timeline it exists to
+    /// animate.
+    ///
+    /// ⚠️ Nested because a part issues a set of draws and they do not all
+    /// paint with the same image. `dmen_magic` reaches four.
+    art: Vec<Vec<Option<texture::Texture>>>,
     /// Why the last image pick produced nothing, so a failed decode says so
     /// rather than looking like a viewport that ignores clicks.
     note: Option<String>,
@@ -81,13 +85,20 @@ impl Stage {
     ///
     /// ⚠️ The override is applied to a **copy**, so moving the preview from one
     /// part to another does not permanently lose the decoded image underneath.
-    fn art(&self) -> Vec<Option<texture::Texture>> {
+    fn art(&self) -> Vec<Vec<Option<texture::Texture>>> {
         let mut images = self.art.clone();
         if let Some(chosen) = &self.chosen {
             if self.part >= images.len() {
-                images.resize(self.part + 1, None);
+                images.resize(self.part + 1, Vec::new());
             }
-            images[self.part] = Some(chosen.image.clone());
+            // ⚠️ The pick lands on the part's **first** draw. A part with
+            // several is showing several images at once, and replacing all of
+            // them would make the preview look like the whole part changed.
+            let slots = &mut images[self.part];
+            if slots.is_empty() {
+                slots.push(None);
+            }
+            slots[0] = Some(chosen.image.clone());
         }
         images
     }
@@ -97,7 +108,7 @@ impl Stage {
 ///
 /// ⚠️ `bank` is the effect system's whole image bank, for browsing, and is
 /// never indexed by anything a part carries. A part's own image comes from
-/// its `pictures`, resolved by name through `effects::image_at` (D258) — not
+/// its `draws`, resolved by name through `effects::image_at` (D258) — not
 /// by counting into this list, whose order is the manifest's.
 #[derive(Default)]
 pub(super) struct EffectPane {
@@ -268,33 +279,49 @@ impl Viewer {
         else {
             return;
         };
-        self.effects.stage.view.camera = render::Camera::fit(render::effect::bounds(entry));
-        self.effects.stage.art = Self::resolve_art(
+        let art = Self::resolve_art(
             entry,
             self.catalog.entries(),
             self.effects.library.textures(),
         );
+        // ⚠️ Fitted to the real geometry, so the camera has to see it. Effect
+        // positions are the file's own units — Dimentio's star spans ±320 —
+        // and a camera fitted to the old billboard layout would frame a
+        // thousandth of it.
+        let bounds = render::effect::bounds(
+            entry,
+            Some(render::effect::Art {
+                images: &art,
+                meshes: self.effects.library.meshes(),
+            }),
+        );
+        self.effects.stage.view.camera = render::Camera::fit(bounds);
+        self.effects.stage.art = art;
     }
 
-    /// Decode the image each part of `entry` draws.
+    /// Decode the image each draw of each part of `entry` paints with.
     ///
-    /// ⚠️ A picture that cannot be read leaves its part unpainted rather than
+    /// ⚠️ An image that cannot be read leaves its draw unpainted rather than
     /// failing the whole effect — one missing PNG in the export should cost one
-    /// quad's texture, not the viewport.
+    /// piece's texture, not the viewport.
     fn resolve_art(
         entry: &effects::Entry,
         catalog: &[data::catalog::Entry],
         source: &str,
-    ) -> Vec<Option<texture::Texture>> {
+    ) -> Vec<Vec<Option<texture::Texture>>> {
         entry
             .parts
             .iter()
             .map(|part| {
-                let picture = part.pictures.first()?;
-                let at = effects::image_at(catalog, source, picture.image)?;
-                let entry = catalog.get(at)?;
-                let raw = std::fs::read(&entry.path).ok()?;
-                texture::Texture::decode(&raw).ok()
+                part.draws
+                    .iter()
+                    .map(|draw| {
+                        let at = effects::image_at(catalog, source, draw.image()?)?;
+                        let found = catalog.get(at)?;
+                        let raw = std::fs::read(&found.path).ok()?;
+                        texture::Texture::decode(&raw).ok()
+                    })
+                    .collect()
             })
             .collect()
     }
@@ -334,9 +361,10 @@ impl Viewer {
         ui.separator();
 
         let time = self.effects.play.time;
+        let meshes = self.effects.library.meshes();
         let stage = &mut self.effects.stage;
         ui.columns(COLUMNS, |columns| {
-            Self::effect_stage(&mut columns[0], entry, stage, time);
+            Self::effect_stage(&mut columns[0], entry, stage, meshes, time);
             egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
                 Self::part_table(ui, entry, time);
                 ui.add_space(12.0);
@@ -345,13 +373,19 @@ impl Viewer {
         });
     }
 
-    /// The viewport: one camera-facing quad per running part, drawn by the same
+    /// The viewport: every draw issued by a running part, drawn by the same
     /// software rasteriser the model tab uses.
     ///
     /// ⚠️ Rasterised on every frame, with no stale flag. The timeline moves the
     /// geometry, so a frame that was skipped because nothing was clicked would
     /// freeze the animation this panel exists to show.
-    fn effect_stage(ui: &mut egui::Ui, entry: &effects::Entry, stage: &mut Stage, time: f32) {
+    fn effect_stage(
+        ui: &mut egui::Ui,
+        entry: &effects::Entry,
+        stage: &mut Stage,
+        meshes: &[effects::Mesh],
+        time: f32,
+    ) {
         Self::manual_row(ui, entry, stage);
         let area = ui.available_size();
         if area.x < 1.0 || area.y < 1.0 {
@@ -366,7 +400,10 @@ impl Viewer {
             entry,
             time,
             &stage.view.camera,
-            Some(render::effect::Art { images: &images }),
+            Some(render::effect::Art {
+                images: &images,
+                meshes,
+            }),
         );
         let pieces: Vec<render::Piece<'_>> = quads
             .iter()
@@ -533,17 +570,16 @@ impl Viewer {
                     // "none" rather than a blank cell: empty reads as data the
                     // viewer failed to load, and this is a fact about the part
                     // — its material carries the documented null.
-                    let images = if part.pictures.is_empty() {
+                    let named: Vec<String> = part
+                        .draws
+                        .iter()
+                        .filter_map(|draw| draw.image())
+                        .map(|image| image.to_string())
+                        .collect();
+                    let images = if named.is_empty() {
                         egui::RichText::new("none").weak().small()
                     } else {
-                        egui::RichText::new(
-                            part.pictures
-                                .iter()
-                                .map(|picture| picture.image.to_string())
-                                .collect::<Vec<_>>()
-                                .join(" "),
-                        )
-                        .monospace()
+                        egui::RichText::new(named.join(" ")).monospace()
                     };
                     ui.label(images);
                     ui.end_row();
@@ -583,7 +619,7 @@ impl Viewer {
     /// The effect system's image bank, as a strip under the effect.
     ///
     /// ⚠️ **This strip is the bank as a whole, in catalog order** — it is the
-    /// browser, not the binding. A part's own image is in its `pictures` and
+    /// browser, not the binding. A part's own image is in its `draws` and
     /// is shown in the part table; ordering this strip by anything a part
     /// carries would invent a second, different mapping.
     ///

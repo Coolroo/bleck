@@ -348,15 +348,29 @@ for them.
 
 An effect's images are the 219 in `files/eff/effdata.tpl`, which
 `bleck texture export` writes out. **Which of them a part draws is known**, and
-`effect export` records it: each part gets a `pictures` list holding the image
-index, its wrap mode and the material's RGBA tint.
+so is **the shape it draws** — `effect export` records both. Each part gets a
+`draws` list; each draw names an image (with its wrap mode and the material's
+RGBA tint) and a `mesh`, indexing a `meshes` table at the top of the manifest.
 
-!!! note "A part draws a set of images, not one"
+!!! note "Effects are real geometry, not sprites on a quad"
 
-    560 of the 704 parts draw exactly one image; 35 draw none at all, and the
-    rest draw up to twelve. `pictures` is therefore a list, and an empty one is
-    a fact about that part rather than a gap in the data — the material says so
-    explicitly.
+    A mesh is one of the game's own GX display lists, exported as indexed
+    triangles: `positions` (three per vertex, in the file's own units),
+    `triangles`, and `uvs`/`colours`/`normals` where the geometry carries them.
+    2,960 draws share just 360 display lists, which is why they are a shared
+    table rather than a field on each draw.
+
+    Dimentio's attack really is a four-pointed star with concave sides, built
+    from one concave quadrant placed four times — the shape is geometry, and the
+    texture only colours it.
+
+!!! note "A part issues a set of draws, not one"
+
+    560 of the 704 parts reach exactly one image; 35 reach none at all, and the
+    rest reach up to twelve. `draws` is therefore a list, and a draw whose
+    `image` is `-1` is a fact about that part rather than a gap in the data —
+    the material says so explicitly. **`-1`, not `0`**: image 0 is a real
+    image.
 
     The reference is not a field on the part. It is five sections away:
     `part → node → draw → subdraw → material → texture → image`, which is why
@@ -478,12 +492,18 @@ Frames run left to right, top to bottom, and the number of them is clamped to
 the effect's real length — nine views of a one-frame effect would be nine
 identical pictures.
 
-!!! warning "The images are real; the positions are not"
+!!! warning "The shapes are real; the arrangement is not"
 
-    Each part is drawn with the image it actually draws. **Where the quads sit
-    is not decoded** — the effect's node transforms are read but not yet
-    applied, so the layout is a fixed, deterministic display choice. Read a reel
-    for *what* an effect draws and *when*, never for where it appears on screen.
+    Each part is drawn as its own geometry, with the image it actually draws.
+    **Where one part sits relative to another is not decoded** — the effect's
+    node transforms are read but not yet applied, so a reel is an *exploded
+    view*, with the parts deliberately separated so they can be told apart.
+    Read a reel for *what* an effect draws and *when*, never for where it
+    appears on screen.
+
+    The report says so on every run, and also flags an effect whose geometry is
+    far deeper than it is wide — one of the file's 360 display lists is 92×
+    deeper than wide, so a fitted camera draws its visible face small.
 
 !!! note "An empty frame has three possible causes"
 

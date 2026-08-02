@@ -72,10 +72,11 @@ def images_of(effect: str) -> list:
     entry = next(e for e in manifest["effects"] if e["name"] == effect)
     seen, order = set(), []
     for part in entry["parts"]:
-        for picture in part["pictures"]:
-            if picture["image"] not in seen:
-                seen.add(picture["image"])
-                order.append(picture["image"])
+        # ⚠️ A draw with no texture carries -1, not 0 — and 0 is a real image.
+        for draw in part["draws"]:
+            if draw["image"] >= 0 and draw["image"] not in seen:
+                seen.add(draw["image"])
+                order.append(draw["image"])
     return order
 
 

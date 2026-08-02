@@ -23,7 +23,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use crate::data::catalog::Catalog;
-use crate::data::effects::{frame_at, image_at, Entry, Library};
+use crate::data::effects::{frame_at, image_at, Entry, Library, Mesh as Geometry};
 use crate::data::texture::Texture;
 use crate::render::{self, effect, Background, Camera, Image, Piece, Rgba, Size, View};
 use crate::shot::{
@@ -46,6 +46,12 @@ const DEFAULT_EXPORT: &str = "work/export";
 
 /// How many near names an unknown effect is offered.
 const SUGGESTIONS: usize = 6;
+
+/// Depth-to-width ratio past which a fitted camera cannot show an effect
+/// usefully. ⚠️ A **reporting** threshold, never a clamp: nothing is scaled or
+/// dropped because of it, and 359 of the file's 360 display lists sit far
+/// below it.
+const DEEP: f32 = 4.0;
 
 pub const USAGE: &str = "\
 dimentio reel --effect <name> --out <file.png> [options]
@@ -79,7 +85,14 @@ pub struct Frame {
     pub time: f32,
     /// Parts the manifest says are running at `time`.
     pub active: usize,
-    /// How many of those carried a decoded image into this cell.
+    /// Draws those parts issued — one piece of geometry each.
+    ///
+    /// ⚠️ **Not the same as `active`, and usually larger.** A part issues a set
+    /// of draws; `dmen_magic`'s six parts issue 31 pieces between them. This
+    /// field exists because `active` briefly counted pieces and read as an
+    /// effect with five times the parts it has.
+    pub pieces: usize,
+    /// How many of those **pieces** carried a decoded image into this cell.
     pub painted: usize,
     /// How many of the **unpainted** parts can be told apart by colour.
     ///
@@ -125,6 +138,23 @@ pub struct Report {
     /// genuinely draw nothing (35 of the file's 704 do), or the export predates
     /// the binding and wants `bleck effect export` re-run.
     pub painted: usize,
+    /// Pieces drawn as a stand-in billboard rather than the effect's own shape,
+    /// at the first frame.
+    ///
+    /// ✅ Zero on a current export: the geometry is decoded (D263). ⚠️ Non-zero
+    /// means the manifest carried no mesh for a draw — an export predating the
+    /// decoding — and **a billboard looks like a deliberate sprite**, so this
+    /// has to be reported rather than left for the reader to notice.
+    pub stood_in: usize,
+    /// How much deeper the effect's geometry is than it is wide.
+    ///
+    /// ⚠️ **A fitted camera frames the whole box, depth included**, so a shape
+    /// far deeper than wide is drawn a few pixels across and reads as an effect
+    /// that renders nothing. One display list of the file's 360 is like this —
+    /// `item_delete`'s is 640 units wide and 58,642 deep — and why is not
+    /// established (D264). Reported rather than clamped: a rule invented here
+    /// to make one effect look better would quietly reshape the other 358.
+    pub depth_ratio: f32,
 }
 
 impl Report {
@@ -166,7 +196,11 @@ impl Report {
             // The ceiling is only worth naming when it bites; on the great
             // majority of effects it equals the active count and saying so
             // every line would bury the numbers that vary.
-            let unpainted = frame.active - frame.painted;
+            // ⚠️ Against `pieces`, not `active`. `painted` counts pieces and a
+            // part issues several, so `active - painted` underflows on any
+            // effect with more than one draw per part — silently in release,
+            // and `dmen_magic` alone would hit it.
+            let unpainted = frame.pieces.saturating_sub(frame.painted);
             // Only worth a column when there is something in it. On a fully
             // textured effect "0 of 0 plain found" is noise in every row.
             let plain = if unpainted == 0 {
@@ -180,10 +214,11 @@ impl Report {
                 format!(", {} of {} plain found", frame.visible, unpainted)
             };
             format!(
-                "  frame {:>4} at {:>6.3}s — {} active, {} painted{}, {:.1}% drawn",
+                "  frame {:>4} at {:>6.3}s — {} part(s), {} piece(s), {} painted{}, {:.1}% drawn",
                 frame.number,
                 frame.time,
                 frame.active,
+                frame.pieces,
                 frame.painted,
                 plain,
                 frame.drawn * 100.0
@@ -214,6 +249,14 @@ impl Report {
         } else {
             "some parts did not reach their frame — occluded, or missing".to_owned()
         });
+        if self.too_deep() {
+            said.push(format!(
+                "⚠️ this effect's geometry is {:.0}x deeper than it is wide, so a \
+                 camera fitted to it draws the visible face small — the depth is \
+                 in the file and why is not established (D264)",
+                self.depth_ratio
+            ));
+        }
         if let Some(blank) = self.blank_frame() {
             said.push(format!(
                 "⚠️ frame {blank} drew nothing though its parts carry images — much of this \
@@ -223,6 +266,12 @@ impl Report {
         }
         said.push(self.caveat());
         said
+    }
+
+    /// Whether a fitted camera is being stretched by depth the viewer cannot
+    /// show — the one cause of a blank cell that raising `--size` will not fix.
+    pub fn too_deep(&self) -> bool {
+        self.depth_ratio > DEEP
     }
 
     /// The first frame that drew nothing despite having a painted part.
@@ -250,10 +299,19 @@ impl Report {
                 self.name
             );
         }
+        let shape = if self.stood_in == 0 {
+            "each is drawn as its own geometry (D263)".to_owned()
+        } else {
+            format!(
+                "⚠️ {} piece(s) fell back to a stand-in billboard, so this export carries no \
+                 geometry for them — re-run `bleck effect export`",
+                self.stood_in
+            )
+        };
         format!(
-            "{} of {} part(s) drew a decoded image (D258). ⛔ Where the quads sit is still a \
-             display choice, not a decoded scene graph — the node transforms are read but not \
-             applied, so do not read a position here as where the game puts it.",
+            "{} of {} part(s) drew a decoded image (D258); {shape}. ⛔ Where one part sits \
+             relative to another is still a display choice — the node transforms are read but \
+             not applied, so this is an exploded view, not where the game puts them.",
             self.painted, self.parts
         )
     }
@@ -361,7 +419,7 @@ pub fn take(request: &Request) -> Result<Report, String> {
 
     let sampled = sample(entry, request.frames);
     let art = resolve_art(entry, &request.export, library.textures());
-    let built = draw(entry, &sampled, &art, request);
+    let built = draw(entry, &sampled, &art, library.meshes(), request);
     write_png(&request.out, &built.sheet.pixels, built.sheet.size)?;
     Ok(Report {
         name: entry.name.clone(),
@@ -373,6 +431,8 @@ pub fn take(request: &Request) -> Result<Report, String> {
         frames: built.frames,
         changes: built.changes,
         painted: built.painted,
+        stood_in: built.stood_in,
+        depth_ratio: built.depth_ratio,
     })
 }
 
@@ -424,30 +484,50 @@ struct Built {
     frames: Vec<Frame>,
     changes: usize,
     painted: usize,
+    stood_in: usize,
+    depth_ratio: f32,
 }
 
-/// Decode the image each part of `entry` draws, from the texture catalog
-/// beside the effect manifest.
+/// Decode the image each **draw** of each part paints with, from the texture
+/// catalog beside the effect manifest.
 ///
-/// ⚠️ A picture that cannot be read leaves its part unpainted rather than
+/// ⚠️ An image that cannot be read leaves its draw unpainted rather than
 /// failing the run. The report counts what actually arrived, so a missing PNG
-/// shows up as a lower `painted` rather than as a crash or a silent flat quad
+/// shows up as a lower `painted` rather than as a crash or a silent flat piece
 /// indistinguishable from a part that genuinely draws nothing.
-fn resolve_art(entry: &Entry, root: &std::path::Path, source: &str) -> Vec<Option<Texture>> {
+fn resolve_art(
+    entry: &Entry,
+    root: &std::path::Path,
+    source: &str,
+) -> Vec<Vec<Option<Texture>>> {
     let catalog = Catalog::load(root);
     entry
         .parts
         .iter()
         .map(|part| {
-            let picture = part.pictures.first()?;
-            let at = image_at(catalog.entries(), source, picture.image)?;
-            let found = catalog.entries().get(at)?;
-            Texture::decode(&std::fs::read(&found.path).ok()?).ok()
+            part.draws
+                .iter()
+                .map(|draw| {
+                    let at = image_at(catalog.entries(), source, draw.image()?)?;
+                    let found = catalog.entries().get(at)?;
+                    Texture::decode(&std::fs::read(&found.path).ok()?).ok()
+                })
+                .collect()
         })
         .collect()
 }
 
-fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request) -> Built {
+fn draw(
+    entry: &Entry,
+    times: &[f32],
+    art: &[Vec<Option<Texture>>],
+    meshes: &[Geometry],
+    request: &Request,
+) -> Built {
+    let palette = effect::Art {
+        images: art,
+        meshes,
+    };
     let cell = Size::new(request.size, request.size);
     let columns = grid_columns(times.len());
     let rows = times.len().div_ceil(columns);
@@ -461,7 +541,10 @@ fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request
     };
     // One camera for the whole reel. Refitting per frame would rescale the view
     // as parts stop, so a part ending would look like the rest moving.
-    let camera = Camera::fit(effect::bounds(entry));
+    let span = effect::bounds(entry, Some(palette));
+    let flat = (span.max.x - span.min.x).max(span.max.y - span.min.y);
+    let depth_ratio = (span.max.z - span.min.z) / flat.max(f32::EPSILON);
+    let camera = Camera::fit(span);
     let view = View {
         camera,
         background: request.background,
@@ -470,14 +553,21 @@ fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request
     let mut frames = Vec::with_capacity(times.len());
     let mut changes = 0;
     let mut painted = vec![false; entry.parts.len()];
+    let mut stood_in = 0;
     let mut previous: Option<Image> = None;
 
     for (index, &time) in times.iter().enumerate() {
-        let quads = effect::quads(entry, time, &camera, Some(effect::Art { images: art }));
+        let quads = effect::quads(entry, time, &camera, Some(palette));
         for quad in &quads {
             if let Some(seen) = painted.get_mut(quad.part) {
                 *seen |= !quad.mesh.paints().is_empty();
             }
+        }
+        // ⚠️ Counted on the first frame only. A later frame runs fewer parts,
+        // so summing across the reel would scale the number by how long each
+        // part happened to last.
+        if index == 0 {
+            stood_in = quads.iter().filter(|quad| quad.stood_in).count();
         }
         let pieces: Vec<Piece<'_>> = quads
             .iter()
@@ -501,7 +591,8 @@ fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request
         frames.push(Frame {
             number: frame_at(time),
             time,
-            active: quads.len(),
+            active: entry.active_at(time).len(),
+            pieces: quads.len(),
             painted: quads.len() - plain.len(),
             distinct: wanted.len(),
             visible: wanted
@@ -532,6 +623,8 @@ fn draw(entry: &Entry, times: &[f32], art: &[Option<Texture>], request: &Request
         frames,
         changes,
         painted: painted.iter().filter(|seen| **seen).count(),
+        stood_in,
+        depth_ratio,
     }
 }
 
@@ -809,10 +902,13 @@ mod tests {
     /// effect with seven parts would report a fault on no evidence.
     #[test]
     fn parts_beyond_the_palette_lower_the_ceiling_rather_than_failing() {
-        let camera = Camera::fit(render::effect::bounds(&Entry {
-            parts: vec![Default::default(); 8],
-            ..Default::default()
-        }));
+        let camera = Camera::fit(render::effect::bounds(
+            &Entry {
+                parts: vec![Default::default(); 8],
+                ..Default::default()
+            },
+            None,
+        ));
         let shades: Vec<Rgba> = (0..8).map(|part| effect::lit(&camera, part)).collect();
         assert_eq!(shades[0], shades[6], "the palette stopped repeating at six");
         assert_eq!(deduped(&shades).len(), 6, "{shades:?}");
@@ -821,6 +917,7 @@ mod tests {
             number: 1,
             time: 0.0,
             active: 8,
+            pieces: 8,
             painted: 0,
             distinct: 6,
             visible: 6,
@@ -836,6 +933,8 @@ mod tests {
             frames: vec![frame],
             changes: 0,
             painted: 0,
+            stood_in: 0,
+            depth_ratio: 1.0,
         };
         assert!(
             report.parts_all_arrived(),
@@ -862,7 +961,7 @@ mod tests {
         assert!(!report.moves());
     }
 
-    /// An export written before D258 carries no `pictures`, and must still
+    /// An export written before D258 carries no `draws`, and must still
     /// load — but it must not look like an effect that genuinely draws nothing.
     /// ⚠️ The message names the command that fixes it, because "0 painted" on
     /// its own sends someone hunting a rendering bug that is not there.
@@ -870,7 +969,7 @@ mod tests {
     fn an_export_predating_the_binding_says_so_rather_than_reading_as_empty() {
         let scratch = scratch_with_manifest("caveat");
         let report = take(&request(&scratch, "twopart", 3)).expect("renders");
-        assert_eq!(report.painted, 0, "the fixture carries no pictures");
+        assert_eq!(report.painted, 0, "the fixture carries no draws");
         let last = report.lines().pop().expect("a caveat line");
         assert!(last.contains("bleck effect export"), "{last}");
         assert!(last.contains("D258"), "{last}");
@@ -1020,6 +1119,7 @@ mod real_export_tests {
         let library = Library::load(&export);
         let folder = out_dir();
         let (mut reeled, mut empty, mut textured) = (0, 0, 0);
+        let mut deep: Vec<String> = Vec::new();
         for entry in library.entries() {
             let out = folder.join("sweep.png");
             let asked = Request {
@@ -1036,21 +1136,31 @@ mod real_export_tests {
             };
             match take(&asked) {
                 Ok(report) => {
-                    assert!(
-                        report.frames[0].drawn > 0.0,
-                        "{} drew nothing at its first frame",
-                        entry.name
-                    );
+                    // ⚠️ An effect that draws nothing must **say why**. The
+                    // one that does is `item_delete`, whose geometry is 92x
+                    // deeper than wide, and the report names that (D264).
+                    // Excusing it without the explanation would let a real
+                    // rendering regression through as "known".
+                    if report.frames[0].drawn > 0.0 {
+                        // drew
+                    } else {
+                        assert!(
+                            report.too_deep(),
+                            "{} drew nothing at its first frame and the report                              gives no reason",
+                            entry.name
+                        );
+                        deep.push(entry.name.clone());
+                    }
                     // A part carrying a picture must reach a decoded image:
                     // that is the export and the catalog agreeing.
                     let declared = entry
                         .parts
                         .iter()
-                        .filter(|part| !part.pictures.is_empty())
+                        .filter(|part| part.draws.iter().any(|d| d.image().is_some()))
                         .count();
                     assert_eq!(
                         report.painted, declared,
-                        "{}: {declared} part(s) declare a picture, {} were painted",
+                        "{}: {declared} part(s) declare an image, {} were painted",
                         entry.name, report.painted
                     );
                     textured += usize::from(report.painted > 0);
@@ -1064,8 +1174,13 @@ mod real_export_tests {
             let _ = std::fs::remove_file(out);
         }
         assert!(reeled > 100, "only {reeled} effects reeled ({empty} empty)");
+        // ✅ Empty: with the bounds measured per axis rather than as a radius,
+        // every effect in the export draws at its first frame — including the
+        // one whose geometry is 92x deeper than wide, which the report still
+        // flags so a reader knows why it is a sliver (D264).
+        assert!(deep.is_empty(), "drew nothing, explained only by depth: {deep:?}");
         // ⚠️ The control on the assertion above: if every effect declared no
-        // pictures, `painted == declared` would hold everywhere at zero and
+        // images, `painted == declared` would hold everywhere at zero and
         // the sweep would pass having verified nothing.
         assert!(
             textured > 100,

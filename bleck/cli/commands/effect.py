@@ -1,8 +1,9 @@
 """`effect` commands: what the game's 139 effects are made of.
 
-The third thing Dimentio shows, and the least complete of them. An effect is a
-name, a list of parts, and transform rows that drive placement (D172, D173).
-All of that is read, **including which image each part draws** (see below).
+The third thing Dimentio shows. An effect is a name, a list of parts, and
+transform rows that drive placement (D172, D173) — and each part issues draws,
+which are now exported with **both** the image they paint with and the geometry
+they paint.
 
 The export writes `effects.json`, the same contract shape as `texture export`
 and `model export`. Its images are the 219 in `files/eff/effdata.tpl`, which
@@ -15,12 +16,18 @@ on**: node → draw → subdraw → material → texture → the `effdata.tpl` i
 Every one of all 704 parts resolves, all 219 images are referenced, and none is
 orphaned.
 
-⚠️ Seven earlier candidates were refuted (D210, D218) because every one of them
-was looked for in or beside the part record. The answer was never a field.
+✅ **So is the geometry** (D263, D264). The same subdraw that names the material
+names a GX display list and the vertex descriptor to read it under, so a draw
+carries a mesh as well as a picture. Effects are indexed triangle fans, not
+billboards.
 
-⚠️ **A part draws a set of images, not one**, so `pictures` is a list. 35 parts
-draw none — their materials carry the documented `-1` — and that is a fact
-about them rather than a failure to resolve.
+⚠️ Seven earlier candidates for the image were refuted (D210, D218) because
+every one of them was looked for in or beside the part record. The answer was
+never a field.
+
+⚠️ **A part issues a set of draws, not one**, so `draws` is a list. 35 parts
+reach no image — their materials carry the documented `-1`, exported as
+`NO_IMAGE` — and that is a fact about them rather than a failure to resolve.
 """
 
 from __future__ import annotations
@@ -31,13 +38,20 @@ from pathlib import Path
 
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
-from bleck.formats import effdata
+from bleck.formats import effdata, effgeom
 from bleck.mods import registry
 
 CATEGORY = "inspection"
 
 #: Written beside the other manifests. Dimentio reads this, not the file.
 MANIFEST = "effects.json"
+
+#: Bumped to 2 when parts gained `draws` in place of `pictures`, and the
+#: manifest gained a top-level `meshes` table (D263).
+SCHEMA = 2
+
+#: A draw whose material names no texture. ⚠️ Not 0, which is a real image.
+NO_IMAGE = -1
 
 #: Where the effect definitions and their images live on the disc.
 EFFECT_DATA = "files/eff/effdata.dat"
@@ -84,31 +98,96 @@ def cmd_show(args: argparse.Namespace) -> int:
     raise UserError(f"no effect named {args.name!r}; `bleck effect list` shows them")
 
 
-def _pictures(data: bytes, effect: effdata.Effect, part: effdata.Part) -> list[dict]:
-    # pylint: disable=container-return
-    """A part's images, as the viewer needs them.
+#: Descriptor bits, so the export can leave out an array the geometry never
+#: names rather than writing a column of defaults for every vertex.
+HAS_NORMAL, HAS_COLOUR, HAS_TEXCOORD = 1 << 1, 1 << 2, 1 << 3
 
-    ⚠️ **A list, because a part draws a set.** 560 of 704 draw one image, 35
-    none and the rest up to twelve, so a scalar field here would silently drop
-    the artwork of the parts that need it most.
+
+def _mesh(mesh: effgeom.Mesh) -> dict:  # pylint: disable=container-return
+    """One display list, as indexed triangles the viewer can draw directly.
+
+    Positions and texture coordinates are written **as the file stores them** —
+    raw `s16` units and unscaled floats. ⚠️ What one position unit is in the
+    game's world is not established, so converting here would be inventing a
+    scale and burying it where nobody would look for it.
+
+    ⚠️ **Vertices are shared, not repeated per triangle.** Fans overlap heavily
+    — every quad of Dimentio's star carries the same centre — and writing three
+    fresh vertices per triangle made this manifest three times the size for the
+    same geometry.
+
+    An array the descriptor does not name is left out entirely rather than
+    filled with defaults, which is most of the file: 2,494 of the 2,960 draws
+    carry position and texture coordinate alone.
     """
-    return [
-        {
-            "image": picture.image,
-            "wrap": picture.wrap,
-            "red": picture.red,
-            "green": picture.green,
-            "blue": picture.blue,
-            "alpha": picture.alpha,
-        }
-        for picture in effdata.artwork(data, effect, part)
-    ]
+    order: dict = {}
+    vertices: list[effgeom.Vertex] = []
+    triangles: list[int] = []
+    for triangle in mesh.triangles():
+        for vertex in (triangle.a, triangle.b, triangle.c):
+            at = order.get(vertex)
+            if at is None:
+                at = order[vertex] = len(vertices)
+                vertices.append(vertex)
+            triangles.append(at)
+
+    written = {
+        "offset": mesh.offset,
+        "descriptor": mesh.descriptor,
+        "positions": [c for v in vertices for c in (v.x, v.y, v.z)],
+        "triangles": triangles,
+    }
+    if mesh.descriptor & HAS_TEXCOORD:
+        written["uvs"] = [round(c, 6) for v in vertices for c in (v.u, v.v)]
+    if mesh.descriptor & HAS_COLOUR:
+        written["colours"] = [
+            c for v in vertices for c in (v.red, v.green, v.blue, v.alpha)
+        ]
+    if mesh.descriptor & HAS_NORMAL:
+        written["normals"] = [round(c, 5) for v in vertices for c in (v.nx, v.ny, v.nz)]
+    return written
+
+
+def _draws(
+    data: bytes, effect: effdata.Effect, part: effdata.Part, index: dict
+) -> list[dict]:
+    # pylint: disable=container-return
+    """A part's draws: what it paints with, and the geometry it paints.
+
+    ⚠️ **A list, because a part issues a set of draws.** 560 of 704 resolve to
+    one image, 35 to none and the rest to as many as twelve, so a scalar field
+    here would silently drop the artwork of the parts that need it most.
+
+    ⚠️ **Not deduplicated by image.** Two draws sharing a material and differing
+    in geometry are two draws; collapsing them would lose half the shape.
+    """
+    written = []
+    for draw in effdata.draws(data, effect, part):
+        picture = draw.picture
+        written.append(
+            {
+                "mesh": index[(draw.offset, draw.descriptor)],
+                "image": picture.image if picture else NO_IMAGE,
+                "wrap": picture.wrap if picture else 0,
+                "red": picture.red if picture else 255,
+                "green": picture.green if picture else 255,
+                "blue": picture.blue if picture else 255,
+                "alpha": picture.alpha if picture else 255,
+            }
+        )
+    return written
 
 
 def cmd_export(args: argparse.Namespace) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     raw = (registry.base_root() / EFFECT_DATA).read_bytes()
+
+    # 2,960 draws share 360 display lists, so the geometry is written once at
+    # the top level and referred to by index. Inlining it per draw would be
+    # eight copies of every mesh.
+    shared = effdata.meshes(raw)
+    index = {(mesh.offset, mesh.descriptor): at for at, mesh in enumerate(shared)}
 
     entries = [
         {
@@ -121,7 +200,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                     "index": part.index,
                     "frames": part.second,
                     "seconds": round(part.seconds, 4),
-                    "pictures": _pictures(raw, effect, part),
+                    "draws": _draws(raw, effect, part, index),
                 }
                 for part, composed in zip(effect.parts, effect.composed(), strict=True)
             ],
@@ -135,12 +214,20 @@ def cmd_export(args: argparse.Namespace) -> int:
     ]
     (out / MANIFEST).write_text(
         json.dumps(
-            {"schema": 1, "textures": EFFECT_TEXTURES, "effects": entries}, indent=2
+            {
+                "schema": SCHEMA,
+                "textures": EFFECT_TEXTURES,
+                "meshes": [_mesh(mesh) for mesh in shared],
+                "effects": entries,
+            },
+            indent=2,
         )
         + "\n",
         encoding="utf-8",
     )
+    faces = sum(len(mesh.triangles()) for mesh in shared)
     print(f"wrote {len(entries)} effect(s) to {out / MANIFEST}")
+    print(f"  {len(shared)} display list(s), {faces} triangle(s)")
     print(f"  images come from {EFFECT_TEXTURES}, which `bleck texture export` writes")
     return 0
 

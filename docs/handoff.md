@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-01, at **D255**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D264**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D255 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D264 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -35,8 +35,8 @@ disc; `dimentio/` is a Rust/eframe window that displays what `bleck` exported.
 uv run bleck texture export --out work/export   # 21,780 images, PNG
 uv run bleck model   export --out work/export   # 864 .glb + models.json
 uv run bleck effect  export --out work/export   # 139 effects + effects.json,
-                                                #   incl. each part's images (D258).
-                                                #   ⚠️ not yet its geometry (D263)
+                                                #   each part's images (D258) **and
+                                                #   its geometry** (D263, D264)
 uv run bleck sound   export --out work/export   # 135 streams, WAV
 uv run cargo run --manifest-path dimentio/Cargo.toml -- work/export
 ```
@@ -69,7 +69,7 @@ injective and stops two assets landing on one file.
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
 | **Models** | ✅ geometry, UVs, one primitive per shape, **a texture per primitive** (D246), wrap modes, UV transforms, the alpha mask (D248) and per-vertex tint (D251); animation plays with a clip picker, scrub bar and per-shape hiding (D222, D235, D237) |
-| **Effects** | ✅ structure, part durations, **the image each part draws** (D258), a scrubber and a viewport. ⛔ placement is still a display choice — node transforms are read, not applied |
+| **Effects** | ✅ structure, part durations, **the image each part draws** (D258) and **the geometry it draws** (D264), a scrubber and a viewport. ⛔ placement *between parts* is still a display choice — node transforms are read, not applied |
 | **Sounds** | 🔶 135 tracks, waveform, seek, volume, real playback through `rodio` (D227). ⛔ **nobody has heard it** |
 
 Every asset name is copyable from any tab (D231). The model viewport is a
@@ -148,20 +148,30 @@ cargo run --release --manifest-path dimentio/Cargo.toml -- `
 | `--size 320` | edge of one frame |
 
 ```
-chaos — 4 part(s), 3.00s, 181 frame(s) long
-  frame    1 at  0.000s — 4 active, 4 painted, 5.2% drawn
-  frame   69 at  1.125s — 2 active, 2 painted, 2.5% drawn
-  frame  136 at  2.250s — 1 active, 1 painted, 1.5% drawn
-2 of 8 frame pair(s) differ
-4 of 4 part(s) drew a decoded image (D258)
+dmen_magic — 6 part(s), 1.07s, 65 frame(s) long
+  frame    1 at  0.000s — 6 part(s), 31 piece(s), 31 painted, 2.3% drawn
+2 of 3 frame pair(s) differ
+6 of 6 part(s) drew a decoded image (D258); each is drawn as its own
+geometry (D263). ⛔ Where one part sits relative to another is still a
+display choice ...
 ```
 
-- ✅ **The artwork is real** since D258. `sweat` reels as a blue droplet,
-  `item_fire` as a flame swirl.
-- ⛔ **The placement is not.** Node transforms are read but not applied, so
-  where a quad sits is a display choice. The report says so on every run —
-  genuine artwork in invented positions is far more convincing than the flat
-  quads that preceded it, and far more likely to be quoted as fact.
+⚠️ **`part(s)` and `piece(s)` are different numbers**, and the gap is usually
+large: a part issues a *set* of draws and each is one piece of geometry.
+`dmen_magic`'s six parts issue 31 pieces. `active` briefly counted pieces and
+read as an effect with five times the parts it has (D264).
+
+- ✅ **The artwork is real** since D258, and **the geometry is real** since
+  D264. `dmen_magic` reels as a yellow four-pointed star with concave sides, a
+  purple shuriken and a **shaded 3D cube** — which is the proof, because no
+  billboard renderer can draw a shaded cube.
+- ⚠️ **A camera-facing quad is now a *fallback*, not the rendering.** It stands
+  in for a draw whose geometry the manifest does not hold — an export predating
+  D264 — and the report counts them. ⛔ A billboard looks like a deliberate
+  sprite, so never read one as an effect's shape.
+- ⛔ **The arrangement is still not decoded.** Node transforms are read but not
+  applied, so a reel is an **exploded view**: each part's *shape* is measured,
+  where it sits relative to the others is not. The report says so every run.
 - ⚠️ **Three different causes give one empty frame**, and telling them apart is
   most of what this tool is for: a part that legitimately draws nothing (5
   effects, D258); a sprite erased by the alpha cutoff (D259); and a sparse
@@ -377,9 +387,12 @@ and it still cannot see a window, hear a speaker, or open a `.glb`.
 
 - **Dimentio's attack** — a gameplay screenshot shows a yellow four-pointed
   star with concave sides and a purple shuriken. `dmen_magic`'s images are a
-  yellow concave *quadrant* and a blue-to-magenta ramp, and rasterising its
-  display list reproduces the star exactly (D262, D263). The shuriken's shape
-  is **geometry**; the ramp only colours it.
+  yellow concave *quadrant* and a blue-to-magenta ramp, and its display list
+  reproduces the star exactly (D262, D263). The shuriken's shape is
+  **geometry**; the ramp only colours it. ✅ Reproduced **twice
+  independently** — by `scripts/effect_geom.py`, which shares no code with the
+  viewer, and by `dimentio reel` since D264, which also draws a **shaded 3D
+  cube** no billboard renderer could produce.
 - **The Void** is `map_darkness_bg` (D260): spawned from `seq_mapchange.c` on
   every map change except `aa4_01` (the Prologue), hard-coding `mac_02` and
   `mac_12` — Flipside and Flopside — at scale 1.0 against 0.96 elsewhere. Its
@@ -783,42 +796,58 @@ else; pick by interest.
    which is what assigns sections 13/14/15/11. ✅ **360 of 360 display lists
    parse exactly**, 14,648 primitives.
 
-   ✅ **Proven by rendering**: `scripts/effect_geom.py` reads the disc, walks
-   display list `0x001C80` and rasterises it *without touching dimentio* — and
-   produces Dimentio's four-pointed yellow star, matching a gameplay
-   screenshot (D262). Four 320×320 quads at (±160, ±160), one inset UV rect
-   shared by all four, corner orders permuted so a single concave quadrant
-   mirrors per cell.
+   ✅ **Shipped and drawn** (D264). `bleck/formats/effgeom.py` reads it,
+   `effect export` writes it, and `dimentio` draws it — `dmen_magic` renders as
+   the four-pointed star, the purple shuriken and a shaded 3D cube, matching a
+   gameplay screenshot (D262). `scripts/effect_geom.py` still rasterises one
+   display list straight from the disc, sharing no code with the viewer.
 
-   ⚠️ **A vertex is 4 bytes when the descriptor says two attributes, not 8.**
-   Reading 8 swallows the next primitive's opcode and reports one quad where
-   there are four. And a first attempt that ignored the descriptor parsed
-   **275 of 360** — including the effect under examination, with the failures
-   confined to effects nobody had opened. That reads as success.
+   ⚠️ **Three readings that look right and are not**, all recorded because each
+   one survived a plausible check:
+   - A vertex is **4 bytes** when the descriptor names two attributes. Reading 8
+     swallows the next primitive's opcode and reports one quad where there are
+     four.
+   - Ignoring the descriptor entirely parses **275 of 360** — including the
+     effect under examination, failures confined to effects nobody had opened.
+   - Section 14 read at stride 6 as `3 x s16` makes **738 of 816** entries
+     unit-length against `1/32767`. It is `3 x s8` (D264): 4,896 divides by 3,
+     not 6, and then **1,632 of 1,632** are unit vectors.
 
-4. 🔶 **What is left for an accurate effect view** (task #29):
-   - Port D263's reading into `bleck`, export it, and draw it in `dimentio` in
-     place of `render::effect`'s camera-facing quad. ⛔ **That quad is now
-     known to be a placeholder for something that exists.**
-   - Apply the node transforms: section 9's hierarchy accumulates parent to
-     child, section 12 supplies TRS. ✅ Verified readable (D262) —
-     `dmen_magic` gives an exact `(0, 0, 360)` Z rotation and scales from
-     `1e-12` to `3.5`, Z scale 1.0 throughout.
+   ⚠️ **`Mesh.strays` is the instrument.** An index outside the array its
+   descriptor bit names used to fall back to a default *silently* — geometry
+   that parses, renders, and is quietly one attribute short. It is counted now,
+   and the count is **0** across all 360 lists. That is what caught the stride.
+
+4. 🔶 **What is left for an accurate effect view:**
+   - **Apply the node transforms** — the remaining half of the problem. Section
+     9's hierarchy accumulates parent to child, section 12 supplies TRS.
+     ✅ Verified readable (D262): `dmen_magic` gives an exact `(0, 0, 360)` Z
+     rotation and scales from `1e-12` to `3.5`, Z scale 1.0 throughout. Until
+     this lands the viewer draws an **exploded view** by part index.
    - 🔶 Section 10's curves animate ten scalars — T.xyz, R.xyz, S.xyz, alpha.
      Not read.
    - ⛔ **No alpha blending in the rasteriser** (D259, task #30), so
      semi-transparent art comes out solid.
-   ⚠️ **Do not "layer effects together" to get an accurate view before the
-   transforms land.** The quads would still sit on the ring the viewer invents,
-   compositing the same fiction more convincingly.
-5. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
+   ⚠️ **Do not "layer effects together" before the transforms land.** The
+   shapes are real now, which makes a wrong composite *more* convincing, not
+   less.
+5. 🔶 **One display list is anomalous** (D264). `item_delete`'s is **640 units
+   wide and 58,642 deep**, where the other 359 are flat or near it. ⛔ Not a
+   framing error — it consumes its declared size exactly — and ⛔ not a general
+   misreading of Z, since two thirds of all positions carry a real non-zero Z
+   whose common values (64, 160, 320) match the star's own grid. **No rule was
+   invented to smooth it away**; `dimentio reel` reports the ratio instead.
+   ⚠️ A **cube** bounding box hid this completely: one radius per part measured
+   64,108 on every axis, a depth ratio of exactly 1.0, while the effect drew
+   nothing. A summary statistic that collapses the axes cannot report an axis
+   being wrong.
+6. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
    2 curves, 3 display lists, 4 textures, 5 materials, 6 matrices, 7 draws,
-   8 subdraws, 9 nodes, 10 curve channels, 11 TEX0, 12 vectors, 13 POS;
-   14 NRM and 15 CLR0 by inference from the descriptor bits. ⚠️ Two readings
-   in `effdata.py` are **known stale and not yet fixed**: `Effect.rows` slices
-   section 6 by `extra`, which is the effect's base *node*, not a section 6
-   index; and `Entry`'s last two `u16` are really one `u32` display-list
-   offset.
+   8 subdraws, 9 nodes, 10 curve channels, 11 TEX0, 12 vectors, 13 POS,
+   14 NRM, 15 CLR0 — the last two **measured**, not inferred (D264). ⚠️ One
+   stale reading remains in `effdata.py`: `Effect.rows` slices section 6 by
+   `extra`, which is the effect's base *node*, not a section 6 index. (Section
+   8's layout is fixed as of D264.)
 4. ✅ **Which Maya shape name goes with which primitive is SOLVED** (D240),
    superseding D236 and D237's `shape <index>` labelling. The 168-byte group
    record carries the name *and* the run of shapes it owns, so `Shape.name` is
