@@ -46,6 +46,6 @@ example-mods/*/overlay/
 /mods/*
 !/mods/README.md
 
-# Agent instructions -- kept on disk, deliberately untracked
-CLAUDE.md
+# Agent instructions. Tracked since 2026-08-02: D149 kept this local, but a
+# second dev machine needs it, and corrections made on one host were stranded.
 viewer/target
