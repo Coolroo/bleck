@@ -293,6 +293,8 @@ impl Viewer {
             Some(render::effect::Art {
                 images: &art,
                 meshes: self.effects.library.meshes(),
+                nodes: self.effects.library.nodes(),
+                curves: self.effects.library.curves(),
             }),
         );
         self.effects.stage.view.camera = render::Camera::fit(bounds);
@@ -361,10 +363,15 @@ impl Viewer {
         ui.separator();
 
         let time = self.effects.play.time;
-        let meshes = self.effects.library.meshes();
+        let scene = render::effect::Art {
+            images: &[],
+            meshes: self.effects.library.meshes(),
+            nodes: self.effects.library.nodes(),
+            curves: self.effects.library.curves(),
+        };
         let stage = &mut self.effects.stage;
         ui.columns(COLUMNS, |columns| {
-            Self::effect_stage(&mut columns[0], entry, stage, meshes, time);
+            Self::effect_stage(&mut columns[0], entry, stage, scene, time);
             egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
                 Self::part_table(ui, entry, time);
                 ui.add_space(12.0);
@@ -383,7 +390,7 @@ impl Viewer {
         ui: &mut egui::Ui,
         entry: &effects::Entry,
         stage: &mut Stage,
-        meshes: &[effects::Mesh],
+        scene: render::effect::Art<'_>,
         time: f32,
     ) {
         Self::manual_row(ui, entry, stage);
@@ -402,7 +409,9 @@ impl Viewer {
             &stage.view.camera,
             Some(render::effect::Art {
                 images: &images,
-                meshes,
+                meshes: scene.meshes,
+                nodes: scene.nodes,
+                curves: scene.curves,
             }),
         );
         let pieces: Vec<render::Piece<'_>> = quads

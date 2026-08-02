@@ -436,6 +436,15 @@ pub struct Paint {
     /// The material declared `alphaMode: "MASK"` — cut-out art, where a texel
     /// below `cutoff` is not drawn at all.
     pub masked: bool,
+    /// Composite this paint onto what is already there, rather than
+    /// replacing it.
+    ///
+    /// ✅ **Effect art needs it and model art does not.** glTF's `MASK` means
+    /// exactly "no blending": a cut-out texel is opaque or absent, and
+    /// blending one at its stated alpha would wash out every model on the
+    /// disc. Effect sprites are semi-transparent throughout — that is what
+    /// they are — so they carry this and models do not (D267).
+    pub blended: bool,
     /// The alpha a texel must reach to be drawn when `masked`.
     ///
     /// ⚠️ **Not always glTF's 128.** Cut-out model art is opaque wherever it is
@@ -489,6 +498,7 @@ pub struct Batch<'a> {
 pub struct Surface<'a> {
     pub texture: &'a Texture,
     pub uvs: &'a [Uv],
+    pub blended: bool,
     pub masked: bool,
     pub cutoff: u8,
     pub sampling: &'a Sampling,
@@ -672,6 +682,7 @@ impl Mesh {
         Some(Surface {
             texture: &paint.texture,
             uvs: self.uvs.as_deref()?,
+            blended: paint.blended,
             masked: paint.masked,
             cutoff: paint.cutoff,
             sampling: &paint.sampling,

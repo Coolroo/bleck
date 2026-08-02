@@ -46,9 +46,10 @@ CATEGORY = "inspection"
 #: Written beside the other manifests. Dimentio reads this, not the file.
 MANIFEST = "effects.json"
 
-#: Bumped to 2 when parts gained `draws` in place of `pictures`, and the
-#: manifest gained a top-level `meshes` table (D263).
-SCHEMA = 2
+#: Bumped to 3 when the manifest gained the `nodes` and `curves` tables that
+#: let a viewer pose an effect at an arbitrary time (D266). 2 added `draws` and
+#: `meshes` (D263); 1 was the original.
+SCHEMA = 3
 
 #: A draw whose material names no texture. ⚠️ Not 0, which is a real image.
 NO_IMAGE = -1
@@ -167,6 +168,7 @@ def _draws(
         written.append(
             {
                 "mesh": index[(draw.offset, draw.descriptor)],
+                "chain": list(draw.chain),
                 "image": picture.image if picture else NO_IMAGE,
                 "wrap": picture.wrap if picture else 0,
                 "red": picture.red if picture else 255,
@@ -176,6 +178,58 @@ def _draws(
             }
         )
     return written
+
+
+def _scene(raw: bytes) -> dict:  # pylint: disable=container-return
+    """The node tree and the curves that animate it, as two shared tables.
+
+    ⚠️ **The viewer poses, rather than being handed a pose.** An effect's
+    transform is a function of time — 44% of drawing nodes are flat at rest and
+    26 effects vanish entirely (D265) — so shipping one frame's matrices would
+    ship the one frame that does not work. The tables are what the game itself
+    reads.
+    """
+    total = effdata.node_count(raw)
+    every = effdata.commands(raw)
+
+    order: dict = {}
+    curves: list[dict] = []
+    nodes: list[dict] = []
+    for index in range(total):
+        node = effdata.node_at(raw, index)
+        driven = []
+        for step in range(node.count):
+            at = node.curves + step
+            if not 0 <= at < len(every):
+                continue
+            command = every[at]
+            if not 0 <= command.tag < effdata.SLOTS:
+                continue
+            slot = order.get(command.offset)
+            if slot is None:
+                curve = effdata.curve_at(raw, command.offset)
+                slot = order[command.offset] = len(curves)
+                curves.append(
+                    {
+                        "length": curve.length,
+                        "start": curve.start,
+                        "end": curve.end,
+                        "loop": curve.loop,
+                        "bytes": curve.byte_samples,
+                        "samples": [round(v, 5) for v in curve.samples],
+                    }
+                )
+            driven.append([command.tag, slot])
+        nodes.append(
+            {
+                "t": [round(v, 5) for v in effdata.vector_at(raw, node.translate)],
+                "r": [round(v, 5) for v in effdata.vector_at(raw, node.rotate)],
+                "s": [round(v, 5) for v in effdata.vector_at(raw, node.scale)],
+                "alpha": node.alpha,
+                "curves": driven,
+            }
+        )
+    return {"nodes": nodes, "curves": curves}
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -188,6 +242,7 @@ def cmd_export(args: argparse.Namespace) -> int:
     # eight copies of every mesh.
     shared = effdata.meshes(raw)
     index = {(mesh.offset, mesh.descriptor): at for at, mesh in enumerate(shared)}
+    scene = _scene(raw)
 
     entries = [
         {
@@ -218,6 +273,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "schema": SCHEMA,
                 "textures": EFFECT_TEXTURES,
                 "meshes": [_mesh(mesh) for mesh in shared],
+                **scene,
                 "effects": entries,
             },
             indent=2,
@@ -228,6 +284,10 @@ def cmd_export(args: argparse.Namespace) -> int:
     faces = sum(len(mesh.triangles()) for mesh in shared)
     print(f"wrote {len(entries)} effect(s) to {out / MANIFEST}")
     print(f"  {len(shared)} display list(s), {faces} triangle(s)")
+    print(
+        f"  {len(scene['nodes'])} node(s), {len(scene['curves'])} curve(s) "
+        "- the viewer poses from these"
+    )
     print(f"  images come from {EFFECT_TEXTURES}, which `bleck texture export` writes")
     return 0
 

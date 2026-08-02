@@ -406,6 +406,8 @@ fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint>
     let material = &json["materials"][index];
     let base = &material["pbrMetallicRoughness"]["baseColorTexture"];
     Some(Paint {
+        // Model art is `MASK`: opaque where drawn at all, so nothing to blend.
+        blended: false,
         texture: decode_reference(json, bin, base)?,
         masked: material["alphaMode"].as_str() == Some("MASK"),
         cutoff: crate::render::MASK_CUTOFF,

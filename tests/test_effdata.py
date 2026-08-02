@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import effdata, effgeom
+from bleck.formats import effcurve, effdata, effgeom
 
 REPO = Path(__file__).resolve().parent.parent
 EFFDATA = REPO / "work" / "extracted" / "eu0" / "files" / "eff" / "effdata.dat"
@@ -188,12 +188,30 @@ class TestCurves:
         assert biggest > section_size * 0.9, "suspiciously far from filling it"
 
     def test_the_first_curve_is_a_full_rotation(self):
-        """🟢 6, 12, 18 ... 360 over 60 samples -- one second at 60 fps."""
+        """🟢 6, 12, 18 ... 360 over 60 samples -- one second at 60 fps, and a
+        curve whose values *are* degrees, which is what the rotation slots want.
+
+        ⚠️ The sample count is `end - start + 1`, not a field. Reading `+0x06`
+        as a count is the superseded layout (D266).
+        """
         curve = effdata.curve_at(self._data(), 0)
+        assert (curve.start, curve.end) == (1, 60)
         assert len(curve.samples) == 60
         assert curve.samples[0] == 6.0
         assert curve.samples[-1] == 360.0
-        assert curve.is_monotonic
+        assert all(b >= a for a, b in itertools.pairwise(curve.samples))
+
+    def test_a_curve_reads_the_way_the_games_evaluator_reads_it(self):
+        """✅ The header the code at `0x8005f2d4` loads, field for field."""
+        curve = effdata.curve_at(self._data(), 0)
+        assert curve.length > 0
+        assert curve.byte_samples == effcurve.CURVE_FLOAT
+        # Before the first frame it says nothing, so the node keeps its own
+        # static value -- which is not the same as saying zero.
+        assert curve.value_at(float(curve.start)) == 6.0
+        assert curve.value_at(float(curve.end)) == 360.0
+        # ⚠️ Past the end it holds, rather than wrapping or vanishing.
+        assert curve.value_at(float(curve.end) + 5.0) == 360.0
 
     def test_most_records_are_exactly_as_long_as_they_claim(self):
         """⚠️ Only ~a third, and that is the finding: the rest of the offsets

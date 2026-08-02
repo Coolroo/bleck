@@ -16,15 +16,20 @@
 //! ⛔ Do not read a billboard as an effect's shape — it means the geometry was
 //! missing, which the caller's report says out loud.
 //!
-//! ⛔ **The placement between parts is still a display choice.** Each draw's
-//! *shape* is measured; where one part sits relative to another is not, because
-//! section 9's node transforms are read but not applied. The layout below is an
-//! **exploded view** — deliberately separated so the parts can be told apart —
-//! and nothing downstream may read a piece's position as where the game puts it.
+//! ✅ **And the placement is measured too**, since D266. A draw carries the
+//! chain of nodes above it; each is posed at the frame — static translate,
+//! rotate and scale, with any curve of its own written over the top — and the
+//! results multiplied parent-first. That is the game's own scheme, transcribed
+//! from the evaluator at `0x8005f2d4`.
+//!
+//! ⚠️ **A flat part is not a missing part.** An effect's scales rise from zero,
+//! so 44% of draws collapse to nothing at frame 0 and are skipped. The exploded
+//! layout survives only for a draw with **no** geometry, where there is no
+//! measured position to use instead.
 
 use super::camera::Basis;
 use super::{Camera, Rgba};
-use crate::data::effects::{Entry, Mesh as Geometry};
+use crate::data::effects::{Curve, Entry, Mesh as Geometry, NodeDef};
 use crate::data::mesh::{Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
 
@@ -67,6 +72,10 @@ pub struct Art<'a> {
     /// The manifest's shared display-list table, indexed by `Draw::mesh`.
     /// Empty for an export predating the geometry, which falls back.
     pub meshes: &'a [Geometry],
+    /// The scene graph, and the curves that pose it. Empty for an export
+    /// predating D266, in which case every part stacks at the origin.
+    pub nodes: &'a [NodeDef],
+    pub curves: &'a [Curve],
 }
 
 impl<'a> Art<'a> {
@@ -104,6 +113,124 @@ pub struct Quad {
     pub stood_in: bool,
 }
 
+/// A node's ten scalars at `frame`: its static values, with any curve of its
+/// own written over the top.
+///
+/// ✅ **The order the game uses**, read off the slot array it fills at
+/// `0x8005f290`. ⚠️ A curve that has not started leaves the static value alone
+/// rather than zeroing it.
+fn slots_at(node: &NodeDef, curves: &[Curve], frame: f32) -> [f32; 10] {
+    let pick = |v: &Vec<f32>, at: usize| v.get(at).copied().unwrap_or(0.0);
+    let mut slots = [
+        pick(&node.t, 0), pick(&node.t, 1), pick(&node.t, 2),
+        pick(&node.r, 0), pick(&node.r, 1), pick(&node.r, 2),
+        pick(&node.s, 0), pick(&node.s, 1), pick(&node.s, 2),
+        node.alpha,
+    ];
+    for [slot, curve] in &node.curves {
+        if let Some(value) = curves.get(*curve).and_then(|c| c.value_at(frame)) {
+            if let Some(cell) = slots.get_mut(*slot) {
+                *cell = value;
+            }
+        }
+    }
+    slots
+}
+
+/// A 3x3 rotation about one axis, in degrees.
+fn turn(axis: usize, degrees: f32) -> [f32; 9] {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    match axis {
+        0 => [1.0, 0.0, 0.0, 0.0, cos, -sin, 0.0, sin, cos],
+        1 => [cos, 0.0, sin, 0.0, 1.0, 0.0, -sin, 0.0, cos],
+        _ => [cos, -sin, 0.0, sin, cos, 0.0, 0.0, 0.0, 1.0],
+    }
+}
+
+fn times(a: &[f32; 9], b: &[f32; 9]) -> [f32; 9] {
+    let mut out = [0.0; 9];
+    for row in 0..3 {
+        for col in 0..3 {
+            out[row * 3 + col] = (0..3).map(|k| a[row * 3 + k] * b[k * 3 + col]).sum();
+        }
+    }
+    out
+}
+
+/// A node's own transform at `frame`, as a 3x4 row-major matrix.
+///
+/// ⚠️ Rotates **z, then y, then x, in degrees** - the order measured against
+/// the file's own stored matrices, which agree on 3,738 of 3,739 nodes (D265).
+fn local(node: &NodeDef, curves: &[Curve], frame: f32) -> [f32; 12] {
+    let slots = slots_at(node, curves, frame);
+    let mut spin = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+    for axis in [2usize, 1, 0] {
+        spin = times(&spin, &turn(axis, slots[3 + axis]));
+    }
+    let mut out = [0.0; 12];
+    for row in 0..3 {
+        for col in 0..3 {
+            out[row * 4 + col] = spin[row * 3 + col] * slots[6 + col];
+        }
+        out[row * 4 + 3] = slots[row];
+    }
+    out
+}
+
+fn concat(a: &[f32; 12], b: &[f32; 12]) -> [f32; 12] {
+    let mut out = [0.0; 12];
+    for row in 0..3 {
+        for col in 0..3 {
+            out[row * 4 + col] = (0..3).map(|k| a[row * 4 + k] * b[k * 4 + col]).sum();
+        }
+        out[row * 4 + 3] =
+            (0..3).map(|k| a[row * 4 + k] * b[k * 4 + 3]).sum::<f32>() + a[row * 4 + 3];
+    }
+    out
+}
+
+const IDENTITY: [f32; 12] = [1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0];
+
+/// The rate the game counts effect frames at, and so what turns the scrubber's
+/// seconds into the frame a curve is sampled at.
+const FRAME_RATE: f32 = 60.0;
+
+/// One point through a 3x4 transform.
+fn apply(m: &[f32; 12], x: f32, y: f32, z: f32) -> Vec3 {
+    Vec3::new(
+        m[0] * x + m[1] * y + m[2] * z + m[3],
+        m[4] * x + m[5] * y + m[6] * z + m[7],
+        m[8] * x + m[9] * y + m[10] * z + m[11],
+    )
+}
+
+/// Where a draw sits at `frame`: every node of its chain posed and multiplied,
+/// parent first.
+///
+/// ✅ **This is a measured position, not a layout.** An export predating the
+/// decoding carries no chain, and then the identity is returned and every part
+/// stacks at the origin - which is honest about knowing nothing.
+fn posed(chain: &[usize], nodes: &[NodeDef], curves: &[Curve], frame: f32) -> [f32; 12] {
+    let mut world = IDENTITY;
+    for index in chain {
+        if let Some(node) = nodes.get(*index) {
+            world = concat(&world, &local(node, curves, frame));
+        }
+    }
+    world
+}
+
+/// Whether a transform collapses volume to nothing.
+///
+/// ⚠️ Not a fault: an effect's parts scale up from zero, so a part is
+/// legitimately flat before it begins. Skipping them keeps degenerate
+/// triangles out of the rasteriser.
+fn flat(m: &[f32; 12]) -> bool {
+    let det = m[0] * (m[5] * m[10] - m[6] * m[9]) - m[1] * (m[4] * m[10] - m[6] * m[8])
+        + m[2] * (m[4] * m[9] - m[5] * m[8]);
+    det.abs() < 1e-9
+}
+
 /// The colour a part is drawn in, so the table beside the viewport can mark a
 /// row with the same one.
 pub fn colour(part: usize) -> Rgba {
@@ -139,21 +266,35 @@ pub fn lit(camera: &Camera, part: usize) -> Rgba {
 pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) -> Vec<Quad> {
     let basis = Basis::of(camera);
     let scale = spread(entry, art);
+    let frame = time * FRAME_RATE;
     let mut built = Vec::new();
     for part in entry.active_at(time) {
-        let at = placement(entry, part, scale);
         let count = entry.parts.get(part).map_or(0, |p| p.draws.len());
         for draw in 0..count.max(1) {
             // Cloned because a mesh owns its texture; only the parts actually
             // running at this instant ever pay for it.
             let image = art.and_then(|art| art.of(part, draw));
-            let shape = art
-                .zip(entry.parts.get(part).and_then(|p| p.draws.get(draw)))
-                .and_then(|(art, draw)| art.geometry(draw.mesh));
+            let named = entry.parts.get(part).and_then(|p| p.draws.get(draw));
+            let shape = art.zip(named).and_then(|(art, d)| art.geometry(d.mesh));
+            let world = match (art, named) {
+                (Some(art), Some(named)) => {
+                    posed(&named.chain, art.nodes, art.curves, frame)
+                }
+                _ => IDENTITY,
+            };
+            // ⚠️ A flat part is not a fault — an effect's parts scale up from
+            // zero, so this one has not begun. Drawing it would push degenerate
+            // triangles at the rasteriser for nothing.
+            if shape.is_some() && flat(&world) {
+                continue;
+            }
             built.push(Quad {
                 mesh: match shape {
-                    Some(geometry) => real(geometry, at, image),
-                    None => quad(&basis, at, scale * HALF, image),
+                    Some(geometry) => real(geometry, &world, image),
+                    // ⛔ No geometry means no measured position either, so the
+                    // stand-in keeps the exploded layout rather than pretending
+                    // the origin is where it belongs.
+                    None => quad(&basis, placement(entry, part, scale), scale * HALF, image),
                 },
                 colour: colour(part),
                 part,
@@ -172,28 +313,44 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
 pub fn bounds(entry: &Entry, art: Option<Art<'_>>) -> Bounds {
     let scale = spread(entry, art);
     let mut span: Option<Bounds> = None;
-    for part in 0..entry.parts.len().max(1) {
-        let at = placement(entry, part, scale);
-        let draws = entry
-            .parts
-            .get(part)
-            .map(|p| p.draws.as_slice())
-            .unwrap_or_default();
-        let mut here: Option<Bounds> = None;
-        for geometry in draws
-            .iter()
-            .filter_map(|draw| art.and_then(|art| art.geometry(draw.mesh)))
-        {
-            here = Some(union(here, box_of(geometry, at)));
+    // ⚠️ **Sampled across the timeline, not taken at one instant.** An effect's
+    // parts scale up from zero and back down, so a camera fitted to frame 0
+    // would frame a pose that is often empty — and one fitted per frame would
+    // zoom in and out as parts came and went.
+    for step in 0..=SAMPLES {
+        let time = entry.seconds * step as f32 / SAMPLES as f32;
+        let frame = time * FRAME_RATE;
+        for part in 0..entry.parts.len().max(1) {
+            let draws = entry
+                .parts
+                .get(part)
+                .map(|p| p.draws.as_slice())
+                .unwrap_or_default();
+            let mut here: Option<Bounds> = None;
+            for named in draws {
+                let Some(geometry) = art.and_then(|art| art.geometry(named.mesh)) else {
+                    continue;
+                };
+                let world = match art {
+                    Some(art) => posed(&named.chain, art.nodes, art.curves, frame),
+                    None => IDENTITY,
+                };
+                if flat(&world) {
+                    continue;
+                }
+                here = Some(union(here, box_of(geometry, &world)));
+            }
+            let here = here.unwrap_or_else(|| {
+                // No geometry, so the stand-in billboard's own extent.
+                let at = placement(entry, part, scale);
+                let corner = Vec3::new(scale * HALF, scale * HALF, scale * HALF);
+                Bounds {
+                    min: at - corner,
+                    max: at + corner,
+                }
+            });
+            span = Some(union(span, here));
         }
-        // No geometry means a stand-in billboard, which is a cube of side
-        // `2 * scale * HALF` about its placement.
-        let corner = Vec3::new(scale * HALF, scale * HALF, scale * HALF);
-        let here = here.unwrap_or(Bounds {
-            min: at - corner,
-            max: at + corner,
-        });
-        span = Some(union(span, here));
     }
     span.unwrap_or(Bounds {
         min: Vec3::new(-HALF, -HALF, -HALF),
@@ -201,14 +358,18 @@ pub fn bounds(entry: &Entry, art: Option<Art<'_>>) -> Bounds {
     })
 }
 
+/// How many instants the camera is fitted across. ⚠️ A reporting choice, not a
+/// decoded one: enough that a part which only appears late is still framed.
+const SAMPLES: usize = 12;
+
 /// ⚠️ **Per axis, not a radius.** A single reach used for all three collapses
 /// to a cube, which hides exactly the anisotropy a caller needs to see: one
 /// display list of the file's 360 is 640 units wide and 58,642 deep, and as a
 /// cube it reports as perfectly ordinary (D264).
-fn box_of(geometry: &Geometry, at: Vec3) -> Bounds {
+fn box_of(geometry: &Geometry, world: &[f32; 12]) -> Bounds {
     let mut span: Option<Bounds> = None;
     for p in geometry.positions.chunks_exact(3) {
-        let point = at + Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32);
+        let point = apply(world, p[0] as f32, p[1] as f32, p[2] as f32);
         span = Some(union(
             span,
             Bounds {
@@ -218,8 +379,8 @@ fn box_of(geometry: &Geometry, at: Vec3) -> Bounds {
         ));
     }
     span.unwrap_or(Bounds {
-        min: at,
-        max: at,
+        min: Vec3::ZERO,
+        max: Vec3::ZERO,
     })
 }
 
@@ -335,11 +496,11 @@ fn ring(part: usize, parts: usize) -> Vec3 {
 /// ⚠️ **Fixed in world space, unlike the billboard below.** Effect geometry is
 /// mostly flat, so orbiting to its edge legitimately shows almost nothing —
 /// that is the shape, not a part that stopped running.
-fn real(geometry: &Geometry, at: Vec3, image: Option<Texture>) -> Mesh {
+fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>) -> Mesh {
     let positions: Vec<Vec3> = geometry
         .positions
         .chunks_exact(3)
-        .map(|p| at + Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32))
+        .map(|p| apply(world, p[0] as f32, p[1] as f32, p[2] as f32))
         .collect();
     let faces: Vec<Face> = geometry
         .triangles
@@ -393,6 +554,8 @@ fn cutout(texture: Texture) -> Paint {
     Paint {
         texture,
         masked: true,
+        // ✅ Semi-transparent throughout, which is the point of the artwork.
+        blended: true,
         cutoff: super::FAINT_CUTOFF,
         sampling: Sampling::default(),
         mask: None,
@@ -680,6 +843,8 @@ mod tests {
             Some(Art {
                 images: &images,
                 meshes: &[],
+                nodes: &[],
+                curves: &[],
             }),
         );
         assert!(

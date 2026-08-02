@@ -20,8 +20,10 @@
 //! mapping. Taking the nth entry of the filtered bank would pair a part with
 //! the wrong picture on any export where the catalog is not contiguous.
 //!
-//! ⛔ **The node transforms are not applied**, so nothing here says where an
-//! effect's parts belong on screen.
+//! ✅ **The node transforms are applied** (D266). A draw names the chain of
+//! nodes above it, `nodes` holds each one's static transform and curve
+//! references, and `curves` holds the samples — enough to pose the effect at
+//! any frame, which is what the viewer does.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -46,7 +48,85 @@ struct Manifest {
     /// rather than a field on each draw.
     #[serde(default)]
     meshes: Vec<Mesh>,
+    /// The scene graph and the curves that animate it.
+    #[serde(default)]
+    nodes: Vec<NodeDef>,
+    #[serde(default)]
+    curves: Vec<Curve>,
     effects: Vec<Entry>,
+}
+
+/// One node of an effect's scene graph, as `bleck` read it (D265, D266).
+///
+/// ⚠️ **The static values are a starting point, not the pose.** A curve
+/// overwrites individual slots, and 44% of drawing nodes are flat until one
+/// does.
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct NodeDef {
+    #[serde(default)]
+    pub t: Vec<f32>,
+    #[serde(default)]
+    pub r: Vec<f32>,
+    #[serde(default)]
+    pub s: Vec<f32>,
+    #[serde(default)]
+    pub alpha: f32,
+    /// `[slot, curve]` pairs. Slot 0..2 is translate, 3..5 rotate, 6..8 scale,
+    /// 9 alpha - the game's own order, read off the array it fills.
+    #[serde(default)]
+    pub curves: Vec<[usize; 2]>,
+}
+
+/// One sampled curve, one value per frame (D266).
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct Curve {
+    #[serde(default)]
+    pub length: i64,
+    #[serde(default)]
+    pub start: i64,
+    #[serde(default)]
+    pub end: i64,
+    #[serde(default, rename = "loop")]
+    pub looping: i64,
+    #[serde(default)]
+    pub samples: Vec<f32>,
+}
+
+impl Curve {
+    /// This curve at `frame`, or `None` when it has nothing to say yet.
+    ///
+    /// ⚠️ **`None` is not zero.** A curve that has not started leaves the
+    /// node's own static value alone; substituting zero would collapse every
+    /// scale still waiting to begin. Transcribed from the game's evaluator.
+    pub fn value_at(&self, frame: f32) -> Option<f32> {
+        if self.length <= 0 {
+            return None;
+        }
+        let length = self.length as f32;
+        let mut time = frame;
+        if self.looping != 0 {
+            // ⚠️ The game adds `length << 6`, not `length`.
+            while time < 0.0 {
+                time += (self.length << 6) as f32;
+            }
+            time = (time as i64).rem_euclid(self.length) as f32;
+        } else {
+            if frame < 0.0 {
+                time = 0.0;
+            }
+            if time >= length {
+                time = length - 1.0;
+            }
+        }
+        if time < self.start as f32 {
+            return None;
+        }
+        if time > self.end as f32 {
+            time = self.end as f32;
+        }
+        let at = (time - self.start as f32) as usize;
+        self.samples.get(at).copied()
+    }
 }
 
 /// One effect, as `bleck` described it.
@@ -134,6 +214,12 @@ pub struct Draw {
     /// Index into the manifest's shared `meshes` table.
     #[serde(default)]
     pub mesh: usize,
+    /// Every node from the part's root down to the one issuing this draw.
+    ///
+    /// ✅ What lets the viewer pose the draw at an arbitrary time: each node is
+    /// evaluated at that frame and the results multiplied, parent first.
+    #[serde(default)]
+    pub chain: Vec<usize>,
     /// Index into the effect system's own bank — 0..218 for `effdata.tpl` —
     /// or negative where the material names no texture.
     ///
@@ -363,6 +449,8 @@ impl Problem {
 pub struct Library {
     entries: Vec<Entry>,
     meshes: Vec<Mesh>,
+    nodes: Vec<NodeDef>,
+    curves: Vec<Curve>,
     textures: String,
     problem: Option<Problem>,
 }
@@ -395,6 +483,8 @@ impl Library {
         Self {
             entries: manifest.effects,
             meshes: manifest.meshes,
+            nodes: manifest.nodes,
+            curves: manifest.curves,
             textures: manifest.textures,
             problem: None,
         }
@@ -408,6 +498,14 @@ impl Library {
     /// geometry was decoded, which is what `Draw::mesh` degrades against.
     pub fn meshes(&self) -> &[Mesh] {
         &self.meshes
+    }
+
+    pub fn nodes(&self) -> &[NodeDef] {
+        &self.nodes
+    }
+
+    pub fn curves(&self) -> &[Curve] {
+        &self.curves
     }
 
     pub fn len(&self) -> usize {

@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D265**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D267**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D265 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D267 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -818,8 +818,27 @@ else; pick by interest.
    that parses, renders, and is quietly one attribute short. It is counted now,
    and the count is **0** across all 360 lists. That is what caught the stride.
 
-4. ✅ **The node transforms are decoded** (D265) and ⛔ **deliberately not
-   applied.** Section 6 holds a node's local transform as a **3x4 matrix**,
+4. ✅ **Effects pose** (D266). The node transforms are decoded (D265) **and
+   applied**, driven by section 2's curves — read out of the game's own
+   evaluator at `0x8005f2d4` rather than pattern-matched, which is the method
+   that unblocked geometry twice. `dimentio reel --effect dmen_magic` now shows
+   one composed figure per frame: the purple shuriken, the distortion ring
+   growing around it, then the yellow four-pointed star. ⛔ The exploded layout
+   is gone except where a draw has no geometry at all.
+
+   ⚠️ **An effect drawing nothing at frame 0 is the data, not a fault.** Scales
+   rise from zero, so 44% of draws are flat there — 26 effects entirely. By
+   frame 1 that is 3. Any test asserting "draws at its first frame" is wrong.
+
+   🟢 Reading the evaluator also confirmed D263 and D264 **from the code**:
+   `GXSetArray(GX_VA_NRM, section 14, stride 3)` is in the game's own draw
+   function, which is the third independent route to D264's correction.
+5. ⚠️ **An export is a cache, and a stale one impersonates a bug** (D267). The
+   distortion ring drew as a solid black square; two renderer changes were made
+   chasing it before anyone checked that `work/export/textures/` was written
+   before the `I4` alpha fix. **Check the timestamp first.**
+6. ⛔ **Superseded, kept for the shape of the mistake** (D265): applying the
+   *rest pose* alone renders less than drawing everything at the origin. Section 6 holds a node's local transform as a **3x4 matrix**,
    1,349 of them at stride 48, filled exactly to node `+0x06`'s largest index.
    Section 12's translate/rotate/scale compose to the same thing on **3,738 of
    3,739 nodes**, rotating `zyx` in degrees — so the transform is established
@@ -837,7 +856,7 @@ else; pick by interest.
    invented** for one that is **correct and invisible**. The second is far
    harder to notice. `Draw.world` carries the matrix and `Transform.is_flat`
    names the problem; the viewer still draws the exploded view.
-5. 🔶 **Section 2's curve records are now the blocker** for everything above.
+7. ✅ **Section 2's curve records are decoded** (D266); this used to be the blocker for everything above.
    ✅ The route in is read: node `+0x10`/`+0x12` is a (start, count) into
    section 10's 4,752 `(tag, offset)` pairs, and 🟢 **tag 0..9 selects one of
    ten scalars** — T.xyz, R.xyz, S.xyz, alpha — confirmed against two nodes'
@@ -849,7 +868,7 @@ else; pick by interest.
      semi-transparent art comes out solid.
    ⚠️ **Do not "layer effects together" before this lands.** The shapes are
    real now, which makes a wrong composite *more* convincing, not less.
-6. 🔶 **One display list is anomalous** (D264). `item_delete`'s is **640 units
+8. 🔶 **One display list is anomalous** (D264). `item_delete`'s is **640 units
    wide and 58,642 deep**, where the other 359 are flat or near it. ⛔ Not a
    framing error — it consumes its declared size exactly — and ⛔ not a general
    misreading of Z, since two thirds of all positions carry a real non-zero Z
@@ -859,7 +878,7 @@ else; pick by interest.
    64,108 on every axis, a depth ratio of exactly 1.0, while the effect drew
    nothing. A summary statistic that collapses the axes cannot report an axis
    being wrong.
-7. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
+9. 🔶 **`effdata.dat` sections, current state.** Decoded: 0 effects, 1 parts,
    2 curves, 3 display lists, 4 textures, 5 materials, 6 matrices, 7 draws,
    8 subdraws, 9 nodes, 10 curve channels, 11 TEX0, 12 vectors, 13 POS,
    14 NRM, 15 CLR0 — the last two **measured**, not inferred (D264). ⚠️ One

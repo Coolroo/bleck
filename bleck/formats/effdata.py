@@ -109,24 +109,16 @@ still leans on it. Section 6 is 3x4 matrices reached from a node's `+0x06`.
 four bytes are one `u32` display-list offset, and section 3 is 360 GX display
 lists. `draws` returns the geometry alongside the picture; see below.
 
-## The curves, and how they are reached
+## ✅ The curves, and how a node is posed (D266)
 
-Section 10 is a flat list of **4,752 `(tag, offset)` pairs** — a `u32` tag in
-0..9, then a `u32` offset **into section 2**. The largest offset is 619,864
-against section 2's 619,936 bytes, which is what says the offsets are relative
-to that section rather than absolute.
+Section 10 is **4,752 `(u32 tag, u32 offset)` pairs**, the offset relative to
+section 2. A node names a **run** of them at `+0x10`/`+0x12`, and the tag picks
+one of ten scalars — T.xyz, R.xyz, S.xyz, alpha — which `slots_at` fills from
+the node's own static values before letting a curve overwrite one. `effcurve`
+holds the record layout; both come from the game's evaluator.
 
-A section 2 record is a `u32`, two `u16`, a zero `u32`, then `count` floats,
-where `count` is the second `u16`. ✅ **1,231 records have exactly that size**,
-measured as the gap to the next referenced offset. The rest of the offsets land
-*inside* records — a command list pointing at sub-ranges, which is why the naive
-"gap = record size" reading only accounts for a third of them.
-
-🟢 **They are plainly curves.** The first record's 60 floats are
-`6, 12, 18 ... 354, 360` — a linear ramp to a full rotation, sampled 60 times,
-which is one second at 60 fps. ⚠️ The leading `u32` is mostly ≡ 1 (mod 10) and
-runs 1..621 with 53 distinct values, the same shape as a part record's second
-`u16`; a duration in some unit is the obvious reading and is **not** established.
+⛔ **The earlier reading of a curve record is superseded**: `+0x06` is the last
+frame, not a sample count, and `u8` samples were being read as floats.
 
 ## Sections 7 and 8, which pair up
 
@@ -179,6 +171,7 @@ import struct
 from dataclasses import dataclass, field
 
 from bleck.common.errors import BleckError
+from bleck.formats.effcurve import curve_at, product, turn
 
 MAGIC = b"EFDT"
 
@@ -402,30 +395,6 @@ class Command:
     """Relative to section 2, not to the file."""
 
 
-@dataclass(frozen=True)
-class Curve:
-    """A sampled curve out of section 2.
-
-    ⚠️ `samples` is the whole of what is established. The first record reads
-    `6, 12, 18 ... 360` -- a linear ramp to a full rotation over 60 samples,
-    one second at 60 fps -- but which curve drives what is not known.
-    """
-
-    offset: int
-    leading: int
-    """The header's first `u32`. Mostly congruent to 1 mod 10, range 1..621.
-    🔶 A duration is the obvious reading and is not established."""
-
-    marker: int
-    """The first `u16`. Unestablished."""
-
-    samples: tuple
-
-    @property
-    def is_monotonic(self) -> bool:
-        return all(b >= a for a, b in itertools.pairwise(self.samples))
-
-
 def commands(data: bytes) -> list[Command]:  # pylint: disable=container-return
     """Section 10, in file order."""
     offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
@@ -434,20 +403,6 @@ def commands(data: bytes) -> list[Command]:  # pylint: disable=container-return
         Command(*struct.unpack_from(">II", data, at))
         for at in range(start, end - COMMAND_STRIDE + 1, COMMAND_STRIDE)
     ]
-
-
-def curve_at(data: bytes, offset: int) -> Curve:
-    """One curve record, by its section-2-relative offset."""
-    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
-    at = offsets[CURVE_SECTION] + offset
-    leading = struct.unpack_from(">I", data, at)[0]
-    marker, count = struct.unpack_from(">HH", data, at + 4)
-    return Curve(
-        offset=offset,
-        leading=leading,
-        marker=marker,
-        samples=struct.unpack_from(f">{count}f", data, at + CURVE_HEADER),
-    )
 
 
 #: Sections 7 and 8, which pair: 7 groups 8's entries by start and count.
@@ -738,6 +693,11 @@ def _count(data: bytes, section: int, stride: int) -> int:
     return max(end - start, 0) // stride
 
 
+def node_count(data: bytes) -> int:
+    """How many section 9 nodes the file holds."""
+    return _count(data, NODE_SECTION, NODE_STRIDE)
+
+
 def node_at(data: bytes, index: int) -> Node:
     """One section 9 node, by absolute index."""
     start, _ = _section(data, NODE_SECTION)
@@ -758,6 +718,70 @@ def node_at(data: bytes, index: int) -> Node:
     )
 
 
+#: The ten scalars a node's curves can drive, in tag order. ✅ Read off the
+#: game's own slot array at `0x8005f290`, which it fills from the node's static
+#: translate, rotate, scale and alpha before letting any curve overwrite a slot.
+SLOT_NAMES = (
+    "translate.x",
+    "translate.y",
+    "translate.z",
+    "rotate.x",
+    "rotate.y",
+    "rotate.z",
+    "scale.x",
+    "scale.y",
+    "scale.z",
+    "alpha",
+)
+SLOTS = len(SLOT_NAMES)
+
+
+def slots_at(data: bytes, index: int, frame: float) -> tuple:
+    # pylint: disable=container-return
+    """A node's ten scalars at `frame`.
+
+    ✅ **The static TRS first, then curves over the top** — which is what the
+    game does, and it matters: a node with one scale curve keeps its *own* other
+    two axes rather than falling to zero.
+    """
+    node = node_at(data, index)
+    slots = [
+        *vector_at(data, node.translate),
+        *vector_at(data, node.rotate),
+        *vector_at(data, node.scale),
+        float(node.alpha),
+    ]
+    every = commands(data)
+    for step in range(node.count):
+        at = node.curves + step
+        if not 0 <= at < len(every):
+            continue
+        command = every[at]
+        if not 0 <= command.tag < SLOTS:
+            continue
+        value = curve_at(data, command.offset).value_at(frame)
+        if value is not None:
+            slots[command.tag] = value
+    return tuple(slots)
+
+
+def local_at(data: bytes, index: int, frame: float) -> Transform:
+    """A node's own transform at `frame`, its curves applied.
+
+    ⚠️ Rotates **z, then y, then x, in degrees** — the order D265 measured
+    against section 6's stored matrices, which agree on 3,738 of 3,739 nodes.
+    """
+    slots = slots_at(data, index, frame)
+    spin = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    for which in (2, 1, 0):
+        spin = product(spin, turn(which, slots[3 + which]))
+    out: list = []
+    for row in range(3):
+        out.extend(spin[row * 3 + col] * slots[6 + col] for col in range(3))
+        out.append(slots[row])
+    return Transform(tuple(out))
+
+
 @dataclass(frozen=True)
 class Placed:
     """A node, and where it lands once its parents' transforms are applied."""
@@ -765,8 +789,16 @@ class Placed:
     index: int
     world: Transform
 
+    chain: tuple = ()
+    """Every node from the part's root down to this one, inclusive.
 
-def _placed(data: bytes, base: int, root: int) -> list[Placed]:
+    ⚠️ Exported so a viewer can pose the node itself, at whatever time it is
+    scrubbed to. `world` is one frame's answer; the chain is the question."""
+
+
+def _placed(
+    data: bytes, base: int, root: int, frame: float | None = None
+) -> list[Placed]:
     # pylint: disable=container-return
     """`root` and everything under it, each with its accumulated transform.
 
@@ -777,21 +809,27 @@ def _placed(data: bytes, base: int, root: int) -> list[Placed]:
     total = _count(data, NODE_SECTION, NODE_STRIDE)
     found: list[Placed] = []
     seen: set = set()
-    pending = [(root, IDENTITY)]
+    pending = [(root, IDENTITY, ())]
     while pending and len(found) < WALK_LIMIT:
-        index, parent = pending.pop()
+        index, parent, above = pending.pop()
         if not 0 <= index < total or index in seen:
             continue
         seen.add(index)
         node = node_at(data, index)
-        here = parent.then(matrix_at(data, node.matrix))
-        found.append(Placed(index, here))
+        own = (
+            matrix_at(data, node.matrix)
+            if frame is None
+            else local_at(data, index, frame)
+        )
+        here = parent.then(own)
+        chain = (*above, index)
+        found.append(Placed(index, here, chain))
         cursor = node.child
         while cursor != NO_INDEX and len(found) < WALK_LIMIT:
             absolute = base + cursor
             if not 0 <= absolute < total:
                 break
-            pending.append((absolute, here))
+            pending.append((absolute, here, chain))
             cursor = node_at(data, absolute).sibling
     return found
 
@@ -881,17 +919,26 @@ class Draw:
     offset: int
     descriptor: int
 
+    chain: tuple = ()
+    """Every node from the part's root down to the one that issued this draw.
+
+    ✅ What a viewer needs to pose the draw at an arbitrary time (D266): each
+    node in the chain is evaluated at that frame and the results multiplied,
+    parent first."""
+
     world: Transform = IDENTITY
     """Where the issuing node lands once its parents' transforms are applied.
 
-    ⛔ **Do not pose an effect with this alone.** 44% of drawing nodes are flat
+    ⛔ **Do not pose an effect from the rest pose alone.** 44% of nodes are flat
     in the rest pose and 26 of 139 effects are flat throughout it (D265) —
     their scale is animated up from zero by section 10's curves, which are not
     read. Applying this without them renders *less* than drawing every part at
     the origin."""
 
 
-def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
+def draws(
+    data: bytes, effect: Effect, part: Part, frame: float | None = None
+) -> list[Draw]:
     # pylint: disable=container-return
     """Every draw `part` issues, in the order the draw code reaches them.
 
@@ -904,7 +951,7 @@ def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
     found: list[Draw] = []
     groups_all = groups(data)
     entries_all = entries(data)
-    for placed in _placed(data, effect.extra, effect.extra + part.first):
+    for placed in _placed(data, effect.extra, effect.extra + part.first, frame):
         node = node_at(data, placed.index)
         if not 0 <= node.draw < len(groups_all):
             continue
@@ -915,6 +962,7 @@ def draws(data: bytes, effect: Effect, part: Part) -> list[Draw]:
                     picture=_picture(data, entry.material),
                     offset=entry.display_list,
                     descriptor=entry.descriptor,
+                    chain=placed.chain,
                     world=placed.world,
                 )
             )

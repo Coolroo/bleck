@@ -18701,3 +18701,166 @@ invisible* — and the second is much harder to notice.
 before any code was written** — #29's "four nodes make the star" (D263) and
 #31's "applying the transforms will compose the figure". Both took under an
 hour to check and would have cost a day each to discover afterwards.
+
+## D266 — The curve evaluator, read out of the game, and effects now pose (2026-08-02)
+
+D265 left the transforms decoded and unusable: the rest pose collapses 44% of
+draws. The curves are what lift them, and rather than pattern-matching section 2
+again — which had already produced a wrong header — **the game's own evaluator
+was read**. That is the method that unblocked model geometry (D206) and effect
+geometry (D263), and it settled this in one pass.
+
+### ✅ Where it lives
+
+`eff_sub.c` spans `0x8005bf08`..`0x800616e4`. The same evaluation loop is
+inlined **three times** — for a material's RGBA at `0x8005c688`, a texture's UV
+animation at `0x8005d104`, and a node's transform at `0x8005f2d4`. All three
+read the same record.
+
+⚠️ **`r21` is the 16-pointer header**, so `lwz rN, 4*S(r21)` names section `S`
+outright. That one observation makes the whole function readable.
+
+### ✅ The curve record, field for field
+
+```
++0x00 u32  length in frames -- and the modulus when looping
++0x04 u16  first frame this curve speaks for
++0x06 u16  last frame
++0x08 u16  loop flag
++0x0A u16  sample format: 0 = f32, else u8
++0x0C      samples
+```
+
+Evaluation, branch for branch:
+
+```
+if loop:  while t < 0: t += length << 6;   t = int(t) % length
+else:     if t < 0: t = 0;   if t >= length: t = length - 1
+if t < start: leave the slot alone        <- not zero
+t = min(t, end)
+value = samples[int(t - start)]
+```
+
+⛔ **Three things the earlier reading had wrong**, and each explains a symptom:
+
+| earlier | actually | symptom it caused |
+|---|---|---|
+| `+0x06` is a sample count | the **last frame** | a third of offsets appeared to point *inside* other records |
+| samples are always `f32` | `u8` when `+0x0A` is set | `-FLT_MAX` read as a "sentinel"; it was a byte pattern |
+| `+0x08` is an always-zero word | loop flag and format | — |
+
+⚠️ **`length << 6`**, not `length`, is what the game adds when normalising a
+negative time. A plain `+= length` is the obvious guess and is wrong.
+
+### ✅ The ten slots, and that curves *override* rather than replace
+
+At `0x8005f22c` the node evaluator builds a ten-float array before touching a
+curve, and `addi r7,r1,200` is the base the evaluator writes into with
+`stfsx f0, r7, tag*4`:
+
+| slot | filled from | | slot | filled from |
+|---|---|---|---|---|
+| 0-2 | `section12[node+0x08]` translate | | 6-8 | `section12[node+0x0C]` scale |
+| 3-5 | `section12[node+0x0A]` rotate | | 9 | `node+0x0E` alpha byte |
+
+🟢 So **tag 0..9 is T.xyz, R.xyz, S.xyz, alpha** — not inferred, read. And a
+curve overwrites *one slot*, leaving the node's other axes at their static
+values. A node with only a scale-Y curve keeps its own scale X.
+
+### 🟢 The same function confirms D263 and D264 outright
+
+Reading it also settled, from the code rather than from fit:
+
+| | game says | matches |
+|---|---|---|
+| `GXSetArray(GX_VA_POS, sec 13, 6)` | stride 6 | D263 |
+| `GXSetArray(GX_VA_NRM, sec 14, **3**)` | stride 3 | **D264's correction** |
+| `GXSetArray(GX_VA_CLR0, sec 15, 4)` | stride 4 | D264 |
+| `GXSetArray(GX_VA_TEX0, sec 11, 8)` | stride 8 | D263 |
+| entry `+0x04` as one `u32` into section 3 | display-list offset | D263 |
+| `rlwinm r23,r3,17,31,31` | bit 15 tested as a flag | D263 |
+| material stride 16, texture stride 28 | | D258 |
+
+⚠️ **The stride-3 normal is the one that matters.** D263 assigned it by GX
+convention and got it wrong; D264 corrected it by measurement; the game now says
+so directly. Three independent routes, one answer.
+
+### ✅ What it does to the corpus
+
+| frame | live draws | flat | effects drawing nothing |
+|---|---|---|---|
+| 0 (rest) | 1,650 | 1,306 | **26** |
+| 1 | 2,080 | 876 | **3** |
+| 30 | 2,155 | 801 | 9 |
+
+`item_fire` — which the handoff cites as reeling "as a flame swirl" and which
+vanishes at rest — has **5 live draws by frame 10**. `dmen_magic`'s node 1369
+sweeps R.z through 0° → 45° → 180° → 360° over 40 frames: the shuriken spinning,
+exactly the motion D262 predicted from that static `360`.
+
+### 🟢 The acceptance test, passed
+
+`dimentio reel --effect dmen_magic` now shows **one composed figure per frame**
+rather than six pieces on an invented ring: the purple shuriken, the distortion
+ring growing around it, then the yellow four-pointed star with concave sides.
+That is the gameplay screenshot.
+
+### What shipped
+
+`effects.json` is **schema 3**: a `nodes` table (static TRS + curve references)
+and a `curves` table (2,940 deduplicated sample arrays), plus a `chain` on each
+draw. ⚠️ **The viewer poses rather than being handed a pose** — an effect's
+transform is a function of time, so shipping one frame's matrices would ship the
+one frame that does not work. 9.5 MB.
+
+⛔ **The exploded layout is gone** except for a draw with *no* geometry, where
+there is no measured position to use instead.
+
+### ⚠️ Consequences for what the tests can assert
+
+Three assertions had to be relaxed, and each relaxation is a fact:
+
+- "every effect draws at its first frame" — **false now, and correctly so.** An
+  effect whose scale rises from zero draws nothing at frame 0. The test asks for
+  a draw *somewhere* in the reel.
+- "painted == declared" — **at most**, not exactly. A part flat at every sampled
+  frame never paints. ⚠️ Backed by a corpus check that ≥80% of declared parts do
+  paint, or relaxing it would have passed a renderer that drew nothing.
+- An effect that draws nothing anywhere must be **explained**: too deep to frame
+  (D264), never posed above zero scale, or sparse art missed at this `--size`
+  (D259). The report names whichever applies.
+
+## D267 — Alpha blending, and a stale texture export that looked like a renderer bug (2026-08-02)
+
+With the posing in, `dmen_magic`'s distortion ring drew as a **solid black
+square**. Two separate causes, and the first was not where it looked.
+
+### ✅ The rasteriser now blends
+
+`Paint` gained `blended`, and a fragment with alpha below 255 is composited onto
+what is there. ⛔ **Depth is not written for a blended fragment** — a
+semi-transparent sprite must not occlude what is drawn after it, or the first
+sprite of a stack hides every one behind it and reads as parts not running.
+
+⚠️ **Model art does not get this and must not.** glTF's `MASK` means exactly
+"no blending": a cut-out texel is opaque or absent, and blending one at its
+stated alpha would wash out every model on the disc. Effect sprites are
+semi-transparent throughout, so they carry the flag and models do not.
+
+### ⛔ And the black square was a stale export, not the renderer
+
+Blending changed nothing, because the ring's alpha was **255 everywhere**. The
+image is `I4`, and `texdecode` already expands intensity to `(I, I, I, I)` — its
+own docstring says "decoding one with `A = 255` makes every cut-out effect quad
+a solid rectangle". The decoder was right; `work/export/textures/` was written
+on **31 July**, before that fix.
+
+⚠️ **An export is a cache, and a stale one impersonates a bug in whatever reads
+it.** Two changes were made to the renderer chasing this before the file's
+timestamp was checked. `bleck texture export` re-run, and the ring renders as
+the wispy cloud it is.
+
+🔶 Whether effect materials also want **additive** blending is untested. The
+game's blend mode lives somewhere in the 16-byte material record and is not
+read; alpha compositing is right for the cut-out art and may be wrong for a
+glow.

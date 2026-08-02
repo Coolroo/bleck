@@ -9,11 +9,10 @@
 //! record, `bleck` resolves it into the export, and this binds it — `sweat`
 //! reels as a blue droplet.
 //!
-//! ⛔ **The placement is not.** Section 9's node transforms are read but not
-//! applied, so where a quad sits is a deterministic display choice. The report
-//! says so on every run: a sheet of genuine artwork in invented positions is
-//! far more convincing than the flat coloured quads that preceded it, and so
-//! far more likely to be quoted as "where this effect appears".
+//! ✅ **And so is the placement**, since D266. Each draw is posed by walking
+//! its node chain and evaluating that node's curves at the frame - the game's
+//! own scheme, transcribed from its evaluator - so a reel shows the parts
+//! composed where the data puts them rather than on an invented ring.
 //!
 //! What it settles is that the data and the renderer agree — the parts the
 //! manifest calls running are the parts that reach the frame, every part
@@ -23,7 +22,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use crate::data::catalog::Catalog;
-use crate::data::effects::{frame_at, image_at, Entry, Library, Mesh as Geometry};
+use crate::data::effects::{
+    frame_at, image_at, Curve, Entry, Library, Mesh as Geometry, NodeDef,
+};
 use crate::data::texture::Texture;
 use crate::render::{self, effect, Background, Camera, Image, Piece, Rgba, Size, View};
 use crate::shot::{
@@ -249,6 +250,12 @@ impl Report {
         } else {
             "some parts did not reach their frame — occluded, or missing".to_owned()
         });
+        if self.never_posed() {
+            said.push(
+                "⚠️ every sampled frame posed this effect flat, so nothing was drawn — its                  scales rise from zero on their own curves and none had risen yet. Try more                  --frames (D266)."
+                    .to_owned(),
+            );
+        }
         if self.too_deep() {
             said.push(format!(
                 "⚠️ this effect's geometry is {:.0}x deeper than it is wide, so a \
@@ -272,6 +279,17 @@ impl Report {
     /// show — the one cause of a blank cell that raising `--size` will not fix.
     pub fn too_deep(&self) -> bool {
         self.depth_ratio > DEEP
+    }
+
+    /// Whether every sampled frame posed the effect flat, so nothing was drawn
+    /// anywhere in the reel.
+    ///
+    /// ⚠️ **Not a fault, and not the same as "no images".** An effect's scales
+    /// rise from zero on curves of their own; if none of them has risen at any
+    /// frame this reel happened to sample, there is genuinely nothing to draw.
+    /// More `--frames` may find it (D266).
+    pub fn never_posed(&self) -> bool {
+        self.frames.iter().all(|frame| frame.pieces == 0)
     }
 
     /// The first frame that drew nothing despite having a painted part.
@@ -300,7 +318,7 @@ impl Report {
             );
         }
         let shape = if self.stood_in == 0 {
-            "each is drawn as its own geometry (D263)".to_owned()
+            "each posed as its own geometry (D263, D266)".to_owned()
         } else {
             format!(
                 "⚠️ {} piece(s) fell back to a stand-in billboard, so this export carries no \
@@ -309,9 +327,9 @@ impl Report {
             )
         };
         format!(
-            "{} of {} part(s) drew a decoded image (D258); {shape}. ⛔ Where one part sits \
-             relative to another is still a display choice — the node transforms are read but \
-             not applied, so this is an exploded view, not where the game puts them.",
+            "{} of {} part(s) drew a decoded image (D258); {shape}. ⚠️ A part whose scale has \
+             not risen from zero yet draws nothing at that frame — that is the data, not a \
+             fault: 44% of the file's draws are flat at frame 0.",
             self.painted, self.parts
         )
     }
@@ -419,7 +437,17 @@ pub fn take(request: &Request) -> Result<Report, String> {
 
     let sampled = sample(entry, request.frames);
     let art = resolve_art(entry, &request.export, library.textures());
-    let built = draw(entry, &sampled, &art, library.meshes(), request);
+    let built = draw(
+        entry,
+        &sampled,
+        &art,
+        Scene {
+            meshes: library.meshes(),
+            nodes: library.nodes(),
+            curves: library.curves(),
+        },
+        request,
+    );
     write_png(&request.out, &built.sheet.pixels, built.sheet.size)?;
     Ok(Report {
         name: entry.name.clone(),
@@ -517,16 +545,27 @@ fn resolve_art(
         .collect()
 }
 
+/// The shared tables a pose is built from, passed together because they are
+/// only meaningful together.
+#[derive(Clone, Copy)]
+struct Scene<'a> {
+    meshes: &'a [Geometry],
+    nodes: &'a [NodeDef],
+    curves: &'a [Curve],
+}
+
 fn draw(
     entry: &Entry,
     times: &[f32],
     art: &[Vec<Option<Texture>>],
-    meshes: &[Geometry],
+    scene: Scene<'_>,
     request: &Request,
 ) -> Built {
     let palette = effect::Art {
         images: art,
-        meshes,
+        meshes: scene.meshes,
+        nodes: scene.nodes,
+        curves: scene.curves,
     };
     let cell = Size::new(request.size, request.size);
     let columns = grid_columns(times.len());
@@ -1103,7 +1142,7 @@ mod real_export_tests {
         assert_eq!(report.painted, 4, "chaos lost its decoded images");
         assert!(report.frames[0].painted > 0, "nothing was textured at 0s");
         let caveat = report.lines().pop().expect("a caveat");
-        assert!(caveat.contains("display choice"), "{caveat}");
+        assert!(caveat.contains("posed as its own geometry"), "{caveat}");
         let _ = std::fs::remove_file(out);
     }
 
@@ -1119,6 +1158,7 @@ mod real_export_tests {
         let library = Library::load(&export);
         let folder = out_dir();
         let (mut reeled, mut empty, mut textured) = (0, 0, 0);
+        let (mut shown, mut claimed) = (0usize, 0usize);
         let mut deep: Vec<String> = Vec::new();
         for entry in library.entries() {
             let out = folder.join("sweep.png");
@@ -1136,17 +1176,22 @@ mod real_export_tests {
             };
             match take(&asked) {
                 Ok(report) => {
-                    // ⚠️ An effect that draws nothing must **say why**. The
-                    // one that does is `item_delete`, whose geometry is 92x
-                    // deeper than wide, and the report names that (D264).
-                    // Excusing it without the explanation would let a real
-                    // rendering regression through as "known".
-                    if report.frames[0].drawn > 0.0 {
-                        // drew
-                    } else {
+                    // ⚠️ **Somewhere in the reel, not at frame 0.** Now that
+                    // parts are posed, an effect whose scale rises from zero
+                    // draws nothing at its first frame — 44% of draws are flat
+                    // there — and demanding otherwise would assert against the
+                    // data. What must hold is that the effect appears at *some*
+                    // point in its own timeline.
+                    if !report.frames.iter().any(|frame| frame.drawn > 0.0) {
                         assert!(
-                            report.too_deep(),
-                            "{} drew nothing at its first frame and the report                              gives no reason",
+                            // Three documented reasons, all reported to the
+                            // reader: geometry too deep to frame (D264), never
+                            // posed above zero scale (D266), or sparse art that
+                            // missed every pixel at this --size (D259).
+                            report.too_deep()
+                                || report.never_posed()
+                                || report.blank_frame().is_some(),
+                            "{} drew nothing anywhere in its reel, and the                              report gives no reason",
                             entry.name
                         );
                         deep.push(entry.name.clone());
@@ -1158,11 +1203,18 @@ mod real_export_tests {
                         .iter()
                         .filter(|part| part.draws.iter().any(|d| d.image().is_some()))
                         .count();
-                    assert_eq!(
-                        report.painted, declared,
-                        "{}: {declared} part(s) declare an image, {} were painted",
-                        entry.name, report.painted
+                    // ⚠️ **At most**, not exactly. A part flat at every
+                    // sampled frame never draws, so it never paints — that is
+                    // its own animation, not a missing image. Painting *more*
+                    // parts than declare an image would still be a fault.
+                    assert!(
+                        report.painted <= declared,
+                        "{}: {declared} part(s) declare an image, {} painted",
+                        entry.name,
+                        report.painted
                     );
+                    shown += report.painted;
+                    claimed += declared;
                     textured += usize::from(report.painted > 0);
                     reeled += 1;
                 }
@@ -1174,11 +1226,21 @@ mod real_export_tests {
             let _ = std::fs::remove_file(out);
         }
         assert!(reeled > 100, "only {reeled} effects reeled ({empty} empty)");
+        // ⛔ The teeth the per-effect check lost. Relaxing to `<=` would pass a
+        // renderer that painted nothing at all, so the corpus has to show that
+        // the great majority of parts declaring an image really do draw one.
+        assert!(
+            shown * 10 >= claimed * 8,
+            "only {shown} of {claimed} declared part(s) ever painted"
+        );
         // ✅ Empty: with the bounds measured per axis rather than as a radius,
         // every effect in the export draws at its first frame — including the
         // one whose geometry is 92x deeper than wide, which the report still
         // flags so a reader knows why it is a sliver (D264).
-        assert!(deep.is_empty(), "drew nothing, explained only by depth: {deep:?}");
+        // ⚠️ A handful of effects sample flat at every frame of a 3-frame reel
+        // — their scales rise later. Pinned loosely so a renderer that stopped
+        // drawing altogether still fails loudly.
+        assert!(deep.len() < 12, "{} effects drew nothing: {deep:?}", deep.len());
         // ⚠️ The control on the assertion above: if every effect declared no
         // images, `painted == declared` would hold everywhere at zero and
         // the sweep would pass having verified nothing.

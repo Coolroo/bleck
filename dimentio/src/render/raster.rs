@@ -121,6 +121,8 @@ pub(super) enum Paint<'a> {
         tint: Tint,
         /// The flat shading term the texel is multiplied by.
         intensity: f32,
+        /// Composite onto what is there rather than replacing it.
+        blended: bool,
         /// The material's `alphaMode` was `MASK`, so a transparent texel is a
         /// hole rather than a dark pixel.
         masked: bool,
@@ -253,27 +255,40 @@ fn tinting(tint: &Tint, triangle: &[Point; 3], weights: &Weights) -> [f32; 4] {
     }
 }
 
+/// A pixel's colour and how much of it to lay down.
+///
+/// ⚠️ `alpha` is 255 for everything that is not blended, so the caller's
+/// composite is a no-op there rather than a special case.
+pub(super) struct Fragment {
+    colour: Rgba,
+    alpha: u8,
+}
+
 /// The colour a pixel takes, or `None` when a masked texel discards it.
 ///
 /// ⚠️ **The mask is applied before the cutoff, not after.** The game multiplies
 /// the alphas in the TEV and only then runs the alpha compare, so a texel the
 /// base leaves opaque and the mask leaves clear is a hole (D247). Testing the
 /// base's own alpha first would draw the shape solid and look plausible.
-fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba> {
+fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragment> {
     match paint {
         Paint::Flat { colour, tint } => {
             let shade = tinting(tint, triangle, weights);
-            Some(Rgba::new(
-                scale(colour.r, shade[0]),
-                scale(colour.g, shade[1]),
-                scale(colour.b, shade[2]),
-            ))
+            Some(Fragment {
+                colour: Rgba::new(
+                    scale(colour.r, shade[0]),
+                    scale(colour.g, shade[1]),
+                    scale(colour.b, shade[2]),
+                ),
+                alpha: 255,
+            })
         }
         Paint::Textured {
             texture,
             corners,
             tint,
             intensity,
+            blended,
             masked,
             cutoff,
             sampling,
@@ -301,7 +316,10 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Rgba>
             if *masked && texel.a < *cutoff {
                 return None;
             }
-            Some(Rgba::new(texel.r, texel.g, texel.b).shaded(*intensity))
+            Some(Fragment {
+                colour: Rgba::new(texel.r, texel.g, texel.b).shaded(*intensity),
+                alpha: if *blended { texel.a } else { 255 },
+            })
         }
     }
 }
@@ -344,11 +362,33 @@ pub(super) fn raster(image: &mut Image, depth: &mut [f32], triangle: &[Point; 3]
                 continue;
             }
             let weights = Weights { at: [w0, w1, w2] };
-            let Some(colour) = fill(paint, triangle, &weights) else {
+            let Some(fragment) = fill(paint, triangle, &weights) else {
                 continue;
             };
-            depth[slot] = near;
-            image.set(x, y, colour);
+            if fragment.alpha == u8::MAX {
+                depth[slot] = near;
+                image.set(x, y, fragment.colour);
+                continue;
+            }
+            // ⛔ **Depth is not written for a blended fragment.** A
+            // semi-transparent sprite must not occlude what is drawn after it;
+            // writing depth here makes the first sprite of a stack hide every
+            // one behind it, which looks exactly like the parts not running.
+            let under = image.pixel(x, y);
+            let over = |a: u8, b: u8| {
+                ((a as u16 * fragment.alpha as u16
+                    + b as u16 * (255 - fragment.alpha) as u16)
+                    / 255) as u8
+            };
+            image.set(
+                x,
+                y,
+                Rgba::new(
+                    over(fragment.colour.r, under.r),
+                    over(fragment.colour.g, under.g),
+                    over(fragment.colour.b, under.b),
+                ),
+            );
         }
     }
 }
@@ -691,6 +731,7 @@ mod texture_tests {
                     },
                 ],
                 &Paint::Textured {
+                    blended: false,
                     tint: None,
                     texture: &base,
                     corners: [Uv::new(0.5, 0.5); 3],
@@ -741,6 +782,7 @@ mod texture_tests {
             &mut depth,
             &near,
             &Paint::Textured {
+                blended: false,
                 tint: None,
                 texture: surface.texture,
                 corners: [Uv::new(0.5, 0.5); 3],
