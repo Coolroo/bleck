@@ -229,7 +229,7 @@ and seek be tested with no device present.
 
 ### What has been checked, and how
 
-`cargo test` — 130 tests, no display required and no sound card. The renderer's
+`cargo test` — 253 tests, no display required and no sound card. The renderer's
 evidence is a
 rendered cube covering **29.1%** of a 200×200 frame in exactly **4 colours**
 (background plus the three faces a cube shows from a general direction), a
@@ -293,6 +293,27 @@ the machine this was written on cannot capture its own interactive desktop, so
 nobody has *looked* at any mode. What the tests cannot cover is whether the
 drag direction feels right, whether playback looks smooth, and whether the
 panels are laid out sensibly.
+
+## Where the source is
+
+Four top-level modules, and nothing else at the top level but `main.rs`:
+
+| module | what it owns |
+|---|---|
+| `src/data/` | reading what `bleck` exported — manifests, glTF, PNG, WAV. **No game format is decoded anywhere in this program** |
+| `src/render/` | the software rasteriser: camera, triangles, blending, backdrops, waveforms |
+| `src/app/` | the window — one file per mode, plus the state they share |
+| `src/headless/` | `shot` and `reel`: the same rendering written to a file instead of a screen |
+
+⚠️ **A module with more than a page of tests is a directory**, with its tests in
+a file beside the code they cover — `data/mesh/tests.rs`,
+`render/raster/texture_tests.rs`, `headless/reel/real_export_tests.rs`. There
+are no `#[path]` attributes: a test file lives where its module lives.
+
+⚠️ **Dependencies run one way.** Inside `data/mesh`, `geometry` knows nothing of
+materials and `paint` nothing of files; inside `headless`, `shot` and `reel`
+share `args`, `sheet` and `encode` and neither reads the other. A submodule that
+reaches back into its parent's siblings is the seam being in the wrong place.
 
 ## Why Rust, and what that must not cost
 

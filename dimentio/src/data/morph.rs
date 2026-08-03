@@ -48,7 +48,7 @@ const NEGLIGIBLE: f32 = 1e-6;
 ///
 /// ⚠️ **Dense here whatever the file said.** A `.glb` may encode a target as a
 /// sparse accessor, as a full buffer view, or as no buffer view at all;
-/// `gltf_accessor::read_vec3` flattens all three into one delta per position
+/// `gltf::accessor::read_vec3` flattens all three into one delta per position
 /// before it reaches this type. Playing a clip walks every position anyway, so
 /// keeping the sparsity would buy a branch per vertex and nothing else.
 #[derive(Debug, Clone, Default, PartialEq)]

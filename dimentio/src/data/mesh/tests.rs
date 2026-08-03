@@ -1,8 +1,8 @@
-//! The unit tests for `mesh.rs`.
+//! The unit tests for the mesh: the OBJ reader, the shape spans, and the
+//! bounds the camera frames itself from.
 //!
-//! ⚠️ Split out only to keep that module under a thousand lines, the same way
-//! `mesh_real_tests.rs` was. `#[path]` in `mesh.rs` keeps the module where it
-//! was, so these still read `super::*`.
+//! Fixtures written here are a triangle or two; what a real export does is
+//! `real_export_tests`.
 
 use super::*;
 use crate::data::scratch::Scratch;

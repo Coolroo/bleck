@@ -19223,3 +19223,112 @@ after every split, because an import cycle is invisible to per-file linting.
 commands and `bleck mod --help` the same 12 actions; `bleck/api/` emits the same
 documents (its own tests cover the shapes, and no `api/` module was edited);
 `mkdocs build --strict` passes.
+
+## D273 - Dimentio reorganised: `headless/`, and the end of `#[path]` (2026-08-02)
+
+**Structural only. Rendered output is byte-identical**, verified against a build
+of the previous commit. Companion to D272, which did the Python side the same
+day; the two agreed on a seam without consulting each other, which is the most
+interesting thing in either entry.
+
+### The loudest signal was where a file *was not*
+
+`reel.rs` (1,399) and `shot.rs` (1,286) were the two largest files in the crate
+and sat flat beside `main.rs` with no module directory, while everything smaller
+was already in `app`/`data`/`render`. The cost was not the line count:
+**`reel` imported twelve names out of `shot`** - `blit`, `measure`, `Sheet`,
+`Coverage`, `write_gif`, `write_png`, `wants_gif`, `grid_columns`, `divided`,
+`number`, `named_background`, `SIZE_LIMIT` - so the effect command could not be
+changed without reading the model command, and the shared machinery was
+documented inside whichever of the two happened to own it.
+
+- ✅ Both are now `src/headless/`, a fourth top-level module beside `app`, `data`
+and `render`, with three shared modules below them: `args` (reading a number or
+a background name), `sheet` (the grid, the blit, the coverage measures) and
+`encode` (PNG and GIF). `shot` and `reel` read from those three and neither
+reads the other.
+
+### Split where the piece needed nothing from its parent
+
+Six extractions passed that test outright, and each is a module a reader can
+finish without the file it came from:
+
+| module | what it owns | why it could leave |
+|---|---|---|
+| `render/effect/pose.rs` | the node-chain matrix maths (D265, D266) | takes a node and a curve list as *arguments*; knows nothing of effects, parts, quads or the camera |
+| `render/raster/blend.rs` | the `GXSetBlendMode` transcription (D270) | needs only `Blend` and `Rgba` |
+| `data/mesh/geometry.rs` | `Vec3`, `Face`, `Uv`, `Bounds` | no materials, no files, no manifest |
+| `data/mesh/paint.rs` | `Shape`, `Paint`, `Mask`, `Batch`, `Surface` | reads geometry; knows nothing of files |
+| `data/gltf/accessor/` | one accessor, dense or sparse | reads a byte range; knows nothing of primitives or materials |
+| `headless/sheet.rs` | the contact sheet and its measures | handed cells already rendered |
+
+⚠️ `render/effect/pose.rs` is the same seam `effgeom.py`/`effcurve.py`
+took, for the same reason and in the same direction: the parent imports it and
+it never imports back. D272 reached it independently on the Python side.
+
+⚠️ **The compiler names the direction for you.** Every visibility
+widening the split forced - `pub(super) fn around`, `pub(super) fn posed`,
+`pub(super) const MANIFEST` - is a dependency edge stated out loud. Three
+upward references remain and all three are error or identity types
+(`mesh/library.rs` -> `super::Problem`, `mesh/obj.rs` -> `super::Mesh`,
+`reel/compose.rs` -> `super::request::Request`), which is a DAG rather than a
+tangle.
+
+### ⛔ `#[path]` is a file-layout workaround that documents itself
+
+Four test modules - `mesh_tests.rs`, `mesh_real_tests.rs`,
+`gltf_shape_tests.rs`, `gltf_sparse_tests.rs` - sat as siblings of their parents
+in `src/data/`, held in place by `#[path]`, and **each carried a header
+explaining the mechanism**: "Split out only to keep this module under a thousand
+lines; `#[path]` keeps it here." Three of those headers also cited each other.
+
+- ✅ **Rule adopted: a module with more than a page of tests is a directory, and
+its tests are a file inside it.** Small inline `mod tests { }` stays inline.
+There are now **zero `#[path]` attributes in the crate**, and
+`data/mesh/tests.rs` needs no header at all. The ten lines of scaffolding prose
+that went with the old scheme are the only comment lines this work deleted.
+
+### The instrument first: a green `cargo test` does not prove it still draws
+
+253 tests passed before and after, but a reorganisation that silently stopped
+drawing would pass every one of them that does not look at pixels. Two things
+were done instead of trusting the count:
+
+1. **Zero real-export tests skipped.** `work/export` is on this machine, so the
+   139-effect reel sweep and the 864-model shot sweep genuinely ran rather than
+   printing "no work/export; skipped" - which is what they do in CI and what a
+   green run would otherwise mean.
+2. **The previous commit was built and run side by side.** `git archive HEAD`
+   into a temp directory, `cargo build --release`, and both binaries pointed at
+   the same export. `chaos.png`, `sweat.gif` and `e_lui_robo.png` came out
+   **byte-identical**; the three reports, `--help`, and six error paths matched
+   character for character *and* on exit code.
+
+⚠️ The byte comparison is the load-bearing one. The reports agreeing shows
+the counting is unchanged; only the files agreeing shows the *pixels* are.
+
+### `cargo fmt --check` was already failing, in five files
+
+Not caused here - the baseline exits 1 with a 127-line diff. All five files were
+being rewritten anyway, so `cargo fmt` settled it. One of its changes would have
+unstacked `slots_at`'s ten scalars from three-to-a-row (translate, rotate,
+scale, alpha) into ten separate lines, deleting the only thing that says which
+slot is which; that function now carries `#[rustfmt::skip]` and a comment naming
+the rows.
+
+### Rejected
+
+- ⛔ **Splitting `data/effects.rs` (752), `app/effects.rs` (707) and
+  `app/models.rs` (660).** All under the cap. The two `app` files are one panel
+  each and every seam in them needs `&mut Viewer` on both sides - egui draws
+  from state mutated in place, so a "layout" half and a "state" half would each
+  reach into the other, which is the wrong seam wearing a tidy name.
+- ⛔ **Moving `Image` into `render/image.rs`.** `mod image` would shadow
+  the `image` crate inside `render`, for a 50-line gain.
+- ⛔ **Deleting `reel`'s duplicate
+  `only_a_gif_extension_asks_for_an_animation`.** It is a byte-for-byte copy of
+  `shot`'s, and the honest move was to keep one. It was kept - knowingly -
+  because the run was measured against "253 or better" and losing a test to a
+  judgement call is the wrong way to spend that. Flagged here rather than
+  hidden: it is one redundant test, and deleting it is a one-line follow-up if
+  anyone would rather.

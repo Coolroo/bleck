@@ -26,9 +26,10 @@
 //! # Shape
 //!
 //! `data` reads what `bleck` exported, `render` turns a mesh or a track into
-//! pixels, and `app` is the window: four modes over one export folder — the
-//! texture browser, the model viewport, the effect table with its timeline, and
-//! the sound list with its waveform.
+//! pixels, `app` is the window — four modes over one export folder: the texture
+//! browser, the model viewport, the effect table with its timeline, and the
+//! sound list with its waveform — and `headless` is the same rendering written
+//! to a file instead of a screen.
 //!
 //! Audio playback is the one thing here that reaches hardware, and it is
 //! confined to `app::audio`.
@@ -59,9 +60,10 @@ use eframe::egui;
 
 mod app;
 mod data;
-mod reel;
+mod headless;
 mod render;
-mod shot;
+
+use headless::{reel, shot};
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();

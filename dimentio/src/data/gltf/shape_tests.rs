@@ -1,9 +1,5 @@
 //! One glTF primitive per shape: reading all of them, and hiding one.
 //!
-//! ⚠️ Split out of `gltf.rs` only to keep that module under a thousand lines,
-//! the same way `mesh_real_tests.rs` was split out of `mesh.rs`. `#[path]` in
-//! `gltf.rs` keeps the module where it was.
-//!
 //! ⛔ **The reader took `primitives[0]` and drew one limb of 92** (D236). The
 //! fixtures below are two primitives that sit far apart, so a reader that
 //! stopped at the first is visible in the vertex count, the face count and the

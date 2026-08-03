@@ -12,9 +12,10 @@
 //! it.** Applying the values in order instead reads back as a mesh that
 //! animates the wrong vertices, which looks like a decode bug in the geometry.
 //!
-//! Split out of `gltf.rs` to keep that module under a thousand lines.
+//! Reading an accessor is the one job here, and the reader next door in
+//! `gltf` never touches the three encodings itself.
 
-use super::mesh::{Uv, Vec3};
+use crate::data::mesh::{Uv, Vec3};
 
 /// glTF component types. Indices are written as the narrowest that fits, and a
 /// reader that only understood one would break on any other exporter's file.
@@ -263,9 +264,5 @@ pub(crate) fn read_indices(
 }
 
 /// The same pose written three ways, and the mesh each of them draws.
-///
-/// ⚠️ Split out only to keep this module under a thousand lines; `#[path]`
-/// keeps it here.
 #[cfg(test)]
-#[path = "gltf_sparse_tests.rs"]
 mod sparse_tests;

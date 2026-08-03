@@ -1,8 +1,7 @@
 //! Loading the real export, when one happens to be on this machine.
 //!
-//! ⚠️ Split out of `mesh.rs` only to keep that module under a thousand
-//! lines. `#[path]` in `mesh.rs` keeps the module where it was, so these
-//! still read `super::*` and are still `data::mesh::real_export_tests`.
+//! ⚠️ `work/` is git-ignored, so these skip rather than fail on a fresh clone
+//! or in CI.
 
 use super::*;
 use crate::data::texture::Wrap;
