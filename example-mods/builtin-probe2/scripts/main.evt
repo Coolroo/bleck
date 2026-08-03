@@ -1,0 +1,83 @@
+-- The second batch of getters, measured rather than guessed.
+--
+-- Same instrument as example-mods/builtin-probe (D184): every slot is pre-seeded
+-- with a sentinel so "returned 0" and "never wrote" are distinguishable, and
+-- gw[31] is set before each call so a hang names the call that caused it.
+--
+-- Ordered by confidence, deliberately. The catalog records no arity at all for
+-- the last three, so a wrong argument count is most likely there -- and a call
+-- that hangs takes everything after it with it. The ones we are sure of go
+-- first, so a late hang still leaves eight measurements.
+
+script main {
+    gw[0] = 12345
+    gw[1] = 12345
+    gw[2] = 12345
+    gw[3] = 12345
+    gw[4] = 12345
+    gw[5] = 12345
+    gw[6] = 12345
+    gw[7] = 12345
+    gw[8] = 12345
+    gw[9] = 12345
+    gw[10] = 12345
+    gw[11] = 12345
+    gw[29] = 0
+
+    -- Gameplay is reached ~45s in; 60 frames past script start is inside it.
+    wait(60)
+
+    -- Arity 1 and documented: one out-parameter each.
+    gw[31] = 1
+    evt_pouch_get_xp(gw[0])
+    gw[31] = 2
+    evt_mario_check_3d(gw[1])
+    gw[31] = 3
+    evt_sub_get_language(gw[2])
+    gw[31] = 4
+    evt_snd_get_last_sfx_id(gw[3])
+    gw[31] = 5
+    evt_guide_get_can_search(gw[4])
+    gw[31] = 6
+    evt_pouch_check_free_use_item(gw[5])
+
+    -- Arity 2, both documented as (input, &out).
+    gw[31] = 7
+    evt_guide_check_flag0(0, gw[6])
+    -- ⛔ evt_npc_get_max_hp(0, ...) never returned: its first argument is a
+    -- const char* name and 0 is a null pointer. Removed rather than "fixed"
+    -- with a guessed name -- what it does with a *real* NPC is still unmeasured.
+
+    -- ⚠️ No arity recorded for these three, so the argument count is a guess.
+    -- Last, and each in its own child, so one that never returns cannot take
+    -- the others with it.
+    gw[31] = 9
+    spawn count_probe
+    wait(30)
+    gw[31] = 10
+    spawn name_probe
+    wait(30)
+    gw[31] = 11
+    spawn cam_probe
+    wait(30)
+
+    gw[31] = 99
+}
+
+script count_probe {
+    gw[29] = 1
+    evt_npc_get_active_count(gw[8])
+    gw[29] = 2
+}
+
+script name_probe {
+    gw[29] = 10
+    evt_sub_get_mapname(gw[9])
+    gw[29] = 11
+}
+
+script cam_probe {
+    gw[29] = 20
+    evt_cam_get_pos(0, gw[10], gw[11], gw[12])
+    gw[29] = 21
+}

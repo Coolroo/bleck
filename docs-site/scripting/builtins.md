@@ -36,7 +36,7 @@ This page is generated from the MIT-licensed headers of [spm-headers](https://gi
 | Signature unknown | 280 | marked *not documented*; the argument list shown is a placeholder |
 | Argument count unknown | 146 | shown as `?`, **cannot be argument-checked** |
 | Return a result | 21 | through `&` out-parameters |
-| **Measured in a running game** | **10** | described in the **Measured** column, 1 found broken |
+| **Measured in a running game** | **20** | described in the **Measured** column, 1 found broken |
 
 !!! danger "There are no per-function descriptions, on purpose"
 
@@ -91,7 +91,7 @@ The player: position, height, facing (a point or an NPC), pose and animation, ju
 
 | Function | Args | Signature | Returns | Measured |
 |---|---|---|---|---|
-| `evt_mario_check_3d` | 1 | *not documented* | ? |  |
+| `evt_mario_check_3d` | 1 | *not documented* | ? | ✅ Writes whether the world is currently flipped into 3D. |
 | `evt_mario_direction_face` | 2 | *not documented* | ? |  |
 | `evt_mario_direction_reset` | 0 | *not documented* | ? |  |
 | `evt_mario_face_coords` | 2 | `evt_mario_face_coords(float positionX, float PositionZ)` | -- |  |
@@ -137,7 +137,7 @@ The player's inventory and stats: coins, HP, attack, items, shop points and char
 | `evt_pouch_add_xp` | 1 | *not documented* | ? |  |
 | `evt_pouch_change_char_selectable` | ? | *not documented* | ? |  |
 | `evt_pouch_change_pixl_selectable` | ? | *not documented* | ? |  |
-| `evt_pouch_check_free_use_item` | 1 | *not documented* | ? |  |
+| `evt_pouch_check_free_use_item` | 1 | *not documented* | ? | ✅ Writes whether the item pouch has a free slot. |
 | `evt_pouch_check_have_item` | 2 | `evt_pouch_check_have_item(s32 id, bool& ret)` | `ret` | ⛔ Does not return. Reproduced twice; avoid it until someone establishes why. |
 | `evt_pouch_count_free_shop_items` | ? | *not documented* | ? |  |
 | `evt_pouch_count_shop_items` | ? | *not documented* | ? |  |
@@ -153,7 +153,7 @@ The player's inventory and stats: coins, HP, attack, items, shop points and char
 | `evt_pouch_get_max_stylish_combo` | ? | *not documented* | ? |  |
 | `evt_pouch_get_next_level_xp` | 1 | *not documented* | ? | ✅ Writes the score needed for the next level into its argument. |
 | `evt_pouch_get_total_coins_collected` | ? | *not documented* | ? |  |
-| `evt_pouch_get_xp` | 1 | *not documented* | ? |  |
+| `evt_pouch_get_xp` | 1 | *not documented* | ? | ✅ Writes the player's experience points into its argument. |
 | `evt_pouch_increment_enemies_defeated` | 0 | `evt_pouch_increment_enemies_defeated(void)` | -- |  |
 | `evt_pouch_remove_item` | 1 | *not documented* | ? |  |
 | `evt_pouch_remove_item_idx` | ? | *not documented* | ? |  |
@@ -259,12 +259,12 @@ Map objects -- blocks, save blocks, arrows, pipes and their kin. Most spawn func
 | `evt_npc_flip` | ? | *not documented* | ? |  |
 | `evt_npc_flip_to` | ? | *not documented* | ? |  |
 | `evt_npc_freeze_all` | 0 | *not documented* | ? |  |
-| `evt_npc_get_active_count` | ? | *not documented* | ? |  |
+| `evt_npc_get_active_count` | ? | *not documented* | ? | ✅ Writes how many NPCs are currently active. Takes one argument, which the catalog does not record. |
 | `evt_npc_get_axis_movement_unit` | 2 | `evt_npc_get_axis_movement_unit(const char * name, f32& ret)` | `ret` |  |
 | `evt_npc_get_cur_anim` | 2 | `evt_npc_get_cur_anim(const char * name, s32 ret)` | -- |  |
 | `evt_npc_get_damage_type` | 2 | *not documented* | ? |  |
 | `evt_npc_get_hp` | ? | *not documented* | ? |  |
-| `evt_npc_get_max_hp` | 2 | *not documented* | ? |  |
+| `evt_npc_get_max_hp` | 2 | *not documented* | ? | ✅ Hangs when its name argument is null. |
 | `evt_npc_get_position` | 4 | `evt_npc_get_position(const char * name, f32& x, f32& y, f32& z)` | `x`, `y`, `z` |  |
 | `evt_npc_get_property` | 3 | `evt_npc_get_property(const char * instanceName, s32 propertyId, EvtVar ret)` | -- |  |
 | `evt_npc_get_unitwork` | 3 | *not documented* | ? |  |
@@ -464,7 +464,7 @@ Music and sound: background music on and off with fades, sound effects, and per-
 | `evt_snd_envon` | ? | *not documented* | ? |  |
 | `evt_snd_envon_f` | 3 | *not documented* | ? |  |
 | `evt_snd_get_bgm_wait_time` | 2 | `evt_snd_get_bgm_wait_time(s32 bgmPlayerId, s32& ret)` | `ret` |  |
-| `evt_snd_get_last_sfx_id` | 1 | `evt_snd_get_last_sfx_id(s32& ret)` | `ret` |  |
+| `evt_snd_get_last_sfx_id` | 1 | `evt_snd_get_last_sfx_id(s32& ret)` | `ret` | ✅ Writes the id of the most recent sound effect. |
 | `evt_snd_set_sfx_reverb_mode` | 1 | `evt_snd_set_sfx_reverb_mode(s32 mode)` | -- |  |
 | `evt_snd_sfx_fadeout` | 2 | *not documented* | ? |  |
 | `evt_snd_sfx_wait` | 1 | *not documented* | ? |  |
@@ -619,8 +619,8 @@ Odds and ends that fit nowhere else -- **reading the controller**, distance betw
 | `evt_sub_display_room_name` | 2 | *not documented* | ? |  |
 | `evt_sub_get_dist` | 5 | *not documented* | ? |  |
 | `evt_sub_get_entername` | 1 | `evt_sub_get_entername(&char* ret)` | `ret` |  |
-| `evt_sub_get_language` | 1 | *not documented* | ? |  |
-| `evt_sub_get_mapname` | ? | *not documented* | ? |  |
+| `evt_sub_get_language` | 1 | *not documented* | ? | ✅ Writes the console's language index. |
+| `evt_sub_get_mapname` | ? | *not documented* | ? | ✅ Arity is NOT one out-parameter. |
 | `evt_sub_hud_configure` | 1 | *not documented* | ? |  |
 | `evt_sub_intpl_msec_get_value` | 0 | *not documented* | ? |  |
 | `evt_sub_intpl_msec_init` | 4 | *not documented* | ? |  |
@@ -803,10 +803,10 @@ Flags controlling the in-game guidance and hint system.
 
 | Function | Args | Signature | Returns | Measured |
 |---|---|---|---|---|
-| `evt_guide_check_flag0` | 2 | `evt_guide_check_flag0(u32 flags, bool &ret)` | `ret` |  |
+| `evt_guide_check_flag0` | 2 | `evt_guide_check_flag0(u32 flags, bool &ret)` | `ret` | ✅ Takes a flag mask and writes whether it is set. |
 | `evt_guide_flag0_onoff` | 2 | `evt_guide_flag0_onoff(bool onoff, u32 flags)` | -- |  |
 | `evt_guide_flag2_onoff` | 2 | `evt_guide_flag2_onoff(bool onoff, u32 flags)` | -- |  |
-| `evt_guide_get_can_search` | 1 | *not documented* | ? |  |
+| `evt_guide_get_can_search` | 1 | *not documented* | ? | ✅ Writes whether Tippi's search is currently allowed. |
 
 ### `evt_offscreen`
 

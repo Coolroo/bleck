@@ -19034,3 +19034,79 @@ use instead.
 than the four axes those rows put the fixture on — and one assertion's pixel
 floor came down with a note saying why. The property under test is that each
 cell rendered something of its own, not how large it is.
+
+## D271 — Eight more builtins measured, and two traps in the instrument (2026-08-02)
+
+D184 measured 10 of 443 and left the route. This adds eight, and the two things
+that went wrong on the way are worth more than the eight.
+
+### ⛔ Only 3 of the first 14 candidates were linkable
+
+The obvious batch — `evt_pouch_get_star_points`, `_get_arcade_tokens`,
+`_count_use_items`, `evt_shop_count_cards` and the rest — is almost entirely
+**unlinkable**: `spm.eu0.lst` names 1,111 symbols and most builtins are not
+among them (D61). Of 443 builtins, **333 are linkable and unmeasured**, and of
+those only **20** are read-only getters that take no `const char *` name.
+
+⚠️ **Filter for linkability before designing a probe**, not after. A name
+argument is the second filter: it needs an object that exists in the map the
+attract demo happens to be in.
+
+### ✅ What was measured
+
+| Builtin | Read | |
+|---|---|---|
+| `evt_pouch_get_xp` | **0** | consistent with D184's `next_level_xp` of 10000 |
+| `evt_mario_check_3d` | **0** | 🟢 and the attract demo really is 2D throughout |
+| `evt_sub_get_language` | **2** | PAL rev 0; which language 2 names is not established |
+| `evt_snd_get_last_sfx_id` | **0** | |
+| `evt_guide_get_can_search` | **1** | |
+| `evt_pouch_check_free_use_item` | **0** | no save, so no pouch |
+| `evt_guide_check_flag0(0, &r)` | **0** | returns and writes; the mask is unmeasured |
+| `evt_npc_get_active_count` | **0** | 🟢 in `aa4_01`, which has no NPCs — and it **settles an arity the catalog leaves blank**: one out-parameter |
+
+✅ **`evt_mario_check_3d` is the positive control.** A getter returning 0 proves
+little on its own; this one returns 0 in a demo that is visibly 2D, so the value
+agrees with the screen rather than merely having been written.
+
+⛔ **`evt_sub_get_mapname` does not take one out-parameter.** Called with a
+single argument the sentinel survived every sample of a 100-second run while the
+script ran to completion — so the call returns and writes nothing there. The
+catalog records no arity and one is wrong.
+
+⛔ **`evt_npc_get_max_hp(0, &out)` never returns**, and that is a fact about
+calling it wrongly: its first argument is a `const char *` and 0 is a null
+pointer. Recorded as such, and the call removed rather than "fixed" with a
+guessed NPC name — which would have measured a different thing and looked the
+same.
+
+### ⛔ The evt global work slots are shared with the game's own scripts
+
+The largest finding here. After the attract demo changed map to `ls4_12`, seven
+of the fourteen watched slots took **new values every sample** — `gw[0]` read
+192, then 4,055,018,496, then 0, then 4,054,967,296 across nine seconds.
+
+⚠️ **A `gw` reading is only trustworthy while it stays stable across samples.**
+`gw[8]` and `gw[9]` held through every sample of a 100-second run, which is why
+they are recorded and the drifting ones are not. D184's readings survive
+unaffected — that run stayed in `aa4_01` and nothing else wrote — but it was
+luck, not design, and the method note in `measured.json` now says so.
+
+🔶 The probe block at `0x80005000` is not shared and would not have this
+problem. A future probe should write there instead of into `gw`.
+
+### ⚠️ Two runs wasted on the instrument, both my error
+
+- **`--watch-gw` takes a list of slot numbers, not a count.** `--watch-gw 40`
+  watched slot 40; `--words 34` printed 34 words of the probe block, which this
+  mod never writes. A whole run showed 34 zeroes from memory nothing had
+  touched, and read as "the script never ran".
+- **`--no-build` boots the existing `.wbfs`.** `bleck mod build` writes an
+  `.iso`, so editing the script, rebuilding by hand and passing `--no-build`
+  boots the *previous* image. ⚠️ The tell was a progress marker stopping at a
+  number the edited script no longer contained — without the marker this would
+  have read as the removed call still hanging.
+
+⚠️ Both are the **same class as D267's stale texture export**: an artefact that
+is out of date impersonates a bug in whatever reads it. That is three times in
+one day.

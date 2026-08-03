@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "name": "builtin-probe2",
+  "version": "0.1.0",
+  "description": "Second batch of builtins, called and read back (D184's method)",
+  "base": "eu0",
+  "code": {
+    "script": "scripts/main.evt",
+    "target": "eu0",
+    "module_id": 2
+  }
+}

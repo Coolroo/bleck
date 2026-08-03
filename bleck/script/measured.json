@@ -1,68 +1,128 @@
 {
-  "note": "What builtins were observed to do, measured by this project in a running game. Kept apart from catalog.json on purpose: that file is derived from the MIT-licensed spm-headers and carries its attribution, whereas everything here is bleck's own observation. Grow it with example-mods/builtin-probe; never by inference from a name.",
-  "method": "scripts/ingame.py builtin-probe --watch-gw ... . Each slot is pre-seeded with a sentinel so 'returned 0' and 'never wrote' are distinguishable, and a progress marker is set before each call so a hang names the call that caused it.",
-  "schema": 1,
-  "measured": [
-    {
-      "name": "evt_pouch_get_coins",
-      "summary": "Writes the player's coin count into its argument.",
-      "observed": "0 with no save file loaded; the sentinel was overwritten, so the call did write.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_get_hp",
-      "summary": "Writes the player's current HP into its argument.",
-      "observed": "10 at the start of the attract demo.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_get_max_hp",
-      "summary": "Writes the player's maximum HP into its argument.",
-      "observed": "10, matching current HP on a fresh game.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_get_level",
-      "summary": "Writes the player's level into its argument.",
-      "observed": "1 on a fresh game.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_get_attack",
-      "summary": "Writes the player's attack power into its argument.",
-      "observed": "1 on a fresh game.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_get_next_level_xp",
-      "summary": "Writes the score needed for the next level into its argument.",
-      "observed": "10000 at level 1.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_mario_get_character",
-      "summary": "Writes which character is active into its argument.",
-      "observed": "0 while playing as Mario. The other values are unestablished.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_mario_get_height",
-      "summary": "Writes the player's height into its argument, as a float.",
-      "observed": "exactly 39.0, decoded through evt's fixed-point float encoding.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_mario_get_pos",
-      "summary": "Writes the player's x, y and z into its three arguments, as floats.",
-      "observed": "0.0, 0.0, 0.0 in the attract demo, where no profile is loaded and the player is never placed (D63). The sentinels were overwritten, so the call did write.",
-      "decision": "D184"
-    },
-    {
-      "name": "evt_pouch_check_have_item",
-      "summary": "Does not return. Reproduced twice; avoid it until someone establishes why.",
-      "observed": "the script stops at this call and never reaches the next statement, and the out-parameter keeps its sentinel, so nothing is written. Both runs used item id 1.",
-      "broken": true,
-      "decision": "D184"
-    }
-  ]
+ "note": "What builtins were observed to do, measured by this project in a running game. Kept apart from catalog.json on purpose: that file is derived from the MIT-licensed spm-headers and carries its attribution, whereas everything here is bleck's own observation. Grow it with example-mods/builtin-probe; never by inference from a name.",
+ "method": "scripts/ingame.py <probe> --watch-gw 31 29 0 1 ... --seconds 100. Each slot is pre-seeded with a sentinel so 'returned 0' and 'never wrote' are distinguishable, and a progress marker is set before each call so a hang names the call that caused it. WARNING: the evt global work slots are shared with the game's own scripts, so a reading is only trustworthy while it stays stable across samples -- see D271.",
+ "schema": 1,
+ "measured": [
+  {
+   "name": "evt_pouch_get_coins",
+   "summary": "Writes the player's coin count into its argument.",
+   "observed": "0 with no save file loaded; the sentinel was overwritten, so the call did write.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_hp",
+   "summary": "Writes the player's current HP into its argument.",
+   "observed": "10 at the start of the attract demo.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_max_hp",
+   "summary": "Writes the player's maximum HP into its argument.",
+   "observed": "10, matching current HP on a fresh game.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_level",
+   "summary": "Writes the player's level into its argument.",
+   "observed": "1 on a fresh game.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_attack",
+   "summary": "Writes the player's attack power into its argument.",
+   "observed": "1 on a fresh game.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_next_level_xp",
+   "summary": "Writes the score needed for the next level into its argument.",
+   "observed": "10000 at level 1.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_mario_get_character",
+   "summary": "Writes which character is active into its argument.",
+   "observed": "0 while playing as Mario. The other values are unestablished.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_mario_get_height",
+   "summary": "Writes the player's height into its argument, as a float.",
+   "observed": "exactly 39.0, decoded through evt's fixed-point float encoding.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_mario_get_pos",
+   "summary": "Writes the player's x, y and z into its three arguments, as floats.",
+   "observed": "0.0, 0.0, 0.0 in the attract demo, where no profile is loaded and the player is never placed (D63). The sentinels were overwritten, so the call did write.",
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_check_have_item",
+   "summary": "Does not return. Reproduced twice; avoid it until someone establishes why.",
+   "observed": "the script stops at this call and never reaches the next statement, and the out-parameter keeps its sentinel, so nothing is written. Both runs used item id 1.",
+   "broken": true,
+   "decision": "D184"
+  },
+  {
+   "name": "evt_pouch_get_xp",
+   "summary": "Writes the player's experience points into its argument.",
+   "observed": "0 in the attract demo, with the sentinel overwritten so the call did write. D184 measured get_next_level_xp as 10000, so 0 of 10000 is consistent.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_mario_check_3d",
+   "summary": "Writes whether the world is currently flipped into 3D.",
+   "observed": "0 during the attract demo, which plays in 2D throughout -- so the value agrees with what is on screen rather than merely being written.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_sub_get_language",
+   "summary": "Writes the console's language index.",
+   "observed": "2 on a PAL rev 0 disc, identical across two runs. Which language 2 names is not established -- only that the call writes a small stable index.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_snd_get_last_sfx_id",
+   "summary": "Writes the id of the most recent sound effect.",
+   "observed": "0 in the attract demo, in both runs. Whether that means 'none played' or 'id 0' is not established.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_guide_get_can_search",
+   "summary": "Writes whether Tippi's search is currently allowed.",
+   "observed": "1 in the attract demo, in both runs.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_pouch_check_free_use_item",
+   "summary": "Writes whether the item pouch has a free slot.",
+   "observed": "0 with no save loaded, where the pouch does not exist. Not the same as 'the pouch is full'.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_guide_check_flag0",
+   "summary": "Takes a flag mask and writes whether it is set.",
+   "observed": "Called with mask 0 and wrote 0. The call returns and writes; which flags the mask selects is unmeasured.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_npc_get_active_count",
+   "summary": "Writes how many NPCs are currently active. Takes one argument, which the catalog does not record.",
+   "observed": "0 in aa4_01, the attract demo's first map, which has no NPCs -- the sentinel was overwritten, so the call wrote a real zero. That also settles the arity the catalog leaves blank: one out-parameter.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_sub_get_mapname",
+   "summary": "Arity is NOT one out-parameter.",
+   "observed": "Called with a single argument, the sentinel survived untouched across every sample of a 100-second run while the script ran to completion. So the call returns and writes nothing there. The catalog records no arity for it and one is wrong.",
+   "decision": "D271"
+  },
+  {
+   "name": "evt_npc_get_max_hp",
+   "summary": "Hangs when its name argument is null.",
+   "observed": "evt_npc_get_max_hp(0, &out) never returned: the progress marker stopped at its number and stayed for 90 seconds, and the out-parameter kept its sentinel. Its first argument is a const char* name and 0 is a null pointer, so this is a fact about calling it wrongly -- what it does with a real NPC name is still unmeasured.",
+   "decision": "D271"
+  }
+ ]
 }
