@@ -5,6 +5,13 @@ description: Everything bleck can be configured with
 
 This is the complete list of variables `bleck` reads.
 
+!!! tip
+
+    [`bleck doctor`](cli.md#bleck-doctor) prints all of them with their current
+    values, alongside every external tool and whether it runs. A variable
+    pointing at a path that does not exist is reported as a misconfiguration,
+    naming the variable — `bleck` will not quietly search elsewhere for it.
+
 ## Paths
 
 `BLECK_BASE_DIR` <span class="pf-default">default: `work/extracted/eu0`</span>

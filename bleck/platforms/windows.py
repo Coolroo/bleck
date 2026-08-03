@@ -69,8 +69,10 @@ PROFILE = PlatformProfile(
                 r"D:\devkitPro\devkitPPC\bin",
             ],
             hint=(
-                "install devkitPPC, then reopen your shell:\n"
-                "  bleck toolchain install\n"
+                "install devkitPPC with devkitPro's Windows installer, then "
+                "reopen your shell:\n"
+                "  https://github.com/devkitPro/installer/releases/latest\n"
+                "  tick the GameCube/Wii development component (gamecube-dev)\n"
                 "  or set BLECK_PPC_GCC to powerpc-eabi-gcc.exe"
             ),
         ),

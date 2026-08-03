@@ -1,10 +1,11 @@
 # macOS Setup — status, blockers, and what a Mac owner must verify
 
-macOS is a supported target (D30) and has **never been run on a Mac** (D239).
-This page is written from our own source, our own CI logs, and upstream
-documents. Every claim carries a confidence marker, and **almost nothing here is
-✅** — reserve that for what was read out of this repository, a CI run, or an
-authoritative upstream file.
+macOS is a supported target (D30). It was **run on a Mac for the first time on
+2026-08-03** — an Apple Silicon MacBook, briefly, retiring exactly one line of
+this page (D274). Everything else here is still written from our own source, our
+own CI logs, and upstream documents. Every claim carries a confidence marker,
+and **almost nothing here is ✅** — reserve that for what was read out of this
+repository, a CI run, an authoritative upstream file, or that one session.
 
 ⚠️ **Read the marker before budgeting against a line.** A doc full of
 confident-sounding untested claims is worse than no doc.
@@ -128,19 +129,79 @@ Dolphin's own macOS build page gives the path as
 ([Building on macOS](https://dolphin-emu-dolphin.mintlify.app/platforms/macos)).
 
 ✅ `bleck` is fine: `macos.py` lists `["dolphin-tool", "DolphinTool"]` in that
-order. ⚠️ **`CLAUDE.md` and `docs-site/install/macos.md` both say `DolphinTool`
-and are wrong** — see "Corrections owed elsewhere".
+order. ⚠️ **`CLAUDE.md` says `DolphinTool` and is wrong** — see "Corrections
+owed elsewhere". `docs-site/install/macos.md` was corrected in D274.
 
-### ✅ `bleck toolchain install` does not exist
+### ⛔ The distributed macOS build does not ship `dolphin-tool`
 
-All three platform profiles tell the user to run it when the cross-compiler is
-missing (`macos.py:86`, `linux.py:63`, `windows.py:73`, and
-`toolchain.py:100`), and `bleck --help` lists no `toolchain` command.
+**Measured on the Mac** (D274): an Apple Silicon MacBook, Dolphin installed with
+`brew install --cask dolphin`. `find /Applications/Dolphin.app -type f -perm
++111` returns eight executables — `Dolphin`, two Qt plugin dylibs, four
+frameworks, and `Dolphin Updater`. No `dolphin-tool`, no `DolphinTool`.
 
-⚠️ **This hurts macOS most.** Linux's hint offers
-`sudo apt install gcc-powerpc-linux-gnu` as a second option and Windows names a
-real installer; the macOS hint offers **only** the command that does not exist,
-then `BLECK_PPC_GCC`.
+Three lines agree: the artifact above; `BuildMacOSUniversalBinary.py`, which
+bundles only `Dolphin.app`, `Dolphin Updater.app` and `unittests`; and
+`Casks/d/dolphin.rb`, which declares one artifact and no `binary` stanza.
+
+✅ **And the mechanism, so this is a cause rather than an observation.** The
+bundle is assembled by `build_final_bundle` in `Source/Core/CMakeLists.txt`,
+gated on `if (APPLE AND ENABLE_QT)`. It `DEPENDS dolphin-emu` — **not**
+`dolphin-tool` — and copies in DolphinQt plus the updater.
+`CMAKE_RUNTIME_OUTPUT_DIRECTORY` is `Binaries/` with no `APPLE` override, and
+`dolphin-tool` is a plain non-bundle executable, so it lands at
+**`Binaries/dolphin-tool`, a sibling of `Dolphin.app`**.
+
+⚠️ **State it precisely.** `Source/Core/DolphinTool/CMakeLists.txt` has
+`add_executable(dolphin-tool …)` with **no platform guard**, so the target is
+built on macOS — its install rule (`if (NOT WIN32)`) just sends it to
+`${CMAKE_INSTALL_BINDIR}`. ⛔ Not "it does not exist on macOS"; **"the
+distributed build does not ship it"**.
+
+⛔ **Dolphin's macOS docs page is wrong**, and that is why this took three
+passes. It gives `./Binaries/Dolphin.app/Contents/MacOS/dolphin-tool`; the
+official Building-for-macOS wiki never mentions `dolphin-tool`, and third-party
+macOS CI collects it with `mv Binaries/dolphin-tool ../` — the sibling path.
+That one line put the path into `macos.py`, into `docs-site/install/macos.md`,
+into a user's `.env`, and finally into a `FileNotFoundError`. ✅
+`formulae.brew.sh` 404s for both `dolphin` and `dolphin-tool`, so there is no
+formula either — only the cask.
+
+⛔ **So RVZ is unreadable with the tools this project already assumes.** The
+`DOLPHIN_TOOL` hint now offers four routes, cheapest first: `nodtool`
+(`cargo install --locked nodtool`, dual MIT/Apache-2.0, native arm64, ✅ v1.4.4
+verified installing — ⚠️ always writes ISO regardless of the output name);
+`npx dolphin-tool` (`@emmercm/dolphin-tool-darwin-arm64` v0.2606.1, ✅ verified
+a Mach-O `cputype arm64` — ⚠️ its CI checks `--help` *before* stripping, and a
+strip can invalidate the mandatory signature, so `Killed: 9` is plausible and
+`codesign -s - <path>` repairs it); Dolphin's own GUI (*Convert File…*); and a
+source build last. Then work from the `.iso`/`.wbfs`, which `wit` reads
+natively — already the sharing recommendation (D24).
+
+🔶 A source build is possible and Qt is genuinely avoidable
+(`ENABLE_CLI_TOOL` is independent of `ENABLE_QT`), but `dolphin-tool` links
+`discio` and `uicommon`, both of which `PUBLIC`-link `core`, so the emulator
+core builds regardless. ⛔ No time estimate: nobody has measured one.
+
+⚠️ **`DOLPHIN_BUNDLES` is still searched, deliberately.** A source build does
+put `dolphin-tool` there. What changed is the *hint*, which used to promise the
+distributed bundle had it.
+
+🔶 **Teaching `bleck` to drive `nodtool` is a separate change** — different
+invocation, different output rule, its own `ToolKey`. Naming it in a hint is not
+the same as supporting it (D274).
+
+### ✅ `bleck toolchain install` does not exist — and is no longer offered
+
+`bleck --help` lists no `toolchain` command, and three profiles told the user to
+run it anyway. **Fixed in D274**: `macos.py` now gives devkitPro's `.pkg`
+installer plus `sudo dkp-pacman -S gamecube-dev`, `windows.py` gives devkitPro's
+Windows installer, and `toolchain.py:100` quotes whichever platform hint applies
+rather than repeating a recipe that can rot separately.
+
+⚠️ **The count of four sites in earlier drafts of this page was wrong.**
+`linux.py` had already been corrected and its `apt.devkitpro.org` recipe is
+right *for Linux*; only three sites named the non-command. A test now pins that
+no profile hint contains the string.
 
 ### ✅ Tool availability, from upstream download pages
 
@@ -221,22 +282,15 @@ sudo codesign --sign - --force \
 and nobody here has run the binary. It fits the signing rule above exactly, which
 is why it is the top-ranked blocker rather than a footnote.
 
-⚠️ **`bleck` will report this badly.** `disc._run` raises
-`DiscError(f"{name} failed:\n{detail}")` from `stderr or stdout`. A `SIGKILL`
-produces neither, so the user sees **`wit failed:`** and nothing else.
+✅ **`bleck` used to report this badly, and no longer does** (D274). `disc._run`
+built its message from `stderr or stdout`; a `SIGKILL` produces neither, so the
+user saw **`wit failed:`** and nothing else. A silent failure now stands in for
+itself — "was killed before it could report anything (signal 9)" — and carries
+`PlatformProfile.signing_remedy`, the `codesign --sign -` line. `bleck doctor`
+reaches the same conclusion without a disc, by probing every tool.
 
-### 🔶 Whether `dolphin-tool` is inside the shipped `Dolphin.app` at all
-
-`bleck` looks for it in `/Applications/Dolphin.app/Contents/MacOS`. Dolphin's own
-docs give that path — but from the **build tree** (`./Binaries/Dolphin.app/…`),
-and `Source/Core/DolphinQt/CMakeLists.txt` has no rule copying `dolphin-tool`
-into the bundle. The release `.dmg` may ship `Dolphin.app` alone.
-
-⛔ If it is absent, **RVZ is unreadable on macOS** — `wit` cannot read RVZ and
-`dolphin-tool` is the only thing that can. The workaround is to convert on
-another machine and ship `.wbfs`, which is already the recommendation (D24).
-
-**One `ls` settles it.** It is first on the checklist below for that reason.
+🔶 Still unverified in the direction that matters: nobody has watched macOS kill
+`wit`, or watched the re-sign fix it.
 
 ### 🔶 Whether the window opens and takes focus from a bare `cargo run`
 
@@ -302,13 +356,15 @@ sw_vers                        # macOS version; Rosetta's clock is macOS 27
 xcode-select --install         # needed by anything that compiles
 ```
 
-### 1. The two things CI cannot see (10 min)
+### 1. The thing CI cannot see (10 min)
+
+⛔ The bundle question is **settled** (D274) — `dolphin-tool` is not in it, so
+there is no RVZ path on macOS. Skip that check; run `uv run bleck doctor`
+instead once step 2 has synced, which reports every tool at once and, unlike an
+`ls`, also proves each one actually executes.
 
 ```bash
-# Does the shipped Dolphin bundle contain the CLI tool?  Settles RVZ support.
 brew install --cask dolphin
-ls -l /Applications/Dolphin.app/Contents/MacOS/ > /tmp/mac-check/dolphin.txt 2>&1
-file /Applications/Dolphin.app/Contents/MacOS/Dolphin >> /tmp/mac-check/dolphin.txt
 
 # Does wit run, or is it killed?  Settles the whole disc path.
 curl -LO https://wit.wiimm.de/download/wit-v3.05a-r8638-mac.tar.gz
@@ -431,7 +487,7 @@ it for years.
 | | |
 |---|---|
 | Homebrew prefix | `/opt/homebrew` on Apple Silicon, `/usr/local` on Intel. Both are searched |
-| Dolphin | `/Applications/Dolphin.app/Contents/MacOS/` — `Dolphin` and (🔶) `dolphin-tool` |
+| Dolphin | `/Applications/Dolphin.app/Contents/MacOS/` — `Dolphin` only. ⛔ `dolphin-tool` is **not** in the distributed bundle (D274); a source build puts it here |
 | devkitPPC | `/opt/devkitpro/devkitPPC/bin` |
 | `wit` / `wstrt` after `install.sh` | `/usr/local/bin` |
 | **Dolphin's user directory** | `~/Library/Application Support/Dolphin/` — **not** `%APPDATA%`. The Gecko cheat lives at `…/GameSettings/R8PP01.ini` (D86 describes the Windows path) |
@@ -441,9 +497,14 @@ it for years.
 ```ini
 BLECK_WIT=/usr/local/bin/wit
 BLECK_DOLPHIN=/Applications/Dolphin.app/Contents/MacOS/Dolphin
-BLECK_DOLPHIN_TOOL=/Applications/Dolphin.app/Contents/MacOS/dolphin-tool
 BLECK_PPC_GCC=/opt/devkitpro/devkitPPC/bin/powerpc-eabi-gcc
 ```
+
+⛔ **Do not set `BLECK_DOLPHIN_TOOL` to a path inside `Dolphin.app`.** Nothing
+is there, and this page and `docs-site/install/macos.md` both told people to do
+it — which is the setting that produced D274's `FileNotFoundError`. Set it only
+if you built Dolphin yourself. `bleck doctor` now reports an override pointing
+at a missing path as a misconfiguration, and names the variable.
 
 ### Finder clutter is filtered automatically
 
@@ -470,19 +531,22 @@ must be true first.
 | Field | Status | What a Mac would settle |
 |---|---|---|
 | `HOMEBREW_PREFIXES` | ✅ correct | Documented Apple behaviour; `find_tool` calls `.expanduser()`, so `~`-relative entries are live |
-| `DOLPHIN_BUNDLES` | 🔶 | `ls /Applications/Dolphin.app/Contents/MacOS/`. If `dolphin-tool` is absent from the release bundle, the `DOLPHIN_TOOL` hint must stop implying it is there and say "build Dolphin, or convert RVZ elsewhere" |
+| `DOLPHIN_BUNDLES` | ✅ **settled, and the hint is fixed** | `dolphin-tool` is not in the distributed bundle (D274). The directory is still searched, because a source build puts it there; the hint now says the distribution does not ship it and gives Dolphin's GUI conversion and `.iso`/`.wbfs` instead |
 | `DOLPHIN_TOOL.names` | ✅ correct order | `dolphin-tool` first is right; `DolphinTool` is Windows-only naming and harmless as a fallback |
-| `WIT.hint` | ⚠️ **stale and incomplete** | It says "download the macOS build". It should name **v3.05a** (the only one with arm64) and, if the checklist reproduces `Killed: 9`, carry the `codesign --sign -` line. A hint that does not mention the failure leaves the user with `wit failed:` and no text |
+| `WIT.hint` | ⚠️ **stale** | It says "download the macOS build"; it should name **v3.05a**, the only one with an arm64 slice. ✅ The `codesign` half is handled elsewhere now — `signing_remedy` supplies it whenever a tool dies on a signal, so a hint that omits it no longer leaves the user with `wit failed:` and no text (D274) |
 | `WSTRT.hint` | ✅ accurate | Correctly says x86_64/Rosetta. ⚠️ Should gain the macOS-27 Rosetta deadline |
-| `PPC_GCC.hint` | ⛔ **names a command that does not exist** | `bleck toolchain install` is not a `bleck` subcommand. Replace with the `.pkg` URL and `dkp-pacman -S gamecube-dev`. Same fix needed in `linux.py`, `windows.py` and `toolchain.py:100` |
+| `PPC_GCC.hint` | ✅ **fixed** | It named `bleck toolchain install`, which is not a subcommand. It now gives the `.pkg` URL and `dkp-pacman -S gamecube-dev` (D274). `windows.py` and `toolchain.py:100` were fixed with it; `linux.py` was already correct |
 | `PPC_GCC.directories` | ✅ correct | `/opt/devkitpro/devkitPPC/bin` is where the pkg installs |
 | `ignored_filenames` / `ignored_prefixes` | ✅ as designed | ⛔ Never exercised by a real Finder |
 | `strip_readonly_on_delete` | ✅ correctly `False` | POSIX unlink needs no bit cleared |
 
-🔶 **One field the profile does not have and may need:** nothing describes a tool
-that must be run under Rosetta, or one whose signature must be repaired. If the
-`wit` re-sign turns out to be required, that is data — a `needs_adhoc_signature`
-flag or a richer hint — not an `if platform.system()` anywhere.
+✅ **Half of the missing field now exists.** `PlatformProfile.signing_remedy`
+carries the `codesign --sign -` command, empty on Linux and Windows, and
+`bleck doctor` prints it whenever a tool dies on a signal (D274) — data, as this
+paragraph asked for, not an `if platform.system()`.
+
+🔶 **The other half is still absent:** nothing describes a tool that must be run
+under Rosetta. Add it when something actually depends on knowing.
 
 ---
 
@@ -533,10 +597,10 @@ document's scope.
 
 | Where | What is wrong |
 |---|---|
-| `CLAUDE.md`, cross-platform rules | "`DolphinTool` inside `Dolphin.app` on macOS" — the macOS binary is `dolphin-tool` |
-| `docs-site/install/macos.md` | Same `DolphinTool` path; and it gives `apt.devkitpro.org/install-devkitpro-pacman`, the **Debian** installer, as the macOS devkitPPC step |
+| `CLAUDE.md`, cross-platform rules | "`DolphinTool` inside `Dolphin.app` on macOS" — the macOS binary is `dolphin-tool`, and ⛔ it is not in the bundle at all (D274) |
+| ~~`docs-site/install/macos.md`, the `DolphinTool` path and the Debian installer~~ | ✅ **fixed in D274** |
+| ~~`macos.py`, `windows.py`, `toolchain.py` pointing at `bleck toolchain install`~~ | ✅ **fixed in D274.** ⚠️ The count was wrong: `linux.py` was already correct, so it was three sites, not four |
 | `docs-site/install/macos.md` | "There is no Homebrew formula" for wit is still true, but it does not name v3.05a as the only arm64 build |
-| `macos.py`, `linux.py`, `windows.py`, `toolchain.py` | All four point at `bleck toolchain install`, which is not a command |
 | Working notes | "wit 3.01a" is the Linux host's version; a Mac needs 3.05a |
 
 ---
@@ -546,7 +610,10 @@ document's scope.
 Listed so the next person does not re-derive them from the same sources.
 
 1. Whether `wit` v3.05a actually runs on Apple Silicon unmodified.
-2. Whether `dolphin-tool` is in the released `Dolphin.app`.
+2. ~~Whether `dolphin-tool` is in the released `Dolphin.app`.~~ ✅ **Settled
+   2026-08-03: it is not** (D274). The distributed bundle's eight executables do
+   not include it, so RVZ is unreadable on macOS. `nodtool` is the candidate
+   replacement and is not built yet.
 3. Whether devkitPPC under Rosetta 2 produces a REL that loads and runs. ⚠️
    Partly retired: D249 shows aarch64-Linux devkitPPC produces bytes identical
    to x86_64-Windows devkitPPC, so "the host architecture changes the output" is
@@ -560,5 +627,6 @@ Listed so the next person does not re-derive them from the same sources.
 9. Whether Dolphin's macOS Gecko/cheat configuration behaves as the Windows path
    in D86 does.
 
-⚠️ **Items 1 and 2 are two commands and gate everything else.** They are steps 0
-and 1 of the checklist for that reason.
+⚠️ **Item 1 gates everything else, and is one command.** It is step 1 of the
+checklist for that reason. Item 2 was the other such question and is now
+answered.

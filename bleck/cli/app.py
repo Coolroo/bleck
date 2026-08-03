@@ -15,7 +15,7 @@ from bleck.common.errors import BleckError
 from bleck.formats.lz77 import Lz77Error
 from bleck.formats.u8 import U8Error
 
-from . import commands
+from . import commands, requirements
 from . import shared as shared_flags
 
 PROG = "bleck"
@@ -50,6 +50,15 @@ def main(argv: list[str] | None = None) -> int:
         # bleck already understands rather than a new threaded parameter.
         if getattr(args, "mods_dir", None):
             env.override(env.MODS_DIR, args.mods_dir)
+
+        # ⚠️ Before dispatch: a command that cannot possibly finish says so up
+        # front, naming every missing tool at once. Only *unconditional* needs
+        # are declared -- `requirements` says why that distinction is the point.
+        check = requirements.preflight(args)
+        if not check.is_satisfied:
+            print(f"{PROG}: {check.message()}", file=sys.stderr)
+            return 1
+
         return args.func(args)
     except HANDLED as exc:
         print(f"{PROG}: {exc}", file=sys.stderr)

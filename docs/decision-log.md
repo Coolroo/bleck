@@ -19332,3 +19332,226 @@ the rows.
   judgement call is the wrong way to spend that. Flagged here rather than
   hidden: it is one redundant test, and deleting it is a one-line follow-up if
   anyone would rather.
+
+## D274 — `bleck doctor`, and the release `Dolphin.app` that has no `dolphin-tool` (2026-08-03)
+
+The first-ever macOS run of this toolkit, on an **Apple Silicon MacBook** with
+Dolphin installed from the release cask (`brew install --cask dolphin`). It
+produced one crash, one measured fact that closes a standing 🔶, and a command.
+
+### ✅ The **distributed macOS build** does not ship `dolphin-tool`
+
+`docs/macos.md` listed this as item 2 of "what could not be determined without a
+Mac". It is now measured on the artifact, on a stock Apple Silicon install via
+`brew install --cask dolphin`. `find /Applications/Dolphin.app -type f -perm
++111` returns the complete executable set:
+
+```
+Contents/MacOS/Dolphin
+Contents/MacOS/platforms/libqcocoa.dylib
+Contents/MacOS/styles/libqmacstyle.dylib
+Contents/Frameworks/QtGui.framework/Versions/A/QtGui
+Contents/Frameworks/QtCore.framework/Versions/A/QtCore
+Contents/Frameworks/QtWidgets.framework/Versions/A/QtWidgets
+Contents/Frameworks/libMoltenVK.dylib
+Contents/Helpers/Dolphin Updater.app/Contents/MacOS/Dolphin Updater
+```
+
+No `dolphin-tool`, no `DolphinTool`, anywhere in the bundle. **Three
+independent lines agree**, which is worth stating because each alone would be
+weaker:
+
+1. **The artifact** — the listing above.
+2. **The build script** — `BuildMacOSUniversalBinary.py` bundles only
+   `Dolphin.app`, `Dolphin Updater.app` and `unittests`. The listing matches
+   its target list exactly.
+3. **The Homebrew cask** — `Casks/d/dolphin.rb` declares a single artifact,
+   `"Dolphin.app"`, with no `binary` stanza.
+
+### ✅ And the mechanism, so this is a cause and not just an observation
+
+The macOS bundle is assembled by one rule — `build_final_bundle` in
+`Source/Core/CMakeLists.txt`, gated on `if (APPLE AND ENABLE_QT)`. It
+`DEPENDS dolphin-emu`, **not** `dolphin-tool`, and copies in DolphinQt plus,
+under `ENABLE_AUTOUPDATE`, the updater into `Contents/Helpers/`. Meanwhile
+`CMAKE_RUNTIME_OUTPUT_DIRECTORY` is `Binaries/` with no `APPLE` override, and
+`dolphin-tool` is a plain non-bundle executable — so it lands at
+**`Binaries/dolphin-tool`, a sibling of `Dolphin.app`, never inside it**.
+
+⚠️ **The precise claim matters.** `Source/Core/DolphinTool/CMakeLists.txt` has
+`add_executable(dolphin-tool …)` with **no platform guard**, so the target *is*
+built on macOS; its install rule (`if (NOT WIN32)`) sends it to
+`${CMAKE_INSTALL_BINDIR}`. The finding is "**the distributed macOS build does
+not ship it**", ⛔ not "it does not exist on macOS".
+
+⛔ **Dolphin's macOS docs page is simply wrong**, and recording that is the
+point: it gives `./Binaries/Dolphin.app/Contents/MacOS/dolphin-tool`, the
+official Building-for-macOS wiki never mentions `dolphin-tool` at all, and
+third-party CI that actually performs this build on macOS runners collects it
+with `mv Binaries/dolphin-tool ../` — the sibling path. That single wrong line
+is what put the path into `macos.py`, into `docs-site/install/macos.md`, into a
+user's `.env`, and finally into a `FileNotFoundError`. ✅ `formulae.brew.sh`
+returns **404** for both `dolphin` and `dolphin-tool`: there is no formula
+either, only the cask.
+
+### ⛔ Consequence, and the remedies in order
+
+`bleck` cannot read RVZ on macOS out of the box. `wit` cannot read the format
+either, so there is no second route inside the tools already assumed. What the
+`DOLPHIN_TOOL` hint now offers, cheapest first:
+
+1. **`nodtool`** — `cargo install --locked nodtool`, dual MIT/Apache-2.0,
+   native arm64, reads ISO, WIA/RVZ, WBFS, CISO, GCZ, NFS and TGC. ✅ v1.4.4
+   verified installing. ⚠️ `nodtool convert <file> <out>` **always writes ISO
+   regardless of the output extension**.
+2. **`npx dolphin-tool`** — `@emmercm/dolphin-tool-darwin-arm64` v0.2606.1, ✅
+   verified a 64-bit Mach-O with `cputype arm64`, built from Dolphin tag 2606.
+   ⚠️ Its CI tests `--help` *before* stripping and never re-tests after, and on
+   Apple Silicon a strip can invalidate the mandatory signature — so `Killed: 9`
+   is a plausible outcome, repaired by `codesign -s - <path>`. That is exactly
+   the failure `doctor` now names, and the two read consistently on purpose.
+3. **Dolphin's own GUI** — right-click the game → *Convert File…*.
+4. **A source build**, last. `ENABLE_CLI_TOOL` is independent of `ENABLE_QT`, so
+   Qt is genuinely avoidable, but `dolphin-tool` links `discio` and `uicommon`
+   and both `PUBLIC`-link `core` — the emulator core gets built either way. 🔶
+   No time estimate is given because nobody has measured one.
+
+Then work from the `.iso`/`.wbfs` the conversion produced, which `wit` reads
+natively — already the sharing recommendation (D24). `DOLPHIN_BUNDLES` stays in
+the search path, because a source build does put `dolphin-tool` there.
+
+⛔ **Wiring `nodtool` in was deliberately not done here.** It is not a drop-in:
+different invocation, different output rule, its own `ToolKey`. Mixing it into
+a change about *reporting* would make both harder to review. Licences are noted
+only for the record — the npm package declares GPL-3.0-or-later and Dolphin is
+GPLv2+, which is irrelevant because `bleck` invokes these as subprocesses and
+copies no code, exactly as it already does with `wit`.
+
+### The crash, and what it was really about
+
+`bleck info work/roms/spm_eu.rvz` raised a bare `FileNotFoundError` out of
+`subprocess._execute_child`. `find_tool` returned an override variable's value
+**without checking it existed** — the user had set `BLECK_DOLPHIN_TOOL` because
+the install docs told them to, at the path the docs gave, and that path is the
+one that turns out not to exist.
+
+- ✅ Fixed: an override naming a missing path now raises a `DiscError` naming
+  the variable *and* the path, and ⛔ **deliberately does not fall back to
+  PATH**. Searching on would run a *different* binary than the one asked for, so
+  a typo in `.env` would surface as tool-version confusion rather than as a typo.
+
+⚠️ **The interesting half was the second message.** With the variable removed,
+`bleck info` degraded gracefully and printed
+`(unrecognised disc image; is wit or dolphin-tool installed?)` — a guess, with
+an `or` in it, put to the one person in the room who could not answer it. It had
+just caught a `DiscError` naming the exact tool, every directory searched, and
+the platform's own advice, and **threw all of it away**. For an RVZ `wit` is not
+even a candidate, so half the sentence was noise.
+
+- ✅ `DiscInfo` gained a `reason` field. `identify` keeps its "returns empty
+  when unreadable" contract — a file summary should not abort over a missing
+  tool — but the reason rides along, and `bleck info` prints it with the
+  platform hint and a pointer to `bleck doctor`.
+
+**Rejected:** raising from `identify` and catching in the caller (turns every
+`bleck info` on a disc image into a try/except at the call site, and the
+command's job is to describe a file, not to fail); returning a
+`(DiscInfo, str)` pair (an unnamed tuple, and the reason belongs *to* the
+reading); swallowing plain absence while letting misconfiguration through (two
+different behaviours for what is, to the user, one question).
+
+### ✅ `bleck doctor`, the 21st command
+
+The user's request was "check that all apps it needs are installed before
+commands that need them, and report an error about misconfiguration". Built as
+two halves.
+
+**One report, every problem at once.** For each `ToolKey`: whether an override
+is set and whether its path exists; where the tool was found (PATH, or which
+directory); ⚠️ **whether it actually runs**; and which commands it gates.
+`env.describe_all()` and `EnvSetting` had sat with no consumer since they were
+written — `doctor` is the one, rather than a second drifting copy.
+
+⚠️ **Presence on disk is not usability, and that is the macOS trap.** Apple
+Silicon `SIGKILL`s an unsigned arm64 binary with **no output at all**, so a tool
+`doctor` can see, name and describe may still be dead — and `disc._run` reported
+exactly that case as `wit failed:` followed by nothing. Every located tool is
+therefore executed with a cheap argument (`ToolKey.probe`) and judged on the
+outcome: six states, of which `KILLED` carries the
+`codesign --sign - --force --preserve-metadata=…` repair. `_run` now stands in
+for a silent tool too, so the empty `wit failed:` cannot recur.
+
+- ✅ **Which repair to name is platform data**, not a conditional:
+  `PlatformProfile.signing_remedy`, empty on Linux and Windows. `docs/macos.md`
+  anticipated this exact field ("a `needs_adhoc_signature` flag or a richer
+  hint — not an `if platform.system()`").
+- ✅ `dolphin-tool` has **no top-level `--version` or `--help`**
+  (`Source/Core/DolphinTool/ToolMain.cpp`: four subcommands, then
+  `PrintUsage(); return EXIT_FAILURE`), so its probe runs it bare and accepts
+  the failure status — the question asked is "can this execute", not "did it
+  like its arguments". `ToolProbe.expect_success` is that distinction, and
+  `DolphinTool.exe` on the Windows host confirmed the behaviour.
+
+**⚠️ Absent is not broken, and the exit code says so.** A user doing asset work
+with no PowerPC cross-compiler is *correctly configured for what they do*.
+`doctor` exits non-zero only for misconfiguration — an override pointing at a
+missing path, or a tool present that will not execute. Anything else would turn
+the report into noise nobody reads twice.
+
+**Rejected:** exiting non-zero on any absence (would fail on almost every
+machine, including this repo's own Linux dev host); a `--json` mode
+(`bleck/api/` is the versioned JSON contract, and this is not part of it);
+probing with a real conversion or compile (slow, and writes files).
+
+### ✅ Preflight, and the needs that must stay lazy
+
+A command declares its unconditional tools with
+`requirements.needs(parser, ToolKey.WIT)`, and `cli.app.main` checks them all
+before dispatch, reporting every missing one together with the platform hint and
+a pointer to `doctor`. `needs` takes the *parser* rather than a name, so a
+nested command reports itself as `bleck script build` — argparse has already
+built that string, and a hand-written one would be one rename from lying.
+
+| command | declares | why it is unconditional |
+|---|---|---|
+| `extract` | `WIT` | every path through it runs `wit EXTRACT` |
+| `build` | `WIT` | ditto, `wit COPY` |
+| `launch` | `DOLPHIN` | booting *is* the command; DolphinTool cannot stand in |
+| `script build` | `PPC_GCC` | `build_rel` always detects a compiler. ⚠️ `script check` and `script dump` declare nothing — both stop at the generated C, which is exactly what you want to read when you have no cross-compiler yet |
+
+⛔ **`mod build` declares nothing, deliberately.** `--output none` writes no
+image and needs no `wit`; a mod with no C sources needs no compiler. A static
+requirement there would refuse work that succeeds today. The same reasoning
+keeps `dolphin-tool` off `extract`: it is needed only for an RVZ *input*, which
+is a property of the file named rather than of the command. A conditional need
+stays lazy, and `find_tool` now reports it in a sentence at the point it is
+genuinely required — which is correct behaviour rather than a gap.
+
+⚠️ **`ROLES.required_by` is checked against the parser by a test** that walks
+the whole command tree, so the table telling a user what a tool gates cannot
+drift from what the commands actually declare.
+
+### ✅ `bleck toolchain install` is gone from the code
+
+D239 recorded that it is not a command. `docs/macos.md` said four sites offered
+it; **three did** — `macos.py`, `windows.py` and `toolchain.py:100`. `linux.py`
+had already been fixed and its `apt.devkitpro.org` recipe is correct *for
+Linux*, so it was left alone; the doc's fourth site is stale and is corrected
+there. macOS now gets devkitPro's `.pkg` installer and
+`sudo dkp-pacman -S gamecube-dev`; ⛔ **not**
+`apt.devkitpro.org/install-devkitpro-pacman`, which is the Debian installer and
+has been given for macOS for years. Windows gets devkitPro's Windows installer.
+`toolchain.py`'s C++-half message now quotes the current platform's own
+`PPC_GCC` hint rather than repeating an install recipe that can rot separately.
+
+### What was executed, and what was only simulated
+
+⚠️ Worth stating plainly, because this work is *about* not misleading people.
+The `dolphin-tool` finding is ✅ **measured on the Mac**. Everything built here
+was executed on **Windows 11 only** — `bleck doctor` reports the Windows
+profile, with `wit`, `wstrt`, `Dolphin.exe`, `DolphinTool.exe` and devkitPPC all
+present and probing clean. The macOS and Linux answers are covered by
+**substituting the `PlatformProfile`**, the way `tests/test_platform.py` has
+always reached the Windows paths from Linux.
+🔶 Nobody has run `bleck doctor` on a Mac, and the `codesign` remedy has never
+repaired a real binary here.

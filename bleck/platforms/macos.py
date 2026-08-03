@@ -1,6 +1,10 @@
-"""macOS specifics: Dolphin's tools live inside `Dolphin.app/Contents/MacOS/`,
-Homebrew's prefix depends on the CPU, and Finder clutter (`.DS_Store`, `._`
-sidecars) must never reach a rebuilt image.
+"""macOS specifics: the emulator lives inside `Dolphin.app/Contents/MacOS/`,
+Homebrew's prefix depends on the CPU, Finder clutter (`.DS_Store`, `._`
+sidecars) must never reach a rebuilt image, and an unsigned arm64 binary is
+killed rather than run.
+
+⛔ The bundle contains the emulator and **not** `dolphin-tool` (D274). The
+directory is still searched, because a source build does put it there.
 """
 
 from __future__ import annotations
@@ -36,10 +40,24 @@ PROFILE = PlatformProfile(
                 *[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
             ],
             hint=(
-                "DolphinTool ships inside Dolphin.app "
-                "(/Applications/Dolphin.app/Contents/MacOS/DolphinTool).\n"
-                "  Install with `brew install --cask dolphin`, or set "
-                "BLECK_DOLPHIN_TOOL to its full path"
+                "the distributed Dolphin.app does not ship dolphin-tool: it is "
+                "built as Binaries/dolphin-tool, a sibling of the app, and is "
+                "never copied inside it (D274).\n"
+                "  RVZ is the only format that needs it. To convert one, "
+                "outside bleck:\n"
+                "    cargo install --locked nodtool && nodtool convert "
+                "game.rvz game.iso\n"
+                "      (native arm64; always writes ISO whatever you name the "
+                "output)\n"
+                "    or npx dolphin-tool convert -f iso -i game.rvz -o "
+                "game.iso\n"
+                "    or right-click the game in Dolphin and choose Convert "
+                "File...\n"
+                "  Then work from the .iso or .wbfs, which wit reads natively.\n"
+                "  BLECK_DOLPHIN_TOOL needs a real dolphin-tool: npx installs "
+                "one for arm64,\n"
+                "  and a source build produces one. If it is killed on launch, "
+                "sign it:  codesign -s - <path>"
             ),
         ),
         ToolKey.DOLPHIN: ToolLocation(
@@ -82,12 +100,20 @@ PROFILE = PlatformProfile(
                 *[f"{prefix}/bin" for prefix in HOMEBREW_PREFIXES],
             ],
             hint=(
-                "install devkitPPC:\n"
-                "  bleck toolchain install\n"
-                "  or set BLECK_PPC_GCC to powerpc-eabi-gcc"
+                "install devkitPPC from devkitPro's macOS installer:\n"
+                "  open https://github.com/devkitPro/pacman/releases/latest\n"
+                "  run devkitpro-pacman-installer.pkg, then:\n"
+                "  sudo dkp-pacman -S gamecube-dev\n"
+                "  or set BLECK_PPC_GCC to powerpc-eabi-gcc.\n"
+                "  The build is x86_64 only, so Apple Silicon needs Rosetta 2:  "
+                "softwareupdate --install-rosetta"
             ),
         ),
     },
     ignored_filenames=frozenset({".DS_Store", ".localized"}),
     ignored_prefixes=frozenset({"._"}),
+    signing_remedy=(
+        "codesign --sign - --force "
+        "--preserve-metadata=entitlements,requirements,flags,runtime {path}"
+    ),
 )

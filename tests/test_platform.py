@@ -162,6 +162,36 @@ class TestToolDiscovery:
         monkeypatch.setenv("BLECK_WIT", str(fake))
         assert disc.find_tool(ToolKey.WIT) == str(fake)
 
+    def test_an_override_pointing_nowhere_is_named(self, monkeypatch, tmp_path: Path):
+        """The variable and the path both, because the user set one of them.
+
+        ⚠️ Found on the first macOS run: `.env` carried a `dolphin-tool` path
+        from the install docs, the release `Dolphin.app` does not contain that
+        binary, and the path went unchecked to `subprocess` -- so the user got a
+        `FileNotFoundError` traceback out of `_execute_child` rather than a
+        sentence naming the variable they had just edited.
+        """
+        missing = tmp_path / "Dolphin.app" / "Contents" / "MacOS" / "dolphin-tool"
+        monkeypatch.setenv("BLECK_DOLPHIN_TOOL", str(missing))
+        with pytest.raises(disc.DiscError) as caught:
+            disc.find_tool(ToolKey.DOLPHIN_TOOL)
+        assert "BLECK_DOLPHIN_TOOL" in str(caught.value)
+        assert str(missing) in str(caught.value)
+
+    def test_a_broken_override_does_not_fall_back_to_path(
+        self, monkeypatch, tmp_path: Path
+    ):
+        """⛔ Never run a different binary than the one the user named.
+
+        Searching on would find the *right-named* tool somewhere else and use
+        it, so a typo in `.env` would surface as tool-version confusion rather
+        than as the typo it is.
+        """
+        monkeypatch.setenv("BLECK_WIT", str(tmp_path / "absent"))
+        monkeypatch.setattr(disc.shutil, "which", lambda _name: "/usr/bin/wit")
+        with pytest.raises(disc.DiscError, match="BLECK_WIT"):
+            disc.find_tool(ToolKey.WIT)
+
 
 class TestPathHandling:
     def test_overlay_paths_are_posix_style(self, tmp_path: Path):

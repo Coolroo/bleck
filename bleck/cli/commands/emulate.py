@@ -8,7 +8,9 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import emulator
+from bleck.cli import requirements
 from bleck.cli.types import AddCommand
+from bleck.platforms import ToolKey
 
 CATEGORY = "emulation"
 
@@ -55,3 +57,6 @@ def register(add: AddCommand) -> None:
         help="load a Dolphin save state, skipping the boot and carrying a save",
     )
     p.set_defaults(func=cmd_launch)
+    # Booting is the whole command; there is no path through it that skips the
+    # emulator. DolphinTool cannot stand in -- a different binary entirely.
+    requirements.needs(p, ToolKey.DOLPHIN)

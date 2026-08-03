@@ -9,6 +9,77 @@ bleck <command> [options]
 
 All commands accept `--force` to overwrite existing output.
 
+## Setup
+
+### `bleck doctor`
+
+```bash
+bleck doctor [--no-run]
+```
+
+Reports every external tool `bleck` shells out to, in one pass: whether a
+`BLECK_*` variable names it and whether that path exists, where it was found,
+**whether it actually runs**, and which commands it gates. Then the current
+value of every declared environment variable, and which `.env` supplied them.
+
+```
+$ bleck doctor
+external tools on macOS
+
+wit            ok
+               path         /usr/local/bin/wit
+               found via    $BLECK_WIT
+               required by  extract, build
+               used by      mod build
+               only for any build that writes a disc image, so not `--output none`
+
+powerpc-gcc    absent
+               powerpc-gcc not found (looked for: powerpc-eabi-gcc)
+                 install devkitPPC from devkitPro's macOS installer:
+                 ...
+               required by  script build
+               used by      mod build
+               only for mods with C or C++ sources, or a compiled script
+```
+
+!!! note "Absent is not an error"
+
+    A tool you never installed gates only the commands that use it, so a machine
+    with no PowerPC cross-compiler is correctly set up for asset work.
+    `bleck doctor` exits **non-zero only for misconfiguration**: a `BLECK_*`
+    variable pointing at a path that does not exist, or a tool that is present
+    and will not execute. Mere absence is reported and exits `0`.
+
+Every tool it finds is **executed** with a cheap argument, because being on disk
+is not the same as being usable — macOS on Apple Silicon terminates unsigned
+binaries with no output at all. When that happens `doctor` says the tool was
+killed and prints the `codesign` command that repairs it.
+
+`--no-run` reports what was found without executing anything, which hides
+exactly the failure the check exists to catch.
+
+Commands that cannot run without a tool check for it **before they start**, and
+name every missing one at once:
+
+```
+$ bleck extract game.iso
+bleck: `bleck extract` needs wit, and cannot run without it:
+
+  wit not found (looked for: wit)
+    install Wiimms ISO Tools:  sudo apt install wit
+    or set BLECK_WIT to its full path
+
+`bleck doctor` checks every tool at once and says what each one gates.
+```
+
+!!! info "Only unconditional needs are checked up front"
+
+    `bleck mod build` checks nothing, deliberately: `--output none` writes no
+    disc image and needs no `wit`, and a mod with no C sources needs no
+    compiler. The same goes for `dolphin-tool` on `bleck extract` — it is needed
+    only for an RVZ *input*, which depends on the file you name. Those are
+    reported when they are genuinely reached, with the same detail.
+
 ## Inspection
 
 ### `bleck info`
@@ -805,8 +876,14 @@ Compile a script all the way to a loadable `.rel` module.
 | Code | Meaning |
 |---|---|
 | `0` | Success |
-| `1` | User-fixable error, or verification failure |
+| `1` | User-fixable error, verification failure, or a misconfigured tool |
 | `130` | Interrupted |
+
+!!! note
+
+    `bleck doctor` returns `1` only for **misconfiguration** — a `BLECK_*`
+    variable pointing nowhere, or a tool that will not execute. A tool that is
+    simply not installed is reported and returns `0`.
 
 ## Placements
 

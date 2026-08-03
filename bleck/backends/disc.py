@@ -21,40 +21,124 @@ class DiscError(Exception):
     pass
 
 
-def find_tool(key: ToolKey) -> str:
-    """Locate an external tool: explicit override, then PATH, then known dirs.
+@dataclass(frozen=True)
+class ToolSearch:
+    """What looking for one external tool turned up.
+
+    `find_tool` is this plus a raise. Anything that wants to *report* rather
+    than fail -- `bleck doctor`, the CLI's preflight check -- reads the same
+    search, so there is one answer to "where is wit" and not two.
+    """
+
+    key: ToolKey
+
+    path: str = ""
+    """The executable, or empty when nothing usable was found."""
+
+    where: str = ""
+    """How it was reached: an override variable, `PATH`, or a directory."""
+
+    problem: str = ""
+    """Why nothing was found, already written for a user to read."""
+
+    override_is_broken: bool = False
+    """Whether an override variable names a path that does not exist.
+
+    The distinction the exit code turns on: this is a misconfiguration somebody
+    can fix, where a tool that is simply absent may be one they never wanted.
+    """
+
+    @property
+    def found(self) -> bool:
+        return bool(self.path)
+
+
+def locate(key: ToolKey) -> ToolSearch:
+    """Look for an external tool: explicit override, then PATH, then known dirs.
 
     Where to look is platform data (`bleck/platforms/`), not logic here, and so
     is which variable overrides it (`ToolKey.override`).
     """
+    location = platforms.current().tool(key)
+    hint = f"\n  {location.hint}" if location.hint else ""
+
     configured = env.path(key.override)
     if configured is not None:
-        return str(configured)
-
-    location = platforms.current().tool(key)
+        if configured.exists():
+            return ToolSearch(key, str(configured), f"${key.override.name}")
+        # ⚠️ An override that points nowhere is a typo, not a reason to search
+        # on: silently falling back to PATH would run a *different* binary than
+        # the one asked for. Say so instead.
+        return ToolSearch(
+            key,
+            problem=(
+                f"{key.override.name} is set to {configured}, which does not exist"
+                + hint
+                + f"\n  unset {key.override.name} to search PATH and the usual places"
+            ),
+            override_is_broken=True,
+        )
 
     for candidate in location.names:
         found = shutil.which(candidate)
         if found:
-            return found
+            return ToolSearch(key, found, "PATH")
 
     for directory in location.search_paths():
         for candidate in location.names:
             path = directory.expanduser() / candidate
             if path.exists():
-                return str(path)
+                return ToolSearch(key, str(path), str(path.parent))
 
     tried = ", ".join(location.names)
-    raise DiscError(
-        f"{key} not found (looked for: {tried})"
-        + (f"\n  {location.hint}" if location.hint else "")
+    return ToolSearch(key, problem=f"{key} not found (looked for: {tried})" + hint)
+
+
+def find_tool(key: ToolKey) -> str:
+    """Locate an external tool, or raise a `DiscError` explaining the search."""
+    search = locate(key)
+    if search.found:
+        return search.path
+    raise DiscError(search.problem)
+
+
+def killed_advice(executable: str) -> str:
+    """What to suggest when the OS terminated a tool before it could speak.
+
+    Which repair to name is platform data (`PlatformProfile.signing_remedy`):
+    on Apple Silicon an unsigned arm64 binary is `SIGKILL`ed with no output,
+    and nowhere else does that happen.
+    """
+    remedy = platforms.current().signing_remedy
+    if not remedy:
+        return ""
+    return "  the OS may be refusing to run it; an ad-hoc signature repairs that:\n" + (
+        f"    {remedy.format(path=executable)}"
     )
+
+
+def explain_exit(executable: str, returncode: int) -> str:
+    """Stand in for a tool's own words when it produced none.
+
+    ⚠️ Without this a killed binary reports as `wit failed:` and then nothing,
+    which is the least useful sentence the toolkit can print.
+    """
+    name = Path(executable).name
+    if returncode < 0:
+        advice = killed_advice(executable)
+        return (
+            f"{name} was killed before it could report anything "
+            f"(signal {-returncode})." + (f"\n{advice}" if advice else "")
+        )
+    return f"{name} exited {returncode} without printing anything."
 
 
 def _run(args: list[str]) -> None:
     result = subprocess.run(args, capture_output=True, text=True, check=False)
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
+        detail = (result.stderr or result.stdout).strip() or explain_exit(
+            args[0], result.returncode
+        )
         raise DiscError(f"{Path(args[0]).name} failed:\n{detail}")
 
 
@@ -211,6 +295,15 @@ class DiscInfo:
     ids: str = ""
     disc_type: str = ""
 
+    reason: str = ""
+    """Why the fields are empty, when they are.
+
+    ⚠️ `identify` still answers rather than raising -- a caller printing a file
+    summary should not abort over a missing tool. But it knew exactly which
+    tool was missing and where it looked, and throwing that away left
+    `bleck info` asking the user a question it had the answer to (D274).
+    """
+
     @property
     def is_empty(self) -> bool:
         return not any((self.name, self.region, self.ids, self.disc_type))
@@ -251,18 +344,18 @@ _DOLPHIN_FIELDS = {
 
 
 def identify(image: Path) -> DiscInfo:
-    """Read disc header fields. Returns an empty DiscInfo if unreadable."""
+    """Read disc header fields. Returns an empty DiscInfo, and why, if unreadable."""
     if is_rvz(image):
         return _identify_rvz(image)
-    try:
-        wit = find_tool(ToolKey.WIT)
-    except DiscError:
-        return DiscInfo()
+    search = locate(ToolKey.WIT)
+    if not search.found:
+        return DiscInfo(reason=search.problem)
+    wit = search.path
     result = subprocess.run(
         [wit, "DUMP", str(image)], capture_output=True, text=True, check=False
     )
     if result.returncode != 0:
-        return DiscInfo()
+        return DiscInfo(reason=_tool_said(wit, result))
 
     found: dict[str, str] = {}
     for line in result.stdout.splitlines():
@@ -275,17 +368,29 @@ def identify(image: Path) -> DiscInfo:
     return DiscInfo(**found)
 
 
+def _tool_said(executable: str, result: subprocess.CompletedProcess[str]) -> str:
+    """A failed run's own words, or a stand-in when it had none."""
+    return (result.stderr or result.stdout).strip() or explain_exit(
+        executable, result.returncode
+    )
+
+
 def _identify_rvz(image: Path) -> DiscInfo:
-    """RVZ headers come from dolphin-tool; wit cannot read the format."""
-    try:
-        tool = find_tool(ToolKey.DOLPHIN_TOOL)
-    except DiscError:
-        return DiscInfo()
+    """RVZ headers come from dolphin-tool; wit cannot read the format.
+
+    ⚠️ So `wit` is not a candidate here and must not appear in the reason. Half
+    a sentence naming a tool that could never have helped is what made the old
+    "is wit or dolphin-tool installed?" message useless.
+    """
+    search = locate(ToolKey.DOLPHIN_TOOL)
+    if not search.found:
+        return DiscInfo(reason=search.problem)
+    tool = search.path
     result = subprocess.run(
         [tool, "header", "-i", str(image)], capture_output=True, text=True, check=False
     )
     if result.returncode != 0:
-        return DiscInfo()
+        return DiscInfo(reason=_tool_said(tool, result))
 
     found: dict[str, str] = {}
     for line in result.stdout.splitlines():

@@ -7,6 +7,7 @@ from __future__ import annotations
 from . import (
     archive,
     disc,
+    doctor,
     effect,
     emulate,
     inspect,
@@ -35,12 +36,14 @@ MODULES = [
     disc,
     emulate,
     stream,
+    doctor,
 ]
 
 __all__ = [
     "MODULES",
     "archive",
     "disc",
+    "doctor",
     "effect",
     "emulate",
     "inspect",

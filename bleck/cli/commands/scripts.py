@@ -6,8 +6,10 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import toolchain
+from bleck.cli import requirements
 from bleck.cli.types import AddCommand
 from bleck.common.errors import BleckError
+from bleck.platforms import ToolKey
 from bleck.script import ScriptError, compile_source, emit
 from bleck.script import catalog as builtin_catalog
 
@@ -164,3 +166,7 @@ def register(add: AddCommand) -> None:
     built = action("build", cmd_build, "compile a script into a .rel module")
     built.add_argument("-o", "--output", help="where to write the module")
     _add_target_flags(built)
+    # Producing the REL is the command; `build_rel` always detects a compiler.
+    # ⚠️ `check` and `dump` deliberately do not: both stop at the generated C,
+    # which is what you want to read when you have no cross-compiler yet.
+    requirements.needs(built, ToolKey.PPC_GCC)

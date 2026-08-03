@@ -20,6 +20,7 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from bleck import platforms
 from bleck.backends import languages, symbols
 from bleck.backends.disc import DiscError, find_tool
 from bleck.backends.languages import Language
@@ -96,8 +97,9 @@ class Toolchain:
             f"  {where}\n"
             f"  bleck derives it from the C compiler it found "
             f"({self.compiler}) so both come from one toolchain.\n"
-            f"  Install that toolchain's {language.name} half:  "
-            f"bleck toolchain install{hint}"
+            f"  Install that toolchain's {language.name} half -- devkitPPC "
+            f"ships both in its gamecube-dev package:{hint}\n"
+            f"  {platforms.current().tool(ToolKey.PPC_GCC).hint}"
         )
 
     def compile_flags(self, language: Language = languages.C) -> list[str]:

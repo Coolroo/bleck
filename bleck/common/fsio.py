@@ -25,6 +25,19 @@ def require_dir(path: Path) -> Path:
     return path
 
 
+def require_file(path: Path) -> Path:
+    """Fail on a missing input before an external tool is handed the path.
+
+    ⚠️ Worth doing even though the tool will also fail: `wit` answers a wrong
+    filename with `ERROR #76 [CAN'T OPEN FILE] in SetupReadSF() @
+    src/lib-sf.c#447`, which is a C source location for "you typed the wrong
+    name". What bleck can check itself, it should.
+    """
+    if not path.is_file():
+        raise UserError(f"no such file: {path}")
+    return path
+
+
 def guard_overwrite(path: Path, force: bool) -> None:
     """Refuse to clobber. These operations produce large, expensive artifacts."""
     if path.exists() and not force:

@@ -138,6 +138,21 @@ class TestVerify:
         assert cli.main(["verify", str(tmp_path)]) == 1
         assert "no .bin files" in capsys.readouterr().err
 
+    def test_a_directory_where_nothing_was_an_archive_is_not_a_pass(
+        self, tmp_path: Path, capsys
+    ):
+        """⚠️ `0 identical, 0 differing, 4 skipped` reads exactly like success.
+
+        Pointed at an extracted disc root this is what happens: the only `.bin`
+        files there are `cert`, `h3`, `ticket` and `tmd`, which are Wii metadata
+        and correctly skipped. The archives are under `files/map/`. Reported as
+        a pass, it says the disc round-trips when nothing was even opened.
+        """
+        for name in ("cert", "ticket"):
+            (tmp_path / f"{name}.bin").write_bytes(b"\x99" * 64)
+        assert cli.main(["verify", str(tmp_path)]) == 1
+        assert "nothing was verified" in capsys.readouterr().out
+
 
 class TestLz:
     def test_decompress_round_trip(self, tmp_path: Path):

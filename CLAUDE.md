@@ -330,18 +330,27 @@ Follow the existing entry format. Non-negotiable parts:
 `bleck/cli/commands/` contains `disc.py`, `emulate.py` and `inspect.py`, and
 ⛔ **there is no `bleck disc`, `bleck emulate` or `bleck inspect`.** Each module
 registers its subcommands at the **top level**, so the file names are an internal
-grouping and nothing more. The twenty that exist:
+grouping and nothing more. The twenty-one that exist:
 
 ```
-build   doors   effect  extract  info    items   launch  ls      lz      maps
-mod     model   pack    script   setup   sound   symbols texture unpack  verify
+build   doctor  doors   effect  extract  info    items   launch  ls      lz
+maps    mod     model   pack    script   setup   sound   symbols texture unpack
+verify
 ```
 
 Eight of them nest further — `mod`, `script`, `model`, `texture`, `sound`,
 `effect`, `symbols` and `setup` — so `mod build`, `model export`,
 `texture list`. ⚠️ **`bleck build` and `bleck mod build` are different
-commands.** ⛔ `bleck toolchain install` is advertised in
-`bleck/backends/toolchain.py` and does not exist (D239).
+commands.** ⛔ `bleck toolchain install` has never existed (D239) and is no
+longer advertised anywhere (D274) — a test pins that.
+
+⚠️ **`bleck doctor` answers "is this machine set up?"** — every external tool,
+whether it is found, **whether it actually runs**, and what each one gates. It
+exits non-zero only for *misconfiguration* (an override pointing nowhere, a tool
+that will not execute); absence is informational. Reach for it before debugging
+a tool error by hand. A command declares an unconditional need with
+`requirements.needs(parser, ToolKey.WIT)`, checked before dispatch — ⛔ only
+*unconditional* ones, which is why `mod build` declares nothing.
 
 ## The scripts you will actually use
 

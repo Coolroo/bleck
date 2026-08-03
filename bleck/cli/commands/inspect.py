@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import disc, doors, maps
+from bleck.cli import requirements
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
 from bleck.common.fsio import read_bytes
@@ -31,14 +32,31 @@ def cmd_info(args: argparse.Namespace) -> int:
             for field in info.describe():
                 print(f"  {field.label}: {field.value}")
             return 0
-        # Disc images are far too large to slurp for format sniffing.
-        print("  (unrecognised disc image; is wit or dolphin-tool installed?)")
+        # Disc images are far too large to slurp for format sniffing, so a
+        # header that could not be read is the end of the road here.
+        for line in _unreadable(path, info):
+            print(line)
         return 0
 
     data = read_bytes(path)
     for line in detect.render(detect.identify(data), indent=1):
         print(line)
     return 0
+
+
+def _unreadable(path: Path, info: disc.DiscInfo) -> list[str]:
+    """Say why a disc header could not be read, rather than guessing at it.
+
+    ⚠️ `identify` already knew which tool was missing, where it looked and what
+    this platform advises. The message this replaced asked the user "is wit or
+    dolphin-tool installed?" -- a question with an `or` in it, put to the one
+    person in the room who could not answer it, and for an RVZ `wit` was never
+    a candidate at all (D274).
+    """
+    kind = path.suffix.lstrip(".").upper()
+    lines = [f"  could not read this {kind} image."]
+    lines += [f"  {line}" for line in info.reason.splitlines()]
+    return [*lines, f"  {requirements.DOCTOR_HINT}"]
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -60,6 +78,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
             print(f"  MISMATCH {path.name}")
 
     print(f"{len(files)} files: {ok} identical, {bad} differing, {skipped} skipped")
+    if target.is_dir() and not ok + bad:
+        # ⚠️ A directory sweep that checked nothing must not read as a pass: at
+        # a disc root this finds only cert/h3/ticket/tmd.bin and "0 differing"
+        # looks like success. One file answering "skipped" is a real answer.
+        print(f"  nothing was verified: no U8 archive among the .bin files in {target}")
+        print("  the disc's archives are under files/map/ and files/hbm/")
+        return 1
     return 1 if bad else 0
 
 

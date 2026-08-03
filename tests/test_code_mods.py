@@ -342,7 +342,10 @@ class TestLanguageDrivers:
             found.driver(languages.CXX)
         message = str(caught.value)
         assert "powerpc-eabi-g++" in message
-        assert "bleck toolchain install" in message
+        assert "gamecube-dev" in message
+        # ⛔ `bleck toolchain install` was offered here for months and is not a
+        # command (D239, D274). Pinned so it cannot come back.
+        assert "toolchain install" not in message
 
     def test_an_underivable_name_says_so(self):
         with pytest.raises(toolchain.ToolchainError) as caught:

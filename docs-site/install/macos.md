@@ -20,17 +20,49 @@ description: Installing bleck on macOS
     brew install --cask dolphin
     ```
 
-    Dolphin's command-line tool lives **inside the application bundle** at
-    `/Applications/Dolphin.app/Contents/MacOS/dolphin-tool`, not on your PATH.
-    `bleck` looks inside the bundle automatically.
+    That gives you the emulator, which is what `bleck launch` needs.
 
-    !!! note
+    !!! warning "RVZ disc images need one extra step on macOS"
 
-        It is spelled `dolphin-tool` here, not `DolphinTool`. Dolphin renames it
-        on Windows only —
-        [`Source/Core/DolphinTool/CMakeLists.txt`](https://github.com/dolphin-emu/dolphin/blob/master/Source/Core/DolphinTool/CMakeLists.txt)
-        applies `OUTPUT_NAME DolphinTool` inside `if (WIN32)`. `bleck` accepts
-        either name, so an older bundle still works.
+        The distributed `Dolphin.app` contains the emulator and **nothing else**
+        — not `dolphin-tool`, which is the only program `bleck` knows that reads
+        RVZ. Dolphin builds it as `Binaries/dolphin-tool`, a *sibling* of the
+        app, and never copies it inside. `wit` cannot read RVZ either.
+
+        Convert the image once, then work from the result — `.iso` and `.wbfs`
+        are what `wit` reads natively, and what builds are shared as anyway:
+
+        ```bash
+        cargo install --locked nodtool
+        nodtool convert game.rvz game.iso    # always writes ISO
+        ```
+
+        Or `npx dolphin-tool convert -f iso -i game.rvz -o game.iso`, or
+        right-click the game in Dolphin and choose *Convert File…*.
+
+        ⛔ **Do not set `BLECK_DOLPHIN_TOOL` to a path inside `Dolphin.app`.**
+        Nothing is there, and earlier versions of this page told you to — which
+        is how the setting became a crash rather than a missing feature. Point
+        it at a real `dolphin-tool` (the `npx` package installs one for arm64,
+        and a source build produces one) or leave it unset.
+
+1.  **Check your setup at any point**
+
+    ```bash
+    uv run bleck doctor
+    ```
+
+    Reports every external tool `bleck` uses: whether it is installed, where it
+    was found, whether it actually runs, and which commands it gates. A tool you
+    have not installed is reported and is **not** an error — it only limits
+    which commands work. A setting pointing at a path that does not exist, or a
+    tool that will not run, exits non-zero.
+
+    !!! tip "Apple Silicon kills unsigned binaries silently"
+
+        `bleck doctor` runs each tool it finds, because being on disk is not the
+        same as being usable. If one was killed rather than run, `doctor` says so
+        and prints the `codesign` command that repairs it.
 
 1.  **Install Wiimms ISO Tools**
 
@@ -67,6 +99,7 @@ description: Installing bleck on macOS
     ```bash
     uv run pytest
     uv run bleck --help
+    uv run bleck doctor
     ```
 { .steps }
 

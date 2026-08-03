@@ -6,17 +6,24 @@ import argparse
 from pathlib import Path
 
 from bleck.backends import disc
+from bleck.cli import requirements
 from bleck.cli.types import AddCommand
 from bleck.common import env
-from bleck.common.fsio import guard_overwrite, require_dir
+from bleck.common.fsio import guard_overwrite, remove_tree, require_dir, require_file
+from bleck.platforms import ToolKey
 
 CATEGORY = "discs"
 
 
 def cmd_extract(args: argparse.Namespace) -> int:
-    image = Path(args.disc)
+    image = require_file(Path(args.disc))
     dest = Path(args.dest) if args.dest else _default_dest(image)
     guard_overwrite(dest, args.force)
+    # ⚠️ `wit EXTRACT` refuses an existing destination and has no --overwrite,
+    # so --force must clear the tree here or it only *permits* an overwrite it
+    # never performs -- the run then dies in wit with `FILE ALREADY EXISTS`.
+    if dest.exists():
+        remove_tree(dest)
     disc.extract(image, dest, keep_iso=args.keep_iso)
     print(f"extracted {image.name} -> {dest}/")
     return 0
@@ -69,9 +76,14 @@ def register(add: AddCommand) -> None:
         help="keep the ISO converted from an RVZ (conversion costs ~70s)",
     )
     p.set_defaults(func=cmd_extract)
+    # ⚠️ wit only. An RVZ input also needs dolphin-tool, but that depends on the
+    # file the user names, so it stays lazy -- declaring it here would refuse an
+    # `.iso` extraction on a machine that never needs the converter.
+    requirements.needs(p, ToolKey.WIT)
 
     p = add("build", help="extracted filesystem -> disc image")
     p.add_argument("dir")
     p.add_argument("out")
     add_format_flags(p)
     p.set_defaults(func=cmd_build)
+    requirements.needs(p, ToolKey.WIT)
