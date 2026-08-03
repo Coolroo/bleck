@@ -3,33 +3,41 @@
 `__init__` decides which build happens — one mod, or several merged. This holds
 what both need: the shared values, the resolution of a manifest's declarations
 into what the emitter wants, and compiling and linking.
+
+Four modules under it own the parts that stand alone, and none imports another
+except downward:
+
+| module | what it owns |
+|---|---|
+| `errors` | `CodeError`, so the four below can all raise it |
+| `sources` | which files a mod compiles, and what they define |
+| `patches` | `code.patches`, `tables.doors`, `code.replace` |
+| `hooks` | `code.hooks` — name to address, and the guard word from the DOL |
 """
 
 from __future__ import annotations
 
 import difflib
-import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from bleck.backends import dol as dol_reader
-from bleck.backends import languages, toolchain
 from bleck.backends import symbols as symbol_tables
+from bleck.backends import toolchain
 from bleck.common import config as project_config
 from bleck.common import env
-from bleck.common.errors import BleckError
-from bleck.formats import tables
-from bleck.mods import registry as mod_registry
-from bleck.mods.manifest import REL_DISC_PATH, CodeSpec, TableKind, codespec
-from bleck.mods.manifest.codespec import FunctionHook
+from bleck.mods.code.errors import CodeError
+from bleck.mods.code.hooks import ResolvedHooks, function_hooks_for
+from bleck.mods.code.patches import patches_for, replacements_for
+from bleck.mods.code.sources import (
+    BLECK_INCLUDE,
+    collect_sources,
+    defines_mod_prolog,
+)
+from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
 from bleck.mods.registry import Mod
 from bleck.script import ScriptError, compile_source, emit
 
 CODE_WORKDIR = ".code"
-
-
-class CodeError(BleckError):
-    """A mod's script could not be turned into a module."""
 
 
 @dataclass(frozen=True)
@@ -123,96 +131,9 @@ class ScriptSource:
         return str(self.path) if self.path is not None else self.origin
 
 
-#: Where `bleck.h` lives, always on a mod's include path so a source can
-#: `#include <bleck.h>` and use the tag macros.
-BLECK_INCLUDE = Path(__file__).resolve().parent / "include"
-
-#: What `code.sources` accepts, as a phrase for error messages.
-_SUFFIX_LIST = ", ".join(languages.SOURCE_SUFFIXES)
-
-
-def collect_sources(mod: Mod, spec: CodeSpec) -> list[Path]:
-    """Resolve `code.sources` to actual C and C++ files.
-
-    A directory entry contributes every source beneath it, sorted, so a build
-    does not depend on filesystem ordering.
-    """
-    found: list[Path] = []
-    for entry in spec.sources:
-        path = mod.root / entry
-        if path.is_dir():
-            # A set first: Windows globs case-insensitively, so `*.c` and `*.cc`
-            # can both match the same file.
-            seen = {
-                match
-                for suffix in languages.SOURCE_SUFFIXES
-                for match in path.rglob(f"*{suffix}")
-            }
-            if not seen:
-                raise CodeError(f"{mod.name}: no {_SUFFIX_LIST} files under {path}")
-            found += sorted(seen)
-        elif path.exists():
-            found.append(path)
-        else:
-            raise CodeError(
-                f"{mod.name}: no source at {path}\n"
-                f"  mod.json lists {entry!r} in 'code.sources'"
-            )
-    _check_cxx_prolog(mod, found)
-    return found
-
-
-def needs_ctor_walk(sources: list[Path]) -> bool:
-    """Whether these sources oblige `_prolog` to walk `.ctors`."""
-    return any(language.needs_ctor_walk for language in languages.used_by(sources))
-
-
-#: Comments, stripped first: mods quote "define `mod_prolog`" from the docs in
-#: a comment, and matching that prose reports a false collision.
-_C_COMMENT = re.compile(r"/\*.*?\*/|//[^\n]*", re.DOTALL)
-
-#: A *definition*, not a declaration: the body brace is what makes it one.
-#: `extern void mod_prolog(void);` collides with nothing.
-_MOD_PROLOG_DEFINITION = re.compile(r"\bvoid\s+mod_prolog\s*\([^)]*\)\s*\{")
-
-
-def defines_mod_prolog(source: Path) -> bool:
-    """Whether a source file supplies its own `mod_prolog`.
-
-    `bleck` emits a *weak* one (see `runtime_c.MOD_HOOK`), so one mod may
-    override it; two is a duplicate symbol.
-    """
-    try:
-        text = source.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-    return bool(_MOD_PROLOG_DEFINITION.search(_C_COMMENT.sub(" ", text)))
-
-
-def _check_cxx_prolog(mod: Mod, sources: list[Path]) -> None:
-    """A C++ `mod_prolog` must have C linkage, or it is never called.
-
-    `bleck`'s weak definition has C linkage, so a mangled `mod_prolog` does not
-    override it: the module links, loads, and silently runs nothing.
-    """
-    for source in sources:
-        if languages.for_source(source) is not languages.CXX:
-            continue
-        if not defines_mod_prolog(source):
-            continue
-        text = source.read_text(encoding="utf-8", errors="replace")
-        if 'extern "C"' in _C_COMMENT.sub(" ", text):
-            continue
-        raise CodeError(
-            f"{mod.name}: {source} defines `mod_prolog` with C++ linkage, so "
-            f"its name is mangled and bleck's own definition wins.\n"
-            f'  Write `extern "C" void mod_prolog(void)` instead -- otherwise '
-            f"the module loads and does nothing."
-        )
-
-
 def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:
     """Which mods in a merge supply their own `mod_prolog`, by name."""
+    # pylint: disable=container-return
     return [
         part.mod.name
         for part in parts
@@ -222,6 +143,7 @@ def mods_defining_mod_prolog(parts: list[Part]) -> list[str]:
 
 def map_hooks_for(mod: Mod) -> list[emit.MapHook]:
     """The map attachments this mod declares, as the emitter wants them."""
+    # pylint: disable=container-return
     spec = mod.code
     if spec is None:
         return []
@@ -237,6 +159,7 @@ def combo_hooks_for(
 
     Joined here so a mod never contains a button mask.
     """
+    # pylint: disable=container-return
     hooks: list[emit.ComboHook] = []
     for binding in spec.combos:
         found = settings.combo(binding.combo)
@@ -257,345 +180,6 @@ def combo_hooks_for(
             emit.ComboHook(name=found.name, mask=found.mask, script=binding.script)
         )
     return hooks
-
-
-#: A function *definition*: same shape as `_MOD_PROLOG_DEFINITION`, but for any
-#: name, so a typo can be matched against what the sources actually define.
-#: One level of nesting, so a function-pointer parameter still matches. A
-#: definition produced by a macro will not -- that costs a build error naming
-#: what was found, not a silent miss.
-_ANY_DEFINITION = re.compile(r"\b([A-Za-z_]\w*)\s*\((?:[^()]|\([^()]*\))*\)\s*\{")
-
-#: `if (x) {` matches the pattern above and is not a function.
-_NOT_A_FUNCTION = frozenset({"if", "for", "while", "switch", "catch", "return"})
-
-
-def _defined_functions(sources: list[Path]) -> list[str]:
-    """Every function these sources define, in order, comments stripped."""
-    names: list[str] = []
-    for source in sources:
-        try:
-            text = source.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for match in _ANY_DEFINITION.finditer(_C_COMMENT.sub(" ", text)):
-            if match[1] not in names and match[1] not in _NOT_A_FUNCTION:
-                names.append(match[1])
-    return names
-
-
-@dataclass(frozen=True)
-class SourcedPatch:
-    """One patch and where it was written, so an error can name the right place.
-
-    A `ScriptPatch` deliberately does not carry a filename -- it is what a mod
-    *declares*, not where -- but "code.patches[3]" is a lie when the patch came
-    from row 4 of a CSV.
-    """
-
-    patch: codespec.ScriptPatch
-    where: str
-
-
-def door_patches(mod: Mod) -> list[SourcedPatch]:
-    """A mod's `tables.doors` rows, as the patches `code.patches` would hold.
-
-    ⚠️ **A door table is code, not placement.** Enemy and coin tables become
-    setup-file data in `bleck/mods/build/edits.py`; these become patches, so
-    they merge here instead and `PLACEMENT_KINDS` excludes `DOORS` (D134).
-
-    Each row is turned back into the selector a manifest would spell and run
-    through `build_patch`, so a table and an inline patch are validated by
-    exactly the same code and refuse exactly the same things.
-    """
-    out: list[SourcedPatch] = []
-    for ref in mod.tables_of(TableKind.DOORS):
-        path = mod.root / ref.path
-        if not path.is_file():
-            raise CodeError(
-                f"{mod.name}: no table at {ref.path}, declared under "
-                f"'tables.{ref.kind}' in mod.json"
-            )
-        table = tables.doors.read(path, source=ref.path, map_name=ref.map_name)
-        for row in table.rows:
-            where = f"{table.source}:{row.line}"
-            out.append(
-                SourcedPatch(
-                    patch=codespec.build_patch(
-                        row.selector, row.at, row.expect, row.call, where
-                    ),
-                    where=where,
-                )
-            )
-    return out
-
-
-def patches_for(mod: Mod, spec: CodeSpec, sources: list[Path]) -> list[emit.ScriptPatch]:
-    """Resolve `code.patches` and `tables.doors` for the emitter, checking each
-    `call` exists.
-
-    Without this the typo reaches `elf2rel`, which reports it as a missing
-    *game* symbol -- the mod's own function looks like an address it should
-    have found in the symbol list.
-    """
-    declared = [
-        SourcedPatch(patch=patch, where=f"code.patches[{index}]")
-        for index, patch in enumerate(spec.patches)
-    ] + door_patches(mod)
-    if not declared:
-        return []
-    defined = _defined_functions(sources)
-    for item in declared:
-        if item.patch.call in defined:
-            continue
-        listed = ", ".join(defined) or "none"
-        close = difflib.get_close_matches(item.patch.call, defined, n=1, cutoff=0.6)
-        hint = f"\n  Did you mean {close[0]!r}?" if close else ""
-        raise CodeError(
-            f"{mod.name}: {item.where} calls {item.patch.call!r}, but "
-            f"this mod's sources define no such function "
-            f"(they define: {listed}).{hint}\n"
-            f"  A patched instruction calls a function with evt's user-func "
-            f"signature -- `s32 f(EvtEntry *entry, bool firstCall)` -- which "
-            f"must return 2 for the script to advance."
-        )
-    return [
-        emit.ScriptPatch(
-            kind=patch.kind,
-            target=patch.emit_target,
-            at=patch.at,
-            expect=patch.expect_word,
-            call=patch.call,
-            index=patch.index,
-            field_offset=patch.field_offset,
-        )
-        for patch in (item.patch for item in declared)
-    ]
-
-
-def replacements_for(_mod: Mod, spec: CodeSpec) -> list[emit.ScriptReplacement]:
-    """Resolve `code.replace` for the emitter, checking each script exists.
-
-    ⚠️ **This conversion is the whole point of the two types.** The manifest form
-    holds what the author wrote; the emitter form holds a map name, an index and
-    a field offset. The C symbol is left blank on purpose -- only the emitter
-    knows the namespace, which is `bleck_` for one mod and a per-mod slug for a
-    merged build. `_bind_replacements` fills it, as `_bind_maps` does for hooks.
-    """
-    if not spec.replacements:
-        return []
-    resolved = []
-    for entry in spec.replacements:
-        resolved.append(
-            emit.ScriptReplacement(
-                map_name=entry.map_name,
-                index=entry.index,
-                field_offset=entry.field_offset,
-                script=entry.script,
-                expect_word=entry.expect_word,
-            )
-        )
-    return resolved
-
-
-#: Where the pristine DOL lives inside an extracted build.
-DOL_PATH = "sys/main.dol"
-
-
-@dataclass(frozen=True)
-class ResolvedHooks:
-    """`code.hooks` turned into what the emitter wants, plus what it could not do.
-
-    A hook whose address the DOL does not map installs **unguarded**, and the
-    warning says so. Faking a guard would be worse than not having one.
-    """
-
-    hooks: list[emit.FunctionHook] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-
-
-def _base_dol(base: Path) -> dol_reader.Dol | None:
-    """The base disc's `main.dol`, or None when there is no readable one."""
-    try:
-        return dol_reader.read(base / DOL_PATH)
-    except dol_reader.DolError:
-        return None
-
-
-def function_hooks_for(
-    mod: Mod,
-    spec: CodeSpec,
-    sources: list[Path],
-    table: symbol_tables.SymbolTable,
-) -> ResolvedHooks:
-    """Resolve `code.hooks`: name to address, and derive each guard word.
-
-    Three things are checked here and nowhere else: the symbol exists in the
-    target's list, the mod defines the function it says it does, and the word
-    the guard will compare against is one bleck actually read out of the base
-    disc rather than one it invented.
-    """
-    if not spec.hooks:
-        return ResolvedHooks()
-
-    defined = _defined_functions(sources)
-    base = mod_registry.base_root()
-    dol = _base_dol(base)
-    hooks: list[emit.FunctionHook] = []
-    warnings: list[str] = []
-
-    for index, hook in enumerate(spec.hooks):
-        where = f"{mod.name}: 'code.hooks[{index}]'"
-        _check_hook_call(hook, defined, where)
-        address = _hook_address(hook, table, where)
-        word = dol.word_at(address) if dol is not None else None
-        if word is None:
-            _check_interception_possible(hook, address, where)
-            warnings.append(_no_guard_warning(hook, address, base, dol, where))
-        else:
-            warnings += _section_warning(hook, address, dol, where)
-        hooks.append(
-            emit.FunctionHook(
-                call=hook.call,
-                address=address,
-                symbol="" if hook.is_address else hook.function,
-                expect=word or 0,
-                guarded=word is not None,
-                mode=hook.mode,
-            )
-        )
-    return ResolvedHooks(hooks=hooks, warnings=warnings)
-
-
-def _check_interception_possible(hook: FunctionHook, address: int, where: str) -> None:
-    """`before` and `after` need a guard word; `replace` does not.
-
-    Interception reaches the original by restoring the function's first
-    instruction, calling it, and re-installing the branch (D96). That word comes
-    out of `main.dol` at build time, so an address the DOL does not map -- a REL
-    address, say -- leaves nothing to restore.
-
-    A `replace` hook installs unguarded with a warning, because it never needs to
-    put the original back. Interception would build fine and then recurse into
-    itself at run time until the stack ran out, so it is refused here instead.
-    """
-    if not hook.intercepts:
-        return
-    raise CodeError(
-        f"{where}: 'mode' is {hook.mode!r}, but bleck could not read the "
-        f"instruction at 0x{address:08X} out of the base disc's main.dol.\n"
-        f"  {hook.mode!r} runs the original as well as your function, and it "
-        f"reaches the original by putting that instruction back for the "
-        f"duration of the call. With no word to restore there is nothing to "
-        f"call, and the hook would branch into itself until the stack ran out.\n"
-        f"  Addresses above the DOL belong to a REL, which is loaded per map "
-        f"and is not on the disc as plain code.\n"
-        f"  Use 'replace' if taking the function over is acceptable."
-    )
-
-
-def _check_hook_call(hook: FunctionHook, defined: list[str], where: str) -> None:
-    """The mod has to define the function it hands the game control to.
-
-    Without this the typo reaches `elf2rel`, which reports it as a missing
-    *game* symbol -- the mod's own function looks like an address it should
-    have found in the symbol list.
-    """
-    if hook.call in defined:
-        return
-    listed = ", ".join(defined) or "none"
-    close = difflib.get_close_matches(hook.call, defined, n=1, cutoff=0.6)
-    hint = f"\n  Did you mean {close[0]!r}?" if close else ""
-    raise CodeError(
-        f"{where}.call names {hook.call!r}, but this mod's sources define no "
-        f"such function (they define: {listed}).{hint}\n"
-        f"  {_signature_rule(hook)}"
-    )
-
-
-def _signature_rule(hook: FunctionHook) -> str:
-    """Why the mod's function has to match the one it hooks -- which differs by
-    mode, and gets the reasoning wrong in both directions if it does not."""
-    if not hook.intercepts:
-        return (
-            f"A {hook.mode!r} hook takes {hook.function} over, so it must accept "
-            f"the same arguments AND return what the caller expects -- the "
-            f"original never runs."
-        )
-    return (
-        f"A {hook.mode!r} hook runs alongside {hook.function}, so it must accept "
-        f"the same arguments. Its return value is discarded: the caller receives "
-        f"the original's."
-    )
-
-
-def _hook_address(
-    hook: FunctionHook, table: symbol_tables.SymbolTable, where: str
-) -> int:
-    """The address a hook's `function` names, resolved against the target list."""
-    if hook.is_address:
-        return hook.address
-    found = table.find(hook.function)
-    if found is not None:
-        return found.address
-    names = [symbol.name for symbol in table.named]
-    close = difflib.get_close_matches(hook.function, names, n=1, cutoff=0.6)
-    hint = f"\n  Did you mean {close[0]!r}?" if close else ""
-    raise CodeError(
-        f"{where}.function names {hook.function!r}, which is not in the symbol "
-        f"list for this target ({table.source}, {len(names)} named "
-        f"symbols).{hint}\n"
-        f"  `bleck symbols search {hook.function}` lists near matches.\n"
-        f"  Resolving by name is the point: a wrong name fails the build "
-        f"rather than branching into unrelated code."
-    )
-
-
-def _section_warning(
-    hook: FunctionHook, address: int, dol: dol_reader.Dol, where: str
-) -> list[str]:
-    """A hook aimed at the DOL's *data* is almost certainly a wrong address.
-
-    Warned rather than refused: the guard still makes it deterministic, and the
-    DOL's data span is wide (eu0 reaches 0x805B7720), so an address that looks
-    like code can land in it.
-    """
-    section = dol.section_for(address)
-    if section is None or section.is_text:
-        return []
-    return [
-        f"{where}: {hook.function} resolves to {address:08X}, which is in "
-        f"{dol.path.name}'s {section.name} -- data, not code.\n"
-        f"  A hook writes a branch instruction there, so unless that word "
-        f"really is code this is the wrong address."
-    ]
-
-
-def _no_guard_warning(
-    hook: FunctionHook,
-    address: int,
-    base: Path,
-    dol: dol_reader.Dol | None,
-    where: str,
-) -> str:
-    """Say exactly why a hook is going in without a derived guard."""
-    if dol is None:
-        why = f"there is no readable DOL at {base / DOL_PATH}"
-    elif dol.section_for(address) is None:
-        why = (
-            f"{address:08X} is outside {dol.path.name}, which loads "
-            f"{dol.address_range} -- most likely a REL address, and REL text "
-            f"is not in the base disc's DOL to read"
-        )
-    else:
-        why = f"{address:08X} is inside the DOL but its word could not be read"
-    return (
-        f"{where}: hooking {hook.function} with no derived guard, because "
-        f"{why}.\n"
-        f"  It will install without checking what is there, so a wrong address "
-        f"or the wrong game version corrupts an instruction instead of being "
-        f"refused."
-    )
 
 
 def banner_for(mod: Mod, spec: CodeSpec | None = None) -> emit.Banner | None:
@@ -702,18 +286,18 @@ def prepare(mod: Mod, override: CodeOverride | None) -> Part:
         except ScriptError as exc:
             raise CodeError(f"{mod.name}:\n{exc.render(source.where)}") from exc
 
-    sources = collect_sources(mod, spec)
+    found = collect_sources(mod, spec)
     return Part(
         mod=mod,
         spec=spec,
         source=source,
         program=program,
-        sources=sources,
+        sources=found,
         boot_map=boot_map,
         combos=combo_hooks_for(mod, spec, project_config.load()),
-        patches=patches_for(mod, spec, sources),
+        patches=patches_for(mod, spec, found),
         replacements=replacements_for(mod, spec),
-        function_hooks=function_hooks_for(mod, spec, sources, table),
+        function_hooks=function_hooks_for(mod, spec, found, table),
     )
 
 
@@ -723,9 +307,9 @@ def link_module(
     """Compile the generated C plus every part's native sources into one REL."""
     headers = env.path(env.HEADERS_DIR)
     spec = parts[-1].spec
-    sources: list[Path] = []
+    found: list[Path] = []
     for part in parts:
-        sources += part.sources
+        found += part.sources
 
     result = toolchain.build_rel(
         toolchain.BuildRequest(
@@ -733,7 +317,7 @@ def link_module(
             workdir=workroot / CODE_WORKDIR / owner.name,
             target=spec.target,
             module_id=spec.module_id,
-            extra_sources=sources,
+            extra_sources=found,
             include_dirs=(
                 ([headers] if headers and headers.is_dir() else []) + [BLECK_INCLUDE]
             ),
@@ -756,7 +340,7 @@ def link_module(
         target=parts[-1].spec.target,
         scripts=scripts,
         called_symbols=[],
-        sources=sources,
+        sources=found,
         boot_map=next((p.boot_map for p in parts if p.boot_map), ""),
         warnings=[note for part in parts for note in part.function_hooks.warnings],
     )

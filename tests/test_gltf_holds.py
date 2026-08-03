@@ -11,14 +11,14 @@ export budget and 39 MB.
 
 from __future__ import annotations
 
-from bleck.formats import gltf, model
+from bleck.formats import gltf, gltfmorph, model
 from tests.test_gltf import _floats, a_mesh, parsed
 
 
 def held() -> list:
     """One movement, then two beats where nothing changes, then another."""
     return [
-        gltf.Clip(
+        gltfmorph.Clip(
             name="beat",
             poses=[
                 model.Morph(time=0.0, offsets=[(1, 1.0, 0.0, 0.0)]),
@@ -63,10 +63,15 @@ class TestAHoldKeyframeCostsNoTarget:
                 "targets"
             ]
         )
-        priced = gltf.costs(a_mesh(), held())
+        priced = gltfmorph.costs(a_mesh(), held())
         assert priced[0].poses == written
         assert priced[0].keys == 4
 
     def test_the_weight_block_is_keys_by_targets(self):
-        assert gltf.weight_cost(2, 4) == 2 * 4 * gltf.WEIGHT_BYTES + 2 * gltf.WEIGHT_JSON
-        assert gltf.weight_cost(4) == gltf.weight_cost(4, 4), "keys default to targets"
+        assert (
+            gltfmorph.weight_cost(2, 4)
+            == 2 * 4 * gltfmorph.WEIGHT_BYTES + 2 * gltfmorph.WEIGHT_JSON
+        )
+        assert gltfmorph.weight_cost(4) == gltfmorph.weight_cost(4, 4), (
+            "keys default to targets"
+        )

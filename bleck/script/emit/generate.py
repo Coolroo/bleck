@@ -1,54 +1,38 @@
-"""Writing compiled scripts out as C, for the existing REL toolchain to build.
+"""One compiled program as one C translation unit, for the REL toolchain to build.
 
 Game functions are declared `extern` and bound by `elf2rel` at REL-build time,
 so `bleck` never writes a game address and ships no symbol list.
+
+Three modules share the work, and the imports run one way:
+
+| module | what it owns |
+|---|---|
+| `blocks` | one C block at a time — a table, a guard, a bound identifier |
+| `checks` | what must be true before any of it is written |
+| here | the shared runtime footer, and the single-program entry points |
+| `merge` | the same footer over several mods' programs at once |
+
+`merge` reads this module for `Runtime` and `footer`; nothing reads `merge`
+back.
 """
 
 from __future__ import annotations
 
-import difflib
 from dataclasses import dataclass, field
 
-from bleck.script.compiler.ir import (
-    CompiledProgram,
-    CompiledScript,
-    Literal,
-    ScriptWord,
-    StringWord,
-    SymbolWord,
-    Word,
-)
-from bleck.script.emit import (
-    runtime_c,
-    runtime_intercept,
-    runtime_patch,
-    runtime_replace,
-    runtime_trace,
-)
-
-# Re-exported as `emit.MapHook` and friends.
-# pylint: disable=unused-import
-from bleck.script.emit.scaffold import (  # noqa: F401
+from bleck.script.compiler.ir import CompiledProgram
+from bleck.script.emit import blocks, checks, runtime_c, runtime_replace
+from bleck.script.emit.blocks import BoundCombo, BoundHook
+from bleck.script.emit.scaffold import (
     _PREFIX,
     BOOT_DELAY_FRAMES,
     BOOT_SCRIPT,
-    DEFAULT_BANNER_SEQUENCES,
-    ENTRY_SCRIPT,
-    MAX_COMBOS,
-    MAX_MAP_HOOKS,
-    SEQUENCE_NAMES,
     Banner,
-    ComboHook,
     FunctionHook,
-    MapHook,
-    PatchKind,
     Scaffolding,
     ScriptPatch,
     ScriptReplacement,
-    mod_slug,
-    prefix_for,
 )
-from bleck.script.errors import Position, ScriptError
 
 
 @dataclass(frozen=True)
@@ -62,358 +46,6 @@ class GeneratedSource:
     @property
     def line_count(self) -> int:
         return len(self.text.splitlines())
-
-
-def _c_string(text: str) -> str:
-    """Escape a Python string as a C string literal.
-
-    Non-ASCII is escaped byte-wise from UTF-8 so the generated file stays pure
-    ASCII and cannot be re-encoded by an editor.
-    """
-    out = ""
-    for byte in text.encode("utf-8"):
-        char = chr(byte)
-        if char == "\\":
-            out += "\\\\"
-        elif char == '"':
-            out += '\\"'
-        elif char == "\n":
-            out += "\\n"
-        elif char == "\t":
-            out += "\\t"
-        elif char == "\r":
-            out += "\\r"
-        elif 0x20 <= byte < 0x7F:
-            out += char
-        else:
-            # Octal, not hex: a C hex escape swallows every following hex
-            # digit, while octal is capped at three.
-            out += f"\\{byte:03o}"
-    return f'"{out}"'
-
-
-def _word_text(word: Word, prefix: str = _PREFIX) -> str:
-    if isinstance(word, Literal):
-        return str(word.value)
-    if isinstance(word, SymbolWord):
-        return f"(s32) &{word.name}"
-    if isinstance(word, StringWord):
-        return f"(s32) {prefix}string_{word.index}"
-    if isinstance(word, ScriptWord):
-        return f"(s32) {prefix}script_{word.name}"
-    raise TypeError(f"unknown word type {type(word).__name__}")
-
-
-def _script_array(script: CompiledScript, prefix: str = _PREFIX) -> str:
-    lines = [
-        f"/* {script.name}: {len(script.words)} words, "
-        f"{script.slots_used} of 16 local slots used */",
-        f"const s32 {prefix}script_{script.name}[] = {{",
-    ]
-    # Four per line, so a bytecode change diffs to a small region.
-    row: list[str] = []
-    for word in script.words:
-        row.append(_word_text(word, prefix))
-        if len(row) == 4:
-            lines.append("    " + ", ".join(row) + ",")
-            row = []
-    if row:
-        lines.append("    " + ", ".join(row) + ",")
-    lines.append("};")
-    return "\n".join(lines)
-
-
-@dataclass(frozen=True)
-class BoundHook:
-    """A map hook whose script has been resolved to a C identifier.
-
-    A merged module's hook table is a union across mods, so each row's symbol
-    is resolved in its own namespace before the table is built.
-    """
-
-    map_name: str
-    symbol: str
-
-
-@dataclass(frozen=True)
-class BoundCombo:
-    """A combination whose script has been resolved to a C identifier."""
-
-    name: str
-    mask: int
-    symbol: str
-
-    @property
-    def comment(self) -> str:
-        return f"/* {self.name} */"
-
-
-def _bind_maps(hooks: list[MapHook], namespace: str) -> list[BoundHook]:
-    return [
-        BoundHook(map_name=h.map_name, symbol=f"{namespace}script_{h.script}")
-        for h in hooks
-    ]
-
-
-def _bind_combos(combos: list[ComboHook], namespace: str) -> list[BoundCombo]:
-    return [
-        BoundCombo(name=c.name, mask=c.mask, symbol=f"{namespace}script_{c.script}")
-        for c in combos
-    ]
-
-
-def _bind_replacements(
-    replacements: list[ScriptReplacement], namespace: str
-) -> list[ScriptReplacement]:
-    """Resolve each swapped-in script to a C identifier in its own namespace."""
-    return [
-        ScriptReplacement(
-            map_name=r.map_name,
-            index=r.index,
-            field_offset=r.field_offset,
-            script=r.script,
-            symbol=f"{namespace}script_{r.script}",
-            expect_word=r.expect_word,
-        )
-        for r in replacements
-    ]
-
-
-def _map_block(hooks: list[BoundHook], namespace: str = _PREFIX) -> str:
-    """Map names, the scripts they start, and the sequence watcher."""
-    if len(hooks) > MAX_MAP_HOOKS:
-        raise ScriptError(
-            f"{len(hooks)} map hooks declared, but at most {MAX_MAP_HOOKS} are "
-            f"supported -- `bleck_map_pending` tracks one bit each in a 32-bit "
-            f"word, and the next one would shift past the end.",
-            Position(),
-        )
-    prefix = f"{namespace}map_"
-    tables = "".join(
-        runtime_c.MAP_TABLE.format(
-            prefix=prefix, index=index, name=_c_string(hook.map_name)
-        )
-        for index, hook in enumerate(hooks)
-    )
-    return runtime_c.MAP_BLOCK.format(
-        count=len(hooks),
-        tables=tables,
-        name_list="".join(f"    {prefix}name_{i},\n" for i in range(len(hooks))),
-        script_list="".join(f"    {h.symbol},\n" for h in hooks),
-    )
-
-
-@dataclass(frozen=True)
-class _PatchKind:
-    """What one selector kind contributes to the generated patch block."""
-
-    constant: str
-    resolver: str
-    """The lookup helper, emitted once when any patch uses this kind."""
-
-    resolve: str
-    """The lines inside `bleck_apply_patches` that call it."""
-
-    needs: tuple[PatchKind, ...] = ()
-    """Other kinds whose resolver this one calls.
-
-    `door` walks a map's init script, so it uses `bleck_map_init_script`. Without
-    this a door-only module would emit a call to a helper it never defined.
-    """
-
-
-#: What each selector kind contributes to the generated C. Keyed by the enum, so
-#: a new member that nobody wired up here is a `KeyError` at the one line that
-#: uses it rather than a hand-written "this is a bug in bleck" branch.
-_PATCH_KINDS = {
-    PatchKind.MAP: _PatchKind(
-        constant="BLECK_PATCH_MAP",
-        resolver=runtime_patch.PATCH_MAP_RESOLVER,
-        resolve=runtime_patch.PATCH_MAP_RESOLVE,
-    ),
-    PatchKind.ITEM: _PatchKind(
-        constant="BLECK_PATCH_ITEM",
-        resolver=runtime_patch.PATCH_ITEM_RESOLVER,
-        resolve=runtime_patch.PATCH_ITEM_RESOLVE,
-    ),
-    PatchKind.DOOR: _PatchKind(
-        constant="BLECK_PATCH_DOOR",
-        resolver=runtime_patch.PATCH_DOOR_RESOLVER + runtime_patch.PATCH_DOOR_VALUE,
-        resolve=runtime_patch.PATCH_DOOR_RESOLVE,
-        needs=(PatchKind.MAP,),
-    ),
-    PatchKind.NPC: _PatchKind(
-        constant="BLECK_PATCH_NPC",
-        resolver=runtime_patch.PATCH_NPC_RESOLVER,
-        resolve=runtime_patch.PATCH_NPC_RESOLVE,
-    ),
-}
-
-
-def _patch_block(patches: list[ScriptPatch]) -> str:
-    """The patch table, the guard, and the status a mod's C can read."""
-    decls: list[str] = []
-    seen: set[str] = set()
-    for index, patch in enumerate(patches):
-        decls.append(
-            runtime_patch.PATCH_TARGET.format(index=index, name=_c_string(patch.target))
-        )
-    for patch in patches:
-        if patch.call not in seen:
-            seen.add(patch.call)
-            decls.append(runtime_patch.PATCH_CALL.format(name=patch.call))
-
-    # Only the kinds actually used, so an item-only module never references
-    # `mapDataPtr` and vice versa. Declaration order stays stable.
-    wanted = {p.kind for p in patches}
-    for kind in list(wanted):
-        wanted.update(_PATCH_KINDS[kind].needs)
-    used = [kind for kind in _PATCH_KINDS if kind in wanted]
-    rows = "".join(
-        f"    {{{_PATCH_KINDS[patch.kind].constant}, bleck_patch_target_{index}, "
-        f"{patch.index}, {patch.field_offset}, {patch.at}u, 0x{patch.expect:08X}u, "
-        f"(const void *) &{patch.call}}},"
-        f"  {patch.comment}\n"
-        for index, patch in enumerate(patches)
-    )
-    return runtime_patch.PATCH_BLOCK.format(
-        count=len(patches),
-        decls="\n" + "\n".join(decls) + "\n",
-        rows=rows,
-        pending="".join("    BLECK_PATCH_PENDING,\n" for _ in patches),
-        uncounted="".join("    BLECK_PATCH_UNCOUNTED,\n" for _ in patches),
-        resolvers="".join(_PATCH_KINDS[name].resolver for name in used),
-        resolve="".join(_PATCH_KINDS[name].resolve for name in used),
-    )
-
-
-def _replace_block(
-    replacements: list[ScriptReplacement], patch_kinds: set[PatchKind]
-) -> str:
-    """The replacement table, its guard, and the pointer store.
-
-    ⚠️ Emits `bleck_door_field` itself when no door *patch* already pulled it in.
-    A module may replace a script without patching one, and the walk is shared:
-    defining it twice would not compile.
-    """
-    decls = [
-        runtime_replace.REPLACE_TARGET.format(index=index, name=_c_string(entry.map_name))
-        for index, entry in enumerate(replacements)
-    ]
-    # ⚠️ No `extern` for the swapped-in scripts. `_program_section` has already
-    # defined them earlier in this same file, and re-declaring one makes elf2rel
-    # treat the mod's own script as a *game* symbol it must resolve.
-
-    resolvers = ""
-    if PatchKind.DOOR not in patch_kinds:
-        if PatchKind.MAP not in patch_kinds:
-            resolvers += runtime_patch.PATCH_MAP_RESOLVER
-        resolvers += runtime_patch.PATCH_DOOR_RESOLVER
-
-    rows = "".join(
-        f"    {{bleck_replace_map_{index}, {entry.index}, {entry.field_offset}, "
-        f"0x{entry.expect_word:08X}u, "
-        f"(const void *) &{entry.symbol}}},"
-        f"  /* {entry.selector} -> {entry.script} */\n"
-        for index, entry in enumerate(replacements)
-    )
-    return resolvers + runtime_replace.REPLACE_BLOCK.format(
-        count=len(replacements),
-        decls="\n" + "\n".join(decls) + "\n",
-        rows=rows,
-        pending="".join("    BLECK_REPLACE_PENDING,\n" for _ in replacements),
-        zeros="".join("    0,\n" for _ in replacements),
-    )
-
-
-def _hook_block(hooks: list[FunctionHook]) -> str:
-    """The hook table, its derived guards, and the status a mod's C can read."""
-    decls: list[str] = []
-    seen: set[str] = set()
-    for hook in hooks:
-        for name, template in (
-            (hook.symbol, runtime_c.HOOK_TARGET),
-            (hook.call, runtime_c.HOOK_CALL),
-        ):
-            if name and name not in seen:
-                seen.add(name)
-                decls.append(template.format(name=name))
-
-    # An intercepting hook branches to a generated wrapper, which calls both the
-    # mod's function and the original. `replace` keeps branching straight at the
-    # mod's function, so its output is unchanged.
-    for index, hook in enumerate(hooks):
-        if hook.intercepts:
-            decls.append(
-                runtime_c.HOOK_CALL.format(name=runtime_intercept.wrapper_name(index))
-            )
-
-    rows = "".join(
-        f"    {{{_hook_address(hook)}, 0x{hook.expect:08X}u, "
-        f"{1 if hook.guarded else 0}u, (const void *) &{_hook_branch(index, hook)}}},"
-        f"  {hook.comment}\n"
-        for index, hook in enumerate(hooks)
-    )
-    block = runtime_c.HOOK_BLOCK.format(
-        count=len(hooks),
-        decls="\n" + "\n".join(decls) + "\n",
-        rows=rows,
-        pending="".join("    BLECK_HOOK_PENDING,\n" for _ in hooks),
-    )
-    # Emitted unconditionally beside the table: a trace needs the derived guard
-    # word that is already there, and `--gc-sections` drops the lot for a mod
-    # that only replaces. Nothing declares a trace, so nothing can ask for it.
-    block += runtime_trace.TRACE_BLOCK.format(
-        traces="".join(runtime_trace.TRACE_ROW for _ in hooks)
-    )
-    wrappers = [
-        runtime_intercept.wrapper(index, hook.call, hook.mode)
-        for index, hook in enumerate(hooks)
-        if hook.intercepts
-    ]
-    if not wrappers:
-        return block
-    return block + runtime_intercept.INTERCEPT_DECLS.format() + "\n" + "\n".join(wrappers)
-
-
-def _hook_branch(index: int, hook: FunctionHook) -> str:
-    """What the game's first instruction actually branches to."""
-    return runtime_intercept.wrapper_name(index) if hook.intercepts else hook.call
-
-
-def _hook_address(hook: FunctionHook) -> str:
-    """Where the branch goes: the symbol if there is one, else the address.
-
-    A named function is left to `elf2rel`, so the symbol list stays the single
-    source of truth for addresses even though the guard beside it is baked.
-    """
-    if hook.symbol:
-        return f"(void *) &{hook.symbol}"
-    return f"(void *) 0x{hook.address:08X}u"
-
-
-def _banner_block(banner: Banner) -> str:
-    return runtime_c.BANNER_BLOCK.format(
-        text=_c_string(banner.text),
-        loader=_c_string(banner.loader_text),
-        flags=banner.flags,
-    )
-
-
-def _combo_block(hooks: list[BoundCombo]) -> str:
-    """Mask and script tables, plus the per-frame watcher."""
-    if len(hooks) > MAX_COMBOS:
-        raise ScriptError(
-            f"{len(hooks)} button combinations declared, but at most "
-            f"{MAX_COMBOS} are supported -- `bleck_combo_down` tracks one bit "
-            f"each in a 32-bit word.",
-            Position(),
-        )
-    return runtime_c.COMBO_BLOCK.format(
-        count=len(hooks),
-        masks="".join(f"    0x{hook.mask:08X}u,  {hook.comment}\n" for hook in hooks),
-        scripts="".join(f"    {hook.symbol},\n" for hook in hooks),
-    )
 
 
 def boot_source(map_name: str, delay: int = BOOT_DELAY_FRAMES) -> str:
@@ -463,7 +95,7 @@ class Runtime:
     """Vanilla scripts repointed at the mod's own, whole, from `_prolog`."""
 
 
-def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
+def footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str:
     """Assemble the shared runtime, from the pieces the module needs.
 
     Emitted **once** however many mods contributed: a second `_prolog` would be
@@ -490,9 +122,9 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
         ):
             return runtime_c.PLAIN_PROLOG + runtime_c.ENTRY_POINTS
         head = runtime_c.CTOR_BLOCK if runtime.run_cxx_ctors else ""
-        head += _patch_block(patches) if patches else ""
-        head += _replace_block(replacements, patch_kinds) if replacements else ""
-        head += _hook_block(functions) if functions else ""
+        head += blocks.patch_block(patches) if patches else ""
+        head += blocks.replace_block(replacements, patch_kinds) if replacements else ""
+        head += blocks.hook_block(functions) if functions else ""
         return (
             head + f"\nvoid _prolog(void)\n{{\n{run_ctors}{apply_patches}"
             f"{apply_replacements}{install_hooks}    mod_prolog();\n}}\n"
@@ -504,20 +136,20 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     if runtime.run_cxx_ctors:
         parts.append(runtime_c.CTOR_BLOCK)
     if patches:
-        parts.append(_patch_block(patches))
+        parts.append(blocks.patch_block(patches))
     if replacements:
-        parts.append(_replace_block(replacements, patch_kinds))
+        parts.append(blocks.replace_block(replacements, patch_kinds))
     if functions:
-        parts.append(_hook_block(functions))
+        parts.append(blocks.hook_block(functions))
 
     if banner is not None:
-        parts.append(_banner_block(banner))
+        parts.append(blocks.banner_block(banner))
         body += "    if (bleck_banner_on[seq])\n        bleck_draw_banner();\n"
     if hooks:
-        parts.append(_map_block(hooks, runtime.namespace))
+        parts.append(blocks.map_block(hooks, runtime.namespace))
         body += "    bleck_maps_on_seq(seq);\n"
     if combos:
-        parts.append(_combo_block(combos))
+        parts.append(blocks.combo_block(combos))
         body += "    bleck_combos_on_seq(seq);\n"
     if len(entries) == 1:
         # The single-mod form.
@@ -556,30 +188,16 @@ def _footer(entries: list[str], hooks: list[BoundHook], runtime: Runtime) -> str
     return "".join(parts)
 
 
-def _program_section(program: CompiledProgram, prefix: str) -> list[str]:
-    """One program's strings and script arrays, under its own namespace.
+#: The two lines every module opens with once the game's own symbols are
+#: declared. ⚠️ `evtEntry` is declared even by a module with no script: the
+#: shared runtime references it, and a missing declaration is a C error rather
+#: than a link one.
+EVT_ENTRY_DECL = (
+    "/* Started by the game's script scheduler. */\n"
+    "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
+)
 
-    Shared by the single-mod and merged paths so both emit identical per-program
-    code.
-    """
-    parts: list[str] = []
-    if program.strings:
-        parts.append(
-            "\n".join(
-                f"static const char {prefix}string_{index}[] = {_c_string(text)};"
-                for index, text in enumerate(program.strings)
-            )
-        )
-    if len(program.scripts) > 1:
-        # Scripts may spawn each other in any order, so declare all first.
-        parts.append(
-            "\n".join(
-                f"extern const s32 {prefix}script_{script.name}[];"
-                for script in program.scripts
-            )
-        )
-    parts.extend(_script_array(script, prefix) for script in program.scripts)
-    return parts
+EXTERNS_COMMENT = "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
 
 
 def generate_bare(
@@ -602,19 +220,19 @@ def generate_bare(
         + runtime_c.MOD_HOOK
         + "\n"
         + runtime_c.CODE_PATCH
-        + _footer(
+        + footer(
             [],
             [],
             Runtime(
                 banner=banner,
                 run_cxx_ctors=run_cxx_ctors,
                 patches=list(patches or []),
-                replacements=_bind_replacements(list(replacements or []), _PREFIX),
+                replacements=blocks.bind_replacements(list(replacements or []), _PREFIX),
                 function_hooks=list(function_hooks or []),
             ),
         )
     )
-    _require_ascii(text)
+    checks.require_ascii(text)
     return GeneratedSource(text=text, entry_script="", external_symbols=[])
 
 
@@ -626,306 +244,48 @@ def generate(
     """Render a compiled program as a single C translation unit."""
     plan = scaffolding or Scaffolding()
     hooks = list(plan.map_hooks)
-    _check_map_hooks(program, hooks)
-    _check_combo_hooks(program, plan.combos)
-    _check_replacements(program, plan.replacements)
-    _check_boot_script(program, plan.boot_script)
-    entry = _entry_script(program, required=plan.needs_entry_script)
+    checks.check_map_hooks(program, hooks)
+    checks.check_combo_hooks(program, plan.combos)
+    checks.check_replacements(program, plan.replacements)
+    checks.check_boot_script(program, plan.boot_script)
+    entry = checks.entry_script(program, required=plan.needs_entry_script)
 
     parts = [runtime_c.HEADER.format(origin=origin)]
 
     if program.called_symbols:
         parts.append(
-            "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
+            EXTERNS_COMMENT
             + "\n".join(f"extern void {name}(void);" for name in program.called_symbols)
         )
 
-    parts.append(
-        "/* Started by the game's script scheduler. */\n"
-        "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
-    )
+    parts.append(EVT_ENTRY_DECL)
     parts.append(runtime_c.MOD_HOOK)
     parts.append(runtime_c.CODE_PATCH)
 
-    parts.extend(_program_section(program, plan.prefix))
+    parts.extend(blocks.program_section(program, plan.prefix))
     parts.append(
-        _footer(
+        footer(
             [f"{plan.prefix}script_{entry}"] if entry else [],
-            _bind_maps(hooks, plan.prefix),
+            blocks.bind_maps(hooks, plan.prefix),
             Runtime(
                 banner=plan.banner,
                 boot=(
                     f"{plan.prefix}script_{plan.boot_script}" if plan.boot_script else ""
                 ),
-                combos=_bind_combos(plan.combos, plan.prefix),
+                combos=blocks.bind_combos(plan.combos, plan.prefix),
                 namespace=plan.prefix,
                 run_cxx_ctors=plan.run_cxx_ctors,
                 patches=list(plan.patches),
-                replacements=_bind_replacements(plan.replacements, plan.prefix),
+                replacements=blocks.bind_replacements(plan.replacements, plan.prefix),
                 function_hooks=list(plan.function_hooks),
             ),
         )
     )
 
     text = "\n\n".join(parts)
-    _require_ascii(text)
+    checks.require_ascii(text)
     return GeneratedSource(
         text=text,
         entry_script=entry,
         external_symbols=list(program.called_symbols),
-    )
-
-
-@dataclass(frozen=True)
-class ModPart:
-    """One mod's compiled contribution to a module shared with other mods."""
-
-    name: str
-    program: CompiledProgram
-    map_hooks: list[MapHook] = field(default_factory=list)
-    combos: list[ComboHook] = field(default_factory=list)
-    boot_script: str = ""
-    replacements: list[ScriptReplacement] = field(default_factory=list)
-
-    @property
-    def prefix(self) -> str:
-        return prefix_for(self.name)
-
-    @property
-    def entry(self) -> str:
-        """This mod's free-running script, if it declares one. Optional here,
-        unlike a single-mod build."""
-        names = [script.name for script in self.program.scripts]
-        return ENTRY_SCRIPT if ENTRY_SCRIPT in names else ""
-
-
-def _check_slugs(parts: list[ModPart]) -> None:
-    """Two mods must not reduce to the same namespace.
-
-    `hard-mode` and `hard mode` both become `hard_mode`, which would otherwise
-    surface as a linker error naming a generated identifier nobody wrote.
-    """
-    seen: dict[str, str] = {}
-    for part in parts:
-        slug = mod_slug(part.name)
-        if slug in seen:
-            raise ScriptError(
-                f"mods {seen[slug]!r} and {part.name!r} both reduce to the "
-                f"namespace {slug!r}, so their generated symbols would collide.\n"
-                f"  Rename one of them.",
-                Position(),
-            )
-        seen[slug] = part.name
-
-
-def _merged_head(origin: str, externals: list[str]) -> list[str]:
-    """The shared preamble a merged module opens with."""
-    # pylint: disable=container-return  # ordered sections, joined by the caller
-    head = [runtime_c.HEADER.format(origin=origin)]
-    if externals:
-        head.append(
-            "/* Game functions called by USER_FUNC, bound by elf2rel. */\n"
-            + "\n".join(f"extern void {name}(void);" for name in externals)
-        )
-    head.append(
-        "/* Started by the game's script scheduler. */\n"
-        "extern void *evtEntry(const s32 *script, u32 priority, u8 flags);"
-    )
-    head.append(runtime_c.MOD_HOOK)
-    head.append(runtime_c.CODE_PATCH)
-    return head
-
-
-def generate_merged(
-    parts: list[ModPart],
-    origin: str = "several mods",
-    *,
-    banner: Banner | None = None,
-    run_cxx_ctors: bool = False,
-    patches: list[ScriptPatch] | None = None,
-    function_hooks: list[FunctionHook] | None = None,
-) -> GeneratedSource:
-    """Render several mods' programs as one C translation unit.
-
-    The loader opens exactly one `/mod/mod.rel`, so merging happens at compile
-    time rather than via runtime REL chaining (D39). Each mod keeps its own
-    namespace; the shared runtime is emitted once, with hook tables that are the
-    **union** across mods.
-
-    `patches` is that union already: a patch names C functions rather than
-    compiled scripts, so it needs no namespace and is passed whole.
-    """
-    if not parts:
-        raise ScriptError("no mods to merge", Position())
-    _check_slugs(parts)
-
-    booting = [part for part in parts if part.boot_script]
-    if len(booting) > 1:
-        raise ScriptError(
-            f"{len(booting)} mods declare a boot map "
-            f"({', '.join(part.name for part in booting)}), but a disc "
-            f"starts in one place.\n"
-            f"  Keep it on one of them, or pass --map to override for a build.",
-            Position(),
-        )
-
-    sections: list[str] = []
-    entries: list[str] = []
-    hooks: list[BoundHook] = []
-    combos: list[BoundCombo] = []
-    swaps: list[ScriptReplacement] = []
-    externals: list[str] = []
-    boot = ""
-
-    for part in parts:
-        _check_map_hooks(part.program, part.map_hooks)
-        _check_combo_hooks(part.program, part.combos)
-        _check_boot_script(part.program, part.boot_script)
-
-        sections.append(runtime_c.MOD_SECTION.format(name=part.name))
-        sections.extend(_program_section(part.program, part.prefix))
-
-        if part.entry:
-            entries.append(f"{part.prefix}script_{part.entry}")
-        hooks += _bind_maps(part.map_hooks, part.prefix)
-        swaps += _bind_replacements(part.replacements, part.prefix)
-        combos += _bind_combos(part.combos, part.prefix)
-        if part.boot_script:
-            boot = f"{part.prefix}script_{part.boot_script}"
-        for name in part.program.called_symbols:
-            if name not in externals:
-                externals.append(name)
-
-    runtime = Runtime(
-        banner=banner,
-        boot=boot,
-        combos=combos,
-        run_cxx_ctors=run_cxx_ctors,
-        patches=list(patches or []),
-        replacements=swaps,
-        function_hooks=list(function_hooks or []),
-    )
-    text = "\n\n".join(
-        _merged_head(origin, externals) + sections + [_footer(entries, hooks, runtime)]
-    )
-    _require_ascii(text)
-    return GeneratedSource(
-        text=text,
-        entry_script=", ".join(entries),
-        external_symbols=externals,
-    )
-
-
-def _require_ascii(text: str) -> None:
-    """Guard the invariant that generated C is pure ASCII.
-
-    Linux, macOS and Windows toolchains disagree on default source encoding.
-    String contents are already escaped byte-wise, so a failure here means a
-    non-ASCII comment template in this module -- a `bleck` bug.
-    """
-    try:
-        text.encode("ascii")
-    except UnicodeEncodeError as exc:
-        offending = text[exc.start : exc.end]
-        raise ValueError(
-            f"generated C contains non-ASCII {offending!r}; "
-            "this is a bug in bleck's code templates"
-        ) from exc
-
-
-def _check_combo_hooks(program: CompiledProgram, hooks: list[ComboHook]) -> None:
-    """Every combination's script has to exist, and be spelled the same twice.
-
-    Nothing connects `mod.json` to the source until here, so a typo would
-    otherwise reach the C compiler as an undefined symbol.
-    """
-    names = [script.name for script in program.scripts]
-    for hook in hooks:
-        if hook.script in names:
-            continue
-        listed = ", ".join(names) or "none"
-        suggestion = difflib.get_close_matches(hook.script, names, n=1, cutoff=0.6)
-        hint = f"\n  Did you mean {suggestion[0]!r}?" if suggestion else ""
-        raise ScriptError(
-            f"mod.json binds combo {hook.name!r} to script {hook.script!r}, "
-            f"but this file declares no such script "
-            f"(it declares: {listed}).{hint}",
-            Position(),
-        )
-
-
-def _check_map_hooks(program: CompiledProgram, hooks: list[MapHook]) -> None:
-    """Every attached script has to exist, and be named the same way twice.
-
-    Nothing links the manifest to the source until here, so a typo would
-    otherwise reach the C compiler as an undefined symbol.
-    """
-    names = [script.name for script in program.scripts]
-    for hook in hooks:
-        if hook.script in names:
-            continue
-        listed = ", ".join(names) or "none"
-        suggestion = difflib.get_close_matches(hook.script, names, n=1, cutoff=0.6)
-        hint = f"\n  Did you mean {suggestion[0]!r}?" if suggestion else ""
-        raise ScriptError(
-            f"mod.json attaches {hook.script!r} to map {hook.map_name!r}, "
-            f"but this file declares no such script "
-            f"(it declares: {listed}).{hint}",
-            Position(),
-        )
-
-
-def _check_replacements(
-    program: CompiledProgram, replacements: list[ScriptReplacement]
-) -> None:
-    """Every swapped-in script has to exist in the program that was compiled.
-
-    Same reason as `_check_map_hooks`: nothing links the manifest to the source
-    until here, so a typo would otherwise reach the C compiler as an undefined
-    symbol naming an identifier the author never wrote.
-    """
-    names = [script.name for script in program.scripts]
-    for entry in replacements:
-        if entry.script in names:
-            continue
-        listed = ", ".join(names) or "none"
-        close = difflib.get_close_matches(entry.script, names, n=1, cutoff=0.6)
-        hint = f"\n  Did you mean {close[0]!r}?" if close else ""
-        raise ScriptError(
-            f"mod.json replaces {entry.selector} with {entry.script!r}, but "
-            f"this file declares no such script (it declares: {listed}).{hint}\n"
-            f"  A replacement names a script, not a C function: its whole "
-            f"bytecode becomes the door's.",
-            Position(),
-        )
-
-
-def _check_boot_script(program: CompiledProgram, name: str) -> None:
-    """The boot script has to be in the program the caller compiled.
-
-    `bleck` generates its source, so a failure here is a bug in `bleck`; it is
-    checked so it does not surface as an undefined C symbol instead.
-    """
-    if not name or any(script.name == name for script in program.scripts):
-        return
-    listed = ", ".join(script.name for script in program.scripts) or "none"
-    raise ScriptError(
-        f"boot script {name!r} is missing from the compiled program "
-        f"(it declares: {listed}). This is a bug in bleck.",
-        Position(),
-    )
-
-
-def _entry_script(program: CompiledProgram, required: bool = True) -> str:
-    names = [script.name for script in program.scripts]
-    if ENTRY_SCRIPT in names:
-        return ENTRY_SCRIPT
-    if not required:
-        return ""
-    listed = ", ".join(names)
-    raise ScriptError(
-        f"no script named {ENTRY_SCRIPT!r} to start "
-        f"(this file declares: {listed}). "
-        f"Rename one to {ENTRY_SCRIPT!r}, or spawn the others from it",
-        Position(),
     )

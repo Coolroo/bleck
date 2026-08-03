@@ -33,7 +33,7 @@ from pathlib import Path, PurePosixPath
 from bleck.cli.types import AddCommand
 from bleck.common import exportlayout
 from bleck.common.errors import UserError
-from bleck.formats import gltf, gltfpaint, model, png, texdecode, tpl
+from bleck.formats import gltf, gltfcore, gltfmorph, gltfpaint, model, png, texdecode, tpl
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -94,9 +94,9 @@ class ClipInfo:
     def seconds(self) -> float:
         return self.frames / FRAME_RATE
 
-    def as_gltf(self) -> gltf.Clip:
+    def as_gltf(self) -> gltfmorph.Clip:
         """The same clip with its key times in seconds, which glTF requires."""
-        return gltf.Clip(
+        return gltfmorph.Clip(
             name=self.name,
             poses=[replace(pose, time=pose.time / FRAME_RATE) for pose in self.poses],
         )
@@ -207,7 +207,7 @@ class Budget:
     size: int
 
 
-#: The default caps, priced against `gltf.costs` rather than a vertex count.
+#: The default caps, priced against `gltfmorph.costs` rather than a vertex count.
 #:
 #: ⚠️ **Measured across all 864 models, not picked round** (D238). Keeping
 #: every clip on the disc needs **10.65 MB** on the worst file (`p_luigi`,
@@ -265,7 +265,7 @@ def fit_animations(mesh, clips: list, dense: bool = False) -> Animations:
     """
     cap = DENSE if dense else SPARSE
     usable = [clip for clip in clips if clip.moves]
-    priced = gltf.costs(mesh, usable, sparse=not dense)
+    priced = gltfmorph.costs(mesh, usable, sparse=not dense)
     kept: list = []
     spent = 0
     targets = 0
@@ -276,8 +276,8 @@ def fit_animations(mesh, clips: list, dense: bool = False) -> Animations:
         grew = (
             spent
             + cost.body
-            + gltf.weight_cost(total, ahead)
-            - gltf.weight_cost(targets, keys)
+            + gltfmorph.weight_cost(total, ahead)
+            - gltfmorph.weight_cost(targets, keys)
         )
         if grew <= cap.size and total <= cap.targets:
             spent = grew
@@ -337,7 +337,7 @@ def textures_for(base: Path, disc_path: str, mesh: model.Mesh) -> list:
         except (tpl.TextureError, ValueError):
             continue
         found.append(
-            gltf.Paint(
+            gltfcore.Paint(
                 index=index, png=png.write(pixels.width, pixels.height, pixels.rgba)
             )
         )

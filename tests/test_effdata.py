@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import effcurve, effdata, effgeom
+from bleck.formats import effcurve, effdata, effgeom, effnode, effsections
 
 REPO = Path(__file__).resolve().parent.parent
 EFFDATA = REPO / "work" / "extracted" / "eu0" / "files" / "eff" / "effdata.dat"
@@ -34,8 +34,8 @@ def a_file(effects: list[tuple[str, int, int, int]], parts: list[str]) -> bytes:
 
     out = bytearray(effdata.HEADER_SIZE)
     offsets = [sec0, sec1, sec1 + len(parts) * effdata.PART_STRIDE]
-    offsets += [offsets[-1]] * (effdata.SECTIONS - len(offsets))
-    struct.pack_into(f">{effdata.SECTIONS}I", out, 0, *offsets)
+    offsets += [offsets[-1]] * (effsections.SECTIONS - len(offsets))
+    struct.pack_into(f">{effsections.SECTIONS}I", out, 0, *offsets)
 
     out += effdata.MAGIC.ljust(header_pad, b"\x00")
     for name, first, count, extra in effects:
@@ -85,7 +85,7 @@ class TestAgainstTheRealFile:
     def test_the_part_total_matches_the_section_size(self):
         """The second, independent arithmetic: 704 parts x 20 bytes = 14,080."""
         data = self._data()
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
         effects = effdata.read(data)
         last = effects[-1]
         implied = last.first_part + last.part_count
@@ -142,7 +142,7 @@ class TestCurves:
         return EFFDATA.read_bytes()
 
     def test_the_command_list_uses_ten_tags(self):
-        commands = effdata.commands(self._data())
+        commands = effnode.commands(self._data())
         assert len(commands) == 4752
         assert sorted({c.tag for c in commands}) == list(range(10))
 
@@ -150,9 +150,9 @@ class TestCurves:
         """⚠️ The measurement that settled it: the largest offset is just under
         section 2's size, and nowhere near the file's."""
         data = self._data()
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
         section_size = offsets[3] - offsets[2]
-        biggest = max(c.offset for c in effdata.commands(data))
+        biggest = max(c.offset for c in effnode.commands(data))
         assert biggest < section_size
         assert biggest > section_size * 0.9, "suspiciously far from filling it"
 
@@ -163,7 +163,7 @@ class TestCurves:
         ⚠️ The sample count is `end - start + 1`, not a field. Reading `+0x06`
         as a count is the superseded layout (D266).
         """
-        curve = effdata.curve_at(self._data(), 0)
+        curve = effcurve.curve_at(self._data(), 0)
         assert (curve.start, curve.end) == (1, 60)
         assert len(curve.samples) == 60
         assert curve.samples[0] == 6.0
@@ -172,7 +172,7 @@ class TestCurves:
 
     def test_a_curve_reads_the_way_the_games_evaluator_reads_it(self):
         """✅ The header the code at `0x8005f2d4` loads, field for field."""
-        curve = effdata.curve_at(self._data(), 0)
+        curve = effcurve.curve_at(self._data(), 0)
         assert curve.length > 0
         assert curve.byte_samples == effcurve.CURVE_FLOAT
         # Before the first frame it says nothing, so the node keeps its own
@@ -186,11 +186,12 @@ class TestCurves:
         """⚠️ Only ~a third, and that is the finding: the rest of the offsets
         point *inside* records, which is what a command list does."""
         data = self._data()
-        targets = sorted({c.offset for c in effdata.commands(data)})
+        targets = sorted({c.offset for c in effnode.commands(data)})
         exact = sum(
             1
             for a, b in itertools.pairwise(targets)
-            if b - a == effdata.CURVE_HEADER + 4 * len(effdata.curve_at(data, a).samples)
+            if b - a
+            == effcurve.CURVE_HEADER + 4 * len(effcurve.curve_at(data, a).samples)
         )
         assert exact > 1000, f"only {exact} records matched their declared size"
 
@@ -234,7 +235,7 @@ class TestGroupsAndEntries:
         350,976 bytes long — which the two-`u16` reading could never fill.
         """
         data = self._data()
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
         size = offsets[effgeom.DISPLAY_SECTION + 1] - offsets[effgeom.DISPLAY_SECTION]
         records = effdata.entries(data)
         assert all(e.display_list % effgeom.DISPLAY_ALIGN == 0 for e in records)
@@ -287,7 +288,7 @@ class TestTheHeader:
         a coincidence worth leaving unstated: the first record name sits at
         +0x2C, immediately past the field the loader reads last."""
         data = self._data()
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
         first = offsets[0] + effdata.EFFECT_STRIDE
         assert data[first : first + 9] == b"3D_switch"
         assert effdata.EFFECT_STRIDE > effdata.TEXTURE_COUNT_AT
@@ -466,11 +467,11 @@ def a_geometry_file(fans: list[list[int]], descriptor: int) -> bytes:
     }
 
     offsets, cursor = [], effdata.HEADER_SIZE
-    for section in range(effdata.SECTIONS):
+    for section in range(effsections.SECTIONS):
         offsets.append(cursor)
         cursor += len(blocks.get(section, b""))
-    out = bytearray(struct.pack(f">{effdata.SECTIONS}I", *offsets))
-    for section in range(effdata.SECTIONS):
+    out = bytearray(struct.pack(f">{effsections.SECTIONS}I", *offsets))
+    for section in range(effsections.SECTIONS):
         out += blocks.get(section, b"")
     return bytes(out)
 
@@ -567,7 +568,7 @@ class TestTheGeometryAgainstTheRealFile:
         # pylint: disable=container-return
         """The section table, with the file's own end appended — section 15 has
         no following offset to bound it."""
-        table = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
+        table = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
         return [*table, len(data)]
 
     def test_every_display_list_parses_exactly(self):
@@ -747,36 +748,36 @@ class TestComposingATransform:
     """`Transform`, without a disc."""
 
     def test_the_identity_leaves_a_transform_alone(self):
-        one = effdata.Transform((2.0, 0, 0, 5.0, 0, 3.0, 0, 6.0, 0, 0, 4.0, 7.0))
-        assert effdata.IDENTITY.then(one) == one
-        assert one.then(effdata.IDENTITY) == one
+        one = effnode.Transform((2.0, 0, 0, 5.0, 0, 3.0, 0, 6.0, 0, 0, 4.0, 7.0))
+        assert effnode.IDENTITY.then(one) == one
+        assert one.then(effnode.IDENTITY) == one
 
     def test_a_parent_scale_multiplies_a_child_translation(self):
         """⚠️ The whole point of accumulating: a child's offset is expressed in
         its parent's frame, so a parent that scales moves the child further."""
-        parent = effdata.Transform((2.0, 0, 0, 0, 0, 2.0, 0, 0, 0, 0, 2.0, 0))
-        child = effdata.Transform((1.0, 0, 0, 10.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        parent = effnode.Transform((2.0, 0, 0, 0, 0, 2.0, 0, 0, 0, 0, 2.0, 0))
+        child = effnode.Transform((1.0, 0, 0, 10.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
         got = parent.then(child).values
         assert got[3] == 20.0, "the parent's scale did not reach the child"
 
     def test_translations_accumulate(self):
-        a = effdata.Transform((1.0, 0, 0, 3.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
-        b = effdata.Transform((1.0, 0, 0, 4.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        a = effnode.Transform((1.0, 0, 0, 3.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
+        b = effnode.Transform((1.0, 0, 0, 4.0, 0, 1.0, 0, 0, 0, 0, 1.0, 0))
         assert a.then(b).values[3] == 7.0
 
     def test_a_zero_scale_is_flat_and_the_identity_is_not(self):
-        assert not effdata.IDENTITY.is_flat
-        flat = effdata.Transform((0.0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 1.0, 0))
+        assert not effnode.IDENTITY.is_flat
+        flat = effnode.Transform((0.0, 0, 0, 0, 0, 0.0, 0, 0, 0, 0, 1.0, 0))
         assert flat.is_flat
         # ⚠️ And it stays flat however it is parented: a collapsed axis cannot
         # be recovered downstream, which is why the rest pose loses effects.
-        assert effdata.IDENTITY.then(flat).is_flat
+        assert effnode.IDENTITY.then(flat).is_flat
 
     def test_an_index_past_the_section_gives_the_identity(self):
         data = a_file([("fire", 0, 1, 0)], ["A"])
-        assert effdata.matrix_at(data, 1 << 20) == effdata.IDENTITY
-        assert effdata.matrix_at(data, -1) == effdata.IDENTITY
-        assert effdata.vector_at(data, 1 << 20) == (0.0, 0.0, 0.0)
+        assert effnode.matrix_at(data, 1 << 20) == effnode.IDENTITY
+        assert effnode.matrix_at(data, -1) == effnode.IDENTITY
+        assert effnode.vector_at(data, 1 << 20) == (0.0, 0.0, 0.0)
 
 
 @pytest.mark.gamedata
@@ -789,34 +790,34 @@ class TestTheNodeTransforms:
         return EFFDATA.read_bytes()
 
     def _nodes(self, data: bytes) -> int:
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
-        span = offsets[effdata.NODE_SECTION + 1] - offsets[effdata.NODE_SECTION]
-        return span // effdata.NODE_STRIDE
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
+        span = offsets[effnode.NODE_SECTION + 1] - offsets[effnode.NODE_SECTION]
+        return span // effnode.NODE_STRIDE
 
     def test_the_matrix_array_is_filled_exactly(self):
         """🟢 The fit that settles the stride: the largest index any node
         carries is 1,348 and the section holds exactly 1,349 matrices at 48
         bytes — zero spare, where stride 16 would leave 2,699."""
         data = self._data()
-        offsets = struct.unpack_from(f">{effdata.SECTIONS}I", data, 0)
-        span = offsets[effdata.MATRIX_SECTION + 1] - offsets[effdata.MATRIX_SECTION]
-        held = span // effdata.MATRIX_STRIDE
-        biggest = max(effdata.node_at(data, i).matrix for i in range(self._nodes(data)))
+        offsets = struct.unpack_from(f">{effsections.SECTIONS}I", data, 0)
+        span = offsets[effnode.MATRIX_SECTION + 1] - offsets[effnode.MATRIX_SECTION]
+        held = span // effnode.MATRIX_STRIDE
+        biggest = max(effnode.node_at(data, i).matrix for i in range(self._nodes(data)))
         assert held == 1349
         assert biggest == held - 1, "the array is not filled to its last entry"
 
     def test_matrix_one_is_the_identity(self):
         """The nesting nodes all name matrix 1, so it had better be."""
-        assert effdata.matrix_at(self._data(), 1) == effdata.IDENTITY
+        assert effnode.matrix_at(self._data(), 1) == effnode.IDENTITY
 
     def test_every_translation_column_is_the_nodes_own_translate_vector(self):
         """✅ 3,739 of 3,739 — the simplest half of the two-way agreement, and
         the one that needs no rotation order to check."""
         data = self._data()
         for i in range(self._nodes(data)):
-            node = effdata.node_at(data, i)
-            m = effdata.matrix_at(data, node.matrix).values
-            translate = effdata.vector_at(data, node.translate)
+            node = effnode.node_at(data, i)
+            m = effnode.matrix_at(data, node.matrix).values
+            translate = effnode.vector_at(data, node.translate)
             assert (m[3], m[7], m[11]) == pytest.approx(translate, abs=1e-4), f"node {i}"
 
     def test_the_matrix_is_the_nodes_own_trs_composed(self):
@@ -830,7 +831,7 @@ class TestTheNodeTransforms:
         """
         data = self._data()
         total = self._nodes(data)
-        agree = [i for i in range(total) if _matches(data, effdata.node_at(data, i))]
+        agree = [i for i in range(total) if _matches(data, effnode.node_at(data, i))]
         assert len(agree) == total - 1
         assert total - 1 not in agree, "the exception is not the last node"
 
@@ -846,7 +847,7 @@ class TestTheNodeTransforms:
             for i in range(total)
             if sum(
                 1
-                for v in effdata.vector_at(data, effdata.node_at(data, i).rotate)
+                for v in effnode.vector_at(data, effnode.node_at(data, i).rotate)
                 if abs(v) > 1e-6
             )
             > 1
@@ -855,7 +856,7 @@ class TestTheNodeTransforms:
 
         best = max(
             sum(
-                1 for i in range(total) if _matches(data, effdata.node_at(data, i), order)
+                1 for i in range(total) if _matches(data, effnode.node_at(data, i), order)
             )
             for order in itertools.permutations("xyz")
             if order != ("z", "y", "x")
@@ -903,20 +904,20 @@ class TestTheNodeTransforms:
         magic = effects["dmen_magic"]
         found = [d for part in magic.parts for d in effdata.draws(data, magic, part)]
         assert found
-        assert any(d.world != effdata.IDENTITY for d in found), "nothing accumulated"
+        assert any(d.world != effnode.IDENTITY for d in found), "nothing accumulated"
 
 
 def _matches(data: bytes, node, order: tuple = ("z", "y", "x")) -> bool:
     """Whether a node's TRS composes to the matrix it names."""
     got = _compose(
-        effdata.vector_at(data, node.translate),
-        effdata.vector_at(data, node.rotate),
-        effdata.vector_at(data, node.scale),
+        effnode.vector_at(data, node.translate),
+        effnode.vector_at(data, node.rotate),
+        effnode.vector_at(data, node.scale),
         order,
     )
     return all(
         abs(a - b) <= 1e-3 * max(1.0, abs(a), abs(b))
-        for a, b in zip(got, effdata.matrix_at(data, node.matrix).values, strict=True)
+        for a, b in zip(got, effnode.matrix_at(data, node.matrix).values, strict=True)
     )
 
 

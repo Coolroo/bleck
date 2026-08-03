@@ -549,32 +549,58 @@ And the older ones that keep biting:
 
 ---
 
-## ⚠️ Modules are capped at 1,000 lines, and `bleck/formats/` shows the seam
+## ⚠️ Modules are capped at 1,000 lines, and the Python tree is split on its seams
 
 Pylint's `too-many-lines` is not configured here, so its **1,000-line default**
-applies. `effdata.py` was the first module in the repo to reach it, and hitting
-it twice in one session produced a rule worth stating:
+applies. `effdata.py` was the first module in the repo to reach it; **D272 then
+applied the same method to the other seven oversized modules**, and no source
+file under `bleck/` is now over 600 lines.
 
 ⛔ **Do not shave docstrings to fit.** The reasoning in these files is the
 point of them, and trimming prose to buy nine lines is deleting the asset to
 satisfy the check. Twice on 2026-08-02 that was the first instinct and twice it
 was wrong.
 
-✅ **Split on a real seam instead.** `effdata.py` gave up two modules cleanly
-because each needed nothing from the rest:
+✅ **Split on a real seam instead** — the test is that the extracted piece needs
+nothing from what it left:
 
-| module | what it owns | why it could leave |
+| parent | gave up | which owns |
 |---|---|---|
-| `effgeom.py` | GX display lists, the vertex arrays | reads a byte range; knows nothing of effects or parts |
-| `effcurve.py` | curve records, the rotation maths | takes a node and a command list as *arguments* |
+| `formats/effdata` | `effsections`, `effnode`, `effgeom`, `effcurve` | the section table · the scene graph · display lists · sampled curves |
+| `formats/gltf` | `gltfcore`, `gltfmorph`, `gltfpaint` | the blob and the vertex partition · morph targets · materials |
+| `formats/modelmesh` | `modelarrays` | reading the vertex arrays out of bytes |
+| `script/emit/generate` | `blocks`, `checks`, `merge` | one C block · what must be true first · several mods at once |
+| `mods/code/parts` | `errors`, `sources`, `patches`, `hooks` | |
+| `mods/build/edits` | `editbase`, `coins` | the item list and its save-flag budget |
+| `mods/manifest/placements` | `placementparse` | the JSON that builds the values |
+| `cli/commands/mods` | `modshare` | pack/install, and the JSON contract commands |
 
-⚠️ **Watch the import direction.** Both were split so `effdata` imports them and
-neither imports back; an earlier attempt put `meshes()` in `effgeom`, where it
-needed `entries()` from `effdata`, and the cycle only showed up at import time.
+⚠️ **Watch the import direction, and push the shared thing *down*.** Where a
+split piece still needed something from its parent, that something moved into a
+module below both — `effsections`, `gltfcore`, `mods/code/errors`,
+`mods/build/editbase` exist for no other reason. An earlier attempt put
+`meshes()` in `effgeom`, where it needed `entries()` from `effdata`, and the
+cycle only showed up at import time. Run a cold
+`uv run python -c "import bleck, bleck.api.v1, bleck.formats, bleck.script, bleck.mods"`
+after any split; `./scripts/lint.sh --full` is the other half.
 
-⚠️ **And the third option is deleting something.** The last 15 lines came off by
-removing `Effect.rows`, which D258 had called superseded and which had shipped
-for two more entries. The ceiling was the thing that finally forced it.
+✅ **The re-export rule: a package `__init__.py` may be a facade; a module may
+not.** `emit/__init__`, `mods/code/__init__`, `mods/manifest/__init__` and
+`formats/model.py` keep their `__all__` and import each name from the module
+that *defines* it. Everywhere else, name the owner — `effnode.node_at`,
+`gltfmorph.costs`, `blocks.patch_block`. A parent that re-exports its own split
+is a parent nobody knows was split.
+
+⚠️ **And the third option is deleting something.** `Effect.rows` came off under
+D270 and `effdata._subtree` under D272 — both superseded, both still shipping.
+Verify with a grep over `bleck/`, `tests/`, `scripts/` **and** `bleck/api/`
+before removing anything, and say in the log that you did.
+
+🔶 **The two files closest to the ceiling are now tests**: `tests/test_gltf.py`
+at 970 and `tests/test_effdata.py` at 951. D272 looked at both and left them —
+their natural seam runs through tests that exercise two modules at once, and
+moving those means duplicating fixtures. Whoever adds 30 lines to
+`test_gltf.py` hits `too-many-lines` first.
 
 ## ⚠️ Every mod this repo names lives in `example-mods/`, not `mods/`
 

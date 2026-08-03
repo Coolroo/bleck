@@ -24,7 +24,9 @@ from bleck.backends import coinflags
 from bleck.formats import setup, tables
 from bleck.mods import manifest as mod_manifest
 from bleck.mods import registry
+from bleck.mods.build import coins as mod_coins
 from bleck.mods.build import edits as mod_edits
+from bleck.mods.build.editbase import EditError
 from bleck.mods.manifest import ManifestError
 
 HEADER = "map,index,x,y,z\n"
@@ -151,9 +153,7 @@ class TestApplying:
         mod = a_mod(tmp_path / "m", body, table)
         data = setup.parse(setup_file(base_items, enemies), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        return mod_edits._apply_coins(  # pylint: disable=protected-access
-            mod, placement, data, NO_BUDGET
-        ).items
+        return mod_coins.apply_coins(mod, placement, data, NO_BUDGET).items
 
     def test_an_added_item_lands_with_spawning_flags(self, tmp_path):
         every = self.build(
@@ -201,7 +201,7 @@ class TestApplying:
         ]
 
     def test_an_index_past_the_end_says_how_many_there_are(self, tmp_path):
-        with pytest.raises(mod_edits.EditError, match=r"places 2 coin\(s\)"):
+        with pytest.raises(EditError, match=r"places 2 coin\(s\)"):
             self.build(
                 tmp_path,
                 {"tables": {"coins": "tables/coins.csv"}},
@@ -239,7 +239,7 @@ class TestTheCoinFlagBudget:
     def budgets(self, monkeypatch, entries):
         """Stub the table so these run without an extracted disc."""
         monkeypatch.setattr(
-            mod_edits.coinflags,
+            mod_coins.coinflags,
             "read",
             lambda _path: coinflags.CoinBudgets(entries=entries),
         )
@@ -251,16 +251,14 @@ class TestTheCoinFlagBudget:
             HEADER + "m1,,-300,50,0\n",
         )
         placement = mod_edits.placements_for(mod)[0]
-        return mod_edits._apply_coins(  # pylint: disable=protected-access
-            mod, placement, data, pathlib.Path("base")
-        )
+        return mod_coins.apply_coins(mod, placement, data, pathlib.Path("base"))
 
     def test_a_budgeted_map_with_no_coins_of_its_own_is_refused(
         self, monkeypatch, tmp_path
     ):
         """Its blocks have already spent the budget -- `he1_01`, measured."""
         self.budgets(monkeypatch, [coinflags.CoinBudget(map_name="m1", flags=4)])
-        with pytest.raises(mod_edits.EditError) as caught:
+        with pytest.raises(EditError) as caught:
             self.apply(tmp_path, setup.parse(setup_file(), origin="t.dat"))
         message = str(caught.value)
         assert "reserves 4 coin flag(s)" in message
@@ -300,8 +298,8 @@ class TestTheCoinFlagBudget:
             HEADER + "m1,,-300,50,0\n",
         )
         placement = mod_edits.placements_for(mod)[0]
-        with pytest.raises(mod_edits.EditError, match="cannot read the coin-flag table"):
-            mod_edits._apply_coins(  # pylint: disable=protected-access
+        with pytest.raises(EditError, match="cannot read the coin-flag table"):
+            mod_coins.apply_coins(
                 mod, placement, setup.parse(setup_file(), origin="t.dat"), NO_BUDGET
             )
 
@@ -314,7 +312,7 @@ class TestTheCoinFlagBudget:
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        found = mod_edits._apply_coins(mod, placement, data, NO_BUDGET).items  # pylint: disable=protected-access
+        found = mod_coins.apply_coins(mod, placement, data, NO_BUDGET).items
         assert len(found) == 2
 
     def test_growing_an_existing_section_is_allowed_and_silent(self, tmp_path):
@@ -338,7 +336,7 @@ class TestTheCoinFlagBudget:
         )
         assert not build.warnings
         placement = mod_edits.placements_for(mod)[0]
-        found = mod_edits._apply_coins(mod, placement, data, NO_BUDGET).items  # pylint: disable=protected-access
+        found = mod_coins.apply_coins(mod, placement, data, NO_BUDGET).items
         assert len(found) == 2
 
     def test_more_than_the_game_can_load_is_refused(self, tmp_path):
@@ -351,8 +349,8 @@ class TestTheCoinFlagBudget:
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        with pytest.raises(mod_edits.EditError, match="at most 512"):
-            mod_edits._apply_coins(mod, placement, data, NO_BUDGET)  # pylint: disable=protected-access
+        with pytest.raises(EditError, match="at most 512"):
+            mod_coins.apply_coins(mod, placement, data, NO_BUDGET)
 
     def test_exactly_the_ceiling_is_allowed(self, tmp_path):
         """Off-by-one guard: 512 fits the allocation exactly."""
@@ -362,7 +360,7 @@ class TestTheCoinFlagBudget:
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        found = mod_edits._apply_coins(mod, placement, data, NO_BUDGET).items  # pylint: disable=protected-access
+        found = mod_coins.apply_coins(mod, placement, data, NO_BUDGET).items
         assert len(found) == setup.MAX_ITEMS
 
     def test_a_size_preserving_edit_moves_the_item(self, tmp_path):
@@ -373,7 +371,7 @@ class TestTheCoinFlagBudget:
         )
         data = setup.parse(setup_file(items=((1, 1, 1),)), origin="t.dat")
         placement = mod_edits.placements_for(mod)[0]
-        found = mod_edits._apply_coins(mod, placement, data, NO_BUDGET).items  # pylint: disable=protected-access
+        found = mod_coins.apply_coins(mod, placement, data, NO_BUDGET).items
         assert len(found) == 1
         assert found[0].position == setup.Position(-300.0, 50.0, 0.0)
 
@@ -481,7 +479,7 @@ class TestMergingWithEnemies:
             },
             HEADER + "m1,0,1,2,3\n",
         )
-        with pytest.raises(mod_edits.EditError) as caught:
+        with pytest.raises(EditError) as caught:
             mod_edits.placements_for(mod)
         message = str(caught.value)
         assert "coin 0 of m1 is declared twice" in message

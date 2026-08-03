@@ -3,10 +3,10 @@
 Split from `runtime_c` when that module crossed pylint's 1000-line limit. The
 seam is a real one rather than a convenience: everything here is reachable only
 from a mod that declares `code.patches`, and each selector kind contributes an
-independent resolver that `generate._patch_block` emits only when used.
+independent resolver that `blocks.patch_block` emits only when used.
 
 Every template is a `str.format` pattern, so literal braces are doubled, and the
-output must be pure ASCII -- `generate._require_ascii` fails the build otherwise,
+output must be pure ASCII -- `checks.require_ascii` fails the build otherwise,
 which is how a stray emoji in a comment gets caught.
 """
 

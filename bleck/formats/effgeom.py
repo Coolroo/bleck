@@ -35,26 +35,7 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
-#: The header is sixteen u32 section offsets.
-SECTIONS = 16
-
-
-def section(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
-    """Where section `index` starts and ends, clamped to what is really there.
-
-    ⚠️ The last section has no following offset, and a truncated file still
-    carries a full section table — so the table's end is a claim, not a fact.
-    """
-    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
-    end = offsets[index + 1] if index + 1 < SECTIONS else len(data)
-    return min(offsets[index], len(data)), min(end, len(data))
-
-
-def count_in(data: bytes, index: int, stride: int) -> int:
-    """How many `stride`-byte entries section `index` holds."""
-    start, end = section(data, index)
-    return max(end - start, 0) // stride
-
+from bleck.formats.effsections import section
 
 #: Section 3 holds the GX display lists an entry points at, and sections
 #: 11/13/14/15 the arrays a vertex indexes into (D263, D264).

@@ -16,7 +16,8 @@ from bleck.backends import doors
 from bleck.formats import tables
 from bleck.mods import manifest as mod_manifest
 from bleck.mods import registry
-from bleck.mods.code import parts as code_parts
+from bleck.mods.code import patches as code_patches
+from bleck.mods.code.errors import CodeError
 from bleck.mods.manifest import ManifestError
 
 HEADER = "map,index,script,at,expect,call\n"
@@ -139,7 +140,7 @@ class TestBecomingPatches:
             WITH_CODE,
             HEADER + "he1_01,0,interact,0,MULF,on_a\nmac_02,3,init,4,MULF,on_b\n",
         )
-        found = code_parts.door_patches(mod)
+        found = code_patches.door_patches(mod)
         assert [item.patch.call for item in found] == ["on_a", "on_b"]
         # `door:` resolves to the MAP whose init script registers the
         # descriptors, with the door itself carried as an index.
@@ -150,7 +151,7 @@ class TestBecomingPatches:
     def test_a_bad_selector_is_refused_by_the_shared_validator(self, tmp_path):
         mod = a_mod(tmp_path / "d", WITH_CODE, HEADER + "he1_01,0,interact,0,NOPE,f\n")
         with pytest.raises(ManifestError):
-            code_parts.door_patches(mod)
+            code_patches.door_patches(mod)
 
     def test_an_error_names_the_file_and_line_not_a_patch_index(self, tmp_path):
         """⚠️ "code.patches[3]" is a lie when the patch came from row 4 of a
@@ -164,19 +165,19 @@ class TestBecomingPatches:
             HEADER + "he1_01,0,interact,0,MULF,ok\nmac_02,1,interact,0,BAD_OP,f\n",
         )
         with pytest.raises(ManifestError) as caught:
-            code_parts.door_patches(mod)
+            code_patches.door_patches(mod)
         message = str(caught.value)
         assert "tables/doors.csv:3" in message
         assert "BAD_OP" in message
 
     def test_a_declared_table_that_is_missing_says_so(self, tmp_path):
         mod = a_mod(tmp_path / "d", WITH_CODE)
-        with pytest.raises(code_parts.CodeError, match=r"no table at tables/doors\.csv"):
-            code_parts.door_patches(mod)
+        with pytest.raises(CodeError, match=r"no table at tables/doors\.csv"):
+            code_patches.door_patches(mod)
 
     def test_no_doors_table_means_no_patches(self, tmp_path):
         mod = a_mod(tmp_path / "d", {"code": {"sources": ["src"], "target": "eu0"}})
-        assert not code_parts.door_patches(mod)
+        assert not code_patches.door_patches(mod)
 
 
 class TestTheDoorCatalog:

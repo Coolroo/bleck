@@ -28,7 +28,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import gltf, gltfpaint, model, modelmat, png
+from bleck.formats import gltf, gltfcore, gltfpaint, model, modelmat, png
 
 REPO = Path(__file__).resolve().parent.parent
 MODELS = REPO / "work" / "extracted" / "eu0" / "files" / "a"
@@ -291,7 +291,10 @@ def a_painted_file() -> bytes:
     """The mesh above, written with both images it names."""
     return gltf.write(
         a_painted_mesh(),
-        paints=[gltf.Paint(index=7, png=a_png()), gltf.Paint(index=3, png=a_png(4, 4))],
+        paints=[
+            gltfcore.Paint(index=7, png=a_png()),
+            gltfcore.Paint(index=3, png=a_png(4, 4)),
+        ],
     )
 
 
@@ -322,7 +325,10 @@ class TestTheEmittedChainResolves:
         while each opened bare in a viewer."""
         blob = gltf.write(
             a_painted_mesh(),
-            paints=[gltf.Paint(index=7, png=a_png()), gltf.Paint(index=99, png=a_png())],
+            paints=[
+                gltfcore.Paint(index=7, png=a_png()),
+                gltfcore.Paint(index=99, png=a_png()),
+            ],
         )
         assert gltf.painting(blob).images == 1
         assert not chain_faults(load(blob))
@@ -338,7 +344,7 @@ class TestTheEmittedChainResolves:
             corner_positions=mesh.corner_positions,
             groups=mesh.groups,
         )
-        blob = gltf.write(bare, paints=[gltf.Paint(index=7, png=a_png())])
+        blob = gltf.write(bare, paints=[gltfcore.Paint(index=7, png=a_png())])
         assert gltf.painting(blob).painted == 0
         assert not chain_faults(load(blob))
 
@@ -371,7 +377,7 @@ def a_layered_file(first: list, second: list) -> bytes:
     )
     wanted = sorted({layer.material for layer in first + second})
     return gltf.write(
-        layered, paints=[gltf.Paint(index=at, png=a_png()) for at in wanted]
+        layered, paints=[gltfcore.Paint(index=at, png=a_png()) for at in wanted]
     )
 
 

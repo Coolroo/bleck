@@ -2,7 +2,7 @@
 
 Split from `effdata` for the reason `effgeom` was: none of it needs the node
 walk, and `effdata` was the repo's first module to reach pylint's 1,000-line
-ceiling. `effdata` supplies the node and the command list; this says what a
+ceiling. `effnode` supplies the node and the command list; this says what a
 curve is worth at a frame, and turns three angles into a matrix.
 
 ✅ **Transcribed from the game's own evaluator** at `0x8005f2d4` (D266), branch
@@ -17,7 +17,7 @@ import math
 import struct
 from dataclasses import dataclass
 
-from bleck.formats.effgeom import section
+from bleck.formats.effsections import section
 
 #: Section 2 holds the samples; a section 10 offset is relative to it.
 CURVE_SECTION = 2

@@ -2,7 +2,7 @@
 
 Held apart from `runtime_c` because it is an instrument rather than part of the
 base runtime -- nothing in a mod's manifest asks for it, and `--gc-sections`
-drops every byte of it unless a mod's own C calls in. `generate._hook_block`
+drops every byte of it unless a mod's own C calls in. `blocks.hook_block`
 emits it straight after the hook table, which is where the derived guard word it
 restores already lives (D96).
 

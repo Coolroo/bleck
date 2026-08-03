@@ -29,6 +29,12 @@ from bleck.mods.manifest.codespec import (  # noqa: F401
     ScriptPatch,
     _parse_code,
 )
+from bleck.mods.manifest.placementparse import (
+    parse_levels,
+    parse_setup,
+    parse_tables,
+    tables_to_json,
+)
 from bleck.mods.manifest.placements import (  # noqa: F401
     COIN,
     PLACEMENT_KINDS,
@@ -40,10 +46,6 @@ from bleck.mods.manifest.placements import (  # noqa: F401
     PlacementEdit,
     TableKind,
     TableRef,
-    _parse_levels,
-    _parse_setup,
-    _parse_tables,
-    tables_to_json,
 )
 
 
@@ -280,9 +282,9 @@ class Manifest:  # pylint: disable=too-many-instance-attributes
             exclusive=list(raw.get("exclusive", [])),
             remove=list(raw.get("remove", [])),
             code=_parse_code(raw.get("code"), source),
-            setup=_parse_setup(raw.get("setup"), source),
-            tables=_parse_tables(raw.get("tables"), source),
-            levels=_parse_levels(raw.get("levels"), source),
+            setup=parse_setup(raw.get("setup"), source),
+            tables=parse_tables(raw.get("tables"), source),
+            levels=parse_levels(raw.get("levels"), source),
         )
 
 

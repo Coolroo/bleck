@@ -1,6 +1,6 @@
 """Compatibility shim: the `code` block now lives in `manifest/code/`.
 
-Kept because `api/v1/mods.py`, `mods/code/parts.py`, `manifest/__init__.py` and
+Kept because `api/v1/mods.py`, `mods/code/patches.py`, `manifest/__init__.py` and
 the tests all import from here, and a rename that breaks the JSON API's imports
 would be a breaking change for what is purely a file move.
 

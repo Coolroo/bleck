@@ -26,7 +26,8 @@ here, so `model.Mesh` and `model.morphs` still resolve:
 
 | | |
 |---|---|
-| `bleck.formats.modelmesh` | the shape record at `0x150` and its vertex arrays |
+| `bleck.formats.modelarrays` | the shape record at `0x150`, read into a `Mesh` |
+| `bleck.formats.modelmesh` | the `Mesh` itself, and how a face is triangulated |
 | `bleck.formats.modelanim` | the clip table and its morph poses |
 | `bleck.formats.modelbase` | `ModelError` and the name field, shared by all three |
 
@@ -100,32 +101,36 @@ from bleck.formats.modelanim import (
     clips,
     morphs,
 )
-from bleck.formats.modelbase import FIELD, ModelError, text
-from bleck.formats.modelmesh import (
-    AREA_EPSILON,
+from bleck.formats.modelarrays import (
     FACE_SLOT,
     FACE_STRIDE,
     FULL_SECTIONS,
-    GROUP_STRIDE,
-    GROUP_TABLE_AT,
     NORMAL_INDEX_SLOT,
     NORMAL_SLOT,
     POSITION_INDEX_SLOT,
     POSITION_SLOT,
-    SHAPE_RECORD_STRIDE,
-    SHAPE_SECTIONS,
-    SHAPE_SECTIONS_AT,
     TEXCOORD_INDEX_SLOT,
     TEXCOORD_SLOT,
     TRIPLE,
     UNIT_TOLERANCE,
     UV_PAIR,
-    Corner,
-    Face,
-    Mesh,
-    Shape,
-    Slice,
     mesh,
+)
+from bleck.formats.modelbase import (
+    FIELD,
+    SHAPE_SECTIONS,
+    SHAPE_SECTIONS_AT,
+    Face,
+    ModelError,
+    Shape,
+    text,
+)
+from bleck.formats.modelmesh import AREA_EPSILON, Corner, Mesh
+from bleck.formats.modelrebase import (
+    GROUP_STRIDE,
+    GROUP_TABLE_AT,
+    SHAPE_RECORD_STRIDE,
+    Slice,
 )
 
 __all__ = [

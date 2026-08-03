@@ -6,14 +6,9 @@ from __future__ import annotations
 
 import argparse
 import difflib
-import json
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from bleck import api
 from bleck.backends import emulator, gecko, maps
 from bleck.cli import shared as shared_flags
 from bleck.cli.types import AddCommand
@@ -25,6 +20,7 @@ from bleck.mods.build import outputs
 from bleck.mods.build.overlay import normalize_disc_path, resolve_target
 
 from .disc import add_format_flags
+from .modshare import cmd_export, cmd_import, cmd_install, cmd_pack, cmd_schema
 
 CATEGORY = "mods"
 
@@ -386,62 +382,6 @@ def _report(report: builder.BuildReport, chain: resolver.Chain) -> int:
     return 0
 
 
-def cmd_pack(args: argparse.Namespace) -> int:
-    """A mod as a shareable `.bleck` archive, carrying no game data."""
-    mod = _registry().require(args.name)
-    plan = pack.plan(mod)
-    out = Path(args.output) if args.output else Path(f"{mod.name}{pack.SUFFIX}")
-
-    include = False
-    if plan.needs_consent:
-        print("")
-        print(f"WARNING: {plan.describe_assets()}")
-        print("")
-        if args.include_assets:
-            include = True
-            print("  --include-assets given; packing them.")
-        else:
-            print("  Type exactly: yes I understand")
-            print("  Anything else packs the mod without them.")
-            try:
-                include = input("  > ").strip() == "yes I understand"
-            except EOFError:
-                include = False
-            if not include:
-                print("  Packing without them; the mod may be incomplete.")
-
-    result = pack.write(mod, plan, out, include_assets=include)
-    print("")
-    print(f"{result.path}  ({len(result.packed)} file(s))")
-    for name in result.packed:
-        print(f"    {name}")
-    if result.skipped:
-        print(f"  left out, rebuilt on install: {len(result.skipped)} file(s)")
-    if result.assets_included:
-        # ⚠️ What the author declared, not what bleck assumed. Telling someone
-        # their own artwork is game-derived was the bug (D186).
-        if mod.manifest.assets is manifest.AssetOrigin.ORIGINAL:
-            print("  Includes this mod's overlay files, declared as your own work.")
-        else:
-            print("  WARNING: includes overlay files that may be game-derived.")
-            print('  Declare `"assets"` in mod.json to say which.')
-    return 0
-
-
-def cmd_install(args: argparse.Namespace) -> int:
-    """Unpack a `.bleck` into the mods directory."""
-    done = pack.install(Path(args.file), registry.mods_root(), force=args.force)
-    print(f"{done.name} -> {done.root}  ({len(done.files)} file(s))")
-    if done.assets_included:
-        if done.assets_origin is manifest.AssetOrigin.ORIGINAL:
-            print("  Includes overlay files the author declares as their own work.")
-        else:
-            print("  WARNING: this archive carried overlay files that replace disc")
-            print("  content, and the author did not say where they came from.")
-    print(f"  build it with: bleck mod build {done.name}")
-    return 0
-
-
 def register(add: AddCommand) -> None:
     parser = add("mod", help="create, inspect and build mods")
     sub = parser.add_subparsers(dest="mod_command", required=True, metavar="<action>")
@@ -556,51 +496,3 @@ def _add_merge_flag(parser: argparse.ArgumentParser) -> None:
             "because byte-disjoint edits can still be semantically incompatible"
         ),
     )
-
-
-def _read_json(source: str) -> str:
-    """JSON from a file, or from stdin when the path is `-`."""
-    if source == "-":
-        return sys.stdin.read()
-    path = Path(source)
-    if not path.exists():
-        raise UserError(f"no such file: {path}")
-    return path.read_text(encoding="utf-8")
-
-
-def cmd_export(args: argparse.Namespace) -> int:
-    """A whole mod as JSON. ⚠️ Declarations only — overlay assets stay on disk."""
-    mod = _registry().require(args.name)
-    print(api.ModDocument.of(mod.manifest).model_dump_json(indent=2))
-    return 0
-
-
-def cmd_import(args: argparse.Namespace) -> int:
-    """Write a JSON document back to a mod's `mod.json`.
-
-    ⚠️ Replaces the manifest rather than merging: an omitted field has no
-    unsurprising meaning. An editor holds the whole document.
-    """
-    try:
-        document = api.ModDocument.model_validate_json(_read_json(args.json))
-    except ValidationError as exc:
-        raise UserError(f"{args.json}: {exc}") from exc
-
-    mod = _registry().require(args.name)
-    if document.name != mod.name:
-        raise UserError(
-            f"this document is for {document.name!r}, but you asked to write it "
-            f"to {mod.name!r}.\n"
-            f"  Renaming a mod means moving its directory; bleck will not do "
-            f"that by surprise."
-        )
-
-    manifest.write(mod.root, document.to_manifest())
-    print(f"wrote {mod.root / manifest.MANIFEST_NAME}")
-    return 0
-
-
-def cmd_schema(_args: argparse.Namespace) -> int:
-    """The JSON Schema for a mod document."""
-    print(json.dumps(api.ModDocument.model_json_schema(), indent=2))
-    return 0

@@ -1,8 +1,7 @@
-"""`effdata.dat` — the effect definitions, as far as they are decoded.
+"""`effdata.dat` — the effect definitions, and the walk from a part to its art.
 
 The file sits beside `effdata.tpl` (219 images) and holds what the 174 effect
-entry points in the DOL are *made of*. Two of its sixteen sections are decoded;
-the rest are binary parameter data and are not.
+entry points in the DOL are *made of*.
 
 ## Layout
 
@@ -17,24 +16,30 @@ The game rewrites the header in place when it loads the file, so
 comparing a memory dump against this module's reading will see sixteen numbers
 that disagree completely and are the same thing.
 
-| Section | Size | What |
-|---|---|---|
-| 0 | 6,176 | ✅ **139 effect records**, 44 bytes each |
-| 1 | 14,080 | ✅ **704 part records**, 20 bytes each |
-| 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats |
-| 3 | 350,976 | ✅ **360 GX display lists** (D263) |
-| 4 | 9,824 | ✅ **351 texture records**, 28 bytes each |
-| 5 | 8,384 | ✅ **524 material records**, 16 bytes each |
-| 6 | 64,768 | ✅ **4,048 transform rows**, four floats each |
-| 7 | 17,760 | ✅ **2,960 `(start, count, flags)`** records, 6 bytes each |
-| 8 | 23,680 | ✅ **2,960 draws**, 8 bytes: material, descriptor, display list |
-| 9 | 74,784 | ✅ **3,739 scene-graph nodes**, 20 bytes each |
-| 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 |
-| 11 | 72,544 | ✅ **9,068 texture coordinates**, `2 x f32` |
-| 12 | 16,096 | ✅ **1,006 translate/rotate/scale vectors** |
-| 13 | 73,504 | ✅ **12,250 positions**, `3 x s16` |
-| 14 | 4,896 | ✅ **1,632 normals**, `3 x s8` (D264) |
-| 15 | 224 | ✅ **56 vertex colours**, `GX_RGBA8` (D264) |
+| Section | Size | What | Read by |
+|---|---|---|---|
+| 0 | 6,176 | ✅ **139 effect records**, 44 bytes each | here |
+| 1 | 14,080 | ✅ **704 part records**, 20 bytes each | here |
+| 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats | `effcurve` |
+| 3 | 350,976 | ✅ **360 GX display lists** (D263) | `effgeom` |
+| 4 | 9,824 | ✅ **351 texture records**, 28 bytes each | here |
+| 5 | 8,384 | ✅ **524 material records**, 16 bytes each | here |
+| 6 | 64,768 | ✅ **1,349 3x4 matrices**, a node's own transform | `effnode` |
+| 7 | 17,760 | ✅ **2,960 `(start, count, flags)`** records, 6 bytes each | here |
+| 8 | 23,680 | ✅ **2,960 draws**, 8 bytes: material, descriptor, display list | here |
+| 9 | 74,784 | ✅ **3,739 scene-graph nodes**, 20 bytes each | `effnode` |
+| 10 | 38,016 | ✅ **4,752 `(tag, offset)` pairs** addressing section 2 | `effnode` |
+| 11 | 72,544 | ✅ **9,068 texture coordinates**, `2 x f32` | `effgeom` |
+| 12 | 16,096 | ✅ **1,006 translate/rotate/scale vectors** | `effnode` |
+| 13 | 73,504 | ✅ **12,250 positions**, `3 x s16` | `effgeom` |
+| 14 | 4,896 | ✅ **1,632 normals**, `3 x s8` (D264) | `effgeom` |
+| 15 | 224 | ✅ **56 vertex colours**, `GX_RGBA8` (D264) | `effgeom` |
+
+Four modules read one file, and the split is by concern rather than by size:
+`effsections` answers where a section is, `effgeom` reads display lists,
+`effcurve` reads sampled curves, `effnode` walks the scene graph, and this
+module holds the effects and parts that address all of it. ⚠️ **The imports run
+one way only** — nothing under this module reaches back into it.
 
 ### The EFDT block, as the game's own loader reads it
 
@@ -105,16 +110,10 @@ grouping those floats per effect meant nothing.
 ✅ Both of D258's outstanding refutations are acted on: section 8's last four
 bytes are one `u32` display-list offset, and section 3 is 360 GX display lists.
 
-## ✅ The curves, and how a node is posed (D266)
+## The curves, and how a node is posed
 
-Section 10 is **4,752 `(u32 tag, u32 offset)` pairs**, the offset relative to
-section 2. A node names a **run** of them at `+0x10`/`+0x12`, and the tag picks
-one of ten scalars — T.xyz, R.xyz, S.xyz, alpha — which `slots_at` fills from
-the node's own static values before letting a curve overwrite one. `effcurve`
-holds the record layout; both come from the game's evaluator.
-
-⛔ **The earlier reading of a curve record is superseded**: `+0x06` is the last
-frame, not a sample count, and `u8` samples were being read as floats.
+`effnode` holds it — sections 9, 6, 12 and 10, and the evaluator that turns them
+into a matrix at a frame (D266). `draws` below is what asks it for a pose.
 
 ## Sections 7 and 8, which pair up
 
@@ -130,9 +129,9 @@ record stride and is GX display-list alignment, so the last two are one number.
 
 ## ✅ The geometry (D263, D264)
 
-An effect is **real indexed geometry**, not a billboard. `mesh_at` reads it and
-states the framing; each descriptor bit names an array, and the evidence for
-which is the fit:
+An effect is **real indexed geometry**, not a billboard. `effgeom.mesh_at` reads
+it and states the framing; each descriptor bit names an array, and the evidence
+for which is the fit:
 
 | bit | attribute | array | evidence |
 |---|---|---|---|
@@ -162,12 +161,12 @@ import struct
 from dataclasses import dataclass, field
 
 from bleck.common.errors import BleckError
-from bleck.formats.effcurve import curve_at, product, turn
+from bleck.formats import effgeom, effnode
+from bleck.formats.effsections import SECTIONS, count_in, section
 
 MAGIC = b"EFDT"
 
 #: The header is sixteen u32 section offsets, then the magic at the first.
-SECTIONS = 16
 HEADER_SIZE = SECTIONS * 4
 
 EFFECT_STRIDE = 44
@@ -295,34 +294,6 @@ def chains_cleanly(effects: list[Effect]) -> bool:
     )
 
 
-#: Section 10: `(tag, offset)` pairs addressing section 2.
-COMMAND_SECTION = 10
-COMMAND_STRIDE = 8
-
-#: Section 2: curve records, reached by those offsets.
-CURVE_SECTION = 2
-CURVE_HEADER = 12
-
-
-@dataclass(frozen=True)
-class Command:
-    """One `(tag, offset)` pair. What the ten tags mean is unestablished."""
-
-    tag: int
-    offset: int
-    """Relative to section 2, not to the file."""
-
-
-def commands(data: bytes) -> list[Command]:  # pylint: disable=container-return
-    """Section 10, in file order."""
-    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
-    start, end = offsets[COMMAND_SECTION], offsets[COMMAND_SECTION + 1]
-    return [
-        Command(*struct.unpack_from(">II", data, at))
-        for at in range(start, end - COMMAND_STRIDE + 1, COMMAND_STRIDE)
-    ]
-
-
 #: Sections 7 and 8, which pair: 7 groups 8's entries by start and count.
 GROUP_SECTION, GROUP_STRIDE = 7, 6
 ENTRY_SECTION, ENTRY_STRIDE = 8, 8
@@ -391,20 +362,9 @@ class Entry:
     once and referring to, not once per entry."""
 
 
-def _section(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
-    offsets = struct.unpack_from(f">{SECTIONS}I", data, 0)
-    # ⚠️ The last section has no following offset to bound it. Reading one past
-    # the table would raise on section 15, which is the vertex colour array and
-    # is read below -- so the file's own end is the bound.
-    end = offsets[index + 1] if index + 1 < SECTIONS else len(data)
-    # ⚠️ Clamped to what is actually there. A truncated file still carries a
-    # full section table, so the table's own end is a claim rather than a fact.
-    return min(offsets[index], len(data)), min(end, len(data))
-
-
 def groups(data: bytes) -> list[Group]:  # pylint: disable=container-return
     """Section 7, in file order."""
-    start, end = _section(data, GROUP_SECTION)
+    start, end = section(data, GROUP_SECTION)
     return [
         Group(index, *struct.unpack_from(">3H", data, at))
         for index, at in enumerate(range(start, end - GROUP_STRIDE + 1, GROUP_STRIDE))
@@ -413,7 +373,7 @@ def groups(data: bytes) -> list[Group]:  # pylint: disable=container-return
 
 def entries(data: bytes) -> list[Entry]:  # pylint: disable=container-return
     """Section 8, in file order. Section 7's start/count addresses these."""
-    start, end = _section(data, ENTRY_SECTION)
+    start, end = section(data, ENTRY_SECTION)
     return [
         Entry(index, *struct.unpack_from(">HHI", data, at))
         for index, at in enumerate(range(start, end - ENTRY_STRIDE + 1, ENTRY_STRIDE))
@@ -457,32 +417,20 @@ def header(data: bytes) -> Header:
     )
 
 
-#: The five sections between a part and its image (D258). ⚠️ Sections 7 and 8
-#: are the `Group` and `Entry` readers above, reached from a different
-#: direction: a group is a run of entries, and an entry names a material.
-NODE_SECTION, NODE_STRIDE = 9, 20
+#: The material and texture sections the five-hop chain ends in (D258).
+#: ⚠️ Sections 7, 8 and 9 are the other three hops, and each is read from a
+#: different direction: a node names a group, a group is a run of entries, and
+#: an entry names one of these materials.
 MATERIAL_SECTION, MATERIAL_STRIDE = 5, 16
 TEXTURE_SECTION, TEXTURE_STRIDE = 4, 28
-
-#: Inside a node record. `sibling` and `child` are **relative to the effect's
-#: own base**, not absolute -- resolving them as absolute reaches 649 of 3,739
-#: nodes and 73 of 219 images, which is a plausible partial answer and a wrong
-#: one (D258).
-NODE_SIBLING, NODE_CHILD, NODE_DRAW = 0x00, 0x02, 0x04
-NODE_ALPHA, NODE_BILLBOARD = 0x0E, 0x0F
 
 #: A material's texture reference, and a texture's image index.
 MATERIAL_TEXTURE = 0x0C
 TEXTURE_IMAGE, TEXTURE_WRAP = 0x00, 0x02
 
-#: Both nulls are -1 read as a signed 16-bit value. ⚠️ `Part.first` is read
-#: unsigned above, so its null is 0xFFFF rather than -1.
-NO_INDEX = -1
+#: ⚠️ `Part.first` is read unsigned, so its null is 0xFFFF rather than the -1
+#: `effnode.NO_INDEX` uses for a node reference.
 NO_PART = 0xFFFF
-
-#: A node that pointed at itself, or a cycle, would walk forever. The file has
-#: 3,739 nodes, so nothing legitimate can visit more than that.
-WALK_LIMIT = 4096
 
 
 @dataclass(frozen=True)
@@ -508,316 +456,22 @@ class Picture:
     """The material's own RGBA at `+0x00`, before the node's alpha is folded in."""
 
 
-#: Section 6: a node's own local transform, as a 3x4 row-major matrix of
-#: floats. ✅ Node `+0x06` reaches 1,348 and the section holds exactly 1,349 at
-#: this stride -- zero spare, the same exact-fill argument that settled the
-#: vertex arrays (D265).
-MATRIX_SECTION, MATRIX_STRIDE = 6, 48
-
-#: Section 12: translate, rotate and scale vectors, three floats each. A node's
-#: `+0x08`, `+0x0A` and `+0x0C` index it.
-VECTOR_SECTION, VECTOR_STRIDE = 12, 12
-
-#: Inside a node record, past the three indices `node_at` already reads.
-NODE_MATRIX, NODE_TRANSLATE, NODE_ROTATE, NODE_SCALE = 0x06, 0x08, 0x0A, 0x0C
-
-#: Section 10 again, reached from the other end: a node names a **run** of
-#: curve commands. 🔶 What the curves do to a node is not read -- see `Transform`.
-NODE_CURVES, NODE_CURVE_COUNT = 0x10, 0x12
-
-
-@dataclass(frozen=True)
-class Node:
-    """One entry of section 9: a scene-graph node under an effect's base.
-
-    ⚠️ `sibling` and `child` are relative to the effect's base node, and
-    `draw` is not -- it is an absolute index into section 7.
-    """
-
-    index: int
-    sibling: int
-    child: int
-    draw: int
-    alpha: int
-    billboard: int
-
-    matrix: int = 0
-    """Into section 6: this node's local transform, relative to its parent."""
-
-    translate: int = 0
-    rotate: int = 0
-    scale: int = 0
-    """Into section 12. ✅ **The same transform as `matrix`, encoded twice** --
-    see `Transform.composed`."""
-
-    curves: int = 0
-    count: int = 0
-    """A run of section 10 curve commands. 🔶 Read, and not yet acted on."""
-
-
-@dataclass(frozen=True)
-class Transform:
-    """A 3x4 row-major matrix: three rows of `(x, y, z, translation)`.
-
-    ✅ **Established twice from different bytes** (D265). Section 6 holds it
-    outright, and a node's section 12 translate/rotate/scale compose to the same
-    thing -- **3,738 of the file's 3,739 nodes agree exactly**, the one exception
-    being the last node, whose every index is zero.
-
-    ⚠️ **The rotation is `zyx` in degrees**, and that order is *discriminated*
-    rather than merely consistent: 199 nodes rotate on more than one axis, and
-    the next-best order matches 3,615 where this one matches 3,738. Nothing here
-    needs it — the matrix is used directly, which is the point of checking that
-    the two agree — but a caller animating a rotation curve will.
-    """
-
-    values: tuple
-
-    @property
-    def is_flat(self) -> bool:
-        """Whether the transform collapses volume to nothing.
-
-        ⚠️ **44% of the file's drawing nodes are flat in the rest pose**, and 26
-        of 139 effects are flat throughout it (D265). That is not a fault: the
-        scale is animated up from zero by section 10's curves. It is why
-        applying this transform *without* those curves renders less than
-        drawing every part at the origin does.
-        """
-        m = self.values
-        determinant = (
-            m[0] * (m[5] * m[10] - m[6] * m[9])
-            - m[1] * (m[4] * m[10] - m[6] * m[8])
-            + m[2] * (m[4] * m[9] - m[5] * m[8])
-        )
-        return abs(determinant) < 1e-9
-
-    def then(self, child: Transform) -> Transform:
-        """`child` applied first, then this one — parent-to-child accumulation."""
-        a, b = self.values, child.values
-        out = []
-        for row in range(3):
-            for col in range(3):
-                out.append(sum(a[row * 4 + k] * b[k * 4 + col] for k in range(3)))
-            out.append(
-                sum(a[row * 4 + k] * b[k * 4 + 3] for k in range(3)) + a[row * 4 + 3]
-            )
-        return Transform(tuple(out))
-
-
-#: What no transform at all looks like, and what an effect's root inherits.
-IDENTITY = Transform((1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0))
-
-
-def matrix_at(data: bytes, index: int) -> Transform:
-    """One section 6 matrix, or the identity when the index is out of range."""
-    start, end = _section(data, MATRIX_SECTION)
-    at = start + index * MATRIX_STRIDE
-    if index < 0 or at + MATRIX_STRIDE > end:
-        return IDENTITY
-    return Transform(struct.unpack_from(">12f", data, at))
-
-
-def vector_at(data: bytes, index: int) -> tuple:  # pylint: disable=container-return
-    """One section 12 vector — a translate, a rotate in degrees, or a scale."""
-    start, end = _section(data, VECTOR_SECTION)
-    at = start + index * VECTOR_STRIDE
-    if index < 0 or at + VECTOR_STRIDE > end:
-        return (0.0, 0.0, 0.0)
-    return struct.unpack_from(">3f", data, at)
-
-
 def _signed(data: bytes, at: int) -> int:
     return struct.unpack_from(">h", data, at)[0]
 
 
-def _count(data: bytes, section: int, stride: int) -> int:
-    start, end = _section(data, section)
-    return max(end - start, 0) // stride
-
-
-def node_count(data: bytes) -> int:
-    """How many section 9 nodes the file holds."""
-    return _count(data, NODE_SECTION, NODE_STRIDE)
-
-
-def node_at(data: bytes, index: int) -> Node:
-    """One section 9 node, by absolute index."""
-    start, _ = _section(data, NODE_SECTION)
-    at = start + index * NODE_STRIDE
-    return Node(
-        index=index,
-        sibling=_signed(data, at + NODE_SIBLING),
-        child=_signed(data, at + NODE_CHILD),
-        draw=_signed(data, at + NODE_DRAW),
-        alpha=data[at + NODE_ALPHA],
-        billboard=data[at + NODE_BILLBOARD],
-        matrix=_signed(data, at + NODE_MATRIX),
-        translate=_signed(data, at + NODE_TRANSLATE),
-        rotate=_signed(data, at + NODE_ROTATE),
-        scale=_signed(data, at + NODE_SCALE),
-        curves=struct.unpack_from(">H", data, at + NODE_CURVES)[0],
-        count=struct.unpack_from(">H", data, at + NODE_CURVE_COUNT)[0],
-    )
-
-
-#: The ten scalars a node's curves can drive, in tag order. ✅ Read off the
-#: game's own slot array at `0x8005f290`, which it fills from the node's static
-#: translate, rotate, scale and alpha before letting any curve overwrite a slot.
-SLOT_NAMES = (
-    "translate.x",
-    "translate.y",
-    "translate.z",
-    "rotate.x",
-    "rotate.y",
-    "rotate.z",
-    "scale.x",
-    "scale.y",
-    "scale.z",
-    "alpha",
-)
-SLOTS = len(SLOT_NAMES)
-
-
-def slots_at(data: bytes, index: int, frame: float) -> tuple:
-    # pylint: disable=container-return
-    """A node's ten scalars at `frame`.
-
-    ✅ **The static TRS first, then curves over the top** — which is what the
-    game does, and it matters: a node with one scale curve keeps its *own* other
-    two axes rather than falling to zero.
-    """
-    node = node_at(data, index)
-    slots = [
-        *vector_at(data, node.translate),
-        *vector_at(data, node.rotate),
-        *vector_at(data, node.scale),
-        float(node.alpha),
-    ]
-    every = commands(data)
-    for step in range(node.count):
-        at = node.curves + step
-        if not 0 <= at < len(every):
-            continue
-        command = every[at]
-        if not 0 <= command.tag < SLOTS:
-            continue
-        value = curve_at(data, command.offset).value_at(frame)
-        if value is not None:
-            slots[command.tag] = value
-    return tuple(slots)
-
-
-def local_at(data: bytes, index: int, frame: float) -> Transform:
-    """A node's own transform at `frame`, its curves applied.
-
-    ⚠️ Rotates **z, then y, then x, in degrees** — the order D265 measured
-    against section 6's stored matrices, which agree on 3,738 of 3,739 nodes.
-    """
-    slots = slots_at(data, index, frame)
-    spin = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
-    for which in (2, 1, 0):
-        spin = product(spin, turn(which, slots[3 + which]))
-    out: list = []
-    for row in range(3):
-        out.extend(spin[row * 3 + col] * slots[6 + col] for col in range(3))
-        out.append(slots[row])
-    return Transform(tuple(out))
-
-
-@dataclass(frozen=True)
-class Placed:
-    """A node, and where it lands once its parents' transforms are applied."""
-
-    index: int
-    world: Transform
-
-    chain: tuple = ()
-    """Every node from the part's root down to this one, inclusive.
-
-    ⚠️ Exported so a viewer can pose the node itself, at whatever time it is
-    scrubbed to. `world` is one frame's answer; the chain is the question."""
-
-
-def _placed(
-    data: bytes, base: int, root: int, frame: float | None = None
-) -> list[Placed]:
-    # pylint: disable=container-return
-    """`root` and everything under it, each with its accumulated transform.
-
-    The same walk as `_subtree` and with the same trap: ⚠️ **the root's own
-    sibling is not followed**, because a sibling chain runs on into the next
-    part's nodes.
-    """
-    total = _count(data, NODE_SECTION, NODE_STRIDE)
-    found: list[Placed] = []
-    seen: set = set()
-    pending = [(root, IDENTITY, ())]
-    while pending and len(found) < WALK_LIMIT:
-        index, parent, above = pending.pop()
-        if not 0 <= index < total or index in seen:
-            continue
-        seen.add(index)
-        node = node_at(data, index)
-        own = (
-            matrix_at(data, node.matrix)
-            if frame is None
-            else local_at(data, index, frame)
-        )
-        here = parent.then(own)
-        chain = (*above, index)
-        found.append(Placed(index, here, chain))
-        cursor = node.child
-        while cursor != NO_INDEX and len(found) < WALK_LIMIT:
-            absolute = base + cursor
-            if not 0 <= absolute < total:
-                break
-            pending.append((absolute, here, chain))
-            cursor = node_at(data, absolute).sibling
-    return found
-
-
-def _subtree(data: bytes, base: int, root: int) -> list[int]:
-    # pylint: disable=container-return
-    """Absolute node indices of `root` and everything under it.
-
-    ⚠️ **The root's own sibling is not followed.** A sibling chain runs on into
-    the next part's nodes, so walking it would give one part the artwork of the
-    parts after it -- and the result would still be in range, still resolve, and
-    still look like an answer.
-    """
-    total = _count(data, NODE_SECTION, NODE_STRIDE)
-    found: list[int] = []
-    pending = [root]
-    while pending and len(found) < WALK_LIMIT:
-        index = pending.pop()
-        if not 0 <= index < total or index in found:
-            continue
-        found.append(index)
-        node = node_at(data, index)
-        # Children are relative to the effect's base, and each child's sibling
-        # chain belongs to the same subtree.
-        cursor = node.child
-        while cursor != NO_INDEX and len(found) < WALK_LIMIT:
-            absolute = base + cursor
-            if not 0 <= absolute < total:
-                break
-            pending.append(absolute)
-            cursor = node_at(data, absolute).sibling
-    return found
-
-
 def _picture(data: bytes, material: int) -> Picture | None:
     """A material's image, or `None` when it names no texture."""
-    materials = _count(data, MATERIAL_SECTION, MATERIAL_STRIDE)
+    materials = count_in(data, MATERIAL_SECTION, MATERIAL_STRIDE)
     if not 0 <= material < materials:
         return None
-    start, _ = _section(data, MATERIAL_SECTION)
+    start, _ = section(data, MATERIAL_SECTION)
     at = start + material * MATERIAL_STRIDE
     reference = _signed(data, at + MATERIAL_TEXTURE)
-    textures = _count(data, TEXTURE_SECTION, TEXTURE_STRIDE)
+    textures = count_in(data, TEXTURE_SECTION, TEXTURE_STRIDE)
     if not 0 <= reference < textures:
         return None
-    texture_start, _ = _section(data, TEXTURE_SECTION)
+    texture_start, _ = section(data, TEXTURE_SECTION)
     texture_at = texture_start + reference * TEXTURE_STRIDE
     return Picture(
         image=_signed(data, texture_at + TEXTURE_IMAGE),
@@ -829,23 +483,14 @@ def _picture(data: bytes, material: int) -> Picture | None:
     )
 
 
-#: The display-list reader lives next door: it needs none of the effect, part
-#: or node machinery above, and this module was the repo's first to pass
-#: pylint's 1,000-line ceiling. `draws` below is what pairs the two.
-from bleck.formats.effgeom import (  # noqa: E402  pylint: disable=wrong-import-position
-    Mesh,
-    mesh_at,
-)
-
-
-def meshes(data: bytes) -> list[Mesh]:  # pylint: disable=container-return
+def meshes(data: bytes) -> list[effgeom.Mesh]:  # pylint: disable=container-return
     """Every distinct display list the entries name, in a stable order.
 
     ⚠️ **360 meshes for 2,960 entries.** Reading one per entry would be eight
     times the work and eight times the export, for the same geometry.
     """
     wanted = sorted({(entry.display_list, entry.descriptor) for entry in entries(data)})
-    return [mesh_at(data, offset, descriptor) for offset, descriptor in wanted]
+    return [effgeom.mesh_at(data, offset, descriptor) for offset, descriptor in wanted]
 
 
 @dataclass(frozen=True)
@@ -871,7 +516,7 @@ class Draw:
     node in the chain is evaluated at that frame and the results multiplied,
     parent first."""
 
-    world: Transform = IDENTITY
+    world: effnode.Transform = effnode.IDENTITY
     """Where the issuing node lands once its parents' transforms are applied.
 
     ⛔ **Do not pose an effect from the rest pose alone.** 44% of nodes are flat
@@ -896,8 +541,8 @@ def draws(
     found: list[Draw] = []
     groups_all = groups(data)
     entries_all = entries(data)
-    for placed in _placed(data, effect.extra, effect.extra + part.first, frame):
-        node = node_at(data, placed.index)
+    for placed in effnode.placed(data, effect.extra, effect.extra + part.first, frame):
+        node = effnode.node_at(data, placed.index)
         if not 0 <= node.draw < len(groups_all):
             continue
         group = groups_all[node.draw]

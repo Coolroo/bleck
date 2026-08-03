@@ -1,9 +1,14 @@
 """Which code build happens: one mod, or several merged into one module.
 
-The two strategies live here; everything they share lives in `parts`.
+The two strategies live here; everything they share lives in `parts`, with
+`errors`, `sources`, `patches` and `hooks` under it.
 
 ⚠️ Compiling runs before the overlay is planned: the plan comes from walking
 `overlay/`, and the output at `overlay/files/mod/mod.rel` has to exist by then.
+
+⚠️ **This is the facade; the modules under it do not re-export each other.**
+Callers reach a name through `mods.code`, and a module inside the package
+imports it from whichever module defines it.
 """
 
 from __future__ import annotations
@@ -18,27 +23,28 @@ from bleck.mods import registry as mod_registry
 
 # Re-exported: callers reach these through `mods.code`.
 # pylint: disable=unused-import
+from bleck.mods.code.errors import CodeError
+from bleck.mods.code.hooks import function_hooks_for
 from bleck.mods.code.parts import (  # noqa: F401
-    BLECK_INCLUDE,
     CODE_WORKDIR,
     CodeBuild,
-    CodeError,
     CodeOverride,
     CodeResult,
     Part,
     ScriptSource,
     banner_for,
-    collect_sources,
     combo_hooks_for,
-    function_hooks_for,
     link_module,
     map_hooks_for,
     mods_defining_mod_prolog,
-    needs_ctor_walk,
-    patches_for,
     prepare,
-    replacements_for,
     script_text,
+)
+from bleck.mods.code.patches import patches_for, replacements_for
+from bleck.mods.code.sources import (
+    BLECK_INCLUDE,
+    collect_sources,
+    needs_ctor_walk,
 )
 from bleck.mods.manifest import REL_DISC_PATH, CodeSpec
 from bleck.mods.registry import Mod

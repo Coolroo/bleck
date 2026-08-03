@@ -140,8 +140,8 @@ bytes (D58, `vision.md`). Two spellings, one meaning:
 Inline is right up to a handful of rows. Past that it is punctuation, so a CSV
 table takes over (D124). A table declared as a bare path carries a `map` column;
 one declared with a `map` binds every row to it and **must not** also have the
-column. `bleck/formats/tables.py` reads them; `bleck/mods/build/edits.py` merges
-both sources and applies them.
+column. `bleck/formats/tables.py` reads them; `bleck/mods/build/edits.py` (enemies) and
+`bleck/mods/build/coins.py` (items) merge both sources and apply them.
 
 ⚠️ **The `tables` key is the *kind*, not a label** (D125) — a closed
 `TableKind`: `enemies`, `coins`, `doors`. Read rows through `Manifest.tables_of(kind)`; iterating
@@ -533,7 +533,7 @@ he1_01,0,init,0,0x0002001A,on_door_init
 ```
 
 A row is a **`code.patches` entry**, not setup-file data, so it merges in
-`bleck/mods/code/parts.py` (`door_patches`) and `PLACEMENT_KINDS` deliberately
+`bleck/mods/code/patches.py` (`door_patches`) and `PLACEMENT_KINDS` deliberately
 excludes `DOORS`. Each row is rebuilt into the selector a manifest would spell —
 `door:<map>:<index>:<script>` — and passed through the same
 `codespec.build_patch` an inline patch uses, so both surfaces refuse the same

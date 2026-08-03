@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from bleck.cli.commands import model as command
-from bleck.formats import gltf, model
+from bleck.formats import gltfmorph, model
 
 REPO = Path(__file__).resolve().parent.parent
 MODELS = REPO / "work" / "extracted" / "eu0" / "files" / "a"
@@ -87,9 +87,9 @@ class TestTheAnimationBudget:
         target in the file, so 2,048 targets cost 16.8 MB of weights whatever
         they displace — which is why the byte cap decides every real model and
         the target cap decides none of them (D238)."""
-        assert gltf.weight_cost(256) == 256 * 256 * 4 + 256 * 4
-        assert gltf.weight_cost(2048) > 16 * 1024 * 1024
-        assert gltf.weight_cost(command.SPARSE.targets) > command.SPARSE.size
+        assert gltfmorph.weight_cost(256) == 256 * 256 * 4 + 256 * 4
+        assert gltfmorph.weight_cost(2048) > 16 * 1024 * 1024
+        assert gltfmorph.weight_cost(command.SPARSE.targets) > command.SPARSE.size
 
     def test_clips_are_kept_in_file_order_until_the_budget_runs_out(self, monkeypatch):
         monkeypatch.setattr(command, "SPARSE", command.Budget(targets=250, size=10**9))

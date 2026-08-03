@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import gltf, model
+from bleck.formats import gltf, gltfcore, gltfmorph, model
 
 REPO = Path(__file__).resolve().parent.parent
 MODELS = REPO / "work" / "extracted" / "eu0" / "files" / "a"
@@ -481,8 +481,8 @@ class TestMorphAnimation:
     (D217). glTF morph targets express exactly that.
     """
 
-    def a_clip(self) -> gltf.Clip:
-        return gltf.Clip(
+    def a_clip(self) -> gltfmorph.Clip:
+        return gltfmorph.Clip(
             name="wave",
             poses=[
                 model.Morph(time=0.0, offsets=[(0, 1, 0, 0)]),
@@ -532,7 +532,7 @@ class TestMorphAnimation:
         assert "animations" not in parsed(gltf.write(a_mesh()))
 
     def test_an_empty_clip_is_not_written_as_an_animation(self):
-        document = parsed(gltf.write(a_mesh(), clips=[gltf.Clip(name="none")]))
+        document = parsed(gltf.write(a_mesh(), clips=[gltfmorph.Clip(name="none")]))
         assert "animations" not in document
 
 
@@ -546,14 +546,16 @@ class TestSeveralClips:
 
     def clips(self) -> list:
         return [
-            gltf.Clip(
+            gltfmorph.Clip(
                 name="wave",
                 poses=[
                     model.Morph(time=0.0, offsets=[(0, 1, 0, 0)]),
                     model.Morph(time=1.0, offsets=[(1, 0, 2, 0)]),
                 ],
             ),
-            gltf.Clip(name="jump", poses=[model.Morph(time=0.0, offsets=[(2, 0, 0, 3)])]),
+            gltfmorph.Clip(
+                name="jump", poses=[model.Morph(time=0.0, offsets=[(2, 0, 0, 3)])]
+            ),
         ]
 
     def test_every_clip_becomes_its_own_named_animation(self):
@@ -592,7 +594,7 @@ class TestSeveralClips:
 
     def test_a_clip_with_no_poses_is_skipped_not_written_empty(self):
         document = parsed(
-            gltf.write(a_mesh(), clips=[gltf.Clip(name="empty"), *self.clips()])
+            gltf.write(a_mesh(), clips=[gltfmorph.Clip(name="empty"), *self.clips()])
         )
         assert [a["name"] for a in document["animations"]] == ["wave", "jump"]
 
@@ -607,7 +609,7 @@ class TestAnimationSurvivesTheSplit:
         """One pose in each shape of `a_two_shape_mesh`: vertex 0 is in the
         first, vertex 5 in the second."""
         return [
-            gltf.Clip(
+            gltfmorph.Clip(
                 name="both",
                 poses=[
                     model.Morph(time=0.0, offsets=[(0, 3, 0, 0)]),
@@ -669,7 +671,7 @@ class TestAnimationSurvivesTheSplit:
 
     def test_the_still_target_accessor_is_shared_rather_than_repeated(self):
         clips = [
-            gltf.Clip(
+            gltfmorph.Clip(
                 name="one-shape-only",
                 poses=[
                     model.Morph(time=float(step), offsets=[(0, step + 1, 0, 0)])
@@ -691,7 +693,7 @@ class TestAnimationSurvivesTheSplit:
         data = path.read_bytes()
         mesh = model.mesh(data)
         clips = [
-            gltf.Clip(name=clip.name, poses=clip.poses)
+            gltfmorph.Clip(name=clip.name, poses=clip.poses)
             for clip in _decoded_clips(data, mesh)
         ][:2]
         assert clips, "p_wii_mario decoded no usable clip"
@@ -755,9 +757,9 @@ class TestSparseTargets:
     the disc move every vertex (D238). The encoding is picked per target.
     """
 
-    def a_partial_clip(self) -> gltf.Clip:
+    def a_partial_clip(self) -> gltfmorph.Clip:
         """One pose moving 4 vertices of 40 — sparse territory."""
-        return gltf.Clip(
+        return gltfmorph.Clip(
             name="corner",
             poses=[
                 model.Morph(time=0.0, offsets=[(v, v + 1, 2, 0) for v in (3, 7, 11, 30)])
@@ -798,13 +800,13 @@ class TestSparseTargets:
         document = parsed(gltf.write(a_wide_mesh(), clips=[self.a_partial_clip()]))
         target = document["meshes"][0]["primitives"][0]["targets"][0]["POSITION"]
         indices = document["accessors"][target]["sparse"]["indices"]
-        assert indices["componentType"] == gltf.UNSIGNED_BYTE
+        assert indices["componentType"] == gltfcore.UNSIGNED_BYTE
 
     def test_a_pose_that_fills_its_primitive_is_written_in_full(self):
         """⛔ **Sparse would be larger here**, and 68% of real targets are in
         this state. Writing them sparse anyway cost 5 MB across the export."""
         mesh = a_wide_mesh()
-        clip = gltf.Clip(
+        clip = gltfmorph.Clip(
             name="all",
             poses=[model.Morph(time=0.0, offsets=[(v, 1, 0, 0) for v in range(40)])],
         )
@@ -954,7 +956,7 @@ def _decoded_clips(data: bytes, mesh: model.Mesh) -> list:
     for clip in model.read(data).animations:
         poses = [p for p in model.morphs(data, clip) if p.offsets and p.reach < reach]
         if poses:
-            found.append(gltf.Clip(name=clip.name, poses=poses))
+            found.append(gltfmorph.Clip(name=clip.name, poses=poses))
     return found
 
 

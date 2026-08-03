@@ -445,7 +445,7 @@ class FunctionHook:
 
     Anything but `replace` needs a wrapper, and needs `guarded`: the detour
     restores `expect` to reach the original, so a hook with no derived guard
-    cannot intercept. `parts.function_hooks_for` refuses that combination.
+    cannot intercept. `mods.code.hooks.function_hooks_for` refuses that combination.
     """
 
     @property

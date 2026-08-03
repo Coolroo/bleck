@@ -38,7 +38,7 @@ from pathlib import Path
 
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
-from bleck.formats import effdata, effgeom
+from bleck.formats import effcurve, effdata, effgeom, effnode
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -186,25 +186,25 @@ def _scene(raw: bytes) -> dict:  # pylint: disable=container-return
     ship the one frame that does not work. The tables are what the game itself
     reads.
     """
-    total = effdata.node_count(raw)
-    every = effdata.commands(raw)
+    total = effnode.node_count(raw)
+    every = effnode.commands(raw)
 
     order: dict = {}
     curves: list[dict] = []
     nodes: list[dict] = []
     for index in range(total):
-        node = effdata.node_at(raw, index)
+        node = effnode.node_at(raw, index)
         driven = []
         for step in range(node.count):
             at = node.curves + step
             if not 0 <= at < len(every):
                 continue
             command = every[at]
-            if not 0 <= command.tag < effdata.SLOTS:
+            if not 0 <= command.tag < effnode.SLOTS:
                 continue
             slot = order.get(command.offset)
             if slot is None:
-                curve = effdata.curve_at(raw, command.offset)
+                curve = effcurve.curve_at(raw, command.offset)
                 slot = order[command.offset] = len(curves)
                 curves.append(
                     {
@@ -219,9 +219,9 @@ def _scene(raw: bytes) -> dict:  # pylint: disable=container-return
             driven.append([command.tag, slot])
         nodes.append(
             {
-                "t": [round(v, 5) for v in effdata.vector_at(raw, node.translate)],
-                "r": [round(v, 5) for v in effdata.vector_at(raw, node.rotate)],
-                "s": [round(v, 5) for v in effdata.vector_at(raw, node.scale)],
+                "t": [round(v, 5) for v in effnode.vector_at(raw, node.translate)],
+                "r": [round(v, 5) for v in effnode.vector_at(raw, node.rotate)],
+                "s": [round(v, 5) for v in effnode.vector_at(raw, node.scale)],
                 "alpha": node.alpha,
                 "curves": driven,
             }

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from bleck.mods.code import parts
+from bleck.mods.code import sources as code_sources
 from bleck.script import compile_source, emit
 from bleck.script.emit import runtime_c
 from bleck.script.errors import ScriptError
@@ -185,12 +185,12 @@ class TestModPrologCollision:
         source = self._source(
             tmp_path, "a", "void mod_prolog(void)\n{\n    probe[0] = 1;\n}\n"
         )
-        assert parts.defines_mod_prolog(source)
+        assert code_sources.defines_mod_prolog(source)
 
     def test_a_declaration_is_not_a_definition(self, tmp_path):
         # `extern void mod_prolog(void);` collides with nothing.
         source = self._source(tmp_path, "a", "extern void mod_prolog(void);\n")
-        assert not parts.defines_mod_prolog(source)
+        assert not code_sources.defines_mod_prolog(source)
 
     def test_a_block_comment_mentioning_it_does_not_count(self, tmp_path):
         """Mods quote docs-site's "define `mod_prolog`" in comments; prose is
@@ -201,13 +201,13 @@ class TestModPrologCollision:
             "/*\n    Your code defines mod_prolog(void) { ... } instead.\n*/\n"
             "void other(void) {}\n",
         )
-        assert not parts.defines_mod_prolog(source)
+        assert not code_sources.defines_mod_prolog(source)
 
     def test_a_line_comment_mentioning_it_does_not_count(self, tmp_path):
         source = self._source(
             tmp_path, "a", "// void mod_prolog(void) { }\nvoid other(void) {}\n"
         )
-        assert not parts.defines_mod_prolog(source)
+        assert not code_sources.defines_mod_prolog(source)
 
     def test_the_weak_definition_bleck_emits_is_still_a_definition(self):
         """The generated one matches too — hence the check runs on mod sources only."""

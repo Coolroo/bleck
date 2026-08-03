@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from bleck.formats import gltf, model
+from bleck.formats import gltf, gltfcore, model
 from tests.test_gltf_materials import Loaded, a_painted_mesh, a_png, load
 
 REPO = Path(__file__).resolve().parent.parent
@@ -55,7 +55,7 @@ def colour_attributes(loaded: Loaded) -> list:  # pylint: disable=container-retu
                 continue
             accessor = document["accessors"][at]
             assert accessor["type"] == "VEC4"
-            assert accessor["componentType"] == gltf.UNSIGNED_BYTE
+            assert accessor["componentType"] == gltfcore.UNSIGNED_BYTE
             assert accessor.get("normalized") is True, (
                 "an unsigned-byte COLOR_0 that is not normalized is read as "
                 "0..255, and a reader would blow the colour out"
@@ -82,7 +82,7 @@ def a_coloured_mesh(tints: list | None = None) -> model.Mesh:
 
 class TestTheColoursReachTheFile:
     def test_the_colours_the_mesh_holds_are_the_bytes_in_the_file(self):
-        blob = gltf.write(a_coloured_mesh(), paints=[gltf.Paint(7, a_png())])
+        blob = gltf.write(a_coloured_mesh(), paints=[gltfcore.Paint(7, a_png())])
         found = colour_attributes(load(blob))
         assert [run for run in found if run], "no primitive carried COLOR_0"
         assert sorted({tint for run in found for tint in run}) == sorted(set(TINTS))
@@ -93,7 +93,7 @@ class TestTheColoursReachTheFile:
         found = [
             run
             for run in colour_attributes(
-                load(gltf.write(a_coloured_mesh(), paints=[gltf.Paint(7, a_png())]))
+                load(gltf.write(a_coloured_mesh(), paints=[gltfcore.Paint(7, a_png())]))
             )
             if run
         ]
@@ -103,18 +103,20 @@ class TestTheColoursReachTheFile:
     def test_an_all_white_mesh_writes_no_attribute(self):
         """A multiply by 1 is the specification's default, so four bytes a
         vertex saying so is weight for nothing. 524 of 864 models are here."""
-        blob = gltf.write(a_coloured_mesh([WHITE] * 6), paints=[gltf.Paint(7, a_png())])
+        blob = gltf.write(
+            a_coloured_mesh([WHITE] * 6), paints=[gltfcore.Paint(7, a_png())]
+        )
         assert not any(colour_attributes(load(blob)))
         assert gltf.painting(blob).coloured == 0
 
     def test_a_mesh_with_no_colours_writes_no_attribute(self):
-        blob = gltf.write(a_painted_mesh(), paints=[gltf.Paint(7, a_png())])
+        blob = gltf.write(a_painted_mesh(), paints=[gltfcore.Paint(7, a_png())])
         assert not any(colour_attributes(load(blob)))
 
     def test_an_index_past_the_array_is_dropped_rather_than_guessed(self):
         """⛔ Clamping would tint a shape with whatever colour sat last."""
         broken = replace(a_coloured_mesh(), corner_colours=[0, 1, 2, 3, 4, 99])
-        blob = gltf.write(broken, paints=[gltf.Paint(7, a_png())])
+        blob = gltf.write(broken, paints=[gltfcore.Paint(7, a_png())])
         assert len([run for run in colour_attributes(load(blob)) if run]) == 1
 
     def test_two_corners_at_one_point_with_different_tints_stay_apart(self):

@@ -1,7 +1,7 @@
 """The C that `bleck` generates into every mod: the bleck runtime.
 
 Every template is a `str.format` pattern, so literal braces are doubled, and
-the generated output must be pure ASCII — `generate._require_ascii` fails the
+the generated output must be pure ASCII — `checks.require_ascii` fails the
 build otherwise.
 """
 

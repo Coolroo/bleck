@@ -19110,3 +19110,116 @@ problem. A future probe should write there instead of into `gw`.
 ⚠️ Both are the **same class as D267's stale texture export**: an artefact that
 is out of date impersonates a bug in whatever reads it. That is three times in
 one day.
+
+## D272 — The Python side split on its seams, and the re-export rule that came out of it (2026-08-02)
+
+D258's addendum and the handoff's module-ceiling section recorded the *method*
+for splitting a module after `effdata.py` hit pylint's 1,000-line default. This
+applies it across the rest of the Python tree, and the method held: **eleven new
+modules, no behaviour change, 1,598 tests passing before and after.**
+
+### ✅ What split into what
+
+| before | after | the seam |
+|---|---|---|
+| `formats/effdata.py` **933** | `effdata` 578 + `effnode` 336 + `effsections` 42 | the effects · the scene graph · where a section is |
+| `script/emit/generate.py` **931** | `generate` 291 + `blocks` 429 + `checks` 162 + `merge` 155 | assembly · one C block · what must be true first · several mods at once |
+| `formats/gltf.py` **890** | `gltf` 317 + `gltfmorph` 475 + `gltfcore` 166 | the document · the animation · the blob and the vertex partition |
+| `mods/code/parts.py` **762** | `parts` 346 + `hooks` 228 + `patches` 138 + `sources` 136 + `errors` 14 | the build · the DOL · the game's scripts · the mod's own C |
+| `formats/modelmesh.py` **720** | `modelmesh` 354 + `modelarrays` 351 | the value · reading it out of bytes |
+| `mods/manifest/placements.py` **610** | `placements` 237 + `placementparse` 401 | the values · the JSON that builds them |
+| `cli/commands/mods.py` **606** | `mods` 498 + `modshare` 130 | a mod here · a mod leaving |
+| `mods/build/edits.py` **591** | `edits` 371 + `coins` 233 + `editbase` 30 | the enemy list · the item list and its flag budget |
+
+Sixteen new modules; the largest source file under `bleck/` that is not a
+template bank is now 578 lines.
+
+Every seam is the same test D258 named: **the extracted piece needs nothing from
+what it left.** Where a piece did need something back, the shared thing moved
+*below* both rather than the piece staying — `effsections`, `mods/code/errors`,
+`mods/build/editbase`, `gltfcore`. Three of those exist only to keep the imports
+one-directional, which is the point.
+
+### ✅ The re-export convention, chosen and applied
+
+It was mixed: `effdata` re-exported `Mesh`/`mesh_at` from `effgeom` while
+`cli/commands/effect.py` imported `effgeom` directly; `generate.py` re-exported
+sixteen scaffold names under a `noqa: F401` that `emit/__init__.py` already
+imported for itself.
+
+**The rule now: a package `__init__.py` may be a facade; a module may not.**
+
+- `bleck/script/emit/__init__.py`, `bleck/mods/code/__init__.py`,
+  `bleck/mods/manifest/__init__.py` and `bleck/formats/model.py` keep their
+  `__all__` and import each name **from the module that defines it**.
+- No other module re-exports. `generate.py`'s sixteen-name block is gone,
+  `modelmesh.__all__` (which re-exported nine `modelbase`/`modelrebase` names)
+  is gone, and `effdata`'s bottom-of-file `# noqa: E402` import of `effgeom` —
+  placed there to dodge a cycle — is an ordinary top import again.
+- Callers name the owner: `effnode.node_at`, `effcurve.curve_at`,
+  `gltfmorph.costs`, `blocks.patch_block`.
+
+⛔ **Rejected: make every parent a facade.** It keeps call sites shorter and
+costs the thing the split was for — with `gltf.costs` still resolving, nothing
+tells a reader that pricing an animation lives in `gltfmorph`, and the next
+person adds their morph code back into `gltf.py`. ⛔ **Also rejected: no facade
+at all.** `bleck/api/` and the CLI import `emit.ModPart` and `model.Mesh` by
+those names, and `bleck/api/` is a versioned contract — churning it to prove a
+point is the wrong trade.
+
+### ✅ One piece of dead code, verified before removal
+
+`effdata._subtree` — a 28-line node walk, private, with no caller anywhere in
+`bleck/`, `tests/`, `scripts/` or `bleck/api/`. Its only remaining mention was a
+docstring in `_placed` saying "the same walk as `_subtree`". Superseded by
+`_placed`, which does the same walk *and* accumulates the transform. Grepped the
+whole tree including tests before deleting.
+
+⚠️ Nothing else came out as dead. `SLOT_NAMES` looks unused — only `SLOTS =
+len(SLOT_NAMES)` reads it — and stays: the ten names are a measured finding off
+the game's own slot array at `0x8005f290`, and deleting them would delete the
+evidence for the tag order, not just a constant.
+
+### ⛔ Seams considered and rejected
+
+- **`script/emit/runtime_c.py` (763).** Pure C template strings with no
+  internal coupling at all, which means *every* cut is arbitrary — there is no
+  seam to find, only a place to stop. Splitting it would put `HOOK_BLOCK` in one
+  file and `HOOK_TARGET` in another for no reason a reader could reconstruct.
+  Left whole.
+- **`script/compiler/lower.py` (715).** 532 of those lines are one class,
+  `_ScriptCompiler`, whose methods share the local-slot allocator and the block
+  stack. Splitting it means a mixin or passing that state around — a rewrite,
+  not a move, and this task was explicitly structural. Left whole.
+- **`scripts/ingame.py` (598).** The `Session` class is the rig's whole reason
+  to exist and its `main` is the only caller. Left whole.
+- **`tests/test_gltf.py` (970) and `tests/test_effdata.py` (951).** ⚠️ **These
+  are now the two closest files in the repo to the ceiling**, and the natural
+  seam runs straight through tests that legitimately exercise both halves at
+  once — `TestTheNodeTransforms` walks nodes *and* asserts on `effdata.draws`,
+  and the morph tests share `a_mesh`/`parsed` with the container tests. Moving
+  them means either duplicating fixtures or a `conftest.py` refactor, both of
+  which risk changing what a test covers. Left for a session that can re-verify
+  the coverage rather than the count. 🔶 Whoever adds 30 lines to `test_gltf.py`
+  will hit `too-many-lines` first.
+
+### ⚠️ Two things that would have gone wrong silently
+
+1. **`effgeom` owned `section()`, and `effcurve` imported it from there** to
+   read curve records — a curve module importing a geometry module to find out
+   where a section is. That is not a cycle, so nothing caught it; it is just
+   wrong, and it became `effsections`.
+2. **`bleck/mods/code/patches.py` and `hooks.py` both call
+   `sources.defined_functions`**, and both raise `CodeError`. With `CodeError`
+   left in `parts.py` the three would have formed a ring the moment `parts`
+   imported either. `errors.py` exists for exactly that and holds nothing else.
+
+⚠️ **`./scripts/lint.sh --full` is what proves the direction**, not the default
+diff run — the same point the handoff already makes. A cold-start
+`import bleck, bleck.api.v1, bleck.formats, bleck.script, bleck.mods` was run
+after every split, because an import cycle is invisible to per-file linting.
+
+✅ **Unchanged, and checked:** `bleck --help` lists the same 20 top-level
+commands and `bleck mod --help` the same 12 actions; `bleck/api/` emits the same
+documents (its own tests cover the shapes, and no `api/` module was edited);
+`mkdocs build --strict` passes.

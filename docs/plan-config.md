@@ -110,7 +110,7 @@ Mirror `code.maps`, which is the proven shape — combo name to script name:
 ```
 
 The script must exist in the mod's source, validated with the same
-list-and-suggest error as `_check_map_hooks` (`emit.py:611`).
+list-and-suggest error as `emit.checks.check_map_hooks`.
 
 For the common case, a built-in so no script is needed:
 

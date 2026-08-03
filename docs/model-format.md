@@ -13,7 +13,8 @@ Read alongside:
 | | |
 |---|---|
 | `bleck/formats/model.py` | the container — name, bounds, name blocks, section table |
-| `bleck/formats/modelmesh.py` | the section table at `0x150` and its vertex arrays — positions, normals, colours, texture coordinates |
+| `bleck/formats/modelarrays.py` | the section table at `0x150` and its vertex arrays — positions, normals, colours, texture coordinates |
+| `bleck/formats/modelmesh.py` | the `Mesh` those arrays land in, and how a face is triangulated |
 | `bleck/formats/modelrebase.py` | the group and shape records — which slice of those arrays each shape indexes |
 | `bleck/formats/modelbase.py` | `Face`, `Shape`, the error type and the name field |
 | `bleck/formats/modelanim.py` | the clip table and its morph poses |
@@ -99,7 +100,7 @@ Reading its first record's `char name[0x40]` field is why it looked like one, an
 why `mesh()` still reports `R_Arm_skinShape` for `p_wii_mario`: that is group 0's
 Maya name, not the model's.
 
-`modelmesh.py` reads **24 entries** (`FULL_SECTIONS`) from `SHAPE_SECTIONS_AT =
+`modelarrays.py` reads **24 entries** (`FULL_SECTIONS`) from `SHAPE_SECTIONS_AT =
 0x150`, and validates the first eight as strictly ascending offsets inside the
 file. `model.py` separately locates the table **by structure** — the longest run
 of ascending in-file offsets in the first 1 KB — and finds **26 entries starting
