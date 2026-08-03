@@ -105,6 +105,22 @@ above it; every one is posed at the frame — its static transform with any curv
 of its own written over the top — and the results multiplied parent-first. That
 is the game's own scheme, transcribed from its evaluator.
 
+✅ **And so is how visible it is** (D280). A draw is multiplied by its
+material's own colour register and by the drawing node's alpha at that frame,
+and a draw those two leave at zero alpha is not drawn at all. 291 of the file's
+524 materials are not white and 660 drawing nodes carry an alpha curve, so this
+is most of the corpus rather than an edge case: `explosion` goes from a solid
+red starburst that never fades to a yellow fireball that does.
+
+⛔ **A node's alpha is not inherited by its children.** Whether it should be is
+untested, and 15 further draws would fade to nothing on the assumption that it
+is. Each node's own alpha, and nothing else.
+
+⚠️ **`N faded out` in a frame's row is draws left out for having no alpha
+left**, and it is the only trace they leave. An effect where every draw fades
+out — `spindash`, whose one material is `(255, 255, 255, 0)` — says so instead
+of blaming a stale export.
+
 ⚠️ **An effect that draws nothing at frame 1 is usually correct.** Scales rise
 from zero, so 44% of draws are flat there and 26 of the 139 effects draw nothing
 at all. Move the window with `--from 10` before believing one is empty.

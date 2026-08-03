@@ -32,6 +32,14 @@ pub struct Frame {
     pub pieces: usize,
     /// How many of those **pieces** carried a decoded image into this cell.
     pub painted: usize,
+    /// Draws the parts issued that were **not** turned into pieces, because the
+    /// drawing node's alpha and the material's composed to nothing.
+    ///
+    /// ⚠️ **Reported, because it is invisible by construction.** A faded draw
+    /// leaves no trace in the cell, so without this a frame that is empty
+    /// because the data says so cannot be told from one that is empty because
+    /// the export is stale — and the advice for those two is opposite (D280).
+    pub faded: usize,
     /// How many of the **unpainted** parts can be told apart by colour.
     ///
     /// ⚠️ **Two separate ceilings, and both bite.** A painted part is drawn in
@@ -173,7 +181,22 @@ impl Report {
         } else {
             "some parts did not reach their frame — occluded, or missing".to_owned()
         });
-        if self.never_posed() {
+        if self.faded_out() {
+            said.push(format!(
+                "⚠️ every draw was left out at every sampled frame because its alpha composed \
+                 to zero — the material's own alpha register times the drawing node's. That is \
+                 the data saying draw nothing, not a stale export, and more --frames will not \
+                 change it (up to {} draw(s) in a frame) (D280)",
+                // ⚠️ The largest, not the first frame's. A part whose scale has
+                // not risen yet is dropped as flat before its alpha is ever
+                // composed, so frame 1 of a fading effect can report none.
+                self.frames
+                    .iter()
+                    .map(|frame| frame.faded)
+                    .max()
+                    .unwrap_or(0)
+            ));
+        } else if self.never_posed() {
             said.push(
                 "⚠️ every sampled frame posed this effect flat, so nothing was drawn — its                  scales rise from zero on their own curves and none had risen yet. Try more                  --frames (D266)."
                     .to_owned(),
@@ -212,7 +235,19 @@ impl Report {
     /// frame this reel happened to sample, there is genuinely nothing to draw.
     /// More `--frames` may find it (D266).
     pub fn never_posed(&self) -> bool {
+        self.frames.iter().all(|frame| frame.pieces == 0) && !self.faded_out()
+    }
+
+    /// Whether the reel is empty because every draw's alpha composed to zero.
+    ///
+    /// ⛔ **Not the same as `never_posed`, and the advice is opposite.** A part
+    /// whose scale has not risen yet may draw at some other frame, so more
+    /// `--frames` can find it; a material carrying alpha 0 draws at no frame
+    /// ever. `spindash` is the export's one wholly transparent effect and was
+    /// told to re-run the exporter until this existed (D280).
+    pub fn faded_out(&self) -> bool {
         self.frames.iter().all(|frame| frame.pieces == 0)
+            && self.frames.iter().any(|frame| frame.faded > 0)
     }
 
     /// The first frame that drew nothing despite having a painted part.
@@ -233,6 +268,13 @@ impl Report {
     /// positions is far more convincing than one drawn in flat colours — so the
     /// half that is still a display choice has to be said out loud every time.
     fn caveat(&self) -> String {
+        if self.faded_out() {
+            return format!(
+                "no part of {} reached the frame: every draw it issues composes to zero alpha, \
+                 so the export is being read correctly and there is nothing to paint (D280)",
+                self.name
+            );
+        }
         if self.painted == 0 {
             return format!(
                 "no part of {} carries an image — either they genuinely draw none, or this \
@@ -281,13 +323,21 @@ impl Frame {
         } else {
             format!(", {} of {} plain found", self.visible, unpainted)
         };
+        // ⚠️ Only when something faded. A column of ", 0 faded" on every row of
+        // every effect would bury the frames where it is the whole story.
+        let gone = if self.faded == 0 {
+            String::new()
+        } else {
+            format!(", {} faded out", self.faded)
+        };
         format!(
-            "  frame {:>4} at {:>6.3}s — {} part(s), {} piece(s), {} painted{}, {:.1}% drawn",
+            "  frame {:>4} at {:>6.3}s — {} part(s), {} piece(s), {} painted{}{}, {:.1}% drawn",
             self.number,
             self.time,
             self.active,
             self.pieces,
             self.painted,
+            gone,
             plain,
             self.drawn * 100.0
         )

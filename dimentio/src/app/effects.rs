@@ -413,6 +413,7 @@ impl Viewer {
             }),
         );
         let pieces: Vec<render::Piece<'_>> = quads
+            .pieces
             .iter()
             .map(|quad| render::Piece {
                 mesh: &quad.mesh,
@@ -434,6 +435,7 @@ impl Viewer {
         // Names the shapes on screen. A quad carries the part it came from, and
         // an unlabelled coloured square says nothing about which row it is.
         let running: Vec<&str> = quads
+            .pieces
             .iter()
             .filter_map(|quad| entry.parts.get(quad.part))
             .map(|part| part.composed.as_str())

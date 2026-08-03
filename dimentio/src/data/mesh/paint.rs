@@ -62,6 +62,49 @@ pub enum Blend {
     Inverse,
 }
 
+/// A constant colour every texel of a surface is multiplied by, channel for
+/// channel — what `GX_MODULATE` does with the material's own colour register.
+///
+/// ✅ **Two measured fields composed into one factor** (D280). The RGB is the
+/// effect material's own colour: 291 of the file's 524 materials are not white
+/// and 101 of 139 effects reach one. `alpha` is that material's alpha times the
+/// drawing node's own alpha at the frame — 83 effects reach a material with
+/// alpha below 255, and 660 drawing nodes carry an alpha curve.
+///
+/// ⚠️ **The default multiplies by one.** Model art carries no such register and
+/// must come out unchanged, so anything that does not set this leaves it alone
+/// rather than darkening.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Modulate {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+    pub alpha: u8,
+}
+
+impl Default for Modulate {
+    fn default() -> Self {
+        Self {
+            red: 255,
+            green: 255,
+            blue: 255,
+            alpha: 255,
+        }
+    }
+}
+
+impl Modulate {
+    /// Whether this factor removes the surface outright.
+    ///
+    /// ⚠️ A caller must drop such a draw before it reaches the rasteriser. Ten
+    /// of the file's materials carry alpha 0 and a further set of drawing nodes
+    /// hold alpha 0 for their whole life; drawn at all they land as a solid
+    /// sprite, which is the most convincing possible wrong picture (D280).
+    pub fn invisible(&self) -> bool {
+        self.alpha == 0
+    }
+}
+
 /// One image a mesh draws with, how it is sampled, and how its alpha is read.
 ///
 /// ⚠️ `masked` and `sampling` belong to the material, not to the image: two
@@ -91,6 +134,9 @@ pub struct Paint {
     pub cutoff: u8,
     /// Wrap mode and UV transform, read from the file's sampler (D247).
     pub sampling: Sampling,
+    /// The constant colour every texel is multiplied by. `Default` for model
+    /// art, which carries no colour register.
+    pub modulate: Modulate,
     /// A second layer whose **alpha** multiplies this one, colour included.
     ///
     /// ✅ 40 shapes on the disc carry one, and glTF has no core slot that means
@@ -138,6 +184,7 @@ pub struct Surface<'a> {
     pub masked: bool,
     pub cutoff: u8,
     pub sampling: &'a Sampling,
+    pub modulate: Modulate,
     pub mask: Option<&'a Mask>,
 }
 

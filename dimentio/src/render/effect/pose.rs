@@ -60,11 +60,46 @@ fn times(a: &[f32; 9], b: &[f32; 9]) -> [f32; 9] {
     out
 }
 
-/// A node's own transform at `frame`, as a 3x4 row-major matrix.
+/// Where a node puts what it draws, and how visible it is there.
+///
+/// ⚠️ **Both halves come out of the same ten slots.** Nine of them build the
+/// matrix and the tenth is alpha; returning only the matrix is what left 660
+/// drawing nodes' alpha curves unread (D278, D280).
+pub(super) struct Pose {
+    pub(super) world: [f32; 12],
+    /// Slot 9 at this frame, 0..255.
+    ///
+    /// ⛔ **One node's own alpha, never a chain's product.** Whether a node's
+    /// alpha reaches its children is not established, and multiplying a chain
+    /// on the assumption that it does would fade 15 further draws to nothing on
+    /// no evidence (D280).
+    pub(super) alpha: f32,
+}
+
+/// Fully visible: what a node with nothing to say about alpha contributes, and
+/// what an export carrying no scene graph at all leaves every draw at.
+const OPAQUE: f32 = 255.0;
+
+impl Pose {
+    /// What a draw with no scene graph behind it is posed at: stacked on the
+    /// origin, and fully visible.
+    ///
+    /// ⚠️ **Opaque, not transparent.** An export predating D266 names no chain
+    /// at all, and starting those draws at zero alpha would render every effect
+    /// in it as an empty frame.
+    pub(super) fn unknown() -> Self {
+        Self {
+            world: IDENTITY,
+            alpha: OPAQUE,
+        }
+    }
+}
+
+/// A node's own transform at `frame`, as a 3x4 row-major matrix, and its alpha.
 ///
 /// ⚠️ Rotates **z, then y, then x, in degrees** - the order measured against
 /// the file's own stored matrices, which agree on 3,738 of 3,739 nodes (D265).
-fn local(node: &NodeDef, curves: &[Curve], frame: f32) -> [f32; 12] {
+fn local(node: &NodeDef, curves: &[Curve], frame: f32) -> Pose {
     let slots = slots_at(node, curves, frame);
     let mut spin = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
     for axis in [2usize, 1, 0] {
@@ -77,7 +112,10 @@ fn local(node: &NodeDef, curves: &[Curve], frame: f32) -> [f32; 12] {
         }
         out[row * 4 + 3] = slots[row];
     }
-    out
+    Pose {
+        world: out,
+        alpha: slots[9],
+    }
 }
 
 fn concat(a: &[f32; 12], b: &[f32; 12]) -> [f32; 12] {
@@ -113,14 +151,25 @@ pub(super) fn apply(m: &[f32; 12], x: f32, y: f32, z: f32) -> Vec3 {
 /// ✅ **This is a measured position, not a layout.** An export predating the
 /// decoding carries no chain, and then the identity is returned and every part
 /// stacks at the origin - which is honest about knowing nothing.
-pub(super) fn posed(chain: &[usize], nodes: &[NodeDef], curves: &[Curve], frame: f32) -> [f32; 12] {
-    let mut world = IDENTITY;
+///
+/// ⚠️ **The alpha that comes back is the last node's**, which is the one
+/// issuing the draw. Each node overwrites it in turn rather than scaling what
+/// its parent left, because inheritance is untested (D280).
+pub(super) fn posed(chain: &[usize], nodes: &[NodeDef], curves: &[Curve], frame: f32) -> Pose {
+    let mut posed = Pose {
+        world: IDENTITY,
+        alpha: OPAQUE,
+    };
     for index in chain {
         if let Some(node) = nodes.get(*index) {
-            world = concat(&world, &local(node, curves, frame));
+            let step = local(node, curves, frame);
+            posed = Pose {
+                world: concat(&posed.world, &step.world),
+                alpha: step.alpha,
+            };
         }
     }
-    world
+    posed
 }
 
 /// Whether a transform collapses volume to nothing.

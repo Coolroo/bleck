@@ -8,7 +8,7 @@
 use super::*;
 use crate::data::gltf;
 use crate::data::gltf::fixtures::{bare_quad, painted_quads, textured_quad, tiled, QUAD_UVS};
-use crate::data::mesh::Mesh;
+use crate::data::mesh::{Mesh, Modulate};
 use crate::data::texture::Texel;
 use crate::render::fixtures::{covered, flat, head_on, FRAME};
 use crate::render::render;
@@ -209,6 +209,7 @@ fn a_second_layer_masks_the_first_rather_than_replacing_it() {
                 masked: true,
                 cutoff: MASK_CUTOFF,
                 sampling: &Sampling::default(),
+                modulate: Modulate::default(),
                 mask: mask.as_ref(),
             },
         );
@@ -260,6 +261,7 @@ fn a_discarded_pixel_does_not_hide_what_is_behind_it() {
             masked: true,
             cutoff: MASK_CUTOFF,
             sampling: surface.sampling,
+            modulate: Modulate::default(),
             mask: surface.mask,
         },
     );

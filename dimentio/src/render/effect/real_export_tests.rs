@@ -28,9 +28,30 @@ fn every_real_effect_draws_at_its_first_frame_and_stops_after_its_last() {
     assert!(!library.entries().is_empty(), "the manifest named nothing");
 
     let mut drawn = 0;
+    let mut transparent = 0;
     for entry in library.entries() {
         if entry.parts.is_empty() {
             assert_eq!(covered(&shot(entry, 0.0, None)), 0, "{}", entry.name);
+            continue;
+        }
+        // ⚠️ **Both directions, decided by the manifest.** A draw whose
+        // material register carries alpha 0 paints nothing, so an effect whose
+        // every draw does must come out empty — and every other effect must
+        // still fill its first frame. `spindash` is the one that does: a single
+        // part, a single draw, `(255, 255, 255, 0)` and no alpha curve (D280).
+        if !entry
+            .parts
+            .iter()
+            .flat_map(|part| &part.draws)
+            .any(|draw| draw.tint().alpha > 0)
+        {
+            assert_eq!(
+                covered(&shot(entry, 0.0, None)),
+                0,
+                "{} has no draw with any alpha and was drawn anyway",
+                entry.name
+            );
+            transparent += 1;
             continue;
         }
         assert!(
@@ -47,6 +68,12 @@ fn every_real_effect_draws_at_its_first_frame_and_stops_after_its_last() {
         drawn += 1;
     }
     assert!(drawn > 100, "only {drawn} effects drew");
+    // ⚠️ Pinned, because the branch above is only evidence while something
+    // takes it. At zero it would assert nothing and still read as a pass.
+    assert_eq!(
+        transparent, 1,
+        "the export no longer holds exactly one wholly transparent effect"
+    );
 }
 
 /// `chaos` is the effect the five-fold ring was measured on, and two of its

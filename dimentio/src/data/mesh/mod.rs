@@ -32,7 +32,7 @@ mod paint;
 
 pub use geometry::{Bounds, Face, Uv, Vec3};
 pub use library::{Entry, Library};
-pub use paint::{Batch, Blend, Mask, Paint, Shape, Surface};
+pub use paint::{Batch, Blend, Mask, Modulate, Paint, Shape, Surface};
 
 /// Why a folder, or one mesh in it, produced nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -301,6 +301,7 @@ impl Mesh {
             masked: paint.masked,
             cutoff: paint.cutoff,
             sampling: &paint.sampling,
+            modulate: paint.modulate,
             mask: paint.mask.as_ref(),
         })
     }

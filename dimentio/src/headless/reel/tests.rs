@@ -263,6 +263,7 @@ fn parts_beyond_the_palette_lower_the_ceiling_rather_than_failing() {
         active: 8,
         pieces: 8,
         painted: 0,
+        faded: 0,
         distinct: 6,
         visible: 6,
         drawn: 0.1,
@@ -318,6 +319,57 @@ fn an_export_predating_the_binding_says_so_rather_than_reading_as_empty() {
     let last = report.lines().pop().expect("a caveat line");
     assert!(last.contains("bleck effect export"), "{last}");
     assert!(last.contains("D258"), "{last}");
+}
+
+/// ⛔ **The opposite advice, from an identical-looking frame.** An effect
+/// whose draws all compose to zero alpha renders empty and must say the data
+/// says so — telling the reader to re-run `bleck effect export`, or to try more
+/// `--frames`, sends them after a fault that does not exist (D280).
+#[test]
+fn an_effect_faded_out_by_its_own_alpha_is_not_reported_as_a_stale_export() {
+    let empty = |faded: usize| Frame {
+        number: 1,
+        time: 0.0,
+        active: 1,
+        pieces: 0,
+        painted: 0,
+        faded,
+        distinct: 0,
+        visible: 0,
+        drawn: 0.0,
+    };
+    let report = |faded: usize| Report {
+        name: "clear".to_owned(),
+        index: 0,
+        parts: 1,
+        seconds: 1.0,
+        length: 61,
+        sheet: Size::new(64, 64),
+        frames: vec![empty(faded), empty(faded)],
+        changes: 0,
+        painted: 0,
+        stood_in: 0,
+        depth_ratio: 1.0,
+        tick: None,
+    };
+
+    let gone = report(1);
+    assert!(gone.faded_out());
+    assert!(!gone.never_posed(), "a fade was read as an unrisen scale");
+    let said = gone.lines().join("\n");
+    assert!(said.contains("composes to zero alpha"), "{said}");
+    assert!(
+        !said.contains("bleck effect export"),
+        "a wholly faded effect was blamed on the exporter: {said}"
+    );
+
+    // ⚠️ The control: the same empty reel with nothing faded is still the
+    // unrisen-scale case, and must keep saying so.
+    let flat = report(0);
+    assert!(!flat.faded_out());
+    assert!(flat.never_posed());
+    let said = flat.lines().join("\n");
+    assert!(said.contains("--frames"), "{said}");
 }
 
 #[test]

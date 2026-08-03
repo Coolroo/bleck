@@ -101,8 +101,9 @@ pub(super) fn draw(
     let mut previous: Option<Image> = None;
 
     for (index, &time) in times.iter().enumerate() {
-        let quads = effect::quads(entry, time, &camera, Some(palette));
-        for quad in &quads {
+        let drawn = effect::quads(entry, time, &camera, Some(palette));
+        let quads = &drawn.pieces;
+        for quad in quads {
             if let Some(seen) = painted.get_mut(quad.part) {
                 *seen |= !quad.mesh.paints().is_empty();
             }
@@ -138,6 +139,7 @@ pub(super) fn draw(
             active: entry.active_at(time).len(),
             pieces: quads.len(),
             painted: quads.len() - plain.len(),
+            faded: drawn.faded,
             distinct: wanted.len(),
             visible: wanted
                 .iter()

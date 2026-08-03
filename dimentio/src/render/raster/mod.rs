@@ -20,7 +20,7 @@
 
 use super::camera::{Basis, Point};
 use super::{Background, Rgba, Size};
-use crate::data::mesh::{Blend, Mask, Uv, Vec3};
+use crate::data::mesh::{Blend, Mask, Modulate, Uv, Vec3};
 use crate::data::texture::{Sampling, Texel, Texture};
 use blend::mix;
 
@@ -135,6 +135,9 @@ pub(super) enum Paint<'a> {
         cutoff: u8,
         /// Wrap mode and UV transform for the base image (D247).
         sampling: &'a Sampling,
+        /// The constant colour every texel is multiplied by — the material's
+        /// own, with the drawing node's alpha already folded into it (D280).
+        modulate: Modulate,
         /// The second layer, whose alpha multiplies the base — colour and
         /// alpha alike, which is what the game's TEV program does.
         mask: Option<&'a Mask>,
@@ -260,6 +263,17 @@ fn tinting(tint: &Tint, triangle: &[Point; 3], weights: &Weights) -> [f32; 4] {
     }
 }
 
+/// A per-pixel tint with the surface's constant colour folded into it.
+///
+/// ⚠️ **One chain of multiplies, not two passes.** The vertex colour and the
+/// material's colour register are both `GX_MODULATE` inputs, so combining them
+/// here keeps a single rounding step; scaling the texel twice loses a level of
+/// every faint channel.
+fn modulated(shade: [f32; 4], by: Modulate) -> [f32; 4] {
+    let channels = [by.red, by.green, by.blue, by.alpha];
+    std::array::from_fn(|channel| shade[channel] * f32::from(channels[channel]) / 255.0)
+}
+
 /// A pixel's colour and how much of it to lay down.
 ///
 /// ⚠️ `alpha` is 255 for everything that is not blended, so the caller's
@@ -299,6 +313,7 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragm
             masked,
             cutoff,
             sampling,
+            modulate,
             mask,
         } => {
             let uv = weights.uv(triangle, corners);
@@ -313,7 +328,11 @@ fn fill(paint: &Paint, triangle: &[Point; 3], weights: &Weights) -> Option<Fragm
                     a: scale(texel.a),
                 };
             }
-            let shade = tinting(tint, triangle, weights);
+            // ⚠️ **Before the alpha compare, not after** — the same order the
+            // mask above takes, and for the same reason: the game multiplies
+            // its colour register in and only then runs the compare, so a
+            // surface the material fades to nothing is a hole (D247, D280).
+            let shade = modulated(tinting(tint, triangle, weights), *modulate);
             texel = Texel {
                 r: scale(texel.r, shade[0]),
                 g: scale(texel.g, shade[1]),

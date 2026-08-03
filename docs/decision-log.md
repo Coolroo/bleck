@@ -20092,3 +20092,92 @@ number that looks like an answer to the one you did.
 before trusting a negative** -- and it was not applied because the reading came
 from `bleck` itself rather than from a rig. A tool being ours is not evidence
 that it was asked the right question.
+
+## D280 - Node alpha and the material colour register reach the pixels, and one effect correctly disappears (2026-08-03)
+
+D278 recorded three fields that arrive in the manifest and are dropped. Two of
+them - the drawing node's alpha (`slots[9]`) and `Draw::red/green/blue/alpha` -
+are now applied, composed into the fragment the rasteriser already blends
+(D267, D270). The third, texture wrap, and the two missing curve evaluators are
+deliberately untouched.
+
+### ✅ What was built
+
+`pose.rs` returns a `Pose { world, alpha }` rather than a bare matrix; `Paint`
+and `Surface` carry a `Modulate` (RGB + alpha, default all-255); the rasteriser
+folds it into the same 0..255 multiply the vertex colours already use, **before
+the alpha compare** - the order D247 established for the mask, and for the same
+reason. A draw whose node alpha times material alpha is zero is **not issued at
+all**: drawn, it lays a solid sprite where the data says nothing, which is the
+most convincing possible wrong picture. The same test skips it in `bounds`, so
+a camera is not fitted to geometry that is never painted.
+
+⛔ **Alpha is not inherited down the chain.** D278 measured 15.5% of painted
+piece-frames fully transparent per-node and 21.4% with inheritance, and
+inheritance is unestablished. Each node's own alpha, and nothing else. What
+would settle it: `dolscan.py` on the node evaluator at `0x8005f2d4`, looking at
+whether slot 9 is written into the child's slot array or multiplied into a
+running value the way the matrix is.
+
+⚠️ **The manifest fields are read as `Option<u8>`.** `#[serde(default)]` on a
+plain `u8` makes an export predating them read as alpha 0 - every effect in it
+invisible. Absent now means "multiply by one".
+
+### ✅ Measured, at the pixels
+
+Corpus, 139 effects at `--frames 3 --size 128`: painted parts **584 -> 561** of
+the 669 that declare an image. Named effects at `--frames 9`:
+
+| effect | pieces painted, before -> after |
+|---|---|
+| `event_charm` | frame 1 29->23, frame 91 30->19, frame 181 22->6 |
+| `map_water` | frame 34 14->6, last frame 9->0 |
+| `event_enmagic` | frame 1 41->32 |
+| `chaos` | frame 1 3->2, and coverage **rose** 8.3%->14.1% at frame 46, because a transparent draw no longer stretches the fitted camera |
+
+✅ **Confirmed by eye, not only by counters.** `explosion` was a hard red
+starburst outline drawn solid at every frame; it is now a yellow-orange
+fireball that fades out. `event_hammer` was a persistent rainbow ring and is
+now a flash that fades to its white spark.
+
+### ✅ `spindash` renders as nothing, and that is the data
+
+Its single part issues a single draw with material `(255, 255, 255, 0)` and no
+alpha curve - one of the 10 materials D278 counted at alpha 0. It is the
+export's only wholly transparent effect. The reel used to tell the reader to
+re-run `bleck effect export`; it now says the alpha composed to zero and that
+more `--frames` will not help. D278 named exactly this class of wrong advice.
+
+🔶 **If material alpha 0 turns out to be an "unset" sentinel** the way blend
+mode 0 is (D270), `spindash` is where it will show. Untested. Applying the data
+and reporting the consequence is the honest option; special-casing 0 would be
+inventing a rule.
+
+### ⚠️ D278's "60 drawing nodes in 23 effects" does not reproduce
+
+Re-measured against `work/export/effects.json` four ways - leaf node's own alpha
+over the part's frames, over the effect's frames, any chain node (inheritance),
+and composed with material alpha. None gives 60/23, and the cited
+`event_charm` 10 and `map_water` 8 have alpha **255** on both the drawing node
+and every parent. What does reproduce:
+
+| reading | draws | leaf nodes | effects |
+|---|---|---|---|
+| leaf node alpha 0 for its whole part | 15 | 15 | 4 |
+| ...with inheritance | 30 | 30 | 5 |
+| ...composed with material alpha | 23 | - | 8 |
+
+⚠️ So the whole-life figure is an order smaller than D278 states. The change is
+still large, because most transparency is **per frame** rather than for a whole
+life: `event_charm` fades 16 of 22 pieces out by its last frame.
+
+### What did not need changing
+
+The corpus assertion `shown * 10 >= claimed * 8` holds at **561/669 = 83.9%**,
+down from 87.3% and still clear of the 80% floor. ⛔ It was not lowered. The
+real-export first-frame assertion was **tightened**: it now decides from the
+manifest which way to assert - an effect whose every draw carries alpha 0 must
+draw nothing, every other must fill its frame - and pins that exactly one such
+effect exists, so the branch cannot silently stop being taken.
+
+`cargo test` 253 -> 259 passing; clippy and fmt clean.

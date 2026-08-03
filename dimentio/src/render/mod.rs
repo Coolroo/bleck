@@ -184,6 +184,7 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                         masked: surface.masked,
                         cutoff: surface.cutoff,
                         sampling: surface.sampling,
+                        modulate: surface.modulate,
                         mask: surface.mask,
                     })
             }) {

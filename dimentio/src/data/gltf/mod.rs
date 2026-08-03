@@ -420,6 +420,9 @@ fn material(json: &serde_json::Value, bin: &[u8], index: usize) -> Option<Paint>
         masked: material["alphaMode"].as_str() == Some("MASK"),
         cutoff: crate::render::MASK_CUTOFF,
         sampling: sampling(json, base),
+        // A glTF material carries no colour register; the exporter puts a
+        // model's tint in `COLOR_0`, which the rasteriser reads per vertex.
+        modulate: crate::data::mesh::Modulate::default(),
         mask: mask(json, bin, material),
     })
 }

@@ -22,6 +22,12 @@
 //! results multiplied parent-first. That is the game's own scheme, transcribed
 //! from the evaluator at `0x8005f2d4`.
 //!
+//! ✅ **And so is how visible each draw is**, since D280: the material's own
+//! colour register multiplies every texel, and the drawing node's alpha at that
+//! frame multiplies its opacity. ⛔ **A draw those two leave at zero alpha is
+//! not issued at all** — drawn, it would be a solid sprite where the data says
+//! there is nothing, which is the most convincing wrong picture available.
+//!
 //! ⚠️ **A flat part is not a missing part.** An effect's scales rise from zero,
 //! so 44% of draws collapse to nothing at frame 0 and are skipped. The exploded
 //! layout survives only for a draw with **no** geometry, where there is no
@@ -32,10 +38,10 @@
 
 use super::camera::Basis;
 use super::{Camera, Rgba};
-use crate::data::effects::{Curve, Entry, Mesh as Geometry, NodeDef};
-use crate::data::mesh::{Blend, Bounds, Face, Mesh, Paint, Parts, Shape, Uv, Vec3};
+use crate::data::effects::{Curve, Draw, Entry, Mesh as Geometry, NodeDef};
+use crate::data::mesh::{Blend, Bounds, Face, Mesh, Modulate, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
-use pose::{apply, flat, posed, FRAME_RATE, IDENTITY};
+use pose::{apply, flat, posed, Pose, FRAME_RATE};
 
 mod pose;
 
@@ -119,6 +125,19 @@ pub struct Quad {
     pub stood_in: bool,
 }
 
+/// What a part issued at one instant, and what it did not.
+///
+/// ⚠️ **The two travel together on purpose.** A draw removed for having no
+/// alpha left is invisible in the pieces by definition, and a caller counting
+/// only pieces cannot tell it from a draw that was never declared — which is
+/// how "nothing was drawn" came to be reported as "re-run the export" (D280).
+pub struct Drawn {
+    pub pieces: Vec<Quad>,
+    /// Draws left out because the node's alpha and the material's composed to
+    /// zero.
+    pub faded: usize,
+}
+
 /// The colour a part is drawn in, so the table beside the viewport can mark a
 /// row with the same one.
 pub fn colour(part: usize) -> Rgba {
@@ -136,7 +155,14 @@ pub fn colour(part: usize) -> Rgba {
 /// all of them.
 pub fn lit(camera: &Camera, part: usize) -> Rgba {
     let basis = Basis::of(camera);
-    let mesh = quad(&basis, Vec3::ZERO, HALF, None, Blend::Alpha);
+    let mesh = quad(
+        &basis,
+        Vec3::ZERO,
+        HALF,
+        None,
+        Blend::Alpha,
+        Modulate::default(),
+    );
     let corners = mesh.positions();
     let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
     colour(part).shaded(intensity)
@@ -151,11 +177,12 @@ pub fn lit(camera: &Camera, part: usize) -> Rgba {
 /// ⚠️ **A part with no draws still produces one piece.** An export predating
 /// the decoding carries none, and dropping those parts would turn a stale
 /// export into an effect that renders as nothing at all.
-pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) -> Vec<Quad> {
+pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) -> Drawn {
     let basis = Basis::of(camera);
     let scale = spread(entry, art);
     let frame = time * FRAME_RATE;
     let mut built = Vec::new();
+    let mut faded = 0;
     for part in entry.active_at(time) {
         let count = entry.parts.get(part).map_or(0, |p| p.draws.len());
         for draw in 0..count.max(1) {
@@ -172,19 +199,28 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
                 _ => Blend::Alpha,
             };
             let shape = art.zip(named).and_then(|(art, d)| art.geometry(d.mesh));
-            let world = match (art, named) {
+            let pose = match (art, named) {
                 (Some(art), Some(named)) => posed(&named.chain, art.nodes, art.curves, frame),
-                _ => IDENTITY,
+                _ => Pose::unknown(),
             };
             // ⚠️ A flat part is not a fault — an effect's parts scale up from
             // zero, so this one has not begun. Drawing it would push degenerate
             // triangles at the rasteriser for nothing.
-            if shape.is_some() && flat(&world) {
+            if shape.is_some() && flat(&pose.world) {
+                continue;
+            }
+            let modulate = shading(named, &pose);
+            // ⛔ **Not drawn at all, rather than drawn and blended away.** A
+            // draw whose node and material together leave no alpha contributes
+            // nothing to the frame, and painting it solid is the most
+            // convincing wrong picture there is (D280).
+            if modulate.invisible() {
+                faded += 1;
                 continue;
             }
             built.push(Quad {
                 mesh: match shape {
-                    Some(geometry) => real(geometry, &world, image, blend),
+                    Some(geometry) => real(geometry, &pose.world, image, blend, modulate),
                     // ⛔ No geometry means no measured position either, so the
                     // stand-in keeps the exploded layout rather than pretending
                     // the origin is where it belongs.
@@ -194,6 +230,7 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
                         scale * HALF,
                         image,
                         blend,
+                        modulate,
                     ),
                 },
                 colour: colour(part),
@@ -202,7 +239,31 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
             });
         }
     }
-    built
+    Drawn {
+        pieces: built,
+        faded,
+    }
+}
+
+/// What a draw's texels are multiplied by: the material's own colour register,
+/// with the drawing node's alpha folded into its alpha channel.
+///
+/// ⚠️ **Only the alpha is composed.** The node carries no colour of its own, so
+/// the RGB is the material's alone.
+fn shading(named: Option<&Draw>, pose: &Pose) -> Modulate {
+    let material = named.map(Draw::tint).unwrap_or_default();
+    Modulate {
+        alpha: fade(pose.alpha, material.alpha),
+        ..material
+    }
+}
+
+/// Two 0..255 opacities as one.
+///
+/// ⚠️ Clamped as well as scaled: a curve is sampled data and nothing guarantees
+/// it stays inside the range the slot is read at.
+fn fade(node: f32, material: u8) -> u8 {
+    ((node.clamp(0.0, 255.0) * f32::from(material)) / 255.0).round() as u8
 }
 
 /// The box the whole layout occupies, running or not.
@@ -231,14 +292,21 @@ pub fn bounds(entry: &Entry, art: Option<Art<'_>>) -> Bounds {
                 let Some(geometry) = art.and_then(|art| art.geometry(named.mesh)) else {
                     continue;
                 };
-                let world = match art {
+                let pose = match art {
                     Some(art) => posed(&named.chain, art.nodes, art.curves, frame),
-                    None => IDENTITY,
+                    None => Pose::unknown(),
                 };
-                if flat(&world) {
+                if flat(&pose.world) {
                     continue;
                 }
-                here = Some(union(here, box_of(geometry, &world)));
+                // ⚠️ **The camera is fitted to what is drawn, so what is not
+                // drawn must not stretch it.** An effect with a transparent
+                // draw far off-centre would otherwise be framed around empty
+                // space and rendered a few pixels across (D280).
+                if shading(Some(named), &pose).invisible() {
+                    continue;
+                }
+                here = Some(union(here, box_of(geometry, &pose.world)));
             }
             let here = here.unwrap_or_else(|| {
                 // No geometry, so the stand-in billboard's own extent.
@@ -378,7 +446,13 @@ fn ring(part: usize, parts: usize) -> Vec3 {
 /// ⚠️ **Fixed in world space, unlike the billboard below.** Effect geometry is
 /// mostly flat, so orbiting to its edge legitimately shows almost nothing —
 /// that is the shape, not a part that stopped running.
-fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, blend: Blend) -> Mesh {
+fn real(
+    geometry: &Geometry,
+    world: &[f32; 12],
+    image: Option<Texture>,
+    blend: Blend,
+    modulate: Modulate,
+) -> Mesh {
     let positions: Vec<Vec3> = geometry
         .positions
         .chunks_exact(3)
@@ -409,7 +483,10 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, blend: B
             .map(|c| [c[0], c[1], c[2], c[3]])
             .collect()
     });
-    let paints: Vec<Paint> = image.map(|t| cutout(t, blend)).into_iter().collect();
+    let paints: Vec<Paint> = image
+        .map(|t| cutout(t, blend, modulate))
+        .into_iter()
+        .collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         shapes: vec![Shape {
@@ -432,13 +509,14 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, blend: B
 /// How an effect's bank image is sampled: cut-out art with a real alpha
 /// channel, so without the mask its transparent surround draws as a black
 /// square around the sprite.
-fn cutout(texture: Texture, blend: Blend) -> Paint {
+fn cutout(texture: Texture, blend: Blend, modulate: Modulate) -> Paint {
     Paint {
         texture,
         masked: true,
         blend,
         cutoff: super::FAINT_CUTOFF,
         sampling: Sampling::default(),
+        modulate,
         mask: None,
     }
 }
@@ -453,10 +531,20 @@ fn cutout(texture: Texture, blend: Blend) -> Paint {
 /// ⚠️ Built from the camera's own right and up vectors, so it must be rebuilt
 /// when the camera moves. A quad fixed in world space turns edge-on as the view
 /// orbits and disappears, which reads as a part that stopped running.
-fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>, blend: Blend) -> Mesh {
+fn quad(
+    basis: &Basis,
+    at: Vec3,
+    half: f32,
+    image: Option<Texture>,
+    blend: Blend,
+    modulate: Modulate,
+) -> Mesh {
     let right = basis.right.scaled(half);
     let up = basis.up.scaled(half);
-    let paints: Vec<Paint> = image.map(|t| cutout(t, blend)).into_iter().collect();
+    let paints: Vec<Paint> = image
+        .map(|t| cutout(t, blend, modulate))
+        .into_iter()
+        .collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![

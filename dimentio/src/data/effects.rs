@@ -24,11 +24,16 @@
 //! nodes above it, `nodes` holds each one's static transform and curve
 //! references, and `curves` holds the samples — enough to pose the effect at
 //! any frame, which is what the viewer does.
+//!
+//! ✅ **So are the material's colour register and the node's alpha** (D280).
+//! Both were in the manifest and read by nothing; a draw is now multiplied by
+//! the first and faded by the second, and one left at zero alpha is not drawn.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 use super::catalog;
+use super::mesh::Modulate;
 
 /// The file `bleck effect export` writes.
 const MANIFEST: &str = "effects.json";
@@ -235,20 +240,41 @@ pub struct Draw {
     pub image: i32,
     #[serde(default)]
     pub wrap: u32,
+    /// The material's own colour register, channel by channel.
+    ///
+    /// ⚠️ **`None` is "this export did not record one", not black.** An export
+    /// predating the field would otherwise read as a material that multiplies
+    /// every texel by zero, and every effect in it would render as nothing —
+    /// which is why these are optional where `mesh` and `blend` are not.
     #[serde(default)]
-    pub red: u8,
+    pub red: Option<u8>,
     #[serde(default)]
-    pub green: u8,
+    pub green: Option<u8>,
     #[serde(default)]
-    pub blue: u8,
+    pub blue: Option<u8>,
     #[serde(default)]
-    pub alpha: u8,
+    pub alpha: Option<u8>,
 }
 
 impl Draw {
     /// The bank index this draw paints with, or `None` when it paints none.
     pub fn image(&self) -> Option<usize> {
         (self.image >= 0).then_some(self.image as usize)
+    }
+
+    /// The material's colour register: what every texel of this draw is
+    /// multiplied by before anything else touches it.
+    ///
+    /// ✅ Measured on the real export: 1,445 of 2,960 draws are white and
+    /// opaque, 21 carry a black register, and 1,163 an alpha strictly between
+    /// 0 and 255 (D280). An export that records none multiplies by one.
+    pub fn tint(&self) -> Modulate {
+        Modulate {
+            red: self.red.unwrap_or(255),
+            green: self.green.unwrap_or(255),
+            blue: self.blue.unwrap_or(255),
+            alpha: self.alpha.unwrap_or(255),
+        }
     }
 }
 

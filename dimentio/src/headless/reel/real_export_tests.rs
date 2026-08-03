@@ -105,12 +105,14 @@ fn every_real_effect_with_parts_reels() {
                 // point in its own timeline.
                 if !report.frames.iter().any(|frame| frame.drawn > 0.0) {
                     assert!(
-                        // Three documented reasons, all reported to the
+                        // Four documented reasons, all reported to the
                         // reader: geometry too deep to frame (D264), never
-                        // posed above zero scale (D266), or sparse art that
-                        // missed every pixel at this --size (D259).
+                        // posed above zero scale (D266), every draw faded out
+                        // by its own alpha (D280), or sparse art that missed
+                        // every pixel at this --size (D259).
                         report.too_deep()
                             || report.never_posed()
+                            || report.faded_out()
                             || report.blank_frame().is_some(),
                         "{} drew nothing anywhere in its reel, and the                              report gives no reason",
                         entry.name
