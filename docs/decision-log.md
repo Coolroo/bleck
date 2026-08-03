@@ -19555,3 +19555,540 @@ present and probing clean. The macOS and Linux answers are covered by
 always reached the Windows paths from Linux.
 🔶 Nobody has run `bleck doctor` on a Mac, and the `codesign` remedy has never
 repaired a real binary here.
+
+## D275 - Several drawing nodes share one curve block, so the file cannot spread them (2026-08-03)
+
+Reported by eye from the viewer: `heart_dance` -- the hearts that circle a Pure
+Heart -- renders as "a huge bundle of hearts all meshed together" rather than
+hearts flying around. Chased on the assumption it was a scale bug. It is not a
+bug at all, and the real answer bounds what the viewer can ever show.
+
+### ✅ the curves are applied correctly
+
+The first measurement said all 28 drawing nodes sit at exactly `(0, 0, 0)` at
+frames 0, 10 and 30 -- one distinct position out of 28. ⚠️ **A control was
+printed alongside**, because a negative measured with a broken ruler is worth
+nothing: `sweat`'s four nodes sit at four distinct spots *and move* between
+frames, and `dmen_magic` spreads to y=59 by frame 30. The instrument can see
+motion.
+
+Sampling the full timeline shows the positions do move:
+
+| frame | distinct spots (of 28) | x range |
+|---|---|---|
+| 1 | 1 | 0.0 .. 0.0 |
+| 100 | 1 | 0.0 .. 0.0 |
+| 120 | 2 | 0.0 .. 2.5 |
+| 200 | 5 | 0.0 .. 6.0 |
+| 300 | 3 | -14.0 .. 3.5 |
+| 420 | 6 | -14.0 .. 0.0 |
+
+⚠️ **`heart_dance` is 621 frames -- 10.33 s -- and its curves do not start until
+frame 101.** So the first 100 frames are *correctly* every heart at the origin.
+An observer looking at frame 1, which is where the timeline and a default reel
+both begin, sees the whole cast stacked on one spot. That alone explains the
+report, and it is the data.
+
+### ✅ but the file genuinely cannot spread them, and this is the norm
+
+Even at its best the effect reaches **6 distinct positions for 28 nodes**. The
+cause is in the node records. Nodes 353 and 357:
+
+```
+node 353: t=[0,0,0] r=[0,0,0] s=[1,1,1] alpha=255 draw=231 matrix=1 curves=309 count=5
+node 357: t=[0,0,0] r=[0,0,0] s=[1,1,1] alpha=255 draw=232 matrix=1 curves=309 count=5
+```
+
+Identical static transform, identical `matrix`, and **the same curve block** --
+`curves=309` for both, resolving to the same five curve offsets
+`[45996, 47208, 47692, 48264, 48880]`. They differ in `draw` alone. Two nodes
+that share every transform input will render at the same place at every frame,
+necessarily.
+
+`heart_dance`'s 28 drawing nodes share **6 curve blocks**, distributed
+`[8, 8, 6, 3, 2, 1]` -- one block drives eight nodes.
+
+⚠️ **This is not an oddity of one effect. 85 of the 139 effects have two or more
+drawing nodes on a single curve block.** It is the common case, so any statement
+about how faithfully the viewer reproduces an effect has to be qualified by it.
+
+### The consequence, and what is NOT being claimed
+
+⛔ a scale bug, a units bug, and a failure to apply curves. All three
+were the initial suspicion and all three are refuted by the numbers above.
+
+🔶 the spread comes from compiled code -- an emitter instantiating one
+template many times with per-instance offsets. This fits the evidence (a
+template shared by eight nodes differing only in artwork) but has **not** been
+traced in the DOL, so it stays unproven. What is certain is the negative: the
+per-node transform data does not contain the spread.
+
+⛔ **This is the limit `dimentio/README.md` already states** -- "Nothing is
+simulated ... an effect's behaviour is compiled PowerPC, and an approximation of
+an emitter would look plausible and be wrong." D275 is that sentence with a
+measurement attached: for 85 of 139 effects the viewer will show fewer distinct
+positions than the game does, and drawing a plausible scatter instead would be
+inventing data.
+
+### What would settle it
+
+Find the code that reads a node's `draw` and walks the group, the way D206 and
+D263 were settled -- `dolscan.py callers` on the node evaluator at `0x8005f2d4`,
+looking for a caller that loops. If an emitter exists, it is there.
+
+## D276 - heart_dance is emitted over time by C, and D275's hypothesis is confirmed (2026-08-03)
+
+D275 recorded that `heart_dance`'s 28 drawing nodes share six curve blocks, so
+the file cannot spread them, and guessed 🔶 an emitter. That guess is now
+✅, traced in the DOL rather than inferred, and the mechanism is not the
+one guessed.
+
+### ✅ The chain, function by function
+
+Found the way D128/D130/D206 were: a string, then who builds its address.
+
+```
+strings heart_dance      -> 0x8032A409
+xref    0x8032A3F8       -> 0x800AD9E4  r30 = "pure_heart_dance"
+```
+
+⚠️ **`heart_dance` has no xref of its own** and reads as unreferenced. It is
+reached as `addi r3, r30, 17` from `"pure_heart_dance\0"` at `0x8032A3F8` --
+that string is 17 bytes, so +17 lands on the next one. A tool looking for a
+direct reference finds nothing, which is the D128 trap exactly.
+
+| address | what it is |
+|---|---|
+| `0x800d61ac` | an **evt builtin**: reads `(int, float, float, float)` through the evt arg getters `0x80095278` / `0x80095258`, returns 2 |
+| `0x800ad9a0` | the spawn helper. Stores `"heart_dance"`, a state block holding the index and four floats, and an update callback |
+| `0x800ADA84` | the **per-tick update**, stored at `+0x10` of the instance |
+| `0x8005af04` | what the update calls to spawn, with `(7, 13, 0x800ADB30, instance)` |
+
+### ✅ The emitter is a loop in *time*, not over nodes
+
+`0x800d61ac` calls the spawn helper **once**; `callers 0x800ad9a0` returns that
+one site and no other. The repetition is in `0x800ADA84`, which each tick:
+
+```
+r4 = 24(r5); r0 = 28(r5)      counter, limit
+if r4 > r0: bl 0x80061a74     done -- tear the emitter down
+r4 += 1 -> 24(r5)
+f2,f1,f0 = 4(r5), 8(r5), 12(r5)    the x,y,z given at spawn
+bl 0x8005af04                 spawn another one there
+```
+
+⛔ **the guess in D275 that a C loop instantiates the template N times at
+once.** It does not. One emitter object is created, and it emits one instance per
+tick until a stored limit, every instance starting from the same recorded point.
+
+⚠️ **So the spread the player sees is emission *timing*.** Every heart runs the
+same 621-frame curve set; they look scattered because each one started at a
+different tick and is therefore at a different age. Nothing in `effdata.dat`
+records that, and nothing could -- the ages exist only at runtime.
+
+### What this settles for the viewer
+
+✅ D275's measurement stands and its consequence is now explained rather
+than assumed: for the 85 of 139 effects with two or more drawing nodes on one
+curve block, the viewer draws **one instance at one age**. The game draws many
+instances at many ages.
+
+⛔ **Do not simulate it.** The tick limit at `+0x1C`, the spawn parameters `(7,
+13)` and the secondary callback at `0x800ADB30` are all unread; a guessed
+emission rate would look plausible and be wrong, which is the failure mode
+`dimentio/README.md` already forbids. The honest fix is for the reel to *say*
+an effect is emitted rather than to invent the scatter -- and that requires
+knowing which effects are, which is not yet known.
+
+### Still open
+
+- ⚠️ **The builtin is not in `bleck/script/catalog.json`** and `xref 0x800d61ac`
+  finds nothing, so its evt table entry is reached some other way. Until it is
+  named, the script that calls it -- the chapter-end sequence handing the player
+  a Pure Heart -- has not been located. `evtdis.py` over the chapter-end maps is
+  where to look next.
+- 🔶 Whether other effects use `0x800ad9a0` or an equivalent helper is untested.
+  That count is what would turn "85 effects share curve blocks" into "N effects
+  are emitted", which is the number the viewer actually needs.
+
+## D277 - The effect "emitter" is a draw loop, not a respawn; and 0x8005fe84 is the duration (2026-08-03)
+
+D276 read `heart_dance` as an emitter that respawns itself every tick. The
+chain it found is real and the addresses are right, but the **last hop is
+misidentified**, and correcting it changes what the number being counted even
+is. This entry supersedes D276's mechanism, settles `0x8005fe84`, and gives the
+census D276 asked for.
+
+### the last hop: `0x8005af04` does not spawn anything, it is `dispEntry`
+
+`work/upstream/spm-headers/linker/spm.eu0.lst` line 132 names it outright:
+
+```
+8005af04:dispEntry
+```
+
+The body agrees. It appends a 16-byte record to a queue at `gp-30520`, storing
+`r3` and `r4` as bytes, `r5` (a callback) at `+0x08`, `r6` (user data) at
+`+0x0C`, and a sort key at `+0x04` computed as `k * (f32)r4 + f1`. It is the
+display-list submission every drawing thing in the game makes once per frame.
+
+So D276's `bl 0x8005af04` with `(7, 13, 0x800ADB30, instance)` is "draw me this
+frame, group 7, layer 13", and the `f1` it consumes is the depth key returned by
+the immediately preceding `bl 0x8005b46c`, which reads the camera and clamps --
+not a coordinate. ⛔ **"it calls `0x8005af04` to spawn again at the stored
+x/y/z" is wrong**, and the "emitter" framing built on it goes with it.
+
+### ✅ what the per-tick update at `0x800ADA84` actually does
+
+```
+r5 = 12(r3)                    the work block
+r4 = 24(r5); r0 = 28(r5)       counter, limit
+if r4 > r0: bl 0x80061a74      expire -- delete the EffEntry
+24(r5) = r4 + 1                age one tick
+bl 0x8005b46c                  depth key for the sort
+bl dispEntry(7, 13, 0x800ADB30, entry)
+```
+
+and the draw callback `0x800ADB30`, read to the end this time:
+
+```
+f1,f2,f3 = 4(r31), 8(r31), 12(r31)   position    -> translate matrix
+f1       = 16(r31)                   scale       -> scale matrix
+r3       = 0(r31) & 7 -> bl 0x800611e4 -> bl 0x8005fab0    per-heart tint
+r4 = 24(r31)                         the counter
+f1 = (f32)(r4 - 1)                   ** the frame **
+r3 = 20(r31)                         the effect handle
+bl 0x8005f82c                        draw
+```
+
+✅ **The counter is an age and the limit is a lifetime.** One `EffEntry` is one
+instance, drawn once per frame at its own age, and deleted when the age passes
+the limit.
+
+### ✅ the three functions that matter, with signatures
+
+| address | name | what |
+|---|---|---|
+| `0x8005fc64` | `effLookup(const char *effect, const char *part)` | linear scan of the 44-byte records of `effdata` section 0, then the 20-byte part records of section 1. Returns `(effectIndex << 16) \| partIndex`, `0xFFFF` in the low half meaning "whole effect". Bit 31 selects `effdata_test.dat` |
+| `0x8005fe84` | `effLife(handle)` | decodes the same handle and returns `Part.second` -- for a whole effect, the **maximum** over its parts |
+| `0x8005f82c` | `effDraw(handle, Mtx *, f32 frame)` | decodes the handle the same way and draws |
+
+Call-site counts, `dolscan.py callers --limit 0`: `effLookup` 372, `effLife`
+216, `effDraw` 336, `effEntry` 177, `dispEntry` 342.
+
+### ✅ `0x8005fe84` returns the effect's duration in frames
+
+It reads `+0x12` of the part record -- `Part.second`, which `bleck` already
+documents as "a duration in frames, counted inclusively" from the data side
+(D210). The two halves now meet:
+
+- `heart_dance`'s parts all carry `second = 621`
+- D275 measured `heart_dance`'s curve timeline as **621 frames**
+- the game stores that value as the tick limit and deletes the effect when the
+  age passes it
+
+✅ So the duration a viewer needs is **already in `effdata.dat` and already
+exported**; nothing further has to be read out of the DOL for it. ⛔ The
+candidate readings "a texture index" and "a node count" stay refuted (D210).
+
+### ✅ why `heart_dance` looks like a crowd: eight parts, eight instances
+
+`0x800ad9a0` takes `(int index, f32 x, f32 y, f32 z, f32 scale)` and does
+
+```
+r4 = *(0x804093F8 + index*4)         "A1" .. "A8"
+r3 = "heart_dance"
+bl effLookup                          -> one PART handle, not the whole effect
+bl effLife -> 28(work)                -> 621
+```
+
+The table at `0x804093F8` holds eight pointers to `A1`..`A8`; `effdata`'s
+`heart_dance` has six parts named `A2 A3 A4 A5 A6 A8`. The evt builtin at
+`0x800d61ac` takes the index modulo 8 and calls the helper **once**.
+
+✅ So each call makes one `EffEntry` that draws one part at its own age. The
+scatter is several instances started at different ticks, exactly as D276
+concluded -- but produced by repeated *calls*, not by a self-respawn.
+
+### the census: 336 draw sites, 91 of them in a loop
+
+Method, and it is worth stating because the obvious version fails. A forward
+register-tracking pass over both text sections resolves every
+`lis`/`addis`/`addi`/`ori`/`mr` chain, so a name reached as `addi r3, r30, 17`
+is found; effect modules are then the private closure of an entry function
+(functions reachable from it whose every referrer is already inside) unioned
+with the address range to the next entry function; and a loop is a backward
+branch **whose target is in the same function**.
+
+⚠️ **Two bugs in that pass each produced a confident wrong answer first.**
+Clobbering GPR *n* on `stfs f30,12(r3)` lost `r30` and made `heart_dance` read
+as unreferenced -- the positive control failing is the only reason it was
+caught. Collecting backward branches without scoping them to a function made
+100% of every call site "in a loop".
+
+| | |
+|---|---|
+| `effDraw` call sites | 336 |
+| ...inside a loop | **91** |
+| effect modules (one per `effEntry` call) | 171 |
+| ...with at least one looped `effDraw` | **51** |
+| ...that call `effDraw` at all | 127 |
+| `effEntry` call sites inside a loop | **0 of 177** |
+| `effLife` call sites inside a loop | 0 of 216 |
+| `effLookup` call sites inside a loop | 5 of 372 |
+
+⚠️ **The zero is a measured negative with a positive control**: the same
+detector finds 91 looped `effDraw` sites and 5 looped `effLookup` sites in the
+same pass. C never batch-creates effects; every instance is one explicit call.
+
+### ✅ what a looped draw looks like -- `spm_get_coin`, the worked control
+
+```
+800a0c78:  lbz  r0,32(r30)        active flag
+800a0c84:  lwz  r0,36(r30)        this particle's age
+800a0c90:  lfs  f1,40(r30) ...    this particle's position
+800a0cd4:  lwz  r3,24(r29)        the shared effect handle
+800a0ce4:  f1 = (f32)(age - 1)    ** its own frame **
+800a0ce8:  bl   effDraw
+800a0cec:  addi r28,r28,1 ; addi r30,r30,20 ; cmpwi r28,4 ; blt
+```
+
+✅ Four instances of one effect, each at its own age, from one array, in one
+frame. This is precisely the shape the viewer cannot reproduce, and the loop
+bound is a literal -- `cmpwi r28,4`.
+
+### ⛔ several draw calls without a loop is *multi-pass*, not multi-instance
+
+`map_water` has **16** `effDraw` sites and no loop, which reads as sixteen
+instances and is not. Reading them:
+
+```
+r3 = lwz -30324(r13)   handle A       f1 = (f32)(lha 14(r28) - 1)
+bl effDraw
+r3 = lwz -30320(r13)   handle B       f1 = the same age
+bl effDraw
+li r3,2 ; bl 0x8005fb5c               render-state change
+... the same two handles, the same age, again
+```
+
+⛔ Two handles drawn repeatedly at one age under different render states. So
+the 41 effects in this shape must not be counted as emitted; only the loop is
+evidence.
+
+### the 139, classified
+
+Every one of the 139 is named by DOL code: **127** have their string address
+computed in an instruction, **12** are reached only through a pointer word in
+DOL data (`chaos_start`, `event_crystal`, `item_happy`, `item_protect`,
+`item_sleep`, `mini_gamestart`, `pure_heart`, `remove_curse`,
+`zunbaba_cloud1/2/3`, `zunbaba_smoke1`). ⛔ "Some are script-only" is refuted --
+and `rel.bin`, decompressed, names only 14 effects at all.
+
+| class | count | reading |
+|---|---|---|
+| ✅ drawn from a looped `effDraw` | **48** | many instances per frame, each at its own age |
+| 🔶 several `effDraw`, no loop | 41 | `map_water` shows this is multi-pass; unproven per effect |
+| 🔶 exactly one `effDraw` | 34 | one instance per `EffEntry` |
+| 🔶 draw callback not resolved | 3 | `item_jiwajiwa`, `mini_gameclear`, `mini_roundclear` |
+| 🔶 no owning module | 13 | the 12 pointer-table names, plus `system`, used by `eff_sub.c` itself |
+
+The 48 is 43 by module attribution plus 5 whose draw callback sits outside the
+module boundary and was recovered by resolving `dispEntry`'s `r5`
+(`ddtas_block`, `dmen_explosion`, `event_3Dget`, `event_tamara1`, `luigi_jump`).
+Loop bounds that are literals: 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 16, 30, 60, 64.
+
+⚠️ **48 is a lower bound, and `heart_dance` proves it.** It has one `effDraw`
+site and no loop, and the game still runs up to eight concurrent instances of
+it. Instance count *across* `EffEntry` objects is not statically decidable; only
+instance count *within* one draw callback is.
+
+### what an export would have to carry, and what it cannot
+
+| fact | recoverable? |
+|---|---|
+| **duration** | ✅ already exported -- `max(Part.second)`, which is what `effLife` returns |
+| **instances per frame** | 🔶 for the 48, often a literal in the loop's exit compare; a DOL-derived table, not disc data. Register-bounded loops give nothing |
+| **emission rate / age stagger** | ⛔ not recoverable. In `spm_get_coin` each slot's age lives at `+0x24` of a 20-byte runtime record; nothing on the disc says when a slot is seeded |
+| **concurrent `EffEntry` count** | ⛔ not recoverable -- driven by script and gameplay |
+
+⛔ So the honest fix stays the one D276 named: the reel should *say* an effect is
+drawn as N instances, not invent the scatter. What is new is that the flag can
+now be set from a measurement -- 48 effects, listed -- rather than from a guess,
+and that the duration beside it needs no new work at all.
+
+### rejected on the way
+
+- ⛔ **Attributing effects by address range alone.** Sixteen modules put their
+  draw callback past the next entry function; the range grouping reported them
+  as drawing nothing.
+- ⛔ **Attributing by private closure alone.** It cannot reach a callback that a
+  shared table also references, and left 14 of 336 draw sites unclaimed. The
+  union of the two claims all 336.
+- ⛔ **Clearing the register file at every branch target.** Chosen first as the
+  conservative option; it lost 7 effect names outright and left 192 of 372
+  `effLookup` sites unresolved. Without it, 322 of 372 resolve to an effdata
+  name and 358 of 372 resolve to *some* valid C string -- so the looser pass is
+  the one that can be checked, and it checks out.
+- ⛔ **Searching the extracted filesystem for effect names in plain text.** The
+  map archives and `rel.bin` are LZ77; the scan returned a clean negative that
+  meant nothing until `rel.bin` was decompressed.
+
+### still open
+
+- 🔶 The 41 "several draws, no loop" effects are unread one by one. `map_water`
+  is multi-pass; whether all 41 are is untested, and the discriminator would be
+  whether the `f1` frame expression differs between sites in a function.
+- 🔶 `0x8005fb5c`, called between `map_water`'s passes, is unread. If it is a
+  blend-mode set, the viewer is drawing one pass of several and that is a second
+  fidelity limit alongside D275's.
+- 🔶 D276 called `0x80095278` / `0x80095258` "the evt arg getters". They sit in
+  the effect code region, not the evt one, and `0x800d61ac` reaches them through
+  `effNameToPtr` (`0x80061b90`) -- so they are more likely accessors on an
+  `EffEntry`. Untested either way; nothing here depends on it.
+
+## D278 - The viewer reads one of the file's three curve evaluators, and three more fields it never applies (2026-08-03)
+
+D275 and D276 settled why `heart_dance` clumps and bounded what the file can
+show. The user's instinct that more gaps were hiding is ✅ correct. Swept
+all 139 effects rather than waiting for the next one to be noticed.
+
+### ✅ D266's other two evaluators are in the data, and were found by subtraction
+
+D266 recorded that `eff_sub.c` inlines the curve loop three times - a material's
+RGBA, a texture's UV animation, and a node's transform - and that only the third
+was implemented. The first two are now located, without disassembling anything:
+count which of section 10's commands no node reaches.
+
+| | commands | overlap with nodes | left over |
+|---|---|---|---|
+| reached by a node `+0x10/+0x12` | 4,447 | | |
+| 97 of 524 materials, `+0x04/+0x06` | 212 | 0 | |
+| 103 of 350 textures, `+0x18/+0x1a` | 93 | 0 | |
+| **total** | **4,752** | | **0** |
+
+⚠️ **Every one of the 305 orphans is claimed exactly once, and nothing is
+left.** The sample format discriminates the two as well: material runs are
+**212 of 212 `u8`, range 0..255** - colour channels, tags 0-3 = R,G,B,A - and
+texture runs are **93 of 93 `f32`, range -18.0..360.0**. One texture curve
+travels 17.9 UV units and one travels 348 degrees. Section 2's unaccounted bytes
+fall from **36,745 to 942** once both are counted, which is the same exact-fill
+argument that settled the vertex arrays (D265).
+
+✅ **The 28-byte texture record is now fully accounted**: `+0x00` image,
+`+0x02` wrap, `+0x03` flags, `+0x04`/`+0x08` f32 UV translate, `+0x0C`/`+0x10`
+f32 UV scale, `+0x14` f32 rotation in degrees, `+0x18`/`+0x1A` the curve run.
+`effdata.py` reads the first two. 19 textures are rotated +90 degrees and 7 at
+-90; 28 of 139 effects carry a non-identity UV transform before any curve runs.
+
+### ✅ Three fields reach the manifest and are then dropped
+
+- **Node alpha.** `pose.rs` fills `slots[9]` from the node's alpha and its tag-9
+  curve, and `local()` uses `slots[0..8]`. 780 alpha curves sit on nodes, 660 on
+  drawing nodes, **287 are full 0-to-255 fades**, and **61 of 139 effects pass
+  through a genuinely intermediate alpha**. **60 drawing nodes in 23 effects are
+  transparent for their whole life** and are painted solid.
+- **Material RGBA.** `Draw::red/green/blue/alpha` appear nowhere in dimentio
+  outside the struct that declares them. 291 of 524 materials are not white;
+  **101 of 139 effects** reach a tinted one and 83 reach one with alpha < 255.
+- **Texture wrap.** `cutout()` passes `Sampling::default()`, which is
+  Repeat/Repeat. 86 effects reach a non-repeat wrap byte, but only **6** pair one
+  with UVs outside the unit square today, so this is latent rather than visible -
+  until UV animation lands and pushes coordinates out of it.
+
+⚠️ **A control was run on the grep**, because "no consumer" measured by
+searching is worth nothing if the search is wrong: the same sweep finds
+`d.blend` consumed at `render/effect/mod.rs:168`.
+
+### ✅ It reaches the pixels, and the viewer's own instrument says so
+
+Across 139 effects sampled at every frame, **32 effects have frames where the
+pose is byte-identical to the previous frame while colour, alpha or UV data
+moves** - 1,523 frames in total. Worst: `map_derkness` 361 of 601,
+`event_cage` 179 of 181, `map_whirl` 141, `chaos` and `pure_heart` 61 each.
+
+```
+reel --effect map_derkness --from 240   ->  0 of 8 frame pair(s) differ
+reel --effect map_derkness --to   239   ->  8 of 8 frame pair(s) differ
+```
+
+The second line is the control: the difference check can see change, and reports
+none over precisely the span the sweep says is frozen.
+
+⚠️ **This is the failure mode that matters.** A frozen tail reads as a finished
+animation. Nobody investigates a picture that looks right.
+
+### 🔶 One field is not exported at all
+
+Node `+0x0F` - `effnode.py` calls it `billboard` - is non-zero on **221 of 3,739
+nodes, 164 of them drawing, every drawing one holding the value 3**, across 9
+effects (`sundale_support` 127, `robo_PC-item` 10, `manera_warp` 8). Only its
+distribution is measured; **what it means is untested**, and it should not be
+honoured before it is traced. `_scene` writes `t`, `r`, `s`, `alpha` and
+`curves`, so the viewer could not honour it either way.
+
+### ⛔ Ruled out, with the detector shown working first
+
+- **Curves outside the declared duration.** 0 parts where every curve starts
+  after the part's last frame, 0 where any curve runs past it. The tightest
+  slack is **exactly 1 frame, in over 100 parts** (`chaos/C`: last curve frame
+  60, part declared 61), so the comparison is live at the boundary.
+- **Draws falling back to the invented ring billboard.** 0 of 2,960. All 360
+  display lists pass dimentio's own `is_sound()` and carry faces. Positive
+  control: with an empty mesh table all 2,960 take the fallback. The README's
+  warning describes a stale export, not current data.
+- **`BLEND_DERIVED`.** 2,528 of 2,960 draws are mode 0 and the viewer keeps
+  plain alpha, which is what D270 prescribes. Not a gap.
+- **A hidden second texture in the material record.** `+0x0A == 256` is exactly
+  `+0x0E == 0xFFFF` is exactly texture index -1, on the same 20 untextured
+  materials. `+0x08`'s high byte is set on 17 materials and stays unexplained.
+
+### ✅ Four effects render as nothing, and the advice is wrong
+
+`item_delete`, `event_guide`, `mini_power_up` and `mini_time_up` are flat at
+every frame of their own declared span. The reel says "Try more --frames",
+which cannot help - the message assumes the frame 0 case (D265) and does not
+distinguish it from a whole timeline that never rises.
+
+### What this bounds
+
+⚠️ Read alongside D275/D276/D277, which say the file cannot spread an effect
+drawn as many concurrent instances. That is a limit nothing can fix. **These are
+not**: the data is in the file, `bleck` already reads the format it lives in,
+and the curve evaluator that consumes it exists on both sides of the export. The
+honest ranking is by how plausible the wrong output looks - a colour-cycling
+glow drawn as a flat white sprite is worse than an effect that draws nothing,
+because only the second one gets reported.
+
+
+## D279 - `symbols list --search` matches names, not addresses, and reads as "unnamed" (2026-08-03)
+
+⚠️ Small, and it cost a wrong entry. While tracing D276 the question was "what
+is `0x8005af04`", and the check run was:
+
+```
+uv run bleck symbols list --search 0x8005fc64
+  -> 0 of 976 symbols, 927 named
+```
+
+That was read as "the address has no symbol", and forty minutes of
+disassembly followed. ⛔ **The search matches the symbol *name*.** An address
+never matches one, so every address returns zero and looks identical to a
+genuine miss. `0x8005af04` was `dispEntry` the whole time, named outright at
+line 132 of `work/upstream/spm-headers/linker/spm.eu0.lst`, and D276's
+"emitter" was built on not knowing it.
+
+✅ **What works instead**, and what should have been run first:
+
+```
+grep -i 8005af04 work/upstream/spm-headers/linker/spm.eu0.lst
+```
+
+🔶 The real fix is for `symbols list --search` to notice a hex-looking needle
+and match on address, or at minimum to say "searched names only". Until then
+this is the trap: a tool that answers a question you did not ask, with a
+number that looks like an answer to the one you did.
+
+⚠️ The general form is already in this repo's rules -- **verify the instrument
+before trusting a negative** -- and it was not applied because the reading came
+from `bleck` itself rather than from a rig. A tool being ours is not evidence
+that it was asked the right question.
