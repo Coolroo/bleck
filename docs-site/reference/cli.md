@@ -519,16 +519,18 @@ Frames run left to right, top to bottom, and the number of them is clamped to
 the effect's real length — nine views of a one-frame effect would be nine
 identical pictures.
 
-!!! warning "The shapes are real; the arrangement is not"
+!!! note "The arrangement is real too"
 
-    Each part is drawn as its own geometry, with the image it actually draws.
-    **Where one part sits relative to another is not decoded** — the effect's
-    node transforms are read but not yet applied, so a reel is an *exploded
-    view*, with the parts deliberately separated so they can be told apart.
-    Read a reel for *what* an effect draws and *when*, never for where it
-    appears on screen.
+        Each part is drawn as its own geometry, with the image it actually
+        draws, **posed where the file puts it** — every node above a draw is
+        evaluated at the frame and the results multiplied. A reel shows the
+        effect composed, not laid out.
 
-    The report says so on every run, and also flags an effect whose geometry is
+        A draw with no geometry at all still falls back to a quad on an even
+        ring, because there is no measured position to use instead; the run
+        reports how many did.
+
+    The report also flags an effect whose geometry is
     far deeper than it is wide — one of the file's 360 display lists is 92×
     deeper than wide, so a fitted camera draws its visible face small.
 

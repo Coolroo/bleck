@@ -76,7 +76,7 @@ repeat run. **Ask for more words than you think you need — they are free.**
 
 See the `slow-command-discipline` skill for the price list of everything else.
 
-## The four ways a run lies
+## The seven ways a run lies
 
 **1. ⛔ Controller input cannot be injected unattended (D48).** Anything behind
 a button press needs a human at the keyboard. Gameplay is reached **~45 s** into
@@ -114,6 +114,39 @@ Related: **a probe must report the precondition it depends on**, not only the
 value it went looking for. Dolphin exiting on its own is reported as a result,
 not an inconvenience — it usually means the game crashed, and running out the
 clock instead makes a hard crash look like a mod that did nothing.
+
+**5. ⛔ `gw` is shared with the game's own scripts (D271).** The evt global work
+slots are not yours. After the attract demo changed map to `ls4_12`, seven of
+fourteen watched slots took **new values every sample** — `gw[0]` read 192, then
+4,055,018,496, then 0, then 4,054,967,296 in nine seconds.
+
+⚠️ **A `gw` reading is only trustworthy while it stays stable across samples.**
+Take at least two and compare. D184's ten measurements survive because that run
+never left `aa4_01`, which was luck rather than design.
+
+🔶 **The probe block at `0x80005000` is not shared.** A probe that writes there
+instead of into `gw` does not have this problem, and a new one should.
+
+**6. ⚠️ `--words` and `--watch-gw` read different memory.** `--words` prints the
+probe block; `--watch-gw` reads evt slots. A mod that writes `gw` shows
+**nothing** under `--words`, and a screenful of zeroes from a block nothing ever
+touched reads exactly like a script that never ran. It cost a whole run.
+
+⚠️ `--watch-gw` takes a **list of slot numbers**, not a count. `--watch-gw 40`
+watches slot 40 — not slots 0..39.
+
+**7. ⛔ `--no-build` boots the last image `ingame.py` built, not the last one
+*you* built.** `bleck mod build` writes `work/build/<mod>.iso`; `ingame.py`
+builds and boots `work/build/<mod>.wbfs`. Edit a script, rebuild by hand, pass
+`--no-build`, and you boot the **previous** run's disc.
+
+⚠️ The tell in D271 was a progress marker stopping at a number the edited script
+no longer contained. Without the marker it would have read as the removed call
+still hanging. **Drop `--no-build` whenever the mod has changed.**
+
+⚠️ This is the general trap, and it caught this project three times in one day
+(D267, D271 twice): **an out-of-date artefact impersonates a bug in whatever
+reads it.** Check the timestamp before you change the reader.
 
 ## ⚠️ `ingame.py` has no `--mods-dir`
 

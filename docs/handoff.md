@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D270**. This is the orientation doc: what exists,
+Last updated 2026-08-02, at **D271**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D270 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D271 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -24,6 +24,21 @@ about keeping derived code MIT-compatible is load-bearing — `spm-rel-loader` a
 
 ---
 
+## ⚠️ The effect pipeline was finished on 2026-08-02 — read this first
+
+Effects went from "structure only" to fully readable in one session, and the
+open threads below are written against the *new* state. In order: geometry
+(D263), the normal stride corrected against three independent routes (D264), the
+node transforms (D265), the curves that pose them read out of the game's own
+evaluator (D266), alpha blending (D267), GIF output and frame ranges (D269), and
+the game's blend-mode switch (D270).
+
+⚠️ **The one thing to carry forward:** an effect that renders nothing at frame 1
+is almost always *correct*. Scales rise from zero on their own curves, so **44%
+of the file's 2,960 draws are flat at frame 1** and 26 of 139 effects draw
+nothing at all there. Before D266 that would have been a bug; now it is the
+data, and every doc, usage string and test assertion has been changed to say so.
+
 ## What this can do today
 
 Two programs. `bleck` is a Python CLI that reads and rebuilds the user's own
@@ -34,9 +49,10 @@ disc; `dimentio/` is a Rust/eframe window that displays what `bleck` exported.
 ```powershell
 uv run bleck texture export --out work/export   # 21,780 images, PNG
 uv run bleck model   export --out work/export   # 864 .glb + models.json
-uv run bleck effect  export --out work/export   # 139 effects + effects.json,
-                                                #   each part's images (D258) **and
-                                                #   its geometry** (D263, D264)
+uv run bleck effect  export --out work/export   # 139 effects + effects.json:
+                                                #   images (D258), geometry (D263),
+                                                #   nodes + curves to pose (D266),
+                                                #   blend modes (D270). schema 3
 uv run bleck sound   export --out work/export   # 135 streams, WAV
 uv run cargo run --manifest-path dimentio/Cargo.toml -- work/export
 ```
@@ -69,7 +85,7 @@ injective and stops two assets landing on one file.
 |---|---|
 | **Textures** | ✅ browsable, searchable, filterable by GameCube format |
 | **Models** | ✅ geometry, UVs, one primitive per shape, **a texture per primitive** (D246), wrap modes, UV transforms, the alpha mask (D248) and per-vertex tint (D251); animation plays with a clip picker, scrub bar and per-shape hiding (D222, D235, D237) |
-| **Effects** | ✅ structure, part durations, **the image each part draws** (D258) and **the geometry it draws** (D264), a scrubber and a viewport. ⛔ placement *between parts* is still a display choice — node transforms are read, not applied |
+| **Effects** | ✅ **fully posed.** Structure, part durations, the image each part draws (D258), its real geometry (D263, D264), its place in the scene graph driven by the file's own curves (D265, D266) and the game's blend mode (D270), on a scrubber. ⚠️ 44% of draws are flat at frame 1 — that is the data |
 | **Sounds** | 🔶 135 tracks, waveform, seek, volume, real playback through `rodio` (D227). ⛔ **nobody has heard it** |
 
 Every asset name is copyable from any tab (D231). The model viewport is a
@@ -132,7 +148,12 @@ after the number changed. Re-measure before quoting a measurement.
 
 A shot is one instant of a model from several angles. A **reel** is one effect
 at several instants of its own timeline, because what there is to check about an
-effect is *when* its parts run (D257).
+effect is *when* its parts run (D257) — and since D266 it really is posed at
+each of those instants rather than laid out.
+
+⚠️ **Reach for a GIF when the motion is fast.** `dmen_magic`'s spine wave has a
+five-frame period and a nine-cell reel over 65 frames samples every eighth one,
+which nearly aliases it away (D268, D269).
 
 ```powershell
 cargo run --release --manifest-path dimentio/Cargo.toml -- `
@@ -179,9 +200,10 @@ read as an effect with five times the parts it has (D264).
   in for a draw whose geometry the manifest does not hold — an export predating
   D264 — and the report counts them. ⛔ A billboard looks like a deliberate
   sprite, so never read one as an effect's shape.
-- ⛔ **The arrangement is still not decoded.** Node transforms are read but not
-  applied, so a reel is an **exploded view**: each part's *shape* is measured,
-  where it sits relative to the others is not. The report says so every run.
+- ✅ **The arrangement is decoded too** (D266). Each draw is posed by walking
+  its node chain and evaluating that node's own curves at the frame. ⛔ The
+  exploded ring survives only for a draw with **no** geometry, which has no
+  measured position to use instead.
 - ⚠️ **Three different causes give one empty frame**, and telling them apart is
   most of what this tool is for: a part that legitimately draws nothing (5
   effects, D258); a sprite erased by the alpha cutoff (D259); and a sparse
@@ -438,14 +460,32 @@ contradictory answers; **one reference file settled it in a single measurement**
 
 ## ⚠️ Standing traps
 
-Seven are new this session and every one has already misled someone.
+Every one has already misled someone.
 
-1. ⚠️ **`work/reference/` is a third-party ground-truth instrument.** It holds
+0. ⛔ **An out-of-date artefact impersonates a bug in whatever reads it**, and
+   this caught the project **three times in one day** (D267, D271 twice):
+   - `work/export/textures/` predated the `I4` alpha fix, so an effect drew as a
+     solid black square. **Two renderer changes were made chasing it** before
+     anyone checked the file's timestamp.
+   - `--no-build` booted the previous run's `.wbfs` while `bleck mod build` had
+     written a `.iso`, so an edited probe ran as its old self.
+   - A probe read the wrong memory entirely and its screenful of zeroes read as
+     "the script never ran".
+
+   ⚠️ **Check when the artefact was written before you change the reader.**
+   `work/` is regenerable and nothing in it is dated by anything but its mtime.
+1. ⛔ **The evt global work slots are shared with the game's own scripts**
+   (D271). After the attract demo changes map, `gw` slots take new values every
+   sample — `gw[0]` read four different values in nine seconds. **A `gw`
+   reading is only trustworthy while it stays stable across samples**; take at
+   least two. 🔶 The probe block at `0x80005000` is not shared and a new probe
+   should use it.
+2. ⚠️ **`work/reference/` is a third-party ground-truth instrument.** It holds
    supplied rips and recordings — Brobot as OBJ/DAE (D236), the pure-heart
    jingle as MP3 (D232). Tests use it and **skip when it is absent**, so a fresh
    clone passes without it. ⛔ It is third-party asset data: `work/` is
    git-ignored and stays that way.
-2. ✅ **Which image a shape draws with is decoded** (D243), and
+3. ✅ **Which image a shape draws with is decoded** (D243), and
    `--guess-textures` is deleted with the guesswork it produced. A shape record
    counts its texture layers at `+0x00` and lists them at `+0x10`; each resolves
    through slot 17 to a slot-18 material record whose `+0x04` is the image's
@@ -461,15 +501,15 @@ Seven are new this session and every one has already misled someone.
    `material.extras.spmMaskTexture` because glTF has no slot for it (D248).
    ⚠️ **`I4` and `I8` decode to `(I, I, I, I)`**, not opaque; a test was pinning
    the old reading and would have passed forever.
-3. 🔶 **The 60 Hz clip rate is an inference, not a measurement.** Model key
+4. 🔶 **The 60 Hz clip rate is an inference, not a measurement.** Model key
    times are whole numbers and `effdata` already converts effect frames at 60
    (D219), so `FRAME_RATE = 60.0` applies the same inference to a second table
    (D235). The manifest carries both `frames` and `seconds`, so the raw number
    is never lost.
-4. ⚠️ **`bleck model export` defaults to `--out work/models`**, the other three
+5. ⚠️ **`bleck model export` defaults to `--out work/models`**, the other three
    to `work/export` (D233). Harmless when one root meant one pile; now it splits
    the export in half and Dimentio finds no models.
-5. ⛔ **The colour of this game's art is mostly not in its textures** (D251).
+6. ⛔ **The colour of this game's art is mostly not in its textures** (D251).
    12,678 of the 12,736 images under `files/a` are CMPR and **none is
    paletted**; one greyscale panel is tinted per shape by slot 5's per-vertex
    colour. So "the texture decoded grey" is the *expected* state, not a bug, and
@@ -477,12 +517,12 @@ Seven are new this session and every one has already misled someone.
    ⚠️ **Slots 5 and 6 were documented as "read by nothing" while being the
    answer.** A slot marked unread in `model-format.md` is a slot nobody looked
    at, not a slot known to be empty.
-6. ⛔ **`dimentio shot`'s colour-spread verdict was falsified within hours of
+7. ⛔ **`dimentio shot`'s colour-spread verdict was falsified within hours of
    being calibrated** (D253, broken by D251). It is now a printed number, not a
    claim; the verdict counts `images` from the file. **Any threshold calibrated
    on one export can be invalidated by the next fix to the exporter** — that is
    the general form.
-7. ⚠️ **A refuted reading that is not withdrawn keeps shipping.** D217 refuted
+8. ⚠️ **A refuted reading that is not withdrawn keeps shipping.** D217 refuted
    D216's key layout and left `curves()` in place; it published `curves`, `keys`
    and `span` in `models.json` for two months, and the `s16` it accumulated was
    `dx` and `dy` packed into one big-endian number (D252). ⛔ When an entry
@@ -508,6 +548,33 @@ And the older ones that keep biting:
   not build that crate, so nothing there breaks — a fresh Linux clone will.
 
 ---
+
+## ⚠️ Modules are capped at 1,000 lines, and `bleck/formats/` shows the seam
+
+Pylint's `too-many-lines` is not configured here, so its **1,000-line default**
+applies. `effdata.py` was the first module in the repo to reach it, and hitting
+it twice in one session produced a rule worth stating:
+
+⛔ **Do not shave docstrings to fit.** The reasoning in these files is the
+point of them, and trimming prose to buy nine lines is deleting the asset to
+satisfy the check. Twice on 2026-08-02 that was the first instinct and twice it
+was wrong.
+
+✅ **Split on a real seam instead.** `effdata.py` gave up two modules cleanly
+because each needed nothing from the rest:
+
+| module | what it owns | why it could leave |
+|---|---|---|
+| `effgeom.py` | GX display lists, the vertex arrays | reads a byte range; knows nothing of effects or parts |
+| `effcurve.py` | curve records, the rotation maths | takes a node and a command list as *arguments* |
+
+⚠️ **Watch the import direction.** Both were split so `effdata` imports them and
+neither imports back; an earlier attempt put `meshes()` in `effgeom`, where it
+needed `entries()` from `effdata`, and the cycle only showed up at import time.
+
+⚠️ **And the third option is deleting something.** The last 15 lines came off by
+removing `Effect.rows`, which D258 had called superseded and which had shipped
+for two more entries. The ceiling was the thing that finally forced it.
 
 ## ⚠️ Every mod this repo names lives in `example-mods/`, not `mods/`
 
@@ -941,8 +1008,17 @@ else; pick by interest.
 12. 🔶 **The boss NPC hang.** `chaos-heart` orbits five effects for 22,350 frames
     with no freeze, where the boss *NPC* froze at a fixed ~2,177 (D157, D183).
     The effect path sidesteps the hang rather than explaining it.
-13. 🔶 **443 builtins, 10 measured** (D184). `example-mods/builtin-probe` is the
-    route. ⛔ `evt_pouch_check_have_item` never returns and nobody knows why.
+13. 🔶 **443 builtins, 18 measured** (D184, D271). `example-mods/builtin-probe`
+    and `builtin-probe2` are the route.
+    ⛔ **The candidate pool is far smaller than 443.** Only **333** are linkable
+    at all — `spm.eu0.lst` names 1,111 symbols and most builtins are not among
+    them (D61) — and of those only **20** are read-only getters taking no
+    `const char *` name, which is what a probe can call in the attract demo
+    without an object to point at. ⚠️ **Filter for linkability first**; three of
+    the first fourteen candidates picked by name were linkable.
+    ⛔ Two never return: `evt_pouch_check_have_item` (D184, unexplained) and
+    `evt_npc_get_max_hp(0, …)` (D271, explained — a null `const char *`).
+    ⛔ `evt_sub_get_mapname` does **not** take one out-parameter.
 14. **`peek`/`poke` for `SET_RAM`/`GET_RAM`** — the language's biggest remaining
     gap. ⚠️ Maps did **not** need it (D51) and doors do **not** (D103).
 15. 🔶 **`plus`/`minus`/`home`/d-pad masks** — one `button-probe` run each. `a`,

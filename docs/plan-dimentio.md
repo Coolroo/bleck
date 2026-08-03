@@ -21,7 +21,7 @@ put in it.
 |---|---|---|
 | **Textures** | ✅ TPL parsed and decodable (D187) | **Yes, today** |
 | **Effect textures** | ✅ Same — `effdata.tpl` is 219 images | **Yes, today** |
-| **Effect definitions** | ✅ `effdata.dat` largely decoded, including which image each part draws (D258) | Done |
+| **Effect definitions** | ✅ `effdata.dat` decoded end to end: images (D258), geometry (D263, D264), node transforms (D265) and the curves that pose them (D266), blend modes (D270) | Done |
 | **Effect behaviour** | ✅ 174 named, ⛔ each is DOL code | List only |
 | **Models** | 🔶 Container format unidentified | No — needs research first |
 | **Animations** | 🔶 Only the *name* of a table is known | No |
@@ -178,7 +178,7 @@ Camera orbit/pan/zoom, preset backgrounds, a grid. Deliberately **after** model
 decoding, because it cannot be validated before then. A cube renders fine and
 proves nothing.
 
-### Stage 3 — effects 🟢 mostly reachable
+### Stage 3 — effects ✅ done (2026-08-02)
 
 ⚠️ **An effect is not a file.** It is a C entry point in the DOL that spawns a
 live entity — `scripts/dump_effects.py` lists all **174** with their addresses,
@@ -188,8 +188,13 @@ three different things, and only two are reachable:
 | | |
 |---|---|
 | Its **textures** | ✅ `files/eff/effdata.tpl` (219 images), `effect.tpl` (41). Viewable as soon as Stage 1 works |
-| Its **definition** | ✅ `effdata.dat` sits beside `effdata.tpl` and is largely decoded (D190, D191, D258): 139 effects, 704 parts, and the five-hop chain from a part to its image. ⛔ Node transforms are read but not applied, so placement is still invented |
+| Its **definition** | ✅ `effdata.dat` sits beside `effdata.tpl` and is **decoded end to end**: 139 effects, 704 parts, the five-hop chain to an image (D258), 360 GX display lists of real geometry (D263, D264), the scene graph and its animation curves (D265, D266) and the game's own blend modes (D270). An effect is **posed at a frame**, not laid out |
 | Its **behaviour** | ⛔ Compiled PowerPC. A viewer cannot run it; only the game can. Listing name, address and textures is the honest ceiling |
+
+✅ **All of that landed.** The viewer draws each effect's own triangle fans,
+posed by walking its node chain and evaluating that node's curves at the frame —
+the game's own scheme, transcribed from its evaluator at `0x8005f2d4`. What
+remains open is listed in `handoff.md`, not here.
 
 🟢 So: show every effect by name with its textures, and treat `effdata.dat` as
 the next research target after Stage 1 — it is the one that would turn a texture

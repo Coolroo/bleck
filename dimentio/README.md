@@ -100,14 +100,19 @@ record — node → draw → subdraw → material → texture — and `bleck` re
 into the export. `sweat` renders as a blue droplet; `system`'s parts land on the
 noise fields and white square they are named after.
 
-⛔ **Where the quads sit is not real.** The node transforms are read but not
-applied, so the placement is a deterministic display choice. That half is
-printed on every run, because a sheet showing genuine artwork in invented
-positions is far more convincing than one drawn in flat colours.
+✅ **And where the parts sit is real too.** Each draw carries the chain of nodes
+above it; every one is posed at the frame — its static transform with any curve
+of its own written over the top — and the results multiplied parent-first. That
+is the game's own scheme, transcribed from its evaluator.
 
-⚠️ **`chaos` is grey gradient ramps, not a heart** — its shape comes from
-display-list geometry nothing here draws. Do not use "does it look right?" on an
-effect whose art is abstract; that test nearly refuted the correct decoding.
+⚠️ **An effect that draws nothing at frame 1 is usually correct.** Scales rise
+from zero, so 44% of draws are flat there and 26 of the 139 effects draw nothing
+at all. Move the window with `--from 10` before believing one is empty.
+
+⚠️ **`chaos` is grey gradient ramps as *artwork*** — its shape is display-list
+geometry, which the viewer now draws. Do not use "does it look right?" on an
+effect whose textures are abstract; that test nearly refuted the correct
+decoding of the image binding.
 
 What the report settles is that the manifest and the renderer agree: the parts
 called running are the parts that reach the pixels, every part declaring a
@@ -189,9 +194,10 @@ The 219 images from `files/eff/effdata.tpl` are still shown as a bank strip —
 that is the browser, in catalog order, and clicking one previews it on a part as
 an explicit override rather than as a claim.
 
-⛔ **Where the parts sit is still not decoded.** The node transforms are read
-and not applied, so the layout is a display choice, and the window says so in
-the same amber it once used for the images.
+✅ **Where the parts sit is decoded**, and posed per frame from the file's own
+curves. ⛔ What is left in amber: a draw with **no geometry** falls back to a
+camera-facing quad on an even ring, because there is no measured position to put
+it at instead — and the run reports how many did.
 
 **Sounds** — the 135 tracks from `sounds.json`: a searchable, virtualised list,
 the facts `bleck` recorded about each one, play / pause / stop with a seek
