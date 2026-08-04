@@ -39,6 +39,11 @@ naming the same `curves` array the nodes do.
 byte-identical pose across 1,523 frames while their colour or UV data moves
 (D278), so an export that drops the other two evaluators renders those frames
 as a still and nothing reports it.
+
+✅ **Blend mode 0 is a request to derive a mode, and its inputs are exported**
+(D283) — a sampler's `alpha_type` and a draw's `translucent`. ⛔ **The mode
+itself is not**: the derivation reads the evaluated colour alpha, so a resolved
+mode is wrong for 341 draws the moment an instance fades.
 """
 
 from __future__ import annotations
@@ -57,12 +62,13 @@ CATEGORY = "inspection"
 #: Written beside the other manifests. Dimentio reads this, not the file.
 MANIFEST = "effects.json"
 
-#: Bumped to 4 when the manifest gained the `materials` and `samplers` tables —
-#: the other two evaluators the file drives from the same `curves` table, plus
-#: the whole 28-byte texture record rather than its first two fields (D281).
-#: 3 added `nodes` and `curves` so a viewer could pose an effect at an arbitrary
-#: time (D266); 2 added `draws` and `meshes` (D263); 1 was the original.
-SCHEMA = 4
+#: Bumped to 5 when the manifest gained the two inputs blend mode 0's derivation
+#: reads — a sampler's `alpha_type` and a draw's `translucent` (D283).
+#: 4 added the `materials` and `samplers` tables, the other two evaluators the
+#: file drives from the same `curves` table (D281); 3 added `nodes` and `curves`
+#: so a viewer could pose an effect at an arbitrary time (D266); 2 added `draws`
+#: and `meshes` (D263); 1 was the original.
+SCHEMA = 5
 
 #: A draw whose material names no texture. ⚠️ Not 0, which is a real image.
 NO_IMAGE = -1
@@ -170,6 +176,11 @@ def _draws(
 
     ⚠️ **Not deduplicated by image.** Two draws sharing a material and differing
     in geometry are two draws; collapsing them would lose half the shape.
+
+    ⛔ **`blend` 0 is exported unresolved, and `translucent` is why** (D283). The
+    derivation reads the *evaluated* colour alpha, which the runtime fade moves,
+    so a mode baked here is wrong for 341 draws the moment anything fades. The
+    inputs travel instead: this bit, and the sampler's `alpha_type`.
     """
     written = []
     for draw in effdata.draws(data, effect, part):
@@ -179,6 +190,7 @@ def _draws(
                 "mesh": index[(draw.offset, draw.descriptor)],
                 "chain": list(draw.chain),
                 "blend": draw.blend,
+                "translucent": draw.translucent,
                 "image": picture.image if picture else NO_IMAGE,
                 "wrap": picture.wrap if picture else 0,
                 "red": picture.red if picture else 255,
@@ -310,6 +322,10 @@ def _samplers(raw: bytes, curves: _Curves) -> list[dict]:
     the two bits per axis fold is a fact about the file — mirror wins over the
     repeat bit — and the reading belongs where the format is owned rather than
     in every consumer.
+
+    ⚠️ **`alpha_type` is decoded the same way, and is not a blend mode.** It is
+    one of three inputs the game folds together (D283); the raw `flags` stays
+    beside it because the other six bits are still unread.
     """
     return [
         {
@@ -318,6 +334,7 @@ def _samplers(raw: bytes, curves: _Curves) -> list[dict]:
             "wrap_s": sampler.wrap_s,
             "wrap_t": sampler.wrap_t,
             "flags": sampler.flags,
+            "alpha_type": sampler.alpha_type,
             "translate": [
                 round(sampler.uv.translate_u, 6),
                 round(sampler.uv.translate_v, 6),

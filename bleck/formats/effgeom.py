@@ -59,6 +59,18 @@ TRIANGLE_FAN = 0xA0
 #: reads two bytes too many per vertex and swallows the next opcode.
 DESCRIPTOR_ATTRIBUTES = 0x7FFF
 
+#: The same bit 15, kept rather than discarded.
+#:
+#: ✅ **It asks for alpha blending** (D283). `rlwinm r23,r3,17,31,31` at
+#: `0x8005c960` tests it and `ori r0,r0,2` sets the bit that forces blend mode 3
+#: — which is what D263 saw tested as a flag without knowing what it selected.
+#: 211 of the file's 2,960 entries carry it.
+#:
+#: ⚠️ **Masked out of the stride and read separately, not one or the other.**
+#: Decoding attributes under the unmasked descriptor mis-strides every vertex;
+#: dropping the bit loses the only per-draw input the blend derivation has.
+DESCRIPTOR_TRANSLUCENT = 0x8000
+
 #: Which array each descriptor bit indexes, in GX's own attribute order.
 #: ✅ Established by fit, not by convention (D264): POS's largest index is
 #: 12,247 against section 13's 12,250 entries and TEX0's is 9,065 against

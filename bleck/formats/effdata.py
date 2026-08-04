@@ -309,9 +309,12 @@ ENTRY_SECTION, ENTRY_STRIDE = 8, 8
 #: What a group's `flags` high byte selects, as the switch at `0x8005c9f8`
 #: reads it. ✅ Each case is one `GXSetBlendMode` call (D270).
 #:
-#: ⚠️ **Zero is not a mode.** It falls through the switch, and the mode is then
-#: derived from state this reading does not follow — so a viewer should keep
-#: doing whatever it did before rather than inventing an opaque default.
+#: ⚠️ **Zero is not a mode; it is a request to derive one** (D283), and it is
+#: 2,528 of the file's 2,960 draws. The derivation at `0x8005c870` folds three
+#: inputs together and can only reach 1 opaque, 2 cut-out or 3 alpha blend —
+#: ⛔ additive is unreachable from it. `Sampler.alpha_type` and
+#: `Entry.translucent` are two of those inputs; the third is the *evaluated*
+#: colour alpha, which moves at runtime, so nothing here resolves a mode.
 BLEND_DERIVED = 0
 BLEND_ADD = 4
 BLEND_SUBTRACT = 5
@@ -360,13 +363,23 @@ class Entry:
 
     ✅ Nine values occur, and every one is a subset of POS/NRM/CLR0/TEX0 plus
     bit 15 (D263). ⚠️ **Bit 15 is a flag, not an attribute** -- it takes no
-    index, so masking it out is what makes the stride come out right."""
+    index, so masking it out is what makes the stride come out right. ✅ What it
+    asks for is alpha blending (D283); `translucent` reads it."""
 
     display_list: int
     """Byte offset into section 3, always a multiple of `DISPLAY_ALIGN`.
 
     ⚠️ 2,960 entries share **360** display lists, so geometry is worth reading
     once and referring to, not once per entry."""
+
+    @property
+    def translucent(self) -> bool:
+        """Whether this draw's descriptor asks outright for alpha blending.
+
+        ✅ Bit 15, which the derivation at `0x8005c960` turns into blend mode 3
+        whatever the sampler declares (D283). 211 of the 2,960 entries set it.
+        """
+        return bool(self.descriptor & effgeom.DESCRIPTOR_TRANSLUCENT)
 
 
 def groups(data: bytes) -> list[Group]:  # pylint: disable=container-return
@@ -532,6 +545,12 @@ class Draw:
     their scale is animated up from zero by section 10's curves, which are not
     read. Applying this without them renders *less* than drawing every part at
     the origin."""
+
+    @property
+    def translucent(self) -> bool:
+        """Whether this draw's descriptor asks outright for alpha blending —
+        `Entry.translucent`, carried through the resolve (D283)."""
+        return bool(self.descriptor & effgeom.DESCRIPTOR_TRANSLUCENT)
 
 
 def draws(

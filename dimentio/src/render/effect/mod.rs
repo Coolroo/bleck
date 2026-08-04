@@ -47,7 +47,7 @@
 use super::camera::Basis;
 use super::{Camera, Rgba};
 use crate::data::effects::{
-    Curve, Draw, Entry, MaterialDef, Mesh as Geometry, NodeDef, SamplerDef,
+    self as effects, Curve, Draw, Entry, MaterialDef, Mesh as Geometry, NodeDef, SamplerDef,
 };
 use crate::data::mesh::{Blend, Bounds, Face, Mesh, Modulate, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
@@ -156,15 +156,55 @@ pub struct Drawn {
 
 /// Everything about painting one draw that is not the image or the geometry.
 ///
-/// ⚠️ **Travelling together because all three are functions of the frame.** The
-/// blend mode is fixed, but the colour register and the UV transform are both
-/// sampled from the shared curve table (D281), and passing them separately down
-/// four call sites is how one of them comes to be evaluated at the wrong time.
+/// ⚠️ **Travelling together because every one is a function of the frame.** The
+/// colour register and the UV transform are sampled from the shared curve table
+/// (D281), and since D283 the blend mode and the alpha compare are derived from
+/// the alpha those produce — so passing them separately down four call sites is
+/// how one of them comes to be evaluated at the wrong time.
 #[derive(Debug, Clone, Copy, Default)]
 struct Surface {
     blend: Blend,
+    /// Whether a texel below `cutoff` is discarded — the game's alpha compare.
+    masked: bool,
+    cutoff: u8,
     modulate: Modulate,
     sampling: Sampling,
+}
+
+impl Surface {
+    /// The blend state and alpha compare one of the game's six modes asks for.
+    ///
+    /// ✅ **One table for the derived modes and the declared ones**, because the
+    /// game runs both through the same switch at `0x8005c9f8` — the derivation
+    /// produces a number and the switch reads it (D270, D283).
+    ///
+    /// ⚠️ **Modes 1 and 2 write depth and mode 3 does not**, which is the whole
+    /// reason the mode has to reach here rather than being folded into a colour:
+    /// a cut-out sprite occludes what is behind it and a blended one must not.
+    /// The rasteriser writes depth for `Blend::Opaque` alone, so both of the
+    /// non-blending modes carry it and differ only in their compare.
+    fn painted(mode: u32, modulate: Modulate, sampling: Sampling) -> Self {
+        let (blend, masked, cutoff) = match mode {
+            // Alpha compare always passes: the black surround of an opaque
+            // draw is painted, which is what the game does (D283).
+            effects::BLEND_OPAQUE => (Blend::Opaque, false, 0),
+            effects::BLEND_CUTOUT => (Blend::Opaque, true, super::MASK_CUTOFF),
+            4 => (Blend::Add, true, super::FAINT_CUTOFF),
+            5 => (Blend::Subtract, true, super::FAINT_CUTOFF),
+            6 => (Blend::Inverse, true, super::FAINT_CUTOFF),
+            // ⚠️ Mode 3 and the fallback are one arm on purpose: plain alpha is
+            // what an unrecognised selector must keep doing, and what every
+            // reader before D283 did with all 2,528 derived draws.
+            _ => (Blend::Alpha, true, super::FAINT_CUTOFF),
+        };
+        Self {
+            blend,
+            masked,
+            cutoff,
+            modulate,
+            sampling,
+        }
+    }
 }
 
 /// The colour a part is drawn in, so the table beside the viewport can mark a
@@ -189,10 +229,11 @@ pub fn lit(camera: &Camera, part: usize) -> Rgba {
         Vec3::ZERO,
         HALF,
         None,
-        Surface {
-            blend: Blend::Alpha,
-            ..Default::default()
-        },
+        Surface::painted(
+            effects::BLEND_TRANSLUCENT,
+            Modulate::default(),
+            Sampling::default(),
+        ),
     );
     let corners = mesh.positions();
     let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
@@ -221,14 +262,6 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
             // running at this instant ever pay for it.
             let image = art.and_then(|art| art.of(part, draw));
             let named = entry.parts.get(part).and_then(|p| p.draws.get(draw));
-            // ✅ The game's own blend mode (D270). Mode 0 keeps plain alpha,
-            // which is what the viewer did before and what 2,528 draws use.
-            let blend = match named.map_or(0, |d| d.blend) {
-                4 => Blend::Add,
-                5 => Blend::Subtract,
-                6 => Blend::Inverse,
-                _ => Blend::Alpha,
-            };
             let shape = art.zip(named).and_then(|(art, d)| art.geometry(d.mesh));
             let pose = match (art, named) {
                 (Some(art), Some(named)) => posed(&named.chain, art.nodes, art.curves, frame),
@@ -249,11 +282,14 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
                 faded += 1;
                 continue;
             }
-            let how = Surface {
-                blend,
+            // ✅ The game's own blend mode (D270), with selector 0's derivation
+            // run at the alpha this frame composed to (D283) — which is why it
+            // is taken here rather than once when the manifest was loaded.
+            let how = Surface::painted(
+                mode_of(named, art, modulate.alpha),
                 modulate,
-                sampling: sampling(named, art, frame),
-            };
+                sampling(named, art, frame),
+            );
             built.push(Quad {
                 mesh: match shape {
                     Some(geometry) => real(geometry, &pose.world, image, how),
@@ -298,6 +334,22 @@ fn shading(named: Option<&Draw>, pose: &Pose, art: Option<Art<'_>>, frame: f32) 
         alpha: fade(pose.alpha, material.alpha),
         ..material
     }
+}
+
+/// Which of the game's blend modes composites a draw at this frame.
+///
+/// ⚠️ **Taken at the alpha the frame composed to**, never at the material's own.
+/// The game tests the value the instance fade has already scaled (D283), so a
+/// draw that is opaque at rest becomes an alpha blend the moment it fades — and
+/// evaluating this once at load would pin 341 draws to the wrong mode.
+///
+/// ⚠️ An export with no art at all keeps every declared selector and derives
+/// nothing, which is plain alpha: the same answer it gave before D283.
+fn mode_of(named: Option<&Draw>, art: Option<Art<'_>>, alpha: u8) -> u32 {
+    let samplers = art.map_or(&[][..], |art| art.samplers);
+    named.map_or(effects::BLEND_TRANSLUCENT, |draw| {
+        draw.blend_mode(samplers, alpha)
+    })
 }
 
 /// The colour register at `frame`, or `None` where the manifest holds no row
@@ -543,7 +595,7 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, how: Sur
             .map(|c| [c[0], c[1], c[2], c[3]])
             .collect()
     });
-    let paints: Vec<Paint> = image.map(|t| cutout(t, how)).into_iter().collect();
+    let paints: Vec<Paint> = image.map(|t| painted(t, how)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         shapes: vec![Shape {
@@ -564,21 +616,24 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, how: Sur
     .into_mesh()
 }
 
-/// How an effect's bank image is sampled: cut-out art with a real alpha
-/// channel, so without the mask its transparent surround draws as a black
-/// square around the sprite.
+/// How an effect's bank image is sampled and composited.
 ///
 /// ✅ **The wrap modes and the UV transform are the file's own** (D281), rather
 /// than the repeat/repeat default this passed until now. 84 of the file's 350
 /// texture records ask for something other than repeat on at least one axis,
 /// and the moment a UV curve pushes a coordinate out of the unit square the
 /// difference is the whole sprite.
-fn cutout(texture: Texture, how: Surface) -> Paint {
+///
+/// ✅ **And so is the alpha compare** (D283). It used to be "keep any texel that
+/// is not wholly transparent" for every draw; a draw the file declares opaque
+/// now keeps every texel including its surround, and one it declares cut-out
+/// drops everything under half.
+fn painted(texture: Texture, how: Surface) -> Paint {
     Paint {
         texture,
-        masked: true,
+        masked: how.masked,
         blend: how.blend,
-        cutoff: super::FAINT_CUTOFF,
+        cutoff: how.cutoff,
         sampling: how.sampling,
         modulate: how.modulate,
         mask: None,
@@ -598,7 +653,7 @@ fn cutout(texture: Texture, how: Surface) -> Paint {
 fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>, how: Surface) -> Mesh {
     let right = basis.right.scaled(half);
     let up = basis.up.scaled(half);
-    let paints: Vec<Paint> = image.map(|t| cutout(t, how)).into_iter().collect();
+    let paints: Vec<Paint> = image.map(|t| painted(t, how)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![

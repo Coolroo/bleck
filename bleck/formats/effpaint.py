@@ -71,6 +71,29 @@ The constants are read, not guessed: `_SDA2_BASE_` is `0x805B7260` (from
 `__init_registers` at `0x80006304`), and the offsets the code uses hold `0.5`,
 `-0.5`, `1.0`, `0.0` and `0.01745329` — the last being pi/180.
 
+## ✅ The alpha type, at `0x8005c94c` (D283)
+
+`+0x03`'s bits 2-3 are a three-valued enum, and the blend derivation is the only
+thing that reads them: `or r0,r0,r10` folds the byte **shifted right two** into
+the accumulator the mode comes out of.
+
+| value | what the draw asks for |
+|---|---|
+| 0 | opaque — alpha compare always passes, Z written |
+| 1 | cut-out — `GEQUAL 128`, Z written |
+| 2 | translucent — alpha blend, Z not written |
+
+✅ Never 3, across all 350 records: 240 translucent, 56 cut-out, 54 opaque.
+
+🟢 **The control.** Against the measured alpha channel of the TPL image each
+sampler names, 344 of 350 agree and all 56 declared cut-out are measured 1-bit.
+A field correlating 98.3% with data it never touches is not a coincidence.
+
+⚠️ **It is one input of three, not the mode.** Bit 15 of the draw's vertex
+descriptor and the *evaluated* colour alpha both force blend mode 3, and the
+second moves at runtime — so nothing here resolves a mode, and a caller must
+apply the rule at its own alpha.
+
 ### ✅ The wrap byte, at `0x8004cb54`
 
 Two bits per axis, mirror winning over the repeat bit:
@@ -110,6 +133,14 @@ TEXTURE_CURVES, TEXTURE_CURVE_COUNT = 0x18, 0x1A
 
 #: GX's own wrap enum, which is what the game passes to `GXInitTexObj`.
 WRAP_CLAMP, WRAP_REPEAT, WRAP_MIRROR = 0, 1, 2
+
+#: What bits 2-3 of a texture record's `+0x03` declare about its image's alpha
+#: (D283). ⛔ 3 never occurs across the file's 350 records.
+ALPHA_OPAQUE, ALPHA_CUTOUT, ALPHA_TRANSLUCENT = 0, 1, 2
+
+#: Where those two bits sit, and how far to shift them down — the `>> 2` the
+#: game's own `or r0,r0,r10` at `0x8005c94c` applies before folding them in.
+ALPHA_TYPE_SHIFT, ALPHA_TYPE_MASK = 2, 0x03
 
 #: What a material's four curve tags drive, in tag order.
 MATERIAL_SLOT_NAMES = ("red", "green", "blue", "alpha")
@@ -212,11 +243,24 @@ class Sampler:
     """The raw `+0x02` byte. `wrap_s` and `wrap_t` decode it."""
 
     flags: int
-    """`+0x03`. 🔶 Non-zero on most records and **not applied anywhere** — no
-    read of it appears in the evaluator, so what it selects is untested."""
+    """`+0x03`. ✅ Bits 2-3 are the **alpha type** and the blend derivation reads
+    them (D283); `alpha_type` decodes it. What the other six bits select is
+    still untested."""
 
     uv: UvTransform
     run: Run
+
+    @property
+    def alpha_type(self) -> int:
+        """What this record declares about its image's alpha — one of
+        `ALPHA_OPAQUE`, `ALPHA_CUTOUT`, `ALPHA_TRANSLUCENT`.
+
+        ⚠️ **Not a blend mode.** It is one of the three inputs the game's
+        derivation at `0x8005c870` folds together, and the other two — the
+        draw's descriptor bit 15 and the evaluated colour alpha — can override
+        it. Reading this alone as the mode is wrong for every faded draw.
+        """
+        return (self.flags >> ALPHA_TYPE_SHIFT) & ALPHA_TYPE_MASK
 
     @property
     def wrap_s(self) -> int:

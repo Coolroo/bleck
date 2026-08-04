@@ -16,6 +16,7 @@ Modding toolkit for **Super Paper Mario** (Wii, 2007).
 | `docs/disc-layout.md` | **Living.** Observed facts about SPM's disc contents |
 | `docs/function-behaviour.md` | **Living.** What game functions do, measured by tracing them |
 | `docs/model-format.md` | **Living.** The character model format in `files/a/` — the 24-slot section table, per-shape rebasing, morph animation, and the refuted candidates |
+| `docs/effect-format.md` | **Living.** The effect format in `files/eff/` — the 16-pointer section table, the file's *three* curve evaluators, alpha inheritance, the blend switch and its "auto" case, and the superseded readings |
 | `docs/cli-design.md` | The `bleck` CLI's shape and rationale |
 | `docs/mods.md` | How mods, overlays, dependencies and conflicts work |
 | `docs/code-mods.md` | Compiled PowerPC code mods — design + proven toolchain |

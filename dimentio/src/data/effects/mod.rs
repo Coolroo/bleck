@@ -36,6 +36,13 @@
 //! them. Without those, 32 effects hold a byte-identical pose for 1,523 frames
 //! while their real data moves — a frozen tail that reads as a finished
 //! animation (D278).
+//!
+//! ✅ **And blend mode 0 is derived rather than assumed** (D283). It is 2,528 of
+//! the file's 2,960 draws and it is not a mode: `Draw::blend_mode` folds the
+//! sampler's alpha type, the descriptor's bit 15 and the frame's own evaluated
+//! alpha into one of opaque, cut-out or alpha blend. ⛔ **It cannot be resolved
+//! at load** — the alpha moves as an instance fades, and 341 draws change mode
+//! when it does.
 
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -151,6 +158,18 @@ pub struct SamplerDef {
     /// Degrees. 19 records hold +90 and 7 hold -90 (D278).
     #[serde(default)]
     pub rotation: Option<f32>,
+    /// What this record declares about its image's alpha: 0 opaque, 1 cut-out,
+    /// 2 translucent — bits 2-3 of the file's `+0x03` byte (D283).
+    ///
+    /// ⚠️ **`None` is "this export did not record one", and must keep the plain
+    /// alpha every reader used before.** Reading absent as 0 would turn 2,528
+    /// draws of every schema-4 export opaque at a stroke — the same trap D280's
+    /// node alpha and D281's UV scale each hit from the other direction.
+    ///
+    /// ⛔ **Not a blend mode.** It is one of three inputs; `Draw::blend_mode`
+    /// folds it with the descriptor bit and the evaluated alpha.
+    #[serde(default)]
+    pub alpha_type: Option<u32>,
     /// `[tag, curve]` pairs. 0, 1 translate; 2, 3 scale; 4 rotation.
     #[serde(default)]
     pub curves: Vec<[usize; 2]>,
@@ -399,12 +418,19 @@ pub struct Draw {
     /// How this draw is composited: 0 derive, 4 additive, 5 subtractive,
     /// 6 inverse-source (D270).
     ///
-    /// ⚠️ **0 is not "opaque".** It falls through the game's own switch and the
-    /// mode comes from state `bleck` does not follow, so a reader should keep
-    /// its existing behaviour rather than invent one. 2,528 of 2,960 draws are
-    /// 0, so guessing wrong here would be wrong nearly everywhere.
+    /// ⚠️ **0 is not a mode; it is a request to derive one** (D283), and it is
+    /// 2,528 of the file's 2,960 draws. `blend_mode` runs the derivation, which
+    /// needs the frame's evaluated alpha and so cannot be done once at load.
     #[serde(default)]
     pub blend: u32,
+    /// Bit 15 of the draw's vertex descriptor, which asks outright for alpha
+    /// blending (D283). 211 of the file's 2,960 draws set it.
+    ///
+    /// ⚠️ **Absent reads as false, and that is the safe direction**: an export
+    /// predating the field then derives from the sampler and the alpha alone,
+    /// which is what it would have done had the bit never been set.
+    #[serde(default)]
+    pub translucent: bool,
     /// Index into the effect system's own bank — 0..218 for `effdata.tpl` —
     /// or negative where the material names no texture.
     ///
@@ -442,10 +468,64 @@ pub struct Draw {
     pub sampler: Option<i32>,
 }
 
+/// The selector that names no mode and asks for one to be worked out (D283).
+pub const BLEND_DERIVED: u32 = 0;
+
+/// The three modes the derivation can reach. ⛔ **Additive is not among them**:
+/// selector 0 can only ever come out 1, 2 or 3, so a glow is always declared.
+pub const BLEND_OPAQUE: u32 = 1;
+pub const BLEND_CUTOUT: u32 = 2;
+pub const BLEND_TRANSLUCENT: u32 = 3;
+
+/// What a sampler's `alpha_type` says about its image.
+const ALPHA_CUTOUT: u32 = 1;
+const ALPHA_TRANSLUCENT: u32 = 2;
+
 impl Draw {
     /// The bank index this draw paints with, or `None` when it paints none.
     pub fn image(&self) -> Option<usize> {
         (self.image >= 0).then_some(self.image as usize)
+    }
+
+    /// Which of the game's six blend modes composites this draw, given the
+    /// alpha its material and node have already composed to at this frame.
+    ///
+    /// ✅ **Transcribed from `0x8005c870`-`0x8005c9f8`** (D283). A declared
+    /// selector is returned untouched; selector 0 seeds an accumulator at zero,
+    /// folds in the sampler's alpha type, and three things set the bit that
+    /// forces alpha blending — an alpha type of 2, the descriptor's bit 15, and
+    /// an evaluated alpha **strictly** between 0 and 255. Otherwise the mode is
+    /// `(accumulator & 1) + 1`.
+    ///
+    /// ⚠️ **A function of the frame, not of the file.** The alpha it reads is
+    /// the one the fade moves, so 341 draws change mode the instant an instance
+    /// fades — which is why the export carries these inputs and no mode.
+    ///
+    /// ⚠️ **An export with no `alpha_type` keeps plain alpha.** That is what
+    /// every reader before this did for all 2,528 of them, and it is also what
+    /// a draw whose material names no texture gets — such a draw paints no
+    /// image, so nothing composites it either way.
+    pub fn blend_mode(&self, samplers: &[SamplerDef], alpha: u8) -> u32 {
+        if self.blend != BLEND_DERIVED {
+            return self.blend;
+        }
+        let Some(kind) = self
+            .sampler()
+            .and_then(|at| samplers.get(at))
+            .and_then(|row| row.alpha_type)
+        else {
+            return BLEND_TRANSLUCENT;
+        };
+        if kind == ALPHA_TRANSLUCENT || self.translucent || (0 < alpha && alpha < 255) {
+            return BLEND_TRANSLUCENT;
+        }
+        // ⛔ Matched rather than `kind + 1`: an alpha type of 3 — which no
+        // record carries — would otherwise arrive as 4, additive, out of a
+        // derivation that provably cannot produce it.
+        match kind {
+            ALPHA_CUTOUT => BLEND_CUTOUT,
+            _ => BLEND_OPAQUE,
+        }
     }
 
     /// This draw's row of the shared `materials` table, or `None`.

@@ -464,6 +464,29 @@ RGBA tint) and a `mesh`, indexing a `meshes` table at the top of the manifest.
     plus the static `translate`, `scale` and `rotation` (in degrees) that 58 of
     them use before any curve runs.
 
+!!! note "A draw's `blend` of 0 asks the reader to work the mode out"
+
+    Each draw carries a `blend`: 4 is additive, 5 subtractive, 6 inverse-source
+    — and **0 is not a mode**. It is the game's request to derive one, and it is
+    2,528 of the 2,960 draws. Three inputs decide it, and a reader must fold all
+    three at the frame it is drawing:
+
+    - the `alpha_type` of the draw's `samplers` row — 0 opaque, 1 cut-out,
+      2 translucent;
+    - the draw's own `translucent`, bit 15 of its vertex descriptor;
+    - the alpha the reader has already composed for that frame, from the
+      material's colour register and the drawing node.
+
+    Any of `alpha_type == 2`, `translucent`, or an alpha **strictly** between 0
+    and 255 means alpha blending. Otherwise it is opaque for `alpha_type` 0 and
+    cut-out at half for 1. Opaque and cut-out write depth; alpha blending does
+    not.
+
+    **The export deliberately does not resolve this.** The third input moves
+    while an effect fades, and 341 draws change mode when it does — a mode baked
+    at export time would be wrong for every one of them. Additive is unreachable
+    from `blend` 0, so a glow is always declared outright.
+
 ### Dimentio, and the manifests
 
 `texture export`, `model export`, `sound export` and `effect export` each write

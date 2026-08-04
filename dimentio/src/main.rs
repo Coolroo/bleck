@@ -98,12 +98,39 @@ fn main() -> ExitCode {
     }
 }
 
+/// The window icon, compiled in so the binary needs nothing beside it.
+///
+/// ⚠️ Stored as a PNG and decoded at startup rather than as raw pixels: a
+/// 256x256 RGBA blob is 256 KB of binary against 60 KB here, and `image` is
+/// already a dependency for the GIF writer.
+///
+/// Returns `None` rather than panicking. The bytes are a compile-time constant
+/// so this either always decodes or never does, and `icon_decodes` asserts the
+/// former -- but a window with the platform's default icon still beats no
+/// window at all.
+fn icon() -> Option<egui::IconData> {
+    let decoded = image::load_from_memory(ICON).ok()?.to_rgba8();
+    let (width, height) = decoded.dimensions();
+    Some(egui::IconData {
+        rgba: decoded.into_raw(),
+        width,
+        height,
+    })
+}
+
+/// Original artwork, not a game asset — see `assets/README.md`.
+const ICON: &[u8] = include_bytes!("../assets/icon.png");
+
 fn window() -> eframe::Result<()> {
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_inner_size([1180.0, 760.0])
+        .with_min_inner_size([720.0, 420.0])
+        .with_title("Dimentio");
+    if let Some(art) = icon() {
+        viewport = viewport.with_icon(art);
+    }
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1180.0, 760.0])
-            .with_min_inner_size([720.0, 420.0])
-            .with_title("Dimentio"),
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
@@ -114,4 +141,27 @@ fn window() -> eframe::Result<()> {
             Ok(Box::new(app::Viewer::from_args()))
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// ⚠️ The icon is a file on disk reached by `include_bytes!`, so replacing
+    /// it with something the decoder cannot read would silently drop the icon
+    /// at runtime rather than fail the build. This is what notices.
+    #[test]
+    fn icon_decodes() {
+        let art = icon().expect("the embedded icon should decode");
+        assert_eq!(art.width, art.height, "the icon should be square");
+        assert_eq!(
+            art.rgba.len() as u32,
+            art.width * art.height * 4,
+            "RGBA should be four bytes a pixel"
+        );
+        assert!(
+            art.rgba.chunks(4).any(|p| p[3] == 0),
+            "no transparent pixel: the rounded corners were not keyed out"
+        );
+    }
 }

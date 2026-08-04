@@ -254,6 +254,39 @@ class TestGroupsAndEntries:
             e.descriptor & effgeom.DESCRIPTOR_ATTRIBUTES <= 0b1111 for e in records
         )
 
+    def test_the_translucent_bit_is_surfaced_rather_than_only_masked_away(self):
+        """✅ Bit 15 asks for alpha blending (D283), and 211 entries set it.
+
+        ⚠️ **Both readings of the same bit have to hold at once.** The attribute
+        mask must still discard it or every vertex mis-strides, and the flag
+        must still be readable or the blend derivation loses its only per-draw
+        input. Masking alone is what hid it from D263.
+        """
+        records = effdata.entries(self._data())
+        assert sum(1 for e in records if e.translucent) == 211
+        assert effgeom.DESCRIPTOR_ATTRIBUTES & effgeom.DESCRIPTOR_TRANSLUCENT == 0
+        marked = [e for e in records if e.translucent]
+        assert {e.descriptor for e in marked} == {0x8005, 0x8007, 0x800D}
+        # ⚠️ The control: the same descriptors without bit 15 exist in the file
+        # and must read as ordinary draws, or this is testing the value and not
+        # the bit.
+        assert all(
+            not e.translucent for e in records if e.descriptor in (0x0005, 0x0007, 0x000D)
+        )
+
+    def test_the_translucent_bit_does_not_change_how_a_vertex_is_read(self):
+        """⛔ The mask stays. A display list read under `0x8009` and under
+        `0x0009` is the same geometry: bit 15 takes no index, so leaving it in
+        reads two bytes too many per vertex and swallows the next opcode."""
+        data = self._data()
+        entry = next(e for e in effdata.entries(data) if e.translucent)
+        plain = effgeom.mesh_at(
+            data, entry.display_list, entry.descriptor & effgeom.DESCRIPTOR_ATTRIBUTES
+        )
+        marked = effgeom.mesh_at(data, entry.display_list, entry.descriptor)
+        assert marked.triangles() == plain.triangles()
+        assert marked.strays == 0 and len(marked.primitives) > 0
+
 
 @pytest.mark.gamedata
 class TestTheHeader:

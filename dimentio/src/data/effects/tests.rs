@@ -223,3 +223,114 @@ fn an_unnamed_bank_selects_nothing_rather_than_every_sourceless_image() {
     let catalog = catalog::Catalog::load(&scratch.path);
     assert!(bank(catalog.entries(), "").is_empty());
 }
+
+/// One draw, so a derivation can be asked about a single set of inputs.
+fn a_draw(blend: u32, sampler: Option<i32>, translucent: bool) -> Draw {
+    Draw {
+        blend,
+        translucent,
+        sampler,
+        ..Default::default()
+    }
+}
+
+/// One sampler row declaring an alpha type and nothing else.
+fn a_sampler(alpha_type: Option<u32>) -> SamplerDef {
+    SamplerDef {
+        alpha_type,
+        ..Default::default()
+    }
+}
+
+/// ✅ The three the sampler alone decides, at an alpha that forces nothing.
+///
+/// ⚠️ **255 is the control**, and it has to be: every input below forces mode 3,
+/// so a derivation that always answered 3 would pass each of them and only this
+/// would notice.
+#[test]
+fn the_samplers_alpha_type_decides_the_mode_when_nothing_overrides_it() {
+    let ask =
+        |kind: u32| a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&[a_sampler(Some(kind))], 255);
+    assert_eq!(ask(0), BLEND_OPAQUE);
+    assert_eq!(ask(1), BLEND_CUTOUT);
+    assert_eq!(ask(2), BLEND_TRANSLUCENT);
+}
+
+/// ⛔ **The descriptor bit alone forces alpha blending**, whatever the sampler
+/// declares — `ori r0,r0,2` at `0x8005c960`. 211 draws set it, and `bleck`
+/// masked it away until D283 because the attribute stride needs it gone.
+#[test]
+fn a_translucent_descriptor_bit_forces_alpha_blending_over_an_opaque_sampler() {
+    let samplers = [a_sampler(Some(0))];
+    assert_eq!(
+        a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&samplers, 255),
+        BLEND_OPAQUE,
+        "the control: without the bit this draw is opaque"
+    );
+    assert_eq!(
+        a_draw(BLEND_DERIVED, Some(0), true).blend_mode(&samplers, 255),
+        BLEND_TRANSLUCENT
+    );
+}
+
+/// ⚠️ **Strictly between**, which is what makes this a runtime value rather than
+/// a file one: 0 and 255 leave the sampler's own answer standing and everything
+/// between them does not. 341 draws change mode the moment an instance fades.
+#[test]
+fn an_alpha_strictly_inside_the_range_forces_alpha_blending_and_the_ends_do_not() {
+    let samplers = [a_sampler(Some(0))];
+    let at = |alpha: u8| a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&samplers, alpha);
+    assert_eq!(at(255), BLEND_OPAQUE);
+    assert_eq!(at(0), BLEND_OPAQUE);
+    assert_eq!(at(254), BLEND_TRANSLUCENT);
+    assert_eq!(at(1), BLEND_TRANSLUCENT);
+}
+
+/// ⛔ **A declared selector is not derived from.** 432 draws name 4, 5 or 6, and
+/// running them through the derivation would turn every glow into plain alpha.
+#[test]
+fn a_declared_selector_survives_a_sampler_that_would_have_derived_otherwise() {
+    let samplers = [a_sampler(Some(0))];
+    for selector in [1, 2, 4, 5, 6] {
+        assert_eq!(
+            a_draw(selector, Some(0), true).blend_mode(&samplers, 128),
+            selector,
+            "selector {selector} was overwritten by the derivation"
+        );
+    }
+}
+
+/// ⚠️ **An export predating the field keeps plain alpha.** Reading a missing
+/// `alpha_type` as 0 would turn 2,528 draws of every schema-4 export opaque —
+/// the trap D280's node alpha and D281's UV scale each hit from the other side.
+#[test]
+fn a_sampler_with_no_recorded_alpha_type_keeps_the_plain_alpha_every_older_reader_used() {
+    assert_eq!(
+        a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&[a_sampler(None)], 255),
+        BLEND_TRANSLUCENT
+    );
+    assert_eq!(
+        a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&[], 255),
+        BLEND_TRANSLUCENT,
+        "an export with no sampler table at all"
+    );
+    assert_eq!(
+        a_draw(BLEND_DERIVED, None, false).blend_mode(&[a_sampler(Some(0))], 255),
+        BLEND_TRANSLUCENT,
+        "a draw whose material names no texture"
+    );
+}
+
+/// ⛔ **Selector 0 cannot reach additive** (D283). No record carries an alpha
+/// type of 3, but `kind + 1` would turn one into mode 4 — a glow out of a
+/// derivation that provably cannot produce one.
+#[test]
+fn an_alpha_type_no_record_carries_cannot_derive_an_additive_glow() {
+    for kind in 0..4 {
+        let mode = a_draw(BLEND_DERIVED, Some(0), false).blend_mode(&[a_sampler(Some(kind))], 255);
+        assert!(
+            (BLEND_OPAQUE..=BLEND_TRANSLUCENT).contains(&mode),
+            "alpha type {kind} derived mode {mode}"
+        );
+    }
+}

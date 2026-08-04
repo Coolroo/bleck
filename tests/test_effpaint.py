@@ -10,6 +10,7 @@ refuted image-index candidates all were (D210, D218).
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import struct
 from pathlib import Path
@@ -156,6 +157,42 @@ class TestTheWrapByte:
         assert self._wrap(5) == (effpaint.WRAP_MIRROR, effpaint.WRAP_CLAMP)
         assert self._wrap(8) == (effpaint.WRAP_CLAMP, effpaint.WRAP_MIRROR)
         assert self._wrap(15) == (effpaint.WRAP_MIRROR, effpaint.WRAP_MIRROR)
+
+
+class TestTheAlphaType:
+    """`+0x03` bits 2-3, which the blend derivation reads (D283).
+
+    ⛔ Reading the whole byte as the type gets every record wrong: 186 of the
+    file's 350 hold 11, which is 2 once the two bits are taken and 11 otherwise.
+    """
+
+    def _kind(self, byte: int) -> int:
+        data = a_file([], [a_texture(0, flags=byte)], [], b"")
+        sampler = effpaint.sampler_at(data, 0)
+        assert sampler is not None
+        return sampler.alpha_type
+
+    def test_the_two_bits_are_taken_from_the_middle_of_the_byte(self):
+        assert self._kind(0b0000) == effpaint.ALPHA_OPAQUE
+        assert self._kind(0b0100) == effpaint.ALPHA_CUTOUT
+        assert self._kind(0b1000) == effpaint.ALPHA_TRANSLUCENT
+
+    def test_the_bits_around_them_are_not_read(self):
+        """⚠️ The file's commonest byte is 11 — bits 0, 1 and 3 — and only bit
+        3 belongs to this field. A shift or a mask that is off by one turns
+        every one of those 186 records into a different mode."""
+        for other in (0b0011, 0b0001, 0b0010, 0b0000):
+            assert self._kind(0b1000 | other) == effpaint.ALPHA_TRANSLUCENT
+            assert self._kind(0b0100 | other) == effpaint.ALPHA_CUTOUT
+            assert self._kind(other) == effpaint.ALPHA_OPAQUE
+
+    def test_the_raw_byte_survives_beside_the_decoding(self):
+        """The other six bits are unread, so throwing the byte away would lose
+        the only record of them."""
+        assert self._kind(0b1011) == effpaint.ALPHA_TRANSLUCENT
+        data = a_file([], [a_texture(0, flags=0b1011)], [], b"")
+        sampler = effpaint.sampler_at(data, 0)
+        assert sampler is not None and sampler.flags == 0b1011
 
 
 class TestTheEvaluators:
@@ -337,6 +374,22 @@ class TestAgainstTheRealFile:
         assert len(turned) == 26
         assert {round(s.uv.rotation) for s in turned} == {90, -90}
 
+    def test_the_alpha_type_is_a_three_valued_enum_and_never_reaches_four(self):
+        """✅ 0, 1 and 2 across all 350 records, and ⛔ never 3 (D283).
+
+        ⚠️ **The never-3 is the load-bearing half.** The derivation is
+        `(accumulator & 1) + 1`, so a fourth value would read as blend mode 4 —
+        additive — out of a path that provably cannot produce a glow.
+        """
+        counts = collections.Counter(
+            s.alpha_type for s in effpaint.samplers(self._data())
+        )
+        assert counts == {
+            effpaint.ALPHA_TRANSLUCENT: 240,
+            effpaint.ALPHA_CUTOUT: 56,
+            effpaint.ALPHA_OPAQUE: 54,
+        }
+
     def test_the_wrap_byte_is_not_one_mode_for_both_axes(self):
         data = self._data()
         every = effpaint.samplers(data)
@@ -365,9 +418,39 @@ class TestTheExport:
 
     def test_the_schema_names_the_two_new_tables(self, tmp_path):
         written = self._manifest(tmp_path)
-        assert written["schema"] == 4
+        assert written["schema"] == 5
         assert len(written["materials"]) == 524
         assert len(written["samplers"]) == 350
+
+    def test_every_sampler_carries_the_alpha_type_its_flags_byte_declares(self, tmp_path):
+        """⚠️ Decoded in the exporter, not left to the reader. `bleck` owns the
+        format, and a second copy of `>> 2 & 3` in every consumer is a second
+        place for it to be wrong."""
+        written = self._manifest(tmp_path)
+        for row in written["samplers"]:
+            assert row["alpha_type"] == (row["flags"] >> 2) & 3
+            assert row["alpha_type"] in (0, 1, 2)
+        counts = collections.Counter(r["alpha_type"] for r in written["samplers"])
+        assert counts == {2: 240, 1: 56, 0: 54}
+
+    def test_no_draw_carries_a_resolved_blend_mode(self, tmp_path):
+        """⛔ **The mode must not be baked** (D283). The derivation reads the
+        evaluated colour alpha, which the runtime fade moves, so a resolved mode
+        is wrong for 341 draws the moment anything fades — and 2,528 draws would
+        be frozen at whatever the exporter happened to compute.
+
+        ⚠️ The teeth are the 0 staying a 0: an exporter that quietly wrote 1, 2
+        or 3 there would pass every other assertion in this file.
+        """
+        written = self._manifest(tmp_path)
+        seen = collections.Counter(
+            draw["blend"]
+            for entry in written["effects"]
+            for part in entry["parts"]
+            for draw in part["draws"]
+        )
+        assert set(seen) == {0, 4, 5, 6}, "a derived mode was written as a selector"
+        assert seen[0] == 2528
 
     def test_the_three_evaluators_share_one_curve_table(self, tmp_path):
         """⛔ **One table, not three.** A curve named by a node and by a
@@ -415,6 +498,28 @@ class TestTheExport:
             draw["blue"],
             draw["alpha"],
         ]
+
+    def test_every_draw_carries_the_descriptor_bit_the_stride_mask_discards(
+        self, tmp_path
+    ):
+        """✅ The other input of the derivation, per draw (D283).
+
+        ⚠️ **Checked against the mesh the draw names**, not against itself: the
+        two travel by different routes — the flag is written per draw and the
+        descriptor per display list — so agreeing is evidence, and a `False`
+        written for every draw would fail here rather than pass quietly.
+        """
+        written = self._manifest(tmp_path)
+        draws = [
+            draw
+            for entry in written["effects"]
+            for part in entry["parts"]
+            for draw in part["draws"]
+        ]
+        for draw in draws:
+            mesh = written["meshes"][draw["mesh"]]
+            assert draw["translucent"] == bool(mesh["descriptor"] & 0x8000)
+        assert sum(1 for d in draws if d["translucent"]) == 211
 
     def test_the_wrap_byte_is_decoded_into_the_two_axes(self, tmp_path):
         written = self._manifest(tmp_path)

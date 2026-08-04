@@ -313,6 +313,7 @@ fn one_draw(material: Modulate) -> Entry {
                 mesh: 0,
                 chain: vec![0],
                 blend: 0,
+                translucent: false,
                 image: 0,
                 wrap: 0,
                 red: Some(material.red),
@@ -922,4 +923,266 @@ fn a_part_flattened_onto_a_plane_is_drawn_and_one_flattened_onto_a_line_is_not()
     };
     assert_eq!(pieces(&[sheet]), 1, "a flattened plane was skipped");
     assert_eq!(pieces(&[line]), 0, "a line was drawn");
+}
+
+/// One draw naming sampler row 0, so the derivation has an alpha type to read.
+fn sampled(translucent: bool) -> Entry {
+    let mut entry = one_draw(Modulate::default());
+    entry.parts[0].draws[0].sampler = Some(0);
+    entry.parts[0].draws[0].translucent = translucent;
+    entry
+}
+
+fn alpha_typed(kind: u32) -> Vec<SamplerDef> {
+    vec![SamplerDef {
+        alpha_type: Some(kind),
+        ..Default::default()
+    }]
+}
+
+/// A one-texel image at a given alpha, so the alpha compare is the only thing
+/// that can decide whether it reaches the frame.
+fn faint(alpha: u8) -> Vec<Vec<Option<Texture>>> {
+    let raw = png(
+        1,
+        1,
+        &[Texel {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: alpha,
+        }],
+    );
+    vec![vec![Texture::decode(&raw).ok()]]
+}
+
+/// ⛔ **The alpha compare, which used to be one rule for every draw.** A sampler
+/// declaring cut-out asks for `GEQUAL 128` (D270, D283), so a texel at 100 is a
+/// hole — where the same texel under a translucent declaration is drawn faint.
+///
+/// ⚠️ **The translucent case is the control**, and it is the same image, the
+/// same draw and the same frame: without it a renderer that had simply stopped
+/// painting would pass.
+#[test]
+fn a_sampler_declaring_cut_out_discards_a_texel_under_the_threshold_that_a_translucent_one_keeps() {
+    let entry = sampled(false);
+    let images = faint(100);
+    let nodes = [node(255.0)];
+    let drawn = |kind: u32| {
+        let samplers = alpha_typed(kind);
+        covered(&shot(
+            &entry,
+            0.0,
+            Some(art_with(&images, &nodes, &[], &[], &samplers)),
+        ))
+    };
+    assert!(
+        drawn(2) > 500,
+        "the control drew {} pixels at alpha 100",
+        drawn(2)
+    );
+    assert_eq!(drawn(1), 0, "a cut-out sampler kept a texel below 128");
+}
+
+/// ✅ And the same threshold lets a texel *above* it through, so the cut-out
+/// mode is a compare rather than a refusal to draw.
+#[test]
+fn a_cut_out_sampler_still_draws_a_texel_over_the_threshold() {
+    let entry = sampled(false);
+    let images = faint(200);
+    let nodes = [node(255.0)];
+    let samplers = alpha_typed(1);
+    assert!(
+        covered(&shot(
+            &entry,
+            0.0,
+            Some(art_with(&images, &nodes, &[], &[], &samplers)),
+        )) > 500
+    );
+}
+
+/// A two-texel image: one opaque red, one wholly transparent green. Under an
+/// opaque draw the game paints both; under an alpha blend the second is a hole.
+fn half_transparent() -> Vec<Vec<Option<Texture>>> {
+    let raw = png(
+        2,
+        1,
+        &[
+            Texel {
+                r: 255,
+                g: 0,
+                b: 0,
+                a: 255,
+            },
+            Texel {
+                r: 0,
+                g: 255,
+                b: 0,
+                a: 0,
+            },
+        ],
+    );
+    vec![vec![Texture::decode(&raw).ok()]]
+}
+
+/// How many pixels of the frame are more green than red — the transparent half
+/// of the image, which only an opaque draw paints.
+fn greenish(image: &Image) -> usize {
+    (0..image.size().height)
+        .flat_map(|y| (0..image.size().width).map(move |x| (x, y)))
+        .filter(|&(x, y)| {
+            let pixel = image.pixel(x, y);
+            pixel.g > pixel.r && pixel.g > pixel.b
+        })
+        .count()
+}
+
+/// ⛔ **The descriptor bit forces alpha blending, and that is visible in the
+/// pixels** (D283). An opaque draw paints its wholly transparent texels too —
+/// which is why reading the mode correctly makes `dmen_warp` *more* opaque, not
+/// less. With bit 15 set the same draw blends and those texels are holes.
+#[test]
+fn a_translucent_descriptor_bit_stops_an_opaque_draw_painting_its_transparent_half() {
+    let images = half_transparent();
+    let nodes = [node(255.0)];
+    let samplers = alpha_typed(0);
+    let painted = |translucent: bool| {
+        greenish(&shot(
+            &sampled(translucent),
+            0.0,
+            Some(art_with(&images, &nodes, &[], &[], &samplers)),
+        ))
+    };
+    assert!(
+        painted(false) > 100,
+        "the control painted only {} transparent pixels, so an opaque draw is \
+         not reaching them and nothing below measures the descriptor bit",
+        painted(false)
+    );
+    assert_eq!(
+        painted(true),
+        0,
+        "bit 15 did not force alpha blending, so a translucent draw painted \
+         texels the file says are holes"
+    );
+}
+
+/// ⚠️ **The alpha the frame composed to, not the material's own.** A draw that
+/// derives to opaque at full alpha must become an alpha blend the moment its
+/// node fades it — 341 draws of the real file are exposed to exactly this, and
+/// a mode resolved once at load would pin every one of them wrongly.
+#[test]
+fn a_node_fading_an_opaque_draw_turns_it_into_an_alpha_blend() {
+    let entry = sampled(false);
+    let images = half_transparent();
+    let samplers = alpha_typed(0);
+    let painted = |alpha: f32| {
+        let nodes = [node(alpha)];
+        greenish(&shot(
+            &entry,
+            0.0,
+            Some(art_with(&images, &nodes, &[], &[], &samplers)),
+        ))
+    };
+    assert!(painted(255.0) > 100, "the control never drew opaque");
+    assert_eq!(
+        painted(128.0),
+        0,
+        "a half-faded draw stayed opaque, so the mode was taken at the wrong \
+         alpha"
+    );
+}
+
+/// A 200-unit square in the XY plane at depth `z`, with coordinates, so the
+/// rasteriser is handed a textured surface rather than a flat one.
+fn plane(z: i32) -> Geometry {
+    Geometry {
+        positions: vec![-100, -100, z, 100, -100, z, 100, 100, z, -100, 100, z],
+        uvs: vec![0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0],
+        triangles: vec![0, 1, 2, 0, 2, 3],
+        ..Default::default()
+    }
+}
+
+/// Two opaque images, in the order the two draws take them.
+///
+/// ⚠️ **`Art::images` is indexed by draw slot**, so swapping the draws has to
+/// swap these with them — otherwise the colour follows the slot and the frame
+/// changes for a reason that has nothing to do with depth.
+fn two_colours(swapped: bool) -> Vec<Vec<Option<Texture>>> {
+    let solid =
+        |r, g, b| Texture::decode(&png(1, 1, &[Texel { r, g, b, a: 255 }])).expect("a 1x1 png");
+    let (red, blue) = (solid(255, 0, 0), solid(0, 0, 255));
+    if swapped {
+        vec![vec![Some(blue), Some(red)]]
+    } else {
+        vec![vec![Some(red), Some(blue)]]
+    }
+}
+
+/// One part issuing a draw over each plane, in the order given.
+fn two_planes(swapped: bool) -> Entry {
+    let mut entry = one_draw(Modulate::default());
+    let over = |mesh: usize| Draw {
+        mesh,
+        sampler: Some(0),
+        ..entry.parts[0].draws[0].clone()
+    };
+    entry.parts[0].draws = if swapped {
+        vec![over(1), over(0)]
+    } else {
+        vec![over(0), over(1)]
+    };
+    entry
+}
+
+/// ⛔ **Modes 1 and 2 write depth and mode 3 does not** (D267, D283), and that
+/// is what decides which of two overlapping draws is seen.
+///
+/// ⚠️ **Asserted as order-independence rather than as "the near one wins"**, so
+/// the test says nothing about which way the fitted camera happens to face. A
+/// depth-writing draw is decided by the depth buffer, so swapping the two draws
+/// cannot change the frame; a blended one is decided by paint order, so swapping
+/// them must.
+#[test]
+fn an_opaque_draw_is_ordered_by_the_depth_buffer_where_an_alpha_blended_one_is_not() {
+    let nodes = [node(255.0)];
+    let meshes = [plane(-20), plane(20)];
+    let frame = |swapped: bool, kind: u32| {
+        let images = two_colours(swapped);
+        let samplers = alpha_typed(kind);
+        let entry = two_planes(swapped);
+        let art = Art {
+            images: &images,
+            meshes: &meshes,
+            nodes: &nodes,
+            samplers: &samplers,
+            ..Default::default()
+        };
+        shot(&entry, 0.0, Some(art)).as_rgba().to_vec()
+    };
+    assert!(
+        frame(false, 2) != frame(true, 2),
+        "the control: two blended planes drew the same frame either way round, \
+         so they do not overlap and nothing below measures the depth buffer"
+    );
+    assert_eq!(
+        frame(false, 0),
+        frame(true, 0),
+        "an opaque draw did not write depth, so paint order decided it"
+    );
+    // ⚠️ **Cut-out writes depth too**, and only its compare differs. Every texel
+    // here is alpha 255, so nothing is discarded and the two modes must land the
+    // same frame — which is what makes this a check on the Z write alone.
+    assert_eq!(
+        frame(false, 1),
+        frame(true, 1),
+        "a cut-out draw did not write depth, so paint order decided it"
+    );
+    assert_eq!(
+        frame(false, 1),
+        frame(false, 0),
+        "cut-out and opaque differ on wholly opaque art, so something other \
+         than the alpha compare separates them"
+    );
 }

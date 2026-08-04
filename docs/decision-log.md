@@ -20481,3 +20481,376 @@ frame the chain is built in.
 
 🔶 `bleck/formats/effnode.py`'s `NODE_BILLBOARD` is directionally right and
 wider than what the code does. Not renamed here; nothing reads it yet.
+
+## D283 — Blend mode 0 is "auto", and the sampler byte that drives it (2026-08-04)
+
+D270 read the six-way switch at `0x8005c9f8` and stopped at zero, which is
+2,528 of 2,960 draws. Zero is not a mode: it is a request to derive one.
+
+### ✅ The derivation, at `0x8005c870`-`0x8005c9f8`
+
+The selector seeds an accumulator, the game scans the group's section-8
+entries, and the accumulator becomes the mode the switch then reads:
+
+| selector | seed | scans textures? |
+|---|---|---|
+| 0 | 0 | yes |
+| 1 | 0 | no |
+| 2 | 1 | no |
+| >= 3 | 2 | scan skipped, mode stays as the selector |
+
+Three things set bits. `or r0,r0,r10` at `0x8005c94c` folds in the **sampler's
+`+0x03` byte shifted right two**; `ori r0,r0,2` at `0x8005c960` fires on **bit
+15 of the section-8 vertex descriptor**; `ori r0,r0,2` at `0x8005c980` fires
+when the **evaluated colour alpha is strictly between 0 and 255**. Bit 1 ends
+the scan. Then `li r0,3` (`0x8005c9ac`) or `(acc & 1) + 1` (`0x8005c9bc`).
+
+⛔ **So mode 0 can only ever be 1, 2 or 3.** Additive is unreachable from it.
+
+### ✅ `Sampler.flags` bits 2-3 are the alpha type
+
+`effpaint.py` records `+0x03` as "🔶 non-zero on most records and not applied
+anywhere". It is applied here, and it is a three-valued enum: 0 opaque, 1
+cut-out, 2 translucent — never 3, across all 350 records.
+
+🟢 **The control.** Against the measured alpha channel of the TPL image each
+sampler names: 344 of 350 agree, 56 of 56 declared cut-out are measured 1-bit,
+and the six disagreements all declare coarser than the image was authored. A
+field correlating 98.3% with data it never touches is not a coincidence.
+
+🟢 **The behaviour control.** `map_derkness`'s four draws all resolve to 3 —
+the plain alpha the viewer already uses — so the known-good purple render is
+untouched. `explosion`'s selector-4 draws are likewise unchanged.
+
+### ⚠️ It is not a constant; it moves at runtime
+
+At rest the 2,528 split **280 opaque / 61 cut-out / 2,187 alpha blend**. But
+`0x8005c7dc`-`0x8005c820` computes the tested alpha as
+`(material_alpha * (arg + 1) * (effsub_wp[0x8B] + 1)) >> 16`, so **any instance
+fade below 255 flips a 1 or a 2 to a 3**. 341 draws are exposed.
+
+⛔ **An exporter must therefore carry the inputs, not a resolved mode** —
+`alpha_type` and the descriptor's bit 15 — and let the reader apply the rule at
+its own alpha. Baking the mode is wrong for 341 draws the moment anything fades.
+
+⚠️ **The alpha compare and the Z write differ across the derived modes**: 1 and
+2 write Z, 3 does not; 2 alone sets `GEQUAL 128`. ⛔ No colour-keyed compare
+exists anywhere in the path, so "the black is keyed out" is ruled out.
+
+### ✅ The state D270 could not follow
+
+`effsub_wp+0x40` is a global override with a three-instruction setter at
+`0x8005fb74`. It initialises to 0 (`li r0,0`, `0x8005bd38`), has **seven** call
+sites, and only two pass non-zero — `3` at `0x8009f0c8` and `4` at `0x800a6ea8`,
+each paired with a reset. `+0x74` (setter `0x8005fa68`) is a decal flag whose
+only blend effect is 1 -> 2. Two more were found: `+0x3c` overrides `GXSetZMode`
+(default -1, "keep"), and `+0xd8` would re-issue
+`GXSetBlendMode(BLEND, DSTALPHA, INVDSTALPHA)` at `0x8005cc30` — 🔶 written only
+to 0 by the init block, so apparently dead.
+
+### ⛔ `dmen_warp`'s black box is not a blend bug
+
+Reported as a black box that should be transparent. It is neither.
+
+✅ Part A's display list at `0x176a0` is **one four-vertex fan, +/-3200 units,
+UV 0->1 over the whole of image 67** — a full-screen quad, ten times the span of
+Dimentio's star. Its sampler declares alpha type 0 and the image is alpha 255
+throughout, so it resolves to **mode 1: opaque, always-pass, Z write on**. The
+game paints the black interior too. Reading the mode correctly makes the viewer
+*more* opaque here, not less.
+
+⛔ **There is no framebuffer copy.** Every `bl` from the dmen modules into the
+GX library is one of ten targets — blend, alpha compare, Z, matrices, `GXBegin`
+— with no EFB copy, no indirect texture and no texture-object setup. The entry
+function at `0x800a04ec` is the ordinary `effEntry` pattern. ⛔ This refutes the
+reading taken from a gameplay screenshot, that the rectangle re-samples a copy
+of the framebuffer: the distortion is real on screen, but no copy is made here.
+
+🔶 What is left is the **TEV stage configuration** at `0x8005d540`-`0x8005e0xx`:
+eight-plus variants of `GXSetTevOrder` plus colour/alpha In and Op, selected by
+something other than the blend switch and entirely unread. It is the only
+remaining state that could stop an opaque black texel painting black.
+
+### ⚠️ The instrument note
+
+`xref` returns nothing for `effsub_wp` because the game holds it as a **pointer
+in sdata** — `lwz r6,-30492(r13)` then `lwz r0,64(r6)` — so no code ever
+materialises `0x805ae824`. Finding the writers took a scan for that load
+followed by a store through the loaded register. `xref` reporting zero here is
+the same failure mode D279 recorded for address lookups against the symbol list.
+
+## D284 — Blend mode 0 is derived at the frame, not at export (2026-08-04)
+
+D283 read the derivation out of the game and stopped at the reading. This
+applies it: `bleck` exports its inputs, `dimentio` folds them per draw per
+frame, and 35 of the export's 139 effects change on screen.
+
+### ✅ What was built
+
+`effects.json` is **schema 5**. Two fields, both inputs and neither a mode:
+
+| field | where | what |
+|---|---|---|
+| `alpha_type` | per `samplers` row | `(flags >> 2) & 3` — 0 opaque, 1 cut-out, 2 translucent |
+| `translucent` | per draw | bit 15 of the vertex descriptor, 211 of 2,960 |
+
+⛔ **No resolved mode is written.** The third input is the *evaluated* colour
+alpha, which the instance fade moves, so a baked mode is wrong for 341 draws the
+moment anything fades. `blend` still holds only 0, 4, 5 and 6, and a test pins
+that the 0s stay 0.
+
+⚠️ **`effgeom.DESCRIPTOR_ATTRIBUTES = 0x7FFF` is unchanged, and bit 15 is
+surfaced beside it.** Both readings of the same bit have to hold at once: the
+mask must discard it or every vertex mis-strides, and the flag must be readable
+or the derivation loses its only per-draw input. Masking alone is what hid it
+from D263, which saw the bit tested and did not know what for.
+
+The viewer's `Draw::blend_mode(samplers, alpha)` is the transcription, and
+`Surface::painted(mode, …)` is **one table for the derived modes and the
+declared ones** — the game runs both through the same switch at `0x8005c9f8`, so
+a second table would be a second place to be wrong. Modes 1 and 2 are
+`Blend::Opaque` and differ only in the compare (always-pass against `GEQUAL
+128`); the rasteriser writes depth for `Opaque` alone, which is exactly the Z
+behaviour D283 measured.
+
+### 🟢 The controls, which are what make this a reading
+
+- **`map_derkness` is bit-identical**, all four draws resolving to 3. It is also
+  the effect D281's UV scroll runs on, so a regression would have been doubly
+  visible.
+- **The four effects whose every draw is a declared selector — `dmen_eye`,
+  `zunbaba_weak_p`, `sinigami_cannon`, `map_fireBar` — are bit-identical**, as
+  are 25 of the 40 effects holding an additive draw. That, not `explosion`'s
+  whole render, is the control for "selector 4 is untouched".
+- ⚠️ **`explosion`'s render is not identical, and D283's compressed form of the
+  claim would have read as a regression.** Only 2 of its 21 draws are selector 4;
+  10 are selector 0 deriving to opaque. Its red starburst and yellow glow are
+  unchanged and its core went from a **black blob to an orange-red fireball** —
+  the mode-1 draws were being blended dark and now paint their own colour.
+- **Nothing changed that was not predicted.** 46 effects were predicted to
+  change from the at-rest derivation and 35 did; the other 11 are explained by
+  the prediction using the *static* material alpha where the renderer uses the
+  animated composed one, which pushes those draws to mode 3 at the frames
+  sampled. Zero effects changed unpredicted.
+- **`dmen_warp-L` got more opaque, by one near-black pixel** (957 → 958 of
+  234,256), and its black rectangle stayed black — the outcome D283 called for
+  and said must not be "fixed".
+
+⚠️ **The baseline was the pre-change binary against the *new* manifest**, and
+that was checked rather than assumed: the schema-5 file renders identically to
+the schema-4 one under the old binary, so every difference is the viewer.
+
+### ⚠️ Applied per draw where the game accumulates per group
+
+The scan at `0x8005c870` ORs across **the group's** section-8 entries, and
+`GXSetBlendMode` is issued once for the group. This applies the rule to each
+draw on its own, because the manifest has no group and exporting section 7's
+grouping serves nothing else.
+
+✅ Measured: **2,520 of the 2,528 selector-0 groups hold exactly one entry**, so
+the two readings differ on 8 draws in 4 groups — **2 at rest, both in
+`heart_use`** (groups 145 and 191), which read cut-out per draw and alpha blend
+per group. Recorded rather than fixed.
+
+### ⚠️ Two counts that look like D283's and are not
+
+D283's "280 opaque / 61 cut-out / 2,187 alpha blend" counts **groups**. Counted
+per section-8 entry the same rule gives **276 / 61 / 2,191**, and per *issued*
+draw with an untextured draw treated as having no alpha type, **165 / 63 /
+2,300** — 111 draws whose material names no texture. None of the three is wrong;
+they answer different questions, and quoting one for another is how a control
+comes to disagree with itself.
+
+⚠️ A draw with no sampler paints no image and reaches the rasteriser's flat path,
+which is opaque whatever the mode says. So the viewer's choice there — keep
+plain alpha, the same answer an export predating the field gets — changes no
+pixel and keeps stale exports rendering as they always did.
+
+### ⛔ What was deliberately not done
+
+- The TEV stage configuration, D283's remaining 🔶, is untouched. It is the only
+  known state that could stop an opaque black texel painting black, and it is
+  someone else's thread.
+- The `Modulate::invisible()` skip from D280 still drops a draw whose composed
+  alpha is 0 before any mode is derived. In the game such a draw resolves to mode
+  1 and is painted; here it is not drawn at all. 🔶 Untested which is right, and
+  changing D280's rule on the way past would have made this change unmeasurable.
+
+### Cost
+
+Python tests 1,674 → 1,683; Rust 276 → 288 (11 here). Lint, clippy, fmt and
+`mkdocs --strict` clean. Every new test was checked by breaking the piece it
+covers and watching it fail — including the depth write, which slipped through
+the first cut-out test and needed the order-independence property to catch.
+
+## D285 — Dimentio's warp copies the framebuffer and bends it with an indirect texture; D283's "no framebuffer copy" was scoped too narrowly (2026-08-04)
+
+D283 read `dmen_warp-L` part A as an opaque black quad the game genuinely
+paints, and ruled out a framebuffer copy because every `bl` from the dmen
+modules (`0x8009C000`-`0x800AC000`) into the GX library was one of ten
+non-copy targets. That sweep was right and its conclusion was wrong: **the
+copy is not in the dmen module.** It is in `eff_sub.c`, the shared effect
+renderer, which every effect reaches through the same three-argument draw
+call. A `bl` from `dmen_warp` to `GXCopyTex` was never going to exist.
+
+### ✅ What runs when Dimentio appears
+
+`ls3_12_dimentio_intro` (module 1, sec5 `+0x138200`) calls
+`evt_npc_teleport_effect(0, "dimain")`. That builtin (`0x8010A910`) branches
+on arg0 and runs one of two DOL scripts:
+
+| arg0 | script | sounds | scale |
+|---|---|---|---|
+| != 0 (appear) | `0x8041BE58` | `SFX_EVT_DEMEN_APPEAR1` + `SFX_EVT_DEMEN_HAMON1` | X 0 -> 1 over 300 ms |
+| 0 (vanish) | `0x8041C090` | `SFX_EVT_DEMEN_GOOUT1` + `SFX_EVT_DEMEN_HAMON1` | X 1 -> 0 |
+
+Both call `evt_eff(0, "dmen_warp", 1, x, y, z, 0...)`. `hamon` is 波紋,
+"ripple" — the sound names the visual. The third argument reaches
+`dmen_warp`'s entry (`0x800A04EC`) as its variant selector: 0 picks
+`dmen_warp-S`, non-zero picks **`dmen_warp-L`**, parts `"A"` and `"B"`
+(strings at `0x80329758`).
+
+✅ So the effect D283 investigated as a black box is exactly the one that
+plays on every Dimentio teleport, in both directions — and on Mario, Tippi
+and the fairy too, in `evt_dimen_handle_cutscenes` (`0x8040F6D8`).
+
+### ✅ The mechanism: EFB copy plus `GXSetTevIndWarp`
+
+`dmen_warp`'s draw function `0x800A06B4`:
+
+| addr | call | effect |
+|---|---|---|
+| `0x800A0718` | `0x8005FBE4(1)` | `effsub_wp+0x98` = framebuffer-capture slot (`0x80060BC8`, 44 bytes at `effsub_wp+0xA8`) |
+| `0x800A07C4` | `0x8005FC3C(5)` | `effsub_wp+0x9C` = warp mode 5 |
+| `0x800A07FC` | draw part A | the +/-3200 quad D283 measured |
+| `0x800A0828` | `0x8005FC3C(1)` | warp mode 1 |
+| `0x800A0858` | draw part B | |
+| `0x800A0860` | `0x8005FBE4(0)` | capture off |
+
+In `eff_sub.c`'s draw function (`0x8005C47C`), gated at `0x8005DE14` on
+`effsub_wp+0x98`:
+
+```
+8005de54  GXSetTexCopySrc(0, 0, 608, 480)     0x802903e8
+8005de68  GXSetTexCopyDst(304, 240, RGB565)   0x8029044c
+8005de74  GXCopyTex(buffer, clear=FALSE)      0x80290c58
+8005de78  GXPixModeSync                       0x8028f98c
+8005de9c  GXInitTexObj                        0x802915a0  (named)
+8005dec4  GXInitTexObjLOD                     0x802917f4  (named)
+8005ded8  GXLoadTexObj(slot+4, map)           0x80291af4
+8005def4  GXSetTexCoordGen2(..., GX_TG_POS)   0x8028f18c
+```
+
+Captured once per frame; `slot+0x24` is the "already captured" flag, set at
+`0x8005DE44`, tested at `0x8005DE20`. `GX_TG_POS` makes it a screen-space
+lookup.
+
+`effsub_wp+0x9C` then indexes a **nine-entry jump table at `0x80407F78`**.
+Five entries (modes 1, 2, 5, 7, 8) run the same quartet:
+
+```
+GXSetIndTexMtx(GX_ITM_0, mtx, scale_exp)     0x8029259c
+GXSetIndTexOrder(0, coord, map)              0x802927f4
+GXSetIndTexCoordScale(0, 1, 1)               0x802926f0
+GXSetTevIndWarp(stage-1, 0, signed, 0, 1)    0x80292928
+```
+
+✅ **The effect's own texture displaces the lookup into the framebuffer
+copy.** That is the smear in the screenshot, and it explains the hard
+rectangle edge too: the edge is the +/-3200 quad, the interior is the warped
+scene.
+
+The five 2x3 matrices live at `0x80407F00`, `0x80407F18`, `0x80407F30`,
+`0x80407F48`, `0x80407F60`, all `[[k,0,0],[0,k,0]]` with k = 0.1 (0.5 for
+mode 2), and the block ends exactly where the jump table starts. The layout
+corroborates the reading without relying on the disassembly.
+
+Mode 5 (part A) passes `signed_offset = TRUE` (`0x8005EB90`) — a centred
+displacement — and animates the warp texture's UV translation from the frame
+counter at `gp+0x14` (`0x8005EBAC`-`0x8005EBF8`), so the swirl moves. Mode 4
+animates a different offset from a counter at `effsub_wp+0xA0`
+(`0x8005DF50`-`0x8005DF9C`).
+
+### 🟢 The positive control
+
+`0x802903e8` / `0x8029044c` / `0x80290c58` are pinned by the driver at
+`0x80063400`-`0x80064B50`, whose only external entry points are
+`evt_env_blur_on` (`0x800E658C`) and `evt_env_static_blur_on` (`0x800E6624`)
+— functions the eu0 list *names* as a blur. It issues the identical trio five
+times, at `0x800634C8`, `0x80063598`, `0x8006367C`, `0x800640F8`, `0x80064788`,
+the fourth with the same 608x480 source rectangle used at `0x8005DE4C`.
+
+`GXSetIndTexMtx` is confirmed from its own body: `0x8029259C` maps `1..3`,
+`5..7`, `9..11` to 0..2 — the `GX_ITM_0` / `_S0` / `_T0` enum groups — and
+biases the scale by +17 (`addi r8,r5,17`), which is how GX packs `scale_exp`.
+
+### ✅ The selector is runtime C state, not a file field
+
+⛔ Nothing in `effdata` carries the mode. `effsub_wp+0x9C` is written only by
+`0x8005FC3C`. **Sixteen effects turn the capture on** (`0x8005FBE4`), and the
+mode each uses, read from the `li r3,N` before each `0x8005FC3C` call:
+
+| mode | effects |
+|---|---|
+| 0 | `pure_heart` (`0x80095F4C`) |
+| 1 | `dmen_warp` B (`0x800A082C`), `clear` (`0x800AD880`), `ac_stopwatch` (`0x800BDF10`), `manera_warp` (`0x802507E4`), `manera_money` (`0x80250D5C`), `sundale_support` (`0x802513B8`) |
+| 2 | `pure_heart` (`0x800960A8`) |
+| 3 | `pure_heart` (`0x80096078`) |
+| 4 | `event_3dget` (`0x800980B0`) |
+| 5 | `dmen_warp` A (`0x800A07C8`) |
+| 6 | `3d_switch` (`0x800B7928`, `0x800B7FD4`) |
+| 7 | `jigen_guard` (`0x800BA6A4`), `event_cage` (`0x800BDB90`) |
+
+`dmen_magic` (`0x8009AB70`), `event_zunbaba` (`0x800A0498`), `event_ddtas`
+(`0x800B3790`), `samurai_voice_sub1` (`0x800B3DB8`) and `event_bamagic`
+(`0x800BFE40`) enable the capture without an explicit mode, so they run
+mode 1 — `0x8005FBE4` sets `+0x9C` to 1 as it enables (`0x8005FC20`).
+
+`dmen_warp` additionally `strncmp`s the current map (`gp+0x44`) against `"ls"`,
+then `"ls4_12"`, then `"sp4_17"` at `0x800A0760`-`0x800A0790` and swaps its
+tint colour, so Castle Bleck is tinted differently from everywhere else.
+
+### ⛔ What the viewer can never do from the file
+
+The quad's colour is the framebuffer. Image 67 — black with a one-pixel white
+border, which D283 measured correctly — is the **displacement map for the
+indirect stage**, not the visible surface. So:
+
+- ⛔ Rendering image 67 as the quad's colour is wrong by construction, and
+  D283's "reading the mode correctly makes the viewer *more* opaque here" is
+  the wrong repair. The black box is not faithful; it is the absence of a
+  screen grab.
+- 🔶 The honest options are to mark these 16 effects as screen-warping and
+  decline to render them, or to implement a real screen-capture-and-displace
+  pass in the viewer using the modes and matrices above. The exporter must
+  carry the mode as a hard-coded per-effect table, because the file does not
+  contain it.
+- ⚠️ Which of parts A and B carries the visible swirl is not separated here.
+  Both warp; A is signed and time-scrolling, B is not.
+
+### ⚠️ Instrument notes
+
+- `scripts/evtdis.py` reads **DOL scripts only** and says so. Dimentio's map
+  scripts are in the REL, and reaching them needs three steps: `bleck lz
+  decompress` the REL, walk the module-0 import relocations to resolve
+  `USER_FUNC` targets to DOL symbols, and walk module-1 relocations for
+  strings and inner script pointers.
+- ⚠️ **A REL relocation's `offset` field is cumulative and does not advance by
+  4 per entry.** Adding 4 shifts every recorded site by 4 x (relocations so
+  far); `sec5+0x138200` then reads as a relocation instead of an opcode header
+  and the script decodes as nothing at all. This looked exactly like "wrong
+  REL" for one round.
+- ✅ **eu0 loads `files/rel/relF.bin`.** `relDecompName` (`0x805AE1A4`) and
+  `relCompName` (`0x805AE1A8`) point at `"relF.rel"` and `"relF.bin"`.
+  `rel.bin` and `relD.bin` are other builds: their module-0 addends run past
+  `0x80680898`, outside this DOL's image, and `ls3_12_dimentio_intro`'s
+  offset decodes as garbage in both. Only `relF.bin`'s addends land on eu0
+  symbols.
+- ⚠️ D279's trap again, from the other side: `dolscan.py callers` on the five
+  entry points of the blur driver found only `evt_env_*`, which correctly said
+  "`dmen_warp` does not use the blur driver". It also would have said nothing
+  useful about `eff_sub`, because `dmen_warp` reaches the copy through a
+  *shared* draw call and a flag word, not a call. **When a mechanism is
+  centralised, `callers` on the mechanism finds the wrong module.** The way in
+  was `effsub_wp`'s field setters (`0x8005FA68`-`0x8005FC48`) and then a scan
+  for loads of those offsets through the sdata pointer.
