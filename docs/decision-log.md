@@ -20181,3 +20181,303 @@ draw nothing, every other must fill its frame - and pins that exactly one such
 effect exists, so the branch cannot silently stop being taken.
 
 `cargo test` 253 -> 259 passing; clippy and fmt clean.
+
+## D281 - The file's other two curve evaluators reach the pixels, and `flat()` was throwing away planes (2026-08-03)
+
+D278 located the two evaluators `eff_sub.c` inlines beside the node one and
+measured what they drive; D280 applied the *static* half of one of them. Both
+are now read, animated, and drawn - and getting the acceptance test to pass
+exposed a separate bug that had nothing to do with curves.
+
+### ✅ Both evaluators read out of the game, not pattern-matched
+
+⚠️ **`symbols list` names none of this**, so the route was `dolscan.py dis` at
+the two addresses D266 recorded.
+
+**Material, `0x8005c634`.** `lha 6(mat)` is the count and `lha 4(mat)` the first
+command; section 10 is stepped by 8 out of `lwz r16,40(r21)`. The four register
+bytes at `+0x00..+0x03` are `stb`'d into a four-byte slot array at `r1+88`
+**before** the loop, and a curve writes one byte with `stbx r16, r15, tag`.
+
+✅ **So a colour curve overrides one channel and leaves the register alone** -
+the same scheme as the node evaluator's ten slots (D266). A material with only a
+red curve keeps its own green, blue and alpha. That settles how the curves
+compose with D280's static read: by slot, not by replacement, and it is measured
+rather than chosen. ⚠️ A `f32` sample goes through `fctiwz` then `stbx`, so it
+is truncated toward zero and the low byte kept; all 212 material curves in the
+file are `u8` already, so nothing exercises it.
+
+**Texture, `0x8005d040`.** `lha 26(tex)` count, `lha 24(tex)` first, and a
+**five-float** slot array whose base is `addi r20,r1,120` at `0x8005cc40`,
+filled from `+0x04`, `+0x08`, `+0x0C`, `+0x10`, `+0x14`. `stfsx f0, r20, tag*4`.
+
+| tag | slot | offset |
+|---|---|---|
+| 0, 1 | translate U, V | `+0x04`, `+0x08` |
+| 2, 3 | **scale U, V** | `+0x0C`, `+0x10` |
+| 4 | rotation, degrees | `+0x14` |
+
+D278 inferred 0, 1 and 4 from the sample ranges; 2 and 3 are named outright by
+the code.
+
+### ✅ The texture matrix, block for block
+
+Three `PSMTX` blocks, each skipped when it would be the identity, concatenated
+as **`R · T · S`** - scale first, then translate, then rotate:
+
+| block | built when | call |
+|---|---|---|
+| scale | `su != 1` or `sv != 1` | `Scale(su, sv, 1)` |
+| translate | `tu != 0` or `tv != 0` or **`sv != 0`** | `Trans(tu, 1 - tv - sv, 0)` |
+| rotate | `rot != 0` | `Trans(.5,.5,0) · RotRad(z, -rot*pi/180) · Trans(-.5,-.5,0)` |
+
+⚠️ **The V translation is `1 - tv - sv`, not `tv`.** With the usual `sv == 1`
+that is `-tv`, and with `tv == 0` the whole block collapses to a zero
+translation - which is why the default record needs no matrix at all and the
+reading is self-consistent. Read it as `+tv` and every scrolling texture runs
+backwards; 75 of the file's 93 texture curves drive exactly that slot.
+
+The constants are read, not guessed. `__init_registers` at `0x80006304` sets
+`_SDA2_BASE_ = 0x805B7260`, and the offsets the code uses hold `0.5`, `-0.5`,
+`1.0`, `0.0` and `0.01745329` (pi/180). ⛔ D279's trap again: an address search
+in `symbols list` would have returned nothing here and read as "unnamed".
+
+### ✅ The wrap byte, at `0x8004cb54`
+
+Two bits per axis, mirror winning over the repeat bit: bit 0 S-repeat, bit 1
+T-repeat, bit 2 S-mirror, bit 3 T-mirror, into GX's own `CLAMP/REPEAT/MIRROR`.
+Measured over the 350 records: **264 repeat/repeat, 67 clamp/clamp, 16
+mirror/mirror, 3 mixed**. ⛔ Reading the byte as one mode for both axes gets 3
+of 350 wrong in a way that is invisible until a UV coordinate leaves the unit
+square - which is precisely what UV animation now does.
+
+### ✅ D278's arithmetic reproduces exactly
+
+Re-measured from the file: 4,752 commands, **nodes 4,447, materials 212,
+textures 93**, zero overlap between any pair, union 4,752 with nothing left
+over. 97 of 524 materials and 103 of 350 textures carry a run. 58 texture
+records carry a non-identity static UV transform, 26 of them a rotation, and
+every one of those 26 is exactly +/-90 degrees.
+
+### ✅ What shipped
+
+`effects.json` is **schema 4**: `materials` (524 rows: `rgba` + curve run) and
+`samplers` (350 rows: `image`, `wrap`, decoded `wrap_s`/`wrap_t`, `flags`,
+`translate`, `scale`, `rotation`, curve run), both referencing the **same**
+`curves` table the nodes already used - 2,940 -> 3,221 rows, and the file stays
+at 9.53 MB. A draw gained `"material"` and `"sampler"`; its static `red`/.../
+`wrap` stay so an older reader still works.
+
+`bleck/formats/effpaint.py` is a new module on the same seam `effgeom`,
+`effcurve` and `effnode` came out on (D272): `effdata` was heading back toward
+the 1,000-line ceiling. `dimentio/src/data/effects.rs` reached 990 lines and was
+split into `effects/{mod,tests}.rs`, matching `data/mesh/`.
+
+⚠️ **`SamplerDef::scale` absent must read as 1, not 0** - D280's `Option` trap in
+the other direction. A missing scale read as zero collapses every texture
+coordinate onto one texel and paints every sprite a flat colour.
+
+### ⛔ `flat()` was a determinant test, and it threw away planes
+
+Curves alone did **not** fix the acceptance test. `map_derkness --from 240`
+stayed at 0 of 8 because its Void floor - node 2148, scale
+`(1.42857, 0, 1.42857)`, a 14,000-unit sheet carrying a looping 601-frame
+V-scroll - has a **zero determinant**, and `pose::flat` skipped it entirely.
+
+✅ **Volume is the wrong test; rank is the right one.** A singular transform
+still has a plane to map a triangle onto, and effect geometry is mostly planar
+already. `flat` now returns true only when every 2x2 minor of the linear part
+vanishes - rank 0 or 1, a point or a line, which genuinely has no area.
+Degenerate triangles were already dropped by the rasteriser's own area test, so
+the old early-out was an optimisation that was quietly deciding what to draw.
+
+Measured across the export: of 11,634 sampled draw-frames with a singular
+transform, **8,139 are rank < 2 and 3,495 are rank 2 across 55 effects**. Three
+of D278's four "render as nothing" effects - `item_delete`, `event_guide`,
+`mini_power_up` - are in that set and now draw.
+
+⛔ Rejected: special-casing `map_derkness`, and dropping the flatness check
+altogether. The first is not a rule; the second pushes 8,139 degenerate
+draw-frames at the rasteriser to produce nothing.
+
+### ⛔ D280's reading of `spindash` is refuted
+
+D280 called it "the export's only wholly transparent effect" from its
+`(255, 255, 255, 0)` register and marked the sentinel question 🔶 untested. The
+register is the **starting value of a tag-3 alpha curve** that rises to 255 by
+the middle of its 91 frames and returns to 0. Not a sentinel, and not
+transparent - a spin-dash puff that fades in and out, rendered as nothing.
+
+⚠️ The general form: **a static field read without its curve is a first frame,
+not a value.** D280's own test encoded the wrong claim and still passed, because
+it rendered with no material table and so re-derived the same wrong answer. It
+now says "at frame 0" rather than "for its whole life".
+
+### ✅ Measured, at the pixels
+
+Same export for both; the pre-change binary built from `git archive HEAD`.
+
+| command | HEAD | now |
+|---|---|---|
+| `reel --effect map_derkness --from 240` | **0 of 8** | **8 of 8** |
+| `reel --effect map_derkness --to 239` | 7 of 8 | 8 of 8 |
+| `event_cage --from 2` | 2 of 8 | 6 of 8 |
+| `map_whirl --from 40` | 0 of 8 | 8 of 8 |
+| `chaos --from 120` | 0 of 8 | 7 of 8 |
+| `pure_heart --from 120` | 0 of 8 | 8 of 8 |
+
+✅ **The control**: the HEAD binary run against the *new* export reproduces the
+left column exactly, so the schema bump alone changes nothing and every
+difference is the viewer.
+
+Corpus, 139 effects at `--frames 5 --size 128`, old binary vs new on one export:
+parts painted **602 -> 643 of 674** (89.3% -> 95.4%), **88 of 139 effects render
+different pixels**, 19 report more differing frame pairs and one fewer
+(`dmen_warp-S`, 4 -> 3).
+
+✅ **Confirmed by eye.** `map_derkness --from 240` was six identical empty cells
+and is now a purple vortex whose swirl arms sit in a different position in every
+cell. `map_whirl` was six identical blue splashes and now moves.
+
+### ⚠️ The sweep that measured nothing, twice
+
+The first corpus sweep compared PNGs byte for byte and reported 139 of 139
+changed **and** 139 of 139 nondeterministic. Both numbers were artefacts: the
+effect-name list had CRLF line endings, every `reel` invocation failed with `no
+effect named "hit\r"`, no PNG was written, and `cmp` on two missing files
+reports a difference. ⚠️ The only reason this was caught is that the sweep ran
+an **old-vs-old control** in the same loop - the same rule that D70-D74 cost
+four entries to learn, and it paid for itself the first time it was applied
+here. The verdict then came from the reel's own reported numbers instead.
+
+### 🔶 Still not honoured
+
+- **Texture `+0x03`**, the "flags" byte: exported, non-zero on most records, and
+  no read of it appears anywhere in the evaluator. Untested; not applied.
+- **The runtime overrides the evaluators end with.** The material result is
+  multiplied by a global RGBA at `wp+136..139`, and the texture's translate can
+  be replaced outright from `wp+68/72` when `wp+76` is set. Both are per-instance
+  runtime state, not in the file, so the viewer treats them as identity.
+- ⛔ Node alpha inheritance and node `+0x0F` are untouched, as D280 left them.
+
+## D282 - Node alpha *is* inherited, and `+0x0F` is a yaw-only billboard (2026-08-03)
+
+D280 applied each node's own alpha and deliberately did not inherit it, naming
+exactly the disassembly that would settle it. D278 left `+0x0F` measured but
+unread. Both are now read out of the game.
+
+⚠️ Per D279, every address below was checked against
+`work/upstream/spm-headers/linker/spm.eu0.lst` before disassembly.
+`effSubMain` is at `0x8005bf08`; `camGetPtr` at `0x80055b24`; `sin`/`cos` at
+`0x802642ac`/`0x80263ea0`; `PSMTXIdentity`/`PSMTXConcat`/`PSMTXTrans`/
+`PSMTXScale`/`PSMTXRotRad` at `0x8027a270`/`0x8027a2d0`/`0x8027a7b4`/
+`0x8027a834`/`0x8027a55c`.
+
+### ✅ The node walker's signature, and its two recursive calls
+
+The evaluator D266 read at `0x8005f2d4` is the curve loop inside a recursive
+walker that starts at **`0x8005f1a8`**:
+
+```
+f(r3=EffData*, r4=base, r5=nodeIndex, r6=Mtx34* parentWorld,
+  r7=u8 parentAlpha, r8=mirrorParity, f1=frame)
+```
+
+Both top-level call sites pass **`li r7,255`** (`0x8005f958`, `0x8005f9a8`), and
+the prologue returns outright on `cmpwi r7,0` (`0x8005f1e8`). r7 is an 8-bit
+alpha seeded opaque at the root.
+
+### ⛔ D280's "alpha is not inherited" is superseded
+
+```
+8005f734: clrlwi. r3,r31,24        ; own alpha & 0xFF
+8005f738: beq  0x8005f7d4          ; own == 0 -> no draw, no children
+8005f73c: addi r0,r3,1
+8005f740: mullw r0,r28,r0          ; parentAlpha * (own + 1)
+8005f744: rlwinm. r24,r0,24,24,31  ; composed = (that >> 8) & 0xFF
+8005f748: beq  0x8005f7d4          ; composed == 0 -> no draw, no children
+```
+
+`r31` is the node's own alpha on both paths: `lbz r31,14(r30)` (`0x8005f214`)
+when it has no curves, and the `fctiwz` of slot 9 at `lwz r31,308(r1)`
+(`0x8005f63c`) when it does.
+
+✅ **The control is in the same eight instructions.** The two recursive calls
+treat matrix and alpha identically - child gets the composed pair, sibling gets
+the incoming pair unchanged:
+
+| | child (`+0x02`) | sibling (`+0x00`) |
+|---|---|---|
+| matrix | `addi r6,r1,240` = `PSMTXConcat` output | `mr r6,r27` incoming |
+| alpha | `mr r7,r24` composed | `mr r7,r28` incoming |
+
+A third value propagates the same way - the mirror-parity flag `r29`, toggled
+per negative scale axis (`0x8005f654`/`f674`/`f694`) and used to swap
+`GXSetCullMode` at `0x8005c5a8`. So the walker's "compose into the child, pass
+through to the sibling" pattern is real, detectable, and alpha is in it.
+
+⚠️ **Two behaviours, not one formula.** A node whose own alpha is 0, or whose
+composed alpha truncates to 0, **suppresses its whole subtree** while its
+siblings still walk. And `clrlwi` truncates mod 256 rather than clamping.
+
+### ✅ Where the composed alpha lands, and what it does not touch
+
+`r24` reaches the draw (`bl 0x8005c47c`, arg 4), which stores it and combines at
+`0x8005c7dc`:
+
+```
+finalA = ((globalA + 1) * (matA * (chainAlpha + 1))) >> 16
+finalC = (matC * (globalC + 1)) >> 8          for R, G, B
+```
+
+✅ **Node alpha scales alpha alone, never RGB**, so D280's `Modulate` folding is
+structurally correct. The global tint at `effWork +0x88..0x8B` defaults to
+`FF FF FF FF` - `0x8005bdcc` stores it from `_SDA2_BASE_-30056` = `0x805AFCF8`.
+`_SDA2_BASE_` is `0x805B7260`, pinned by `-30120` = `0.0f`, `-30116` =
+`0.0174533`, `-30108` = `1.0f`. So it is an identity multiply until the setter
+at `0x8005fab0` is called, and the viewer can ignore it.
+
+⚠️ D278's 21.4%-with-inheritance was the right measurement all along. The reason
+to withhold it in D280 was absence of evidence, which was the correct call then
+and is not now.
+
+### ✅ Node `+0x0F` is a yaw-only billboard, not a mode
+
+```
+8005f430: lbz  r0,15(r30)
+8005f438: beq  0x8005f454
+8005f43c: bl   0x80055b50      ; camGetCurNo
+8005f440: bl   0x80055b24      ; camGetPtr
+8005f444: lfs  f1,384(r3)      ; CamEntry +0x180 targetAngle
+8005f448: lfs  f0,216(r1)      ; slots[4] = rotate.y
+8005f44c: fsubs f0,f0,f1
+8005f450: stfs f0,216(r1)
+```
+
+`216(r1)` is `r1+200 + 4*4` - slot 4, rotate.y, from D266's `addi r7,r1,200`.
+The write lands before `lfs f29,216(r1)` (`0x8005f4a4`) feeds
+`PSMTXRotRad(mtx,'y',...)` (`li r4,121`, `0x8005f51c`).
+
+✅ **`targetAngle` is the camera's yaw about +Y, in degrees.** `camdrv.h` names
+it; and `0x800584d4`..`0x80058520` computes
+`pos.x = target.x - dist*sin(targetAngle * 0.0174533)` with `pos.z` from `cos`
+- an XZ orbit. It is compared against `90.0`/`-90.0` (`0x805AFE38`/`0x805AFE3C`)
+at `0x80061fb8`.
+
+⛔ **The value 3 is not a mode.** A whole-DOL sweep for `lbz rD,15(rA)` finds
+exactly two hits inside `0x8005bf08`..`0x800616e4` - `0x8005F220` and
+`0x8005F430` - and both only test against zero. A sweep of every load/store in
+that region at displacements `0x0C`..`0x0F` confirms nothing reads the byte as
+part of a wider field. Any non-zero value behaves identically; whatever the
+authoring tool meant by 3, this build discards it.
+
+⚠️ The flag also **forces the slow TRS path even with no curves**
+(`0x8005f228`, where curve-count 0 *and* flag 0 is what takes the fast path that
+uses the stored section-6 matrix). And because the yaw is subtracted from the
+*local* rotation before the concat, a billboarded node still inherits its
+parents' rotation: the composed yaw is `parentYaw + (ownYaw - camYaw)`, not a
+world-space face-the-camera. Honouring it needs a camera yaw in the same world
+frame the chain is built in.
+
+🔶 `bleck/formats/effnode.py`'s `NODE_BILLBOARD` is directionally right and
+wider than what the code does. Not renamed here; nothing reads it yet.

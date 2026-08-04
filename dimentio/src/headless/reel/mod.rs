@@ -98,6 +98,8 @@ pub fn take(request: &Request) -> Result<Report, String> {
             meshes: library.meshes(),
             nodes: library.nodes(),
             curves: library.curves(),
+            materials: library.materials(),
+            samplers: library.samplers(),
         },
         request,
     );

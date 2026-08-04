@@ -6,7 +6,7 @@
 use super::*;
 use crate::data::effects::Part;
 use crate::data::mesh::Modulate;
-use crate::data::texture::{png, Texel};
+use crate::data::texture::{png, Texel, Wrap};
 use crate::render::fixtures::{differing, FRAME};
 use crate::render::{scene, Background, Image, Piece, Size, View};
 
@@ -161,8 +161,10 @@ fn billboard_light() -> f32 {
         Vec3::ZERO,
         HALF,
         None,
-        Blend::Alpha,
-        Modulate::default(),
+        Surface {
+            blend: Blend::Alpha,
+            ..Default::default()
+        },
     );
     let corners = mesh.positions();
     crate::render::raster::lighting(&basis, &[corners[0], corners[1], corners[2]])
@@ -222,9 +224,7 @@ fn a_bound_image_changes_the_pixels_of_its_own_part_only() {
         0.5,
         Some(Art {
             images: &images,
-            meshes: &[],
-            nodes: &[],
-            curves: &[],
+            ..Default::default()
         }),
     );
     assert!(
@@ -319,6 +319,8 @@ fn one_draw(material: Modulate) -> Entry {
                 green: Some(material.green),
                 blue: Some(material.blue),
                 alpha: Some(material.alpha),
+                material: None,
+                sampler: None,
             }],
         }],
     }
@@ -410,6 +412,55 @@ fn an_intermediate_node_alpha_composites_instead_of_snapping_to_solid() {
     );
 }
 
+/// ✅ A faded parent fades its children (D282, `0x8005f734`).
+///
+/// ⚠️ The chain here is opaque leaf under faded parent, which is exactly the
+/// case D280's "take the last node's alpha" got wrong — an all-opaque chain
+/// reduces to the same answer either way, so only a faded *ancestor* separates
+/// them. Revert `posed` to `alpha: step.alpha` and this is the test that fails.
+#[test]
+fn a_faded_parent_fades_the_child_that_issues_the_draw() {
+    let mut entry = one_draw(Modulate::default());
+    entry.parts[0].draws[0].chain = vec![0, 1];
+    let images = white();
+
+    let both_opaque = [node(255.0), node(255.0)];
+    let faded_parent = [node(128.0), node(255.0)];
+    let at = |nodes: &[NodeDef]| shades(&shot(&entry, 0.0, Some(art_of(&images, nodes))));
+
+    let solid = at(&both_opaque);
+    let inherited = at(&faded_parent);
+    assert_eq!(solid.len(), 1, "{solid:?}");
+    assert_eq!(
+        inherited.len(),
+        1,
+        "the faded chain left the frame entirely"
+    );
+    assert!(
+        inherited[0].r < solid[0].r,
+        "the leaf's own 255 was used and the parent's 128 ignored: {:?} vs {:?}",
+        inherited[0],
+        solid[0]
+    );
+}
+
+/// ⛔ Zero is absorbing: a transparent parent takes its whole subtree with it,
+/// even where the node issuing the draw is fully opaque (D282).
+#[test]
+fn a_transparent_parent_suppresses_an_opaque_child() {
+    let mut entry = one_draw(Modulate::default());
+    entry.parts[0].draws[0].chain = vec![0, 1];
+    let images = white();
+    let nodes = [node(0.0), node(255.0)];
+
+    let frame = shot(&entry, 0.0, Some(art_of(&images, &nodes)));
+    assert_eq!(
+        shades(&frame),
+        Vec::new(),
+        "an opaque leaf under a transparent parent still painted"
+    );
+}
+
 /// ✅ 291 of the file's 524 materials are not white (D278). A viewer that drops
 /// the register paints a coloured glow as a white sprite.
 #[test]
@@ -462,7 +513,7 @@ fn an_invisible_draw_does_not_stretch_the_bounds() {
                 images: &images,
                 meshes: &meshes,
                 nodes,
-                curves: &[],
+                ..Default::default()
             }),
         )
     };
@@ -486,9 +537,8 @@ fn triangle(at: i32) -> Geometry {
 fn art_of<'a>(images: &'a [Vec<Option<Texture>>], nodes: &'a [NodeDef]) -> Art<'a> {
     Art {
         images,
-        meshes: &[],
         nodes,
-        curves: &[],
+        ..Default::default()
     }
 }
 
@@ -509,4 +559,367 @@ fn a_zero_sized_frame_is_empty_rather_than_a_panic() {
         })
         .collect();
     assert!(scene(&pieces, &view, Size::new(0, 0)).as_rgba().is_empty());
+}
+
+/// A four-texel image whose quadrants differ, so which texel a UV transform
+/// lands on is readable off the frame as a colour.
+fn quadrants() -> Vec<Vec<Option<Texture>>> {
+    let cell = |r, g, b| Texel { r, g, b, a: 255 };
+    let raw = png(
+        2,
+        2,
+        &[
+            cell(255, 0, 0),
+            cell(0, 255, 0),
+            cell(0, 0, 255),
+            cell(255, 255, 0),
+        ],
+    );
+    vec![vec![Texture::decode(&raw).ok()]]
+}
+
+/// One draw naming row 0 of both shared tables.
+fn tabled() -> Entry {
+    let mut entry = one_draw(Modulate::default());
+    entry.parts[0].draws[0].material = Some(0);
+    entry.parts[0].draws[0].sampler = Some(0);
+    entry
+}
+
+fn art_with<'a>(
+    images: &'a [Vec<Option<Texture>>],
+    nodes: &'a [NodeDef],
+    curves: &'a [Curve],
+    materials: &'a [MaterialDef],
+    samplers: &'a [SamplerDef],
+) -> Art<'a> {
+    Art {
+        images,
+        nodes,
+        curves,
+        materials,
+        samplers,
+        ..Default::default()
+    }
+}
+
+/// A curve holding one value for every frame of a 61-frame part.
+fn held(value: f32) -> Curve {
+    Curve {
+        length: 61,
+        start: 0,
+        end: 60,
+        looping: 0,
+        samples: vec![value; 61],
+    }
+}
+
+/// A curve that is one value for the first half of a part and another for the
+/// second, so a frame from each half must differ and nothing else moves.
+fn stepped(before: f32, after: f32) -> Curve {
+    Curve {
+        length: 61,
+        start: 0,
+        end: 60,
+        looping: 0,
+        samples: (0..=60)
+            .map(|f| if f < 30 { before } else { after })
+            .collect(),
+    }
+}
+
+/// The composition D281 read out of the game's own evaluator: it fills a
+/// four-byte slot array from the register and *then* lets a curve overwrite one
+/// byte by tag. A material driving green alone keeps its own red, blue and
+/// alpha.
+///
+/// ⛔ Replacing the whole register, or dropping the static fill, turns every
+/// partially animated material into a stranger's colour.
+#[test]
+fn a_colour_curve_overrides_one_channel_and_leaves_the_register_alone() {
+    let material = MaterialDef {
+        rgba: vec![10, 20, 30, 40],
+        curves: vec![[1, 0]],
+    };
+    let curves = [held(200.0)];
+    let composed = material.at(&curves, 5.0);
+    assert_eq!(composed.green, 200, "the curve never reached the channel");
+    assert_eq!(
+        (composed.red, composed.blue, composed.alpha),
+        (10, 30, 40),
+        "the curve replaced the whole register instead of one channel"
+    );
+    let plain = MaterialDef {
+        rgba: vec![10, 20, 30, 40],
+        curves: Vec::new(),
+    };
+    assert_eq!(
+        plain.at(&curves, 5.0).green,
+        20,
+        "a material with no curve                 was moved anyway"
+    );
+}
+
+/// ⚠️ **A curve that has not started leaves the register alone**, which is what
+/// `spindash` depends on: its register alpha is 0 and its curve begins at frame
+/// 1, so frame 0 is genuinely dark and every later frame is not (D281).
+#[test]
+fn a_colour_curve_before_its_first_frame_leaves_the_static_value() {
+    let material = MaterialDef {
+        rgba: vec![255, 255, 255, 0],
+        curves: vec![[3, 0]],
+    };
+    let curves = [Curve {
+        length: 91,
+        start: 1,
+        end: 90,
+        looping: 0,
+        samples: (1..=90).map(|f| f as f32 * 2.0).collect(),
+    }];
+    assert_eq!(
+        material.at(&curves, 0.0).alpha,
+        0,
+        "the curve started early"
+    );
+    assert_eq!(material.at(&curves, 10.0).alpha, 20, "the curve never ran");
+}
+
+/// ⛔ **D280's trap, in the other direction.** An export written before the
+/// sampler table has no `scale`, and reading a missing one as 0 collapses every
+/// texture coordinate onto a single texel — every sprite a flat colour.
+#[test]
+fn a_sampler_with_no_recorded_scale_multiplies_by_one_rather_than_zero() {
+    let plain = SamplerDef::default().at(&[], 0.0);
+    assert_eq!(plain.transform.scale, [1.0, 1.0]);
+    assert!(
+        plain.transform.is_identity(),
+        "a blank sampler moved the coordinates: {:?}",
+        plain.transform
+    );
+    assert_eq!(plain.wrap_s, Wrap::Repeat);
+    assert_eq!(plain.wrap_t, Wrap::Repeat, "a blank sampler stopped                 repeating, which is how every export before this one sampled");
+}
+
+/// ✅ The game builds `Trans(tu, 1 - tv - sv, 0)`, so with the usual `sv == 1`
+/// the V shift is **negated**. Reading it as `+tv` runs every scrolling texture
+/// backwards, and 75 of the file's 93 texture curves drive exactly that slot.
+#[test]
+fn the_v_translation_runs_the_way_the_game_builds_it() {
+    let sampler = SamplerDef {
+        translate: vec![0.25, 0.25],
+        scale: vec![1.0, 1.0],
+        ..Default::default()
+    };
+    let how = sampler.at(&[], 0.0);
+    assert_eq!(how.transform.offset[0], 0.25, "U was negated");
+    assert_eq!(how.transform.offset[1], -0.25, "V was not negated");
+}
+
+/// ✅ `Trans(.5,.5,0) · RotRad(z, -r) · Trans(-.5,-.5,0)`: the middle of the
+/// image is the one point a rotation leaves alone. 19 of the file's records
+/// turn +90 degrees and 7 turn -90.
+#[test]
+fn a_uv_rotation_turns_about_the_middle_of_the_image() {
+    let sampler = SamplerDef {
+        rotation: Some(90.0),
+        ..Default::default()
+    };
+    let how = sampler.at(&[], 0.0);
+    let (u, v) = how.transform.apply(0.5, 0.5);
+    assert!(
+        (u - 0.5).abs() < 1e-5 && (v - 0.5).abs() < 1e-5,
+        "the centre moved to ({u}, {v}), so the rotation turns about a corner"
+    );
+    let (u, v) = how.transform.apply(1.0, 0.5);
+    assert!(
+        (u - 0.5).abs() < 1e-5 && v.abs() < 1e-5,
+        "a quarter turn landed at ({u}, {v})"
+    );
+}
+
+/// ✅ Two bits per axis, decoded by `bleck` into GX's own enum. 84 of the
+/// file's 350 records ask for something other than repeat on one axis.
+#[test]
+fn the_wrap_modes_reach_the_sampler() {
+    let of = |s, t| {
+        SamplerDef {
+            wrap_s: Some(s),
+            wrap_t: Some(t),
+            ..Default::default()
+        }
+        .at(&[], 0.0)
+    };
+    assert_eq!(of(0, 1).wrap_s, Wrap::Clamp);
+    assert_eq!(of(0, 1).wrap_t, Wrap::Repeat);
+    assert_eq!(of(2, 0).wrap_s, Wrap::Mirror);
+    assert_eq!(of(2, 0).wrap_t, Wrap::Clamp);
+}
+
+/// ⛔ **The failure D281 exists to close.** The pose is byte-identical across
+/// these two frames and only the material's own curve moves — the state 32
+/// effects spend 1,523 frames in. A viewer reading the register alone renders
+/// both frames the same, and a frozen tail reads as a finished animation.
+#[test]
+fn a_colour_curve_changes_the_frame_while_the_pose_stands_still() {
+    let entry = tabled();
+    let images = white();
+    let nodes = [node(255.0)];
+    let curves = [stepped(255.0, 0.0)];
+    let materials = [MaterialDef {
+        rgba: vec![0, 0, 255, 255],
+        curves: vec![[0, 0]],
+    }];
+    let art = art_with(&images, &nodes, &curves, &materials, &[]);
+    let camera = Camera::fit(bounds(&entry, Some(art)));
+    let posed = |time: f32| {
+        quads(&entry, time, &camera, Some(art)).pieces[0]
+            .mesh
+            .positions()
+            .to_vec()
+    };
+    assert_eq!(
+        posed(0.1),
+        posed(0.8),
+        "the pose moved, so a difference in the pixels proves nothing"
+    );
+    let moved = differing(&shot(&entry, 0.1, Some(art)), &shot(&entry, 0.8, Some(art)));
+    assert!(
+        moved > 500,
+        "a colour curve changed nothing: {moved} pixels"
+    );
+}
+
+/// The same for the UV evaluator: the pose stands still and a translate curve
+/// walks the sampled texel across the image.
+#[test]
+fn a_uv_curve_changes_the_sampled_texel_while_the_pose_stands_still() {
+    let entry = tabled();
+    let images = quadrants();
+    let nodes = [node(255.0)];
+    let curves = [stepped(0.0, -0.5)];
+    let samplers = [SamplerDef {
+        wrap_s: Some(1),
+        wrap_t: Some(1),
+        scale: vec![1.0, 1.0],
+        curves: vec![[1, 0]],
+        ..Default::default()
+    }];
+    let art = art_with(&images, &nodes, &curves, &[], &samplers);
+    let early = shades(&shot(&entry, 0.1, Some(art)));
+    let late = shades(&shot(&entry, 0.8, Some(art)));
+    assert!(!early.is_empty() && !late.is_empty(), "nothing was drawn");
+    assert_ne!(
+        early, late,
+        "a UV curve left the sampled texels exactly where they were"
+    );
+}
+
+/// ⚠️ **The static UV transform, with no curve anywhere.** 28 of 139 effects
+/// carry one before any curve runs, and it changes which texel every fragment
+/// of the draw lands on.
+#[test]
+fn a_static_uv_transform_changes_which_texel_is_sampled() {
+    let entry = tabled();
+    let images = quadrants();
+    let nodes = [node(255.0)];
+    let plain = [SamplerDef {
+        scale: vec![1.0, 1.0],
+        ..Default::default()
+    }];
+    let turned = [SamplerDef {
+        scale: vec![1.0, 1.0],
+        rotation: Some(90.0),
+        ..Default::default()
+    }];
+    let at = |samplers: &[SamplerDef]| {
+        let images = &images;
+        let nodes = &nodes;
+        shades(&shot(
+            &entry,
+            0.0,
+            Some(art_with(images, nodes, &[], &[], samplers)),
+        ))
+    };
+    assert_ne!(
+        at(&plain),
+        at(&turned),
+        "a 90 degree UV rotation sampled exactly the same texels"
+    );
+}
+
+/// ⚠️ An export predating the tables keeps the draw's own four channels rather
+/// than reading a missing row as black.
+#[test]
+fn a_draw_with_no_material_row_keeps_its_own_channels() {
+    let images = white();
+    let nodes = [node(255.0)];
+    let entry = one_draw(Modulate {
+        red: 255,
+        green: 0,
+        blue: 0,
+        alpha: 255,
+    });
+    let red = shades(&shot(&entry, 0.0, Some(art_of(&images, &nodes))));
+    assert_eq!(red.len(), 1, "{red:?}");
+    assert_eq!((red[0].g, red[0].b), (0, 0), "the inline tint was dropped");
+    assert!(red[0].r > 0, "the fallback removed the whole sprite");
+}
+
+/// ⛔ **Rank, not determinant** (D281). `map_derkness` scales its ground sheet
+/// by `(1.42857, 0, 1.42857)`: the volume is gone and a 14,000-unit plane is
+/// not. The determinant test threw the whole thing away, which is why the
+/// effect's frozen tail drew nothing at all rather than a scrolling floor.
+#[test]
+fn a_transform_that_flattens_a_plane_still_has_something_to_draw() {
+    let sheet = [
+        1.42857, 0.0, 0.0, 0.0, //
+        0.0, 0.0, 0.0, 0.0, //
+        0.0, 0.0, 1.42857, 0.0,
+    ];
+    assert!(!flat(&sheet), "a plane was skipped as having no area");
+    let line = [
+        0.0, 0.0, 0.0, 0.0, //
+        0.0, 0.0, 0.0, 0.0, //
+        0.0, 0.0, 1.0, 0.0,
+    ];
+    assert!(flat(&line), "a line was kept");
+    assert!(flat(&[0.0; 12]), "a point was kept");
+}
+
+/// The pixels behind the rank rule: a part scaled flat in one axis must still
+/// reach the frame, and one scaled to a line must not.
+#[test]
+fn a_part_flattened_onto_a_plane_is_drawn_and_one_flattened_onto_a_line_is_not() {
+    let entry = tabled();
+    let images = white();
+    let meshes = [triangle(0)];
+    let sheet = NodeDef {
+        t: vec![0.0, 0.0, 0.0],
+        r: vec![0.0, 0.0, 0.0],
+        s: vec![1.0, 1.0, 0.0],
+        alpha: 255.0,
+        curves: Vec::new(),
+    };
+    let line = NodeDef {
+        s: vec![1.0, 0.0, 0.0],
+        ..sheet.clone()
+    };
+    let pieces = |nodes: &[NodeDef]| {
+        let art = Art {
+            images: &images,
+            meshes: &meshes,
+            nodes,
+            ..Default::default()
+        };
+        quads(
+            &entry,
+            0.0,
+            &Camera::fit(bounds(&entry, Some(art))),
+            Some(art),
+        )
+        .pieces
+        .len()
+    };
+    assert_eq!(pieces(&[sheet]), 1, "a flattened plane was skipped");
+    assert_eq!(pieces(&[line]), 0, "a line was drawn");
 }

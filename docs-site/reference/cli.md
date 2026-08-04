@@ -447,6 +447,23 @@ RGBA tint) and a `mesh`, indexing a `meshes` table at the top of the manifest.
     `part → node → draw → subdraw → material → texture → image`, which is why
     seven candidate fields were ruled out before it was found.
 
+!!! note "An effect animates three things, and only one of them is the pose"
+
+    The file drives a node's transform, a material's colour register **and** a
+    texture's UV transform from one shared `curves` table. A draw names a row of
+    `materials` and a row of `samplers` alongside its mesh, and each row carries
+    its static value and the curves that move it.
+
+    97 of the 524 materials animate their colour; 103 of the 350 texture records
+    animate their UVs. Read the pose alone and 32 effects hold a frozen picture
+    for 1,523 frames while their real data moves — `map_derkness`'s Void floor
+    scrolls for six seconds without the pose changing at all.
+
+    A `samplers` row also carries `wrap_s` and `wrap_t` as GX's own enum — 0
+    clamp, 1 repeat, 2 mirror — decoded from the file's two-bits-per-axis byte,
+    plus the static `translate`, `scale` and `rotation` (in degrees) that 58 of
+    them use before any curve runs.
+
 ### Dimentio, and the manifests
 
 `texture export`, `model export`, `sound export` and `effect export` each write

@@ -28,6 +28,14 @@
 //! not issued at all** — drawn, it would be a solid sprite where the data says
 //! there is nothing, which is the most convincing wrong picture available.
 //!
+//! ✅ **And both of those move over time**, since D281. The file drives three
+//! things from one curve table, not one: a node's transform, a material's
+//! colour register, and a texture's UV transform. `shading` and `sampling`
+//! evaluate the second and third at the same frame the pose is taken at.
+//! ⚠️ Without them 32 effects hold a byte-identical pose for 1,523 frames while
+//! their colour and UV data moves — which reads as a finished animation rather
+//! than as a bug, so nobody reports it (D278).
+//!
 //! ⚠️ **A flat part is not a missing part.** An effect's scales rise from zero,
 //! so 44% of draws collapse to nothing at frame 0 and are skipped. The exploded
 //! layout survives only for a draw with **no** geometry, where there is no
@@ -38,7 +46,9 @@
 
 use super::camera::Basis;
 use super::{Camera, Rgba};
-use crate::data::effects::{Curve, Draw, Entry, Mesh as Geometry, NodeDef};
+use crate::data::effects::{
+    Curve, Draw, Entry, MaterialDef, Mesh as Geometry, NodeDef, SamplerDef,
+};
 use crate::data::mesh::{Blend, Bounds, Face, Mesh, Modulate, Paint, Parts, Shape, Uv, Vec3};
 use crate::data::texture::{Sampling, Texture};
 use pose::{apply, flat, posed, Pose, FRAME_RATE};
@@ -78,7 +88,7 @@ const PALETTE: [Rgba; 6] = [
 /// slice leaves the draws past its end unpainted rather than shifting the
 /// artwork along by one. A slot of `None` is a draw that paints no image, which
 /// the file's untextured materials genuinely do.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct Art<'a> {
     pub images: &'a [Vec<Option<Texture>>],
     /// The manifest's shared display-list table, indexed by `Draw::mesh`.
@@ -88,6 +98,12 @@ pub struct Art<'a> {
     /// predating D266, in which case every part stacks at the origin.
     pub nodes: &'a [NodeDef],
     pub curves: &'a [Curve],
+    /// The colour registers and the texture records, indexed by
+    /// `Draw::material` and `Draw::sampler`. Empty for an export predating
+    /// D281, which then keeps the draw's own static channels and samples
+    /// repeat/repeat with no UV transform.
+    pub materials: &'a [MaterialDef],
+    pub samplers: &'a [SamplerDef],
 }
 
 impl<'a> Art<'a> {
@@ -138,6 +154,19 @@ pub struct Drawn {
     pub faded: usize,
 }
 
+/// Everything about painting one draw that is not the image or the geometry.
+///
+/// ⚠️ **Travelling together because all three are functions of the frame.** The
+/// blend mode is fixed, but the colour register and the UV transform are both
+/// sampled from the shared curve table (D281), and passing them separately down
+/// four call sites is how one of them comes to be evaluated at the wrong time.
+#[derive(Debug, Clone, Copy, Default)]
+struct Surface {
+    blend: Blend,
+    modulate: Modulate,
+    sampling: Sampling,
+}
+
 /// The colour a part is drawn in, so the table beside the viewport can mark a
 /// row with the same one.
 pub fn colour(part: usize) -> Rgba {
@@ -160,8 +189,10 @@ pub fn lit(camera: &Camera, part: usize) -> Rgba {
         Vec3::ZERO,
         HALF,
         None,
-        Blend::Alpha,
-        Modulate::default(),
+        Surface {
+            blend: Blend::Alpha,
+            ..Default::default()
+        },
     );
     let corners = mesh.positions();
     let intensity = super::raster::lighting(&basis, &[corners[0], corners[1], corners[2]]);
@@ -209,7 +240,7 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
             if shape.is_some() && flat(&pose.world) {
                 continue;
             }
-            let modulate = shading(named, &pose);
+            let modulate = shading(named, &pose, art, frame);
             // ⛔ **Not drawn at all, rather than drawn and blended away.** A
             // draw whose node and material together leave no alpha contributes
             // nothing to the frame, and painting it solid is the most
@@ -218,9 +249,14 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
                 faded += 1;
                 continue;
             }
+            let how = Surface {
+                blend,
+                modulate,
+                sampling: sampling(named, art, frame),
+            };
             built.push(Quad {
                 mesh: match shape {
-                    Some(geometry) => real(geometry, &pose.world, image, blend, modulate),
+                    Some(geometry) => real(geometry, &pose.world, image, how),
                     // ⛔ No geometry means no measured position either, so the
                     // stand-in keeps the exploded layout rather than pretending
                     // the origin is where it belongs.
@@ -229,8 +265,7 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
                         placement(entry, part, scale),
                         scale * HALF,
                         image,
-                        blend,
-                        modulate,
+                        how,
                     ),
                 },
                 colour: colour(part),
@@ -245,17 +280,48 @@ pub fn quads(entry: &Entry, time: f32, camera: &Camera, art: Option<Art<'_>>) ->
     }
 }
 
-/// What a draw's texels are multiplied by: the material's own colour register,
-/// with the drawing node's alpha folded into its alpha channel.
+/// What a draw's texels are multiplied by: the material's colour register at
+/// this frame, with the drawing node's alpha folded into its alpha channel.
 ///
 /// ⚠️ **Only the alpha is composed.** The node carries no colour of its own, so
 /// the RGB is the material's alone.
-fn shading(named: Option<&Draw>, pose: &Pose) -> Modulate {
-    let material = named.map(Draw::tint).unwrap_or_default();
+///
+/// ✅ **A colour curve overrides one channel of the register, not all four**
+/// (D281) — the game fills a four-byte slot array from the register before its
+/// curve loop runs. A material with a red curve alone keeps its own green, blue
+/// and alpha, which is why this composes with D280's static read rather than
+/// replacing it. An export with no `materials` table falls back to that read.
+fn shading(named: Option<&Draw>, pose: &Pose, art: Option<Art<'_>>, frame: f32) -> Modulate {
+    let material =
+        animated(named, art, frame).unwrap_or_else(|| named.map(Draw::tint).unwrap_or_default());
     Modulate {
         alpha: fade(pose.alpha, material.alpha),
         ..material
     }
+}
+
+/// The colour register at `frame`, or `None` where the manifest holds no row
+/// for this draw.
+fn animated(named: Option<&Draw>, art: Option<Art<'_>>, frame: f32) -> Option<Modulate> {
+    let (art, named) = art.zip(named)?;
+    let row = art.materials.get(named.material()?)?;
+    Some(row.at(art.curves, frame))
+}
+
+/// How a draw's image is folded and transformed at `frame`.
+///
+/// ⚠️ **Repeat/repeat with no transform is the fallback, not the answer.** It
+/// is what every export before D281 was drawn with, so a manifest that names no
+/// sampler must keep sampling the way it always did rather than clamping.
+fn sampling(named: Option<&Draw>, art: Option<Art<'_>>, frame: f32) -> Sampling {
+    let Some((art, named)) = art.zip(named) else {
+        return Sampling::default();
+    };
+    named
+        .sampler()
+        .and_then(|at| art.samplers.get(at))
+        .map(|row| row.at(art.curves, frame))
+        .unwrap_or_default()
 }
 
 /// Two 0..255 opacities as one.
@@ -303,7 +369,7 @@ pub fn bounds(entry: &Entry, art: Option<Art<'_>>) -> Bounds {
                 // drawn must not stretch it.** An effect with a transparent
                 // draw far off-centre would otherwise be framed around empty
                 // space and rendered a few pixels across (D280).
-                if shading(Some(named), &pose).invisible() {
+                if shading(Some(named), &pose, art, frame).invisible() {
                     continue;
                 }
                 here = Some(union(here, box_of(geometry, &pose.world)));
@@ -446,13 +512,7 @@ fn ring(part: usize, parts: usize) -> Vec3 {
 /// ⚠️ **Fixed in world space, unlike the billboard below.** Effect geometry is
 /// mostly flat, so orbiting to its edge legitimately shows almost nothing —
 /// that is the shape, not a part that stopped running.
-fn real(
-    geometry: &Geometry,
-    world: &[f32; 12],
-    image: Option<Texture>,
-    blend: Blend,
-    modulate: Modulate,
-) -> Mesh {
+fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, how: Surface) -> Mesh {
     let positions: Vec<Vec3> = geometry
         .positions
         .chunks_exact(3)
@@ -483,10 +543,7 @@ fn real(
             .map(|c| [c[0], c[1], c[2], c[3]])
             .collect()
     });
-    let paints: Vec<Paint> = image
-        .map(|t| cutout(t, blend, modulate))
-        .into_iter()
-        .collect();
+    let paints: Vec<Paint> = image.map(|t| cutout(t, how)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         shapes: vec![Shape {
@@ -500,7 +557,8 @@ fn real(
         uvs,
         colours,
         paints,
-        // Section 10's curves would animate this; they are not read (D263).
+        // The curves that animate an effect are sampled by the caller and
+        // baked into this mesh; there is no morph clip here to play.
         animation: None,
     }
     .into_mesh()
@@ -509,14 +567,20 @@ fn real(
 /// How an effect's bank image is sampled: cut-out art with a real alpha
 /// channel, so without the mask its transparent surround draws as a black
 /// square around the sprite.
-fn cutout(texture: Texture, blend: Blend, modulate: Modulate) -> Paint {
+///
+/// ✅ **The wrap modes and the UV transform are the file's own** (D281), rather
+/// than the repeat/repeat default this passed until now. 84 of the file's 350
+/// texture records ask for something other than repeat on at least one axis,
+/// and the moment a UV curve pushes a coordinate out of the unit square the
+/// difference is the whole sprite.
+fn cutout(texture: Texture, how: Surface) -> Paint {
     Paint {
         texture,
         masked: true,
-        blend,
+        blend: how.blend,
         cutoff: super::FAINT_CUTOFF,
-        sampling: Sampling::default(),
-        modulate,
+        sampling: how.sampling,
+        modulate: how.modulate,
         mask: None,
     }
 }
@@ -531,20 +595,10 @@ fn cutout(texture: Texture, blend: Blend, modulate: Modulate) -> Paint {
 /// ⚠️ Built from the camera's own right and up vectors, so it must be rebuilt
 /// when the camera moves. A quad fixed in world space turns edge-on as the view
 /// orbits and disappears, which reads as a part that stopped running.
-fn quad(
-    basis: &Basis,
-    at: Vec3,
-    half: f32,
-    image: Option<Texture>,
-    blend: Blend,
-    modulate: Modulate,
-) -> Mesh {
+fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>, how: Surface) -> Mesh {
     let right = basis.right.scaled(half);
     let up = basis.up.scaled(half);
-    let paints: Vec<Paint> = image
-        .map(|t| cutout(t, blend, modulate))
-        .into_iter()
-        .collect();
+    let paints: Vec<Paint> = image.map(|t| cutout(t, how)).into_iter().collect();
     let paint = (!paints.is_empty()).then_some(0);
     Parts {
         positions: vec![

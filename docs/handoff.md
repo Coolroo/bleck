@@ -52,7 +52,8 @@ uv run bleck model   export --out work/export   # 864 .glb + models.json
 uv run bleck effect  export --out work/export   # 139 effects + effects.json:
                                                 #   images (D258), geometry (D263),
                                                 #   nodes + curves to pose (D266),
-                                                #   blend modes (D270). schema 3
+                                                #   blend modes (D270), materials
+                                                #   + samplers (D281). schema 4
 uv run bleck sound   export --out work/export   # 135 streams, WAV
 uv run cargo run --manifest-path dimentio/Cargo.toml -- work/export
 ```
@@ -150,6 +151,12 @@ A shot is one instant of a model from several angles. A **reel** is one effect
 at several instants of its own timeline, because what there is to check about an
 effect is *when* its parts run (D257) — and since D266 it really is posed at
 each of those instants rather than laid out.
+
+⚠️ **`n of m frame pair(s) differ` is the instrument, and it was blind until
+D281.** The file animates three things and the viewer read one, so 32 effects
+reported "nothing changes across the reel" while their colour and UV data moved
+— `reel --effect map_derkness --from 240` said **0 of 8** and now says 8 of 8.
+A frozen tail reads as a finished animation, which is why nobody reported it.
 
 ⚠️ **Reach for a GIF when the motion is fast.** `dmen_magic`'s spine wave has a
 five-frame period and a nine-cell reel over 65 frames samples every eighth one,

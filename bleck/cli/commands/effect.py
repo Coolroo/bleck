@@ -28,6 +28,17 @@ never a field.
 ⚠️ **A part issues a set of draws, not one**, so `draws` is a list. 35 parts
 reach no image — their materials carry the documented `-1`, exported as
 `NO_IMAGE` — and that is a fact about them rather than a failure to resolve.
+
+✅ **All three of the file's curve evaluators are exported** (D281). A node's
+transform was the only one until now; a material's colour register and a
+texture's UV transform are the other two, and they arrive as the shared
+`materials` and `samplers` tables — 97 and 103 of which carry a curve run,
+naming the same `curves` array the nodes do.
+
+⚠️ **A frozen tail reads as a finished animation.** 32 effects hold a
+byte-identical pose across 1,523 frames while their colour or UV data moves
+(D278), so an export that drops the other two evaluators renders those frames
+as a still and nothing reports it.
 """
 
 from __future__ import annotations
@@ -38,7 +49,7 @@ from pathlib import Path
 
 from bleck.cli.types import AddCommand
 from bleck.common.errors import UserError
-from bleck.formats import effcurve, effdata, effgeom, effnode
+from bleck.formats import effcurve, effdata, effgeom, effnode, effpaint
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -46,10 +57,12 @@ CATEGORY = "inspection"
 #: Written beside the other manifests. Dimentio reads this, not the file.
 MANIFEST = "effects.json"
 
-#: Bumped to 3 when the manifest gained the `nodes` and `curves` tables that
-#: let a viewer pose an effect at an arbitrary time (D266). 2 added `draws` and
-#: `meshes` (D263); 1 was the original.
-SCHEMA = 3
+#: Bumped to 4 when the manifest gained the `materials` and `samplers` tables —
+#: the other two evaluators the file drives from the same `curves` table, plus
+#: the whole 28-byte texture record rather than its first two fields (D281).
+#: 3 added `nodes` and `curves` so a viewer could pose an effect at an arbitrary
+#: time (D266); 2 added `draws` and `meshes` (D263); 1 was the original.
+SCHEMA = 4
 
 #: A draw whose material names no texture. ⚠️ Not 0, which is a real image.
 NO_IMAGE = -1
@@ -172,61 +185,149 @@ def _draws(
                 "green": picture.green if picture else 255,
                 "blue": picture.blue if picture else 255,
                 "alpha": picture.alpha if picture else 255,
+                # ⚠️ The static fields above stay: they are what an older
+                # reader uses, and dropping them would make this export render
+                # every draw white in one.
+                "material": draw.material,
+                "sampler": picture.sampler if picture else effdata.NO_RECORD,
             }
         )
     return written
 
 
-def _scene(raw: bytes) -> dict:  # pylint: disable=container-return
-    """The node tree and the curves that animate it, as two shared tables.
+class _Curves:
+    """The shared `curves` table, and the dedup that keeps it one table.
+
+    ⚠️ **Deduplicated by section 2 offset, across all three consumers.** Nodes,
+    materials and textures name the same command table and several of them land
+    on the same curve record; writing one array per reference would inflate the
+    manifest for no extra information.
+    """
+
+    def __init__(self, raw: bytes) -> None:
+        self.raw = raw
+        self.every = effnode.commands(raw)
+        self.written: list[dict] = []
+        self._order: dict = {}
+
+    def slot(self, offset: int) -> int:
+        """Where this curve's samples sit in the shared table, writing it first
+        if nothing has named it yet."""
+        at = self._order.get(offset)
+        if at is not None:
+            return at
+        curve = effcurve.curve_at(self.raw, offset)
+        at = self._order[offset] = len(self.written)
+        self.written.append(
+            {
+                "length": curve.length,
+                "start": curve.start,
+                "end": curve.end,
+                "loop": curve.loop,
+                "bytes": curve.byte_samples,
+                "samples": [round(v, 5) for v in curve.samples],
+            }
+        )
+        return at
+
+    def driven(self, run: effpaint.Run, slots: int) -> list:
+        # pylint: disable=container-return
+        """A record's curve run as `[tag, curve]` pairs.
+
+        ⚠️ A tag outside the record's own slot array is dropped rather than
+        exported: the reader has no slot to put it in, and a viewer inventing
+        one would drive a scalar the game never touches.
+        """
+        return [
+            [command.tag, self.slot(command.offset)]
+            for command in effpaint.run_of(run, self.every)
+            if 0 <= command.tag < slots
+        ]
+
+
+def _scene(raw: bytes, curves: _Curves) -> dict:  # pylint: disable=container-return
+    """The node tree, the materials and the samplers, as three shared tables.
 
     ⚠️ **The viewer poses, rather than being handed a pose.** An effect's
     transform is a function of time — 44% of drawing nodes are flat at rest and
     26 effects vanish entirely (D265) — so shipping one frame's matrices would
     ship the one frame that does not work. The tables are what the game itself
     reads.
-    """
-    total = effnode.node_count(raw)
-    every = effnode.commands(raw)
 
-    order: dict = {}
-    curves: list[dict] = []
+    ⚠️ **All three tables reference the same `curves`.** The file drives a
+    node's transform, a material's colour register and a texture's UV transform
+    from one command table, and 305 of its 4,752 commands belong to the second
+    and third (D278, D281).
+    """
     nodes: list[dict] = []
-    for index in range(total):
+    for index in range(effnode.node_count(raw)):
         node = effnode.node_at(raw, index)
-        driven = []
-        for step in range(node.count):
-            at = node.curves + step
-            if not 0 <= at < len(every):
-                continue
-            command = every[at]
-            if not 0 <= command.tag < effnode.SLOTS:
-                continue
-            slot = order.get(command.offset)
-            if slot is None:
-                curve = effcurve.curve_at(raw, command.offset)
-                slot = order[command.offset] = len(curves)
-                curves.append(
-                    {
-                        "length": curve.length,
-                        "start": curve.start,
-                        "end": curve.end,
-                        "loop": curve.loop,
-                        "bytes": curve.byte_samples,
-                        "samples": [round(v, 5) for v in curve.samples],
-                    }
-                )
-            driven.append([command.tag, slot])
         nodes.append(
             {
                 "t": [round(v, 5) for v in effnode.vector_at(raw, node.translate)],
                 "r": [round(v, 5) for v in effnode.vector_at(raw, node.rotate)],
                 "s": [round(v, 5) for v in effnode.vector_at(raw, node.scale)],
                 "alpha": node.alpha,
-                "curves": driven,
+                "curves": curves.driven(
+                    effpaint.Run(node.curves, node.count), effnode.SLOTS
+                ),
             }
         )
-    return {"nodes": nodes, "curves": curves}
+    return {
+        "nodes": nodes,
+        "materials": _materials(raw, curves),
+        "samplers": _samplers(raw, curves),
+    }
+
+
+def _materials(raw: bytes, curves: _Curves) -> list[dict]:
+    # pylint: disable=container-return
+    """Section 5: every colour register, and the curves that drive its channels.
+
+    ⚠️ **Written whole, not per draw.** 2,960 draws share 524 materials, and 97
+    of those carry a curve run — inlining the run on each draw would repeat the
+    same reference five times over.
+    """
+    return [
+        {
+            "rgba": [
+                material.colour.red,
+                material.colour.green,
+                material.colour.blue,
+                material.colour.alpha,
+            ],
+            "curves": curves.driven(material.run, len(effpaint.MATERIAL_SLOT_NAMES)),
+        }
+        for material in effpaint.materials(raw)
+    ]
+
+
+def _samplers(raw: bytes, curves: _Curves) -> list[dict]:
+    # pylint: disable=container-return
+    """Section 4: the whole 28-byte texture record, decoded.
+
+    ⚠️ **`wrap_s` and `wrap_t` are decoded here, not left as the raw byte.** How
+    the two bits per axis fold is a fact about the file — mirror wins over the
+    repeat bit — and the reading belongs where the format is owned rather than
+    in every consumer.
+    """
+    return [
+        {
+            "image": sampler.image,
+            "wrap": sampler.wrap,
+            "wrap_s": sampler.wrap_s,
+            "wrap_t": sampler.wrap_t,
+            "flags": sampler.flags,
+            "translate": [
+                round(sampler.uv.translate_u, 6),
+                round(sampler.uv.translate_v, 6),
+            ],
+            "scale": [round(sampler.uv.scale_u, 6), round(sampler.uv.scale_v, 6)],
+            "rotation": round(sampler.uv.rotation, 5),
+            "curves": curves.driven(sampler.run, len(effpaint.SAMPLER_SLOT_NAMES)),
+        }
+        for sampler in effpaint.samplers(raw)
+    ]
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -239,7 +340,8 @@ def cmd_export(args: argparse.Namespace) -> int:
     # eight copies of every mesh.
     shared = effdata.meshes(raw)
     index = {(mesh.offset, mesh.descriptor): at for at, mesh in enumerate(shared)}
-    scene = _scene(raw)
+    curves = _Curves(raw)
+    scene = _scene(raw, curves)
 
     entries = [
         {
@@ -267,6 +369,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "textures": EFFECT_TEXTURES,
                 "meshes": [_mesh(mesh) for mesh in shared],
                 **scene,
+                "curves": curves.written,
                 "effects": entries,
             },
             indent=2,
@@ -278,9 +381,10 @@ def cmd_export(args: argparse.Namespace) -> int:
     print(f"wrote {len(entries)} effect(s) to {out / MANIFEST}")
     print(f"  {len(shared)} display list(s), {faces} triangle(s)")
     print(
-        f"  {len(scene['nodes'])} node(s), {len(scene['curves'])} curve(s) "
-        "- the viewer poses from these"
+        f"  {len(scene['nodes'])} node(s), {len(scene['materials'])} material(s), "
+        f"{len(scene['samplers'])} sampler(s) - the viewer poses from these"
     )
+    print(f"  {len(curves.written)} curve(s), shared by all three")
     print(f"  images come from {EFFECT_TEXTURES}, which `bleck texture export` writes")
     return 0
 

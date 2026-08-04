@@ -295,6 +295,8 @@ impl Viewer {
                 meshes: self.effects.library.meshes(),
                 nodes: self.effects.library.nodes(),
                 curves: self.effects.library.curves(),
+                materials: self.effects.library.materials(),
+                samplers: self.effects.library.samplers(),
             }),
         );
         self.effects.stage.view.camera = render::Camera::fit(bounds);
@@ -367,6 +369,8 @@ impl Viewer {
             meshes: self.effects.library.meshes(),
             nodes: self.effects.library.nodes(),
             curves: self.effects.library.curves(),
+            materials: self.effects.library.materials(),
+            samplers: self.effects.library.samplers(),
         };
         let stage = &mut self.effects.stage;
         ui.columns(COLUMNS, |columns| {
@@ -407,9 +411,7 @@ impl Viewer {
             &stage.view.camera,
             Some(render::effect::Art {
                 images: &images,
-                meshes: scene.meshes,
-                nodes: scene.nodes,
-                curves: scene.curves,
+                ..scene
             }),
         );
         let pieces: Vec<render::Piece<'_>> = quads

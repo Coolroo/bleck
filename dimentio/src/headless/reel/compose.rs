@@ -6,7 +6,9 @@
 //! sampling is `super`'s.
 
 use crate::data::catalog::Catalog;
-use crate::data::effects::{frame_at, image_at, Curve, Entry, Mesh as Geometry, NodeDef};
+use crate::data::effects::{
+    frame_at, image_at, Curve, Entry, MaterialDef, Mesh as Geometry, NodeDef, SamplerDef,
+};
 use crate::data::texture::Texture;
 use crate::headless::sheet::{self, Sheet, GUTTER};
 use crate::render::{self, effect, Background, Camera, Image, Piece, Rgba, Size, View};
@@ -34,6 +36,9 @@ pub(super) struct Scene<'a> {
     pub(super) meshes: &'a [Geometry],
     pub(super) nodes: &'a [NodeDef],
     pub(super) curves: &'a [Curve],
+    /// The colour registers and texture records the same curves drive (D281).
+    pub(super) materials: &'a [MaterialDef],
+    pub(super) samplers: &'a [SamplerDef],
 }
 
 /// Decode the image each **draw** of each part paints with, from the texture
@@ -77,6 +82,8 @@ pub(super) fn draw(
         meshes: scene.meshes,
         nodes: scene.nodes,
         curves: scene.curves,
+        materials: scene.materials,
+        samplers: scene.samplers,
     };
     let cell = Size::new(request.size, request.size);
     let columns = sheet::grid_columns(times.len());

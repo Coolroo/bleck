@@ -22,8 +22,8 @@ that disagree completely and are the same thing.
 | 1 | 14,080 | ✅ **704 part records**, 20 bytes each | here |
 | 2 | 619,936 | ✅ **Animation curves**: a 12-byte header then N floats | `effcurve` |
 | 3 | 350,976 | ✅ **360 GX display lists** (D263) | `effgeom` |
-| 4 | 9,824 | ✅ **351 texture records**, 28 bytes each | here |
-| 5 | 8,384 | ✅ **524 material records**, 16 bytes each | here |
+| 4 | 9,824 | ✅ **350 texture records**, 28 bytes each | `effpaint` |
+| 5 | 8,384 | ✅ **524 material records**, 16 bytes each | `effpaint` |
 | 6 | 64,768 | ✅ **1,349 3x4 matrices**, a node's own transform | `effnode` |
 | 7 | 17,760 | ✅ **2,960 `(start, count, flags)`** records, 6 bytes each | here |
 | 8 | 23,680 | ✅ **2,960 draws**, 8 bytes: material, descriptor, display list | here |
@@ -35,11 +35,12 @@ that disagree completely and are the same thing.
 | 14 | 4,896 | ✅ **1,632 normals**, `3 x s8` (D264) | `effgeom` |
 | 15 | 224 | ✅ **56 vertex colours**, `GX_RGBA8` (D264) | `effgeom` |
 
-Four modules read one file, and the split is by concern rather than by size:
+Five modules read one file, and the split is by concern rather than by size:
 `effsections` answers where a section is, `effgeom` reads display lists,
-`effcurve` reads sampled curves, `effnode` walks the scene graph, and this
-module holds the effects and parts that address all of it. ⚠️ **The imports run
-one way only** — nothing under this module reaches back into it.
+`effcurve` reads sampled curves, `effnode` walks the scene graph, `effpaint`
+reads the material and texture records, and this module holds the effects and
+parts that address all of it. ⚠️ **The imports run one way only** — nothing
+under this module reaches back into it.
 
 ### The EFDT block, as the game's own loader reads it
 
@@ -115,6 +116,12 @@ bytes are one `u32` display-list offset, and section 3 is 360 GX display lists.
 `effnode` holds it — sections 9, 6, 12 and 10, and the evaluator that turns them
 into a matrix at a frame (D266). `draws` below is what asks it for a pose.
 
+⚠️ **Section 10 drives three things, not one.** The same command table a node
+names is also named by a material's `+0x04`/`+0x06` and a texture's
+`+0x18`/`+0x1A`, and `effpaint` holds those two evaluators (D281). Of the 4,752
+commands, nodes reach 4,447, materials 212 and textures 93 — every one claimed
+exactly once, with nothing left over.
+
 ## Sections 7 and 8, which pair up
 
 Section 7 is 2,960 records of `(u16 start, u16 count, u16 flags)`, and the
@@ -161,8 +168,8 @@ import struct
 from dataclasses import dataclass, field
 
 from bleck.common.errors import BleckError
-from bleck.formats import effgeom, effnode
-from bleck.formats.effsections import SECTIONS, count_in, section
+from bleck.formats import effgeom, effnode, effpaint
+from bleck.formats.effsections import SECTIONS, section
 
 MAGIC = b"EFDT"
 
@@ -417,20 +424,12 @@ def header(data: bytes) -> Header:
     )
 
 
-#: The material and texture sections the five-hop chain ends in (D258).
-#: ⚠️ Sections 7, 8 and 9 are the other three hops, and each is read from a
-#: different direction: a node names a group, a group is a run of entries, and
-#: an entry names one of these materials.
-MATERIAL_SECTION, MATERIAL_STRIDE = 5, 16
-TEXTURE_SECTION, TEXTURE_STRIDE = 4, 28
-
-#: A material's texture reference, and a texture's image index.
-MATERIAL_TEXTURE = 0x0C
-TEXTURE_IMAGE, TEXTURE_WRAP = 0x00, 0x02
-
 #: ⚠️ `Part.first` is read unsigned, so its null is 0xFFFF rather than the -1
 #: `effnode.NO_INDEX` uses for a node reference.
 NO_PART = 0xFFFF
+
+#: What a draw names when its material is out of range, or names no texture.
+NO_RECORD = -1
 
 
 @dataclass(frozen=True)
@@ -441,6 +440,11 @@ class Picture:
     part -> node -> draw -> subdraw -> material -> texture -> image. Every hop
     is a fixed offset the draw code loads, and `image` is bounded by the 219 the
     game's own loader reads out of the EFDT header.
+
+    ⚠️ **The static values only.** Both records also name a run of section 10
+    curves that animate them (D281); `sampler` and the draw's `material` are how
+    a caller reaches those. Reading these four bytes as the final colour freezes
+    97 materials and 103 textures at their first frame.
     """
 
     image: int
@@ -455,31 +459,27 @@ class Picture:
     alpha: int
     """The material's own RGBA at `+0x00`, before the node's alpha is folded in."""
 
-
-def _signed(data: bytes, at: int) -> int:
-    return struct.unpack_from(">h", data, at)[0]
+    sampler: int = NO_RECORD
+    """Which section 4 record this came from, so a caller can reach its UV
+    transform and its curve run."""
 
 
 def _picture(data: bytes, material: int) -> Picture | None:
     """A material's image, or `None` when it names no texture."""
-    materials = count_in(data, MATERIAL_SECTION, MATERIAL_STRIDE)
-    if not 0 <= material < materials:
+    record = effpaint.material_at(data, material)
+    if record is None:
         return None
-    start, _ = section(data, MATERIAL_SECTION)
-    at = start + material * MATERIAL_STRIDE
-    reference = _signed(data, at + MATERIAL_TEXTURE)
-    textures = count_in(data, TEXTURE_SECTION, TEXTURE_STRIDE)
-    if not 0 <= reference < textures:
+    sampler = effpaint.sampler_at(data, record.texture)
+    if sampler is None:
         return None
-    texture_start, _ = section(data, TEXTURE_SECTION)
-    texture_at = texture_start + reference * TEXTURE_STRIDE
     return Picture(
-        image=_signed(data, texture_at + TEXTURE_IMAGE),
-        wrap=data[texture_at + TEXTURE_WRAP],
-        red=data[at],
-        green=data[at + 1],
-        blue=data[at + 2],
-        alpha=data[at + 3],
+        image=sampler.image,
+        wrap=sampler.wrap,
+        red=record.colour.red,
+        green=record.colour.green,
+        blue=record.colour.blue,
+        alpha=record.colour.alpha,
+        sampler=sampler.index,
     )
 
 
@@ -505,6 +505,14 @@ class Draw:
     picture: Picture | None
     offset: int
     descriptor: int
+
+    material: int = NO_RECORD
+    """Which section 5 record this draw paints with.
+
+    ⚠️ **Named as well as resolved.** `picture` is the static end of the chain;
+    the record itself also carries a run of section 10 curves that animate the
+    colour register, and 97 of the file's 524 materials have one (D281). A draw
+    whose material names no texture still has one."""
 
     blend: int = BLEND_DERIVED
     """How to composite this draw — see `Group.blend`."""
@@ -552,6 +560,7 @@ def draws(
                     picture=_picture(data, entry.material),
                     offset=entry.display_list,
                     descriptor=entry.descriptor,
+                    material=entry.material,
                     blend=group.blend,
                     chain=placed.chain,
                     world=placed.world,
