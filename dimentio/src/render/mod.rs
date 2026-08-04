@@ -122,20 +122,131 @@ pub fn render(mesh: &Mesh, view: &View, size: Size) -> Image {
 /// would order them by draw order instead, which is the bug the depth buffer
 /// exists to prevent.
 pub fn scene(pieces: &[Piece], view: &View, size: Size) -> Image {
+    cut_into(pieces, view, size, None)
+}
+
+/// `scene`, with the number of bands forced.
+///
+/// ⚠️ Only the invariance test passes a count. It exists so that test can put
+/// the *same* frame through every split there is — the picture must not depend
+/// on how many threads happened to draw it, and a machine's core count is not
+/// something a test can vary.
+fn cut_into(pieces: &[Piece], view: &View, size: Size, bands: Option<usize>) -> Image {
     let mut image = Image::filled(size, view.background);
     if size.pixels() == 0 {
         return image;
     }
     let basis = Basis::of(&view.camera);
     let lens = Lens::new(view.camera.fov_y, size);
-    let mut depth = vec![f32::NEG_INFINITY; size.pixels()];
+    let mut placed = Placement::default();
     for piece in pieces {
-        draw(&mut image, &mut depth, &basis, &lens, piece);
+        place(&basis, &lens, piece, size, &mut placed);
+    }
+
+    let mut depth = vec![f32::NEG_INFINITY; size.pixels()];
+    {
+        let count = bands.unwrap_or_else(|| crews(size, placed.reach));
+        let mut bands = image.bands(&mut depth, count);
+        match bands.as_mut_slice() {
+            [only] => fill(only, &placed.shapes),
+            many => std::thread::scope(|crew| {
+                for band in many {
+                    let shapes = &placed.shapes;
+                    crew.spawn(move || fill(band, shapes));
+                }
+            }),
+        }
     }
     image
 }
 
-fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece: &Piece) {
+/// How many bands a frame is cut into, and so how many threads fill it.
+///
+/// ⚠️ **A band is a thread, so this is the core count and not the row count.**
+/// Every band walks the whole triangle list to find what lands in its own rows,
+/// so cutting finer than the machine can run at once pays for that walk again
+/// and buys nothing.
+///
+/// ⚠️ **Gated on the work, not on the frame.** A large viewport holding one
+/// small sprite is most of this program's output — 11 of the export's 139
+/// effects — and spawning eight threads to fill a few thousand pixels costs
+/// more than filling them.
+fn crews(size: Size, reach: usize) -> usize {
+    if reach < THREADED {
+        return 1;
+    }
+    static CORES: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    let cores =
+        *CORES.get_or_init(|| std::thread::available_parallelism().map_or(1, |count| count.get()));
+    cores.min(size.height).max(1)
+}
+
+/// Pixels a frame has to be able to touch before it is worth splitting up.
+///
+/// ⛔ **A switch, not a rate.** Handing out threads in proportion to `reach`
+/// reads better and is worse: reach is a bound on bounding boxes, and the
+/// effects that cost most are fans of small triangles whose boxes barely
+/// overlap the pixels they fill — `heart_dance` measured 6.6 ms on every core
+/// and 8.4 ms on the two its reach asked for. Above the bar, take the machine.
+const THREADED: usize = 100_000;
+
+/// One triangle placed on the screen, and what paints it.
+///
+/// ⚠️ **Projected once, filled once per band.** The bands share this list rather
+/// than each re-deriving it, and it is what makes the split safe: every band
+/// walks the same triangles in the same order, so which fragment wins a pixel
+/// cannot depend on how the frame was cut up.
+struct Placed<'a> {
+    screen: [camera::Point; 3],
+    paint: raster::Paint<'a>,
+}
+
+/// Every triangle of a frame, and how many pixels they can between them reach.
+#[derive(Default)]
+struct Placement<'a> {
+    shapes: Vec<Placed<'a>>,
+    /// The triangles' bounding boxes summed and clipped to the frame — an upper
+    /// bound on the fill, worked out here because the projection already has the
+    /// corners in hand.
+    reach: usize,
+}
+
+fn fill(band: &mut raster::Band, placed: &[Placed]) {
+    for shape in placed {
+        raster::raster(band, &shape.screen, &shape.paint);
+    }
+}
+
+/// How many pixels of `size` a projected triangle's bounding box covers.
+fn box_of(screen: &[camera::Point; 3], size: Size) -> usize {
+    let reach = |low: f32, high: f32, limit: usize| {
+        if !low.is_finite() || !high.is_finite() {
+            return 0;
+        }
+        let low = low.max(0.0);
+        let high = high.min(limit as f32);
+        if high <= low {
+            0
+        } else {
+            (high - low) as usize + 1
+        }
+    };
+    let xs = screen.map(|corner| corner.x);
+    let ys = screen.map(|corner| corner.y);
+    let across = reach(
+        xs.iter().copied().fold(f32::INFINITY, f32::min),
+        xs.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        size.width,
+    );
+    let down = reach(
+        ys.iter().copied().fold(f32::INFINITY, f32::min),
+        ys.iter().copied().fold(f32::NEG_INFINITY, f32::max),
+        size.height,
+    );
+    across * down
+}
+
+fn place<'a>(basis: &Basis, lens: &Lens, piece: &Piece<'a>, size: Size, into: &mut Placement<'a>) {
     let mesh = piece.mesh;
     if mesh.is_empty() {
         return;
@@ -194,7 +305,8 @@ fn draw(image: &mut Image, depth: &mut [f32], basis: &Basis, lens: &Lens, piece:
                     tint,
                 },
             };
-            raster::raster(image, depth, &screen, &paint);
+            into.reach += box_of(&screen, size);
+            into.shapes.push(Placed { screen, paint });
         }
     }
 }
@@ -299,6 +411,28 @@ mod tests {
         // The camera sits at z = 8 looking towards -z; this quad is behind it.
         let mesh = Mesh::parse("v -2 -2 40\nv 2 -2 40\nv 2 2 40\nf 1 2 3\n").expect("parses");
         assert_eq!(covered(&render(&mesh, &flat(head_on()), FRAME)), 0);
+    }
+
+    /// ⚠️ **The frame must not depend on how many threads drew it.** Bands are
+    /// filled at the same time and each keeps its own depth, so a triangle
+    /// straddling a seam is the case that would show a split: one row too many
+    /// or too few, or a depth test taken against the wrong slice. Every count
+    /// from one to more bands than there are rows has to agree with one thread.
+    #[test]
+    fn splitting_the_frame_into_bands_does_not_change_a_pixel_of_it() {
+        let mesh = cube();
+        let view = flat(Camera::fit(mesh.bounds()));
+        let pieces = [Piece::plain(&mesh)];
+        let alone = cut_into(&pieces, &view, FRAME, Some(1));
+        assert!(covered(&alone) > 0, "the control drew nothing");
+        for count in [2, 3, 5, 8, 13, FRAME.height, FRAME.height * 2] {
+            let split = cut_into(&pieces, &view, FRAME, Some(count));
+            assert_eq!(
+                split.as_rgba(),
+                alone.as_rgba(),
+                "{count} bands drew a different frame"
+            );
+        }
     }
 
     #[test]

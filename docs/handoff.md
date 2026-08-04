@@ -55,7 +55,7 @@ uv run bleck effect  export --out work/export   # 139 effects + effects.json:
                                                 #   blend modes (D270), materials
                                                 #   + samplers (D281). schema 4
 uv run bleck sound   export --out work/export   # 135 streams, WAV
-uv run cargo run --manifest-path dimentio/Cargo.toml -- work/export
+uv run cargo run --release --manifest-path dimentio/Cargo.toml -- work/export
 ```
 
 ⚠️ **`bleck model export` still defaults to `--out work/models`** while the

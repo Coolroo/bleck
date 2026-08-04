@@ -6,11 +6,17 @@ first.
 Named for the jester who steps sideways out of the world to watch it.
 
 ```bash
-cargo run -- ../work/export        # a folder bleck exported into
+cargo run --release -- ../work/export   # a folder bleck exported into
 ```
 
 Four modes over the same folder: **Textures**, **Models**, **Effects** and
 **Sounds**.
+
+⚠️ **`--release` is not optional here.** Every pixel of a viewport is produced
+by plain arithmetic on the CPU, and an unoptimised build is **16–33× slower**:
+`robo_PC-item` measures 5 ms a frame released and 371 ms a frame in `dev`, which
+is the difference between a timeline that plays and one that shows three frames
+a second. If the effect tab feels like treacle, check this first.
 
 ## Without a screen: `dimentio shot` and `dimentio reel`
 
@@ -353,3 +359,33 @@ raise it once the toolchain floor moves.
 ⚠️ **Linux needs ALSA's development headers** (`libasound2-dev` on Debian and
 Ubuntu). `rodio` builds on `cpal`, which links against them; without them the
 build fails in `alsa-sys` rather than in this crate.
+
+## How the viewports stay quick
+
+Three things, all of them in `render` and `app::effects`, and all measured
+against the real export's 139 effects at 700×700 (D286):
+
+- **The frame is filled on every core.** `scene` projects each triangle once and
+  then cuts the frame into one band of rows per core, filling them at the same
+  time. A band owns its rows outright, and every band walks the same triangle
+  list in the same order — so the picture cannot depend on how many threads drew
+  it, which `splitting_the_frame_into_bands_does_not_change_a_pixel_of_it`
+  pins. The worst effect went 22.5 ms a frame to 5.2.
+- **A frame is drawn once, not once per repaint.** egui repaints on a mouse
+  move; the effect viewport used to rasterise on every one of them. It now keeps
+  what the last frame was drawn from and re-uses the pixels when none of it
+  moved, which is what the model viewport's `stale` flag already did.
+- **The triangle filler hoists what it can.** Per-row edge terms, the tint
+  chain where a mesh carries no vertex colours, and the perspective divisor the
+  depth test and the interpolators were each working out separately.
+
+⚠️ **The arithmetic is unchanged, and that is checked rather than assumed.**
+Every one of the 139 effects and 120 models was rendered through the old code
+and the new and compared byte for byte — 1,668 effect frames and 480 model
+views, all identical. A rasteriser optimisation that is "visually the same" is
+one nobody can ever tell from a regression.
+
+⛔ **Multiplying by a reciprocal is not one of the three.** Replacing the two
+per-pixel divides with `1.0 / total` measured *slower* on Apple Silicon
+(275 → 290 ms across the corpus) as well as changing the last bit of the result.
+Divides are not the bottleneck here; do not reach for that trade.

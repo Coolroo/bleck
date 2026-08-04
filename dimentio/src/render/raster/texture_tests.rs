@@ -181,8 +181,7 @@ fn a_second_layer_masks_the_first_rather_than_replacing_it() {
         let mut image = Image::filled(FRAME, Background::DarkGrey);
         let mut depth = vec![f32::NEG_INFINITY; FRAME.pixels()];
         raster(
-            &mut image,
-            &mut depth,
+            &mut Band::whole(&mut image, &mut depth),
             &[
                 Point {
                     x: 20.0,
@@ -249,8 +248,7 @@ fn a_discarded_pixel_does_not_hide_what_is_behind_it() {
     let mut depth = vec![f32::NEG_INFINITY; FRAME.pixels()];
     let near = at(0.5);
     raster(
-        &mut image,
-        &mut depth,
+        &mut Band::whole(&mut image, &mut depth),
         &near,
         &Paint::Textured {
             blend: Blend::Opaque,
@@ -269,8 +267,7 @@ fn a_discarded_pixel_does_not_hide_what_is_behind_it() {
 
     let far = at(0.1);
     raster(
-        &mut image,
-        &mut depth,
+        &mut Band::whole(&mut image, &mut depth),
         &far,
         &Paint::Flat {
             colour: Rgba::new(220, 30, 30),

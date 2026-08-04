@@ -483,6 +483,58 @@ fn the_viewport_rasterises_and_takes_a_manually_chosen_image() {
     draw(&mut viewer, &ctx);
 }
 
+/// ⚠️ **egui repaints on far more than the timeline moving** — a mouse crossing
+/// the window is enough — and the effect viewport used to rasterise on every one
+/// of them, which is a full software render of the effect per mouse move. The
+/// pixels are identical either way, so nothing but a count can see this.
+#[test]
+fn a_repaint_that_changes_nothing_re_uses_the_frame_it_already_drew() {
+    let root = export_folder("held");
+    let mut viewer = Viewer {
+        mode: Mode::Effects,
+        ..Viewer::empty()
+    };
+    viewer.open(root);
+    let ctx = egui::Context::default();
+
+    // ⚠️ egui settles a panel's size over its first repaints, and the frame is
+    // rasterised at that size — so the count is taken once the layout has
+    // stopped moving rather than after the very first pass.
+    viewer.select_effect(0);
+    for _ in 0..3 {
+        draw(&mut viewer, &ctx);
+    }
+    let first = viewer.effects.stage.rasterised();
+    assert!(first > 0, "the viewport drew no frame at all");
+
+    for _ in 0..5 {
+        draw(&mut viewer, &ctx);
+    }
+    assert_eq!(
+        viewer.effects.stage.rasterised(),
+        first,
+        "a repaint with nothing moved rasterised again"
+    );
+
+    // The control: the rig has to be able to see a redraw happen, or the
+    // assertion above passes for a viewport that has simply stopped working.
+    viewer.effects.play.time += 0.25;
+    draw(&mut viewer, &ctx);
+    assert_eq!(
+        viewer.effects.stage.rasterised(),
+        first + 1,
+        "moving the scrubber did not redraw"
+    );
+
+    viewer.effects.stage.view.background = render::Background::Gradient;
+    draw(&mut viewer, &ctx);
+    assert_eq!(
+        viewer.effects.stage.rasterised(),
+        first + 2,
+        "changing the background did not redraw"
+    );
+}
+
 /// One egui frame with every texture panel in it, and no window anywhere.
 fn draw_textures(viewer: &mut Viewer, ctx: &egui::Context) {
     let _ = ctx.run(egui::RawInput::default(), |ctx| {

@@ -40,13 +40,39 @@ struct Chosen {
     image: texture::Texture,
 }
 
+/// Everything the last rasterised frame was drawn from.
+///
+/// ⚠️ **Compared, where the model viewport sets a `stale` flag.** Seven inputs
+/// move this picture and the scrubber is only one of them; a flag has to be set
+/// at every one of their call sites and a signature cannot be forgotten at a new
+/// one. What it buys is the same thing: without it the software rasteriser runs
+/// on every repaint egui makes, so moving the mouse across the window costs a
+/// full render of the effect — 22 ms of it, for `robo_PC-item`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Held {
+    effect: usize,
+    time: f32,
+    camera: render::Camera,
+    background: render::Background,
+    size: render::Size,
+    /// The manual preview: which part it is on, and which catalog image it is.
+    part: usize,
+    chosen: Option<usize>,
+}
+
 /// The effect viewport's own state: where the camera is, the frame it drew
 /// last, and the image a user asked to see on a part.
 #[derive(Default)]
 pub(super) struct Stage {
-    view: render::View,
+    pub(super) view: render::View,
     /// The last rasterised frame, uploaded once and replaced in place.
     frame: Option<egui::TextureHandle>,
+    /// What that frame was drawn from, so a repaint that changes none of it
+    /// re-uses the pixels instead of producing them again.
+    held: Option<Held>,
+    /// The parts the last frame drew, for the hover text — which is read far
+    /// more often than the frame is redrawn.
+    running: String,
     /// Which part `chosen` is drawn on. Zero until someone moves it.
     part: usize,
     chosen: Option<Chosen>,
@@ -61,6 +87,11 @@ pub(super) struct Stage {
     /// Why the last image pick produced nothing, so a failed decode says so
     /// rather than looking like a viewport that ignores clicks.
     note: Option<String>,
+    /// How many frames have been rasterised. Only the test that `held` works
+    /// reads it — "the picture is right" and "the picture was produced once"
+    /// look identical from the pixels.
+    #[cfg(test)]
+    rasterised: usize,
 }
 
 impl Stage {
@@ -70,6 +101,12 @@ impl Stage {
     #[cfg(test)]
     pub(super) fn drawn(&self) -> bool {
         self.frame.is_some()
+    }
+
+    /// How many frames this stage has rasterised.
+    #[cfg(test)]
+    pub(super) fn rasterised(&self) -> usize {
+        self.rasterised
     }
 
     /// The image being previewed, and the part it is on.
@@ -374,7 +411,7 @@ impl Viewer {
         };
         let stage = &mut self.effects.stage;
         ui.columns(COLUMNS, |columns| {
-            Self::effect_stage(&mut columns[0], entry, stage, scene, time);
+            Self::effect_stage(&mut columns[0], entry, index, stage, scene, time);
             egui::ScrollArea::vertical().show(&mut columns[1], |ui| {
                 Self::part_table(ui, entry, time);
                 ui.add_space(12.0);
@@ -391,6 +428,7 @@ impl Viewer {
     fn effect_stage(
         ui: &mut egui::Ui,
         entry: &effects::Entry,
+        index: usize,
         stage: &mut Stage,
         scene: render::effect::Art<'_>,
         time: f32,
@@ -404,26 +442,57 @@ impl Viewer {
         Self::steer_camera(ui, &response, &mut stage.view.camera);
 
         let size = Self::frame_size(area);
-        let images = stage.art();
-        let quads = render::effect::quads(
-            entry,
+        let wanted = Held {
+            effect: index,
             time,
-            &stage.view.camera,
-            Some(render::effect::Art {
-                images: &images,
-                ..scene
-            }),
-        );
-        let pieces: Vec<render::Piece<'_>> = quads
-            .pieces
-            .iter()
-            .map(|quad| render::Piece {
-                mesh: &quad.mesh,
-                flat: quad.colour,
-            })
-            .collect();
-        let drawn = render::scene(&pieces, &stage.view, size);
-        Self::upload(ui, &mut stage.frame, "effect-stage", &drawn);
+            camera: stage.view.camera,
+            background: stage.view.background,
+            size,
+            part: stage.part,
+            chosen: stage.chosen.as_ref().map(|chosen| chosen.catalog),
+        };
+        if stage.held != Some(wanted) || stage.frame.is_none() {
+            let images = stage.art();
+            let quads = render::effect::quads(
+                entry,
+                time,
+                &stage.view.camera,
+                Some(render::effect::Art {
+                    images: &images,
+                    ..scene
+                }),
+            );
+            let pieces: Vec<render::Piece<'_>> = quads
+                .pieces
+                .iter()
+                .map(|quad| render::Piece {
+                    mesh: &quad.mesh,
+                    flat: quad.colour,
+                })
+                .collect();
+            let drawn = render::scene(&pieces, &stage.view, size);
+            Self::upload(ui, &mut stage.frame, "effect-stage", &drawn);
+            // Names the shapes on screen. A quad carries the part it came from,
+            // and an unlabelled coloured square says nothing about which row it
+            // is. Kept with the frame it describes, because the hover is read on
+            // repaints that draw nothing new.
+            let running: Vec<&str> = quads
+                .pieces
+                .iter()
+                .filter_map(|quad| entry.parts.get(quad.part))
+                .map(|part| part.composed.as_str())
+                .collect();
+            stage.running = if running.is_empty() {
+                "no part is running at this point in the timeline".to_string()
+            } else {
+                format!("running: {}", running.join(", "))
+            };
+            stage.held = Some(wanted);
+            #[cfg(test)]
+            {
+                stage.rasterised += 1;
+            }
+        }
 
         if let Some(handle) = &stage.frame {
             ui.painter().image(
@@ -433,20 +502,7 @@ impl Viewer {
                 egui::Color32::WHITE,
             );
         }
-
-        // Names the shapes on screen. A quad carries the part it came from, and
-        // an unlabelled coloured square says nothing about which row it is.
-        let running: Vec<&str> = quads
-            .pieces
-            .iter()
-            .filter_map(|quad| entry.parts.get(quad.part))
-            .map(|part| part.composed.as_str())
-            .collect();
-        response.on_hover_text(if running.is_empty() {
-            "no part is running at this point in the timeline".to_string()
-        } else {
-            format!("running: {}", running.join(", "))
-        });
+        response.on_hover_text(stage.running.as_str());
     }
 
     /// The manual image chooser, and the standing statement that it is manual.

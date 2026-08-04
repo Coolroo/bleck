@@ -69,12 +69,15 @@ impl Texture {
         let (u, v) = how.transform.apply(u, v);
         let x = how.wrap_s.fold(u, self.width);
         let y = how.wrap_t.fold(v, self.height);
+        // One slice rather than four indexes: the same four bytes, behind one
+        // bounds check instead of four, on the hottest read in the program.
         let at = (y * self.width + x) * 4;
+        let texel = &self.pixels[at..at + 4];
         Texel {
-            r: self.pixels[at],
-            g: self.pixels[at + 1],
-            b: self.pixels[at + 2],
-            a: self.pixels[at + 3],
+            r: texel[0],
+            g: texel[1],
+            b: texel[2],
+            a: texel[3],
         }
     }
 }

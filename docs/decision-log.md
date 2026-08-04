@@ -20854,3 +20854,134 @@ indirect stage**, not the visible surface. So:
   centralised, `callers` on the mechanism finds the wrong module.** The way in
   was `effsub_wp`'s field setters (`0x8005FA68`-`0x8005FC48`) and then a scan
   for loads of those offsets through the sdata pointer.
+
+## D286 — Dimentio's effect viewport was slow four ways, and only one of them was the rasteriser (2026-08-04)
+
+"Dimentio gets really laggy when rendering effects." Four separate causes, found
+by measuring rather than by reading the inner loop, which is where the first
+guess went and where the least of the time turned out to be.
+
+### The instrument
+
+A throwaway `dimentio bench` subcommand reproducing one GUI frame exactly —
+`stage.art()` clone, `render::effect::quads`, `render::scene` — timed separately
+over 30 scrubber positions per effect, across all 139 effects of `work/export`
+at 700×700. It has been deleted; the numbers are here because re-deriving them
+costs a rebuild and 139 runs.
+
+### ✅ 1. The window was documented to run unoptimised, and that is 16–33×
+
+`README.md` said `cargo run -- ../work/export`. Measured, `dev` against
+`release`:
+
+| effect | dev | release |
+|---|---|---|
+| `robo_PC-item` | 371 ms/frame | 22.5 ms/frame |
+| `mini_gameclear` | 165 ms/frame | 11.1 ms/frame |
+
+2.7 fps. ⚠️ **This is almost certainly the whole of the reported symptom** — the
+other three are real and worth having, and none of them is a 33× factor. Every
+`cargo run` line in the README now carries `--release`.
+
+### ✅ 2. The effect viewport rasterised on every repaint; the model viewport does not
+
+`app::models` has a `stale` flag (D253-era) and `app::effects` never grew one —
+its comment said so out loud and read as a deliberate choice, because the
+timeline does need a frame per tick. But egui repaints on a mouse move, so
+moving the pointer across the window cost a full software render of the effect.
+
+`Stage` now keeps a `Held` signature — effect, time, camera, background, size,
+preview part, preview image — and re-uses the pixels when none of it moved.
+
+⚠️ **A signature, not a flag**, and the difference is not stylistic: seven
+inputs move this picture and a flag has to be set at all seven call sites. A
+signature cannot be forgotten at the eighth.
+
+⚠️ Only a count can see this. The pixels are identical either way, so
+`a_repaint_that_changes_nothing_re_uses_the_frame_it_already_drew` asserts on a
+`rasterised` counter and carries its own positive control — it moves the
+scrubber and the background afterwards and requires the count to *rise*, because
+"never redraws" also passes for a viewport that has stopped working.
+
+### ✅ 3. The frame is now filled on every core
+
+`render::scene` projects each triangle once into a shared list, then cuts the
+frame into one band of rows per core and fills the bands at the same time under
+`std::thread::scope`. A band owns its rows of both the pixel buffer and the
+depth buffer — a `chunks_mut` split — so no two can touch the same pixel.
+
+Across the 139 effects at 700×700: **311.9 ms → 160.8 ms summed**, and the worst
+effect **22.5 ms → 5.2 ms**. 16 effects regressed, every one of them by under
+0.35 ms on a frame already under 1.5 ms.
+
+⛔ **Threads in proportion to the work is worse than a threshold.** Handing out
+`reach / 150_000` bands reads better and measured worse: `reach` bounds bounding
+boxes, and the expensive effects are fans of small triangles whose boxes barely
+overlap what they fill. `heart_dance` took 6.6 ms on every core and 8.4 ms on
+the two its reach asked for. Above 100,000 pixels of reach, take the machine.
+
+### ✅ 4. The triangle filler hoists three things it was recomputing per pixel
+
+Worth 1.13× on its own, single-threaded:
+
+- **Per-row edge terms.** `edge()` re-subtracted `b.x-a.x` and `y-a.y` at every
+  pixel. `Rail` holds the four constants and splits the weight into a per-row
+  half and a per-pixel half. ⚠️ The *same* arithmetic in the same order — a
+  cheaper recurrence stepping the weight by `dy` along the row drifts, and the
+  drift decides boundary pixels.
+- **The tint chain, where a mesh carries no vertex colours** — which is every
+  effect part, whose colour comes from its material's register and is one value
+  for the whole draw. `Ready::Whole` goes further: a flat triangle with no
+  vertex colour is one fragment at every pixel.
+- **The perspective divisor.** The depth test and `uv`/`tint` were each
+  computing `w0*inv_z0 + w1*inv_z1 + w2*inv_z2` separately, at every pixel of
+  every textured triangle.
+
+Plus a per-row analytic x-span, ⚠️ narrowing only — the f32 edge test still
+decides, and the f64 solve is widened by a pixel so it can only ever leave a
+pixel in for that test to reject. ⚠️ It is skipped below 24 px of box width:
+solving costs three divides, and `mini_gameclear` issues 26,851 triangles a
+frame, nearly all a few pixels across. Without that guard it was a 0.92×.
+
+### ⛔ Ruled out: multiplying by a reciprocal
+
+The obvious next step — `1.0 / total` once instead of two divides, and
+`by * (1.0/255.0)` instead of `/255.0` — measured **slower**: 275 → 290 ms
+across the corpus. Apple Silicon's FDIV is not the bottleneck and the extra
+multiply is not free. It would also have changed the last bit of every texel for
+nothing. Do not reach for it.
+
+### ⛔ Ruled out by measurement: the texture clones, and overdraw
+
+Both were the first guesses and both are noise.
+
+- `stage.art()` deep-clones every decoded PNG per frame and
+  `Art::of` clones one per draw. `mini_result` clones **13.6 MB** a frame — and
+  it costs 0.46 ms, because a `Vec<u8>` clone is a memcpy. Left alone.
+- Overdraw is **0.5–1.5×**, measured with counters in the fill loop. Nothing is
+  being drawn many times over; the frame is expensive per pixel, not per pass.
+
+The per-pixel cost is spread — texture sample ~20%, `blend::mix` ~18%, the edge
+walk ~15%, the modulate chain ~15%, memory traffic the rest. ⚠️ **There is no
+hot spot left to find**, which is why the remaining factor came from cores
+rather than from arithmetic.
+
+### ⚠️ The trap this run walked into once
+
+The first bisection of the per-pixel chain returned `Blend::Opaque` from each
+short-circuit, and an opaque fragment **writes depth** — so every variant also
+enabled depth rejection and shaded far fewer pixels. It reported `mix` as 80% of
+the frame. `mix` is 18%. The control has to preserve the control flow, not just
+the result. (An earlier attempt put a `std::env::var_os` in the same loop, which
+is an environment lookup per pixel; that one at least announced itself.)
+
+### ✅ The renderer's output is unchanged, and it is checked rather than claimed
+
+Every one of the 139 effects was reeled at two sizes and every one of 120 models
+shot at four angles, through a build of `HEAD` and a build of this change, and
+compared **byte for byte**: 1,668 effect frames and 480 model views, all
+identical. `splitting_the_frame_into_bands_does_not_change_a_pixel_of_it` keeps
+that true for band counts 1, 2, 3, 5, 8, 200 and 400 on every run.
+
+⚠️ A rasteriser change that is "visually the same" is one nobody can ever tell
+from a regression. The old binary is buildable from git; use it.

@@ -408,8 +408,11 @@ uv run bleck build work/extracted/eu0 /tmp/mac-check/out.wbfs
 ### 3. Dimentio, with a screen (10 min)
 
 ```bash
-cargo run --manifest-path dimentio/Cargo.toml -- work/export
+cargo run --release --manifest-path dimentio/Cargo.toml -- work/export
 ```
+
+⚠️ **`--release` matters here.** The viewports rasterise on the CPU and a `dev`
+build is 16-33x slower — the effect timeline plays at about 3 fps (D286).
 
 Four questions, all invisible to CI, all answerable by looking:
 
