@@ -132,7 +132,14 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 17 | `0x194` | 8 bytes × layers | **layer records** — `+0x00` a material index, `+0x04` the wrap mode | ✅ D243, D247 |
 | 18 | `0x198` | 64 bytes × materials | **material records** — `+0x04` the bank image index, `+0x08` a mode the draw code branches on, `+0x0C` the source TGA path | ✅ D243 |
 | 19 | `0x19C` | 108 bytes × shapes | **shape records** — layer count and list, material mode, UV channel per layer, first face, face count, and the corner offset of each index stream | ✅ D240, D243, D247 |
-| 20..23 | `0x1A0`+ | — | ⛔ **unread** | — |
+| 20 | `0x1A0` | 32 bytes of `01` | ⛔ **unread** | — |
+| 21 | `0x1A4` | 96 bytes × **nodes** | **node transforms** — translate, scale, rotation in degrees, and a pivot | ✅ structure D287, 🔶 fields |
+| 22 | `0x1A8` | 88 bytes × **nodes** | **node records** — a name, previous sibling, last child, and the shape it draws | ✅ D287 |
+| 23 | `0x1AC` | — | ⛔ **unread** | — |
+
+⛔ **Slots 21 and 22 are a scene graph, and nothing reads it** (D287). `bleck`
+exports every model in its **rest state, unposed**: 489 of 869 models carry at
+least one node that is not the identity, and 5,473 of 27,400 nodes do.
 
 ⚠️ **The draw code loads slots 7–14 as *index* streams, not channel data.**
 `lwzx r0, r24, r5` picks `0x16C + channel × 4`, so `0x16C`…`0x188` are eight
@@ -1040,3 +1047,69 @@ what let all 864 models be checked rather than the six a rip existed for.
 verts look wrong" into a number, and the Brobot comparison took minutes where
 four rounds of eyeballing had not converged. ⛔ The rips are third-party assets;
 `work/` is git-ignored and stays that way.
+
+## ✅ Slots 21 and 22 are a scene graph, and the export ignores it (D287)
+
+Reported as "`e_card_nri_m` looks wrong, the textures seem to be not rotated
+correctly". ⛔ **It is not the textures and not the rasteriser.** The model is
+exported in its rest state with a whole node hierarchy left unapplied.
+
+### The two tables
+
+Parallel, one record per node, on **869 of 872** model files — and the two
+counts **agree on every one of them**, which is what makes this structural
+rather than a reading of one file.
+
+| slot | stride | what a record holds |
+|---|---|---|
+| 21 | 96 bytes | 24 floats: translate `[0..2]`, scale `[3..5]`, rotation in degrees `[6..8]`, then a pivot repeated at `[12..14]` and `[15..17]` |
+| 22 | 88 bytes | `char name[0x20]`, then at `+0x40` previous sibling, `+0x44` last child, `+0x48` the shape this node draws (`-1` for a node that only groups) |
+
+`e_card_nri_m` — a Cursya — holds **31 nodes for 17 shapes**, and the links
+rebuild a Maya DAG exactly:
+
+```
+|all
+  noroi                      <- 呪い, the enemy's own name
+    grp_body
+      lct_body02a            <- rotate (11.69, -2.40, -1.04)
+        body02a_mod          <- shape 16
+        lct_body01a          <- rotate (44.09, -33.42, -42.93)
+          body01a_mod        <- shape 15
+          lct_body02b        ...and so on down the stack
+    lct_tntcl_l              <- rotate (0, 0, 10.00)
+      tntcl_l01_mod          <- shape 9, its own rotate (0, 0, 17.50)
+    grp_eye_r                <- translate (-0.3, 0.3, 0), scale 1.10
+```
+
+⚠️ **`lct_` is a Maya locator and they nest down the stack**, so a stone's
+rotation is the product of every locator above it. This is the same shape the
+effect format's node chain has (D265, D266) and wants the same treatment.
+
+### ✅ The stored positions are unposed — the control
+
+`grp_eye_r` carries **scale 1.10** and `grp_eye_l` carries 1.00. If the
+positions were already posed the right eye would be 1.1× the left. Measured:
+`weye_r` is 5.0 × 5.0 and `weye_l` is 5.0 × 5.0, `eye_r` is 4.0 × 3.0 and
+`eye_l` is 4.0 × 3.0. Identical. Nothing is baked in.
+
+⚠️ **The rotations read as degrees authored by hand**, which is the other reason
+to believe the field: the values across the corpus are 3.50, 7.50, 10.00, 17.50,
+20.00, 168.75, **180.00** and **360.00**, not a spread of arbitrary floats.
+
+### 🔶 What this does *not* yet establish
+
+⛔ **Nothing here has read the game's draw code.** That the file holds a scene
+graph is measured; that the game *walks* it is not, and 489 models would move if
+it were applied. A scan for `lwz rN, 0x1a4(r3)` finds sites of the same shape as
+the known-read slots 17–19 use, which is a lead and not a finding — 0x1A4 is
+also an ordinary stack offset, so the counts do not discriminate.
+
+⚠️ Also unestablished: the rotation **order** (the effect evaluator is z, then y,
+then x — D265), whether the rotation is taken **about the pivot** at `[12..14]`
+(it is within 0.08 of `weye_r`'s centroid, on one sample), and what floats
+`[9..11]` and `[18..23]` are.
+
+⛔ **Do not apply this to the exporter on the strength of the above.** The
+positive control to demand first is the draw code: find the routine that walks
+slot 22's sibling/child links, and read what it does with slot 21.

@@ -20985,3 +20985,83 @@ that true for band counts 1, 2, 3, 5, 8, 200 and 400 on every run.
 
 ⚠️ A rasteriser change that is "visually the same" is one nobody can ever tell
 from a regression. The old binary is buildable from git; use it.
+
+## D287 — Every model is exported unposed: slots 21 and 22 are a scene graph (2026-08-04)
+
+Reported as "`e_card_nri_m` looks wrong, the textures seem to be not rotated
+correctly". ⛔ **Neither the textures nor the rasteriser.** The exporter writes
+the rest geometry and drops a node hierarchy that 489 of 869 models use.
+
+Full structure in [`model-format.md`](./model-format.md); the reasoning is here.
+
+### ⚠️ The reported diagnosis was wrong, and checking it is what found this
+
+"Textures not rotated" would be a UV problem. The measurement that killed it:
+7 of `e_card_nri_m`'s 17 shapes are **flat in XZ** while the other 10 are flat in
+XY. That is geometry, not sampling. The seven are `body01a`…`body02d` — the
+stones — which the group table names outright.
+
+### ✅ And it is not the exporter mis-rotating them either
+
+The oracle D240 built for exactly this: **stored normals are not rebased**, so
+they are an independent witness. All seven lying-down shapes carry normals of
+`(0, 1, ~0)` — pointing the same way the geometry lies. Positions and normals
+agree, so the rebase is right and the file really does hold horizontal quads.
+
+### ✅ What is actually missing
+
+Slots 21 and 22 are **parallel per-node tables**, 96 and 88 bytes. Across the
+corpus: 869 of 872 files parse as both, and the two record counts **agree on
+every one of the 869**. Slot 22 holds a name, a previous sibling, a last child
+and the shape a node draws; slot 21 holds translate, scale and a rotation in
+degrees.
+
+`e_card_nri_m` holds 31 nodes for 17 shapes and the links rebuild a Maya DAG —
+`|all` → `noroi` (呪い, the enemy's own name) → `grp_body` → a chain of `lct_`
+locators, one per stone, each rotating what hangs below it. The tentacles carry
+their own ±20° and ±17.5° about Z, which is the splay the render is missing.
+
+**489 of 869 models carry at least one node that is not the identity, and 5,473
+of 27,400 nodes do.** This is most of the corpus, not an edge case.
+
+### ✅ The control: the positions are unposed
+
+`grp_eye_r` carries scale **1.10** and `grp_eye_l` carries 1.00. Posed, the right
+eye would be 1.1× the left. Measured: `weye_r` 5.0 × 5.0 against `weye_l`
+5.0 × 5.0, `eye_r` 4.0 × 3.0 against `eye_l` 4.0 × 3.0. Nothing is baked in.
+
+⚠️ Without that control this is just "there is a table of floats". The scale was
+the discriminator available because one node has a scale and its mirror does not
+— a rotation would have been much harder to see from the geometry alone.
+
+Corroborating: the rotations across the corpus are 3.50, 7.50, 10.00, 17.50,
+20.00, 168.75, **180.00** and **360.00** — hand-authored degrees, not a spread of
+arbitrary floats.
+
+### ⛔ What this does not establish, and why nothing was changed
+
+**Nothing here has read the game's draw code.** That the file holds a scene graph
+is measured; that the game *walks* it is not. Applying it would move geometry on
+489 models on the strength of an inference, which is the shape of mistake this
+log exists to prevent.
+
+A scan for `lwz rN, 0x1a4(r3)` finds sites of the same form the known-read slots
+17–19 use — a lead, not a finding. `0x1A4` is also an ordinary stack offset, so
+the hit counts across slots 16 to 23 are all within 130–290 and discriminate
+nothing.
+
+Also unestablished: the rotation **order** (the effect evaluator is z, then y,
+then x — D265), whether rotation is about the pivot at floats `[12..14]` (within
+0.08 of `weye_r`'s centroid, on one sample), and what `[9..11]` and `[18..23]`
+are.
+
+### 🔶 Next, in order
+
+1. Find the routine that walks slot 22's sibling/child links — `dolscan.py
+   callers`, not `xref` (D206). Read what it does with slot 21.
+2. Only then compose the chain and re-export, keeping the same
+   normals-versus-geometry oracle as the check.
+3. `e_card_nri_m` is the worked example: the tentacles must splay and the stack
+   must close up. ⚠️ The stones stay horizontal either way — no node in its
+   chain carries anything near 90°, so "the stones should stand up" is not what
+   this predicts and must not be read into it.
