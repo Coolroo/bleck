@@ -30,14 +30,17 @@ jobs:
         with:
           workspaces: dimentio
 
-      # eframe needs X11/Wayland development headers on Linux; the other two
-      # platforms ship their graphics stack.
+      # eframe needs X11/Wayland development headers on Linux and rodio needs
+      # ALSA's; the other two platforms ship both. ⚠️ libasound2-dev is not
+      # optional and its absence fails in alsa-sys, before this crate compiles
+      # at all — the runner image used to carry it and stopped.
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libxkbcommon-dev libwayland-dev \
-            libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev
+            libxcursor-dev libxrandr-dev libxi-dev libgl1-mesa-dev \
+            libasound2-dev
 
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
