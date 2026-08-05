@@ -613,8 +613,8 @@ impl Mesh {
     /// ⚠️ Checked rather than trusted: a manifest is a file on disk, and a
     /// stray index would panic the rasteriser rather than draw wrongly.
     pub fn is_sound(&self) -> bool {
-        self.triangles.len() % 3 == 0
-            && self.positions.len() % 3 == 0
+        self.triangles.len().is_multiple_of(3)
+            && self.positions.len().is_multiple_of(3)
             && self.triangles.iter().all(|&at| at < self.vertices())
             && (self.uvs.is_empty() || self.uvs.len() == self.vertices() * 2)
             && (self.colours.is_empty() || self.colours.len() == self.vertices() * 4)

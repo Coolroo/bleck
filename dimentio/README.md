@@ -356,6 +356,13 @@ Needs a recent stable Rust. `Cargo.lock` is committed, and `image` is pinned to
 0.25.5 because 0.25.10 requires rustc 1.88 while this was written against 1.87 —
 raise it once the toolchain floor moves.
 
+⚠️ **CI takes `dtolnay/rust-toolchain@stable` and runs `clippy -- -D warnings`,
+so a new lint in a new stable turns working code red without anything here
+changing.** That is what `manual_is_multiple_of` did. The fix is to take the
+lint's suggestion, not to pin the toolchain: `cargo clippy --all-targets --
+-D warnings` locally reproduces it exactly, and a rustup that has drifted behind
+CI's stable will not.
+
 ⚠️ **Linux needs ALSA's development headers** (`libasound2-dev` on Debian and
 Ubuntu). `rodio` builds on `cpal`, which links against them; without them the
 build fails in `alsa-sys` rather than in this crate.

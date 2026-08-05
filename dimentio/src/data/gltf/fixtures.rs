@@ -338,7 +338,7 @@ pub(crate) fn push_floats(bin: &mut Vec<u8>, values: &[f32]) {
 
 /// Append indices at a 4-byte boundary and report where they landed.
 pub(crate) fn pad(bin: &mut Vec<u8>, indices: &[u32]) -> usize {
-    while bin.len() % 4 != 0 {
+    while !bin.len().is_multiple_of(4) {
         bin.push(0);
     }
     let at = bin.len();
@@ -350,11 +350,11 @@ pub(crate) fn pad(bin: &mut Vec<u8>, indices: &[u32]) -> usize {
 
 pub(crate) fn container(json: &str, bin: &[u8]) -> Vec<u8> {
     let mut text = json.as_bytes().to_vec();
-    while text.len() % 4 != 0 {
+    while !text.len().is_multiple_of(4) {
         text.push(b' ');
     }
     let mut binary = bin.to_vec();
-    while binary.len() % 4 != 0 {
+    while !binary.len().is_multiple_of(4) {
         binary.push(0);
     }
     let mut out = Vec::new();

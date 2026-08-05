@@ -38,7 +38,7 @@ impl Background {
         match self {
             Self::DarkGrey => Rgba::new(38, 40, 44),
             Self::Checkerboard => {
-                if (x / CHECK + y / CHECK) % 2 == 0 {
+                if (x / CHECK + y / CHECK).is_multiple_of(2) {
                     Rgba::new(56, 58, 63)
                 } else {
                     Rgba::new(38, 40, 44)
