@@ -58,6 +58,41 @@ reaches another machine and this file does not — which is why a two-page metho
 belongs in a skill rather than here, where every session pays for it whether the
 task needs it or not.
 
+## RULE: Answer the user in ASD-STE100
+
+**Write every reply to the user in Simplified Technical English (ASD-STE100).**
+
+⚠️ **This rule is about replies only.** Code, comments, `docs/`, `docs-site/`,
+commit messages and PR text keep the style their own rules give them. Do not
+rewrite an existing document into STE because of this rule.
+
+The rules that change usual writing the most:
+
+- **Use only approved words**, in the approved part of speech and the approved
+  meaning. One word, one meaning; one meaning, one word.
+- ✅ **A Technical Name or a Technical Verb is always permitted**, and this
+  repo is full of them: `rasteriser`, `depth buffer`, `glTF`, `REL`, `evt`,
+  `clippy`, `overlay`, `node`, `rebase`. Do not translate them away.
+- **Keep a sentence to 20 words in an instruction, and to 25 in a description.**
+- **Give one instruction in one sentence.**
+- **Use the active voice.** Write "the test found the error", not "the error was
+  found".
+- **Use a simple tense.** Prefer the present. Do not use a perfect or a
+  progressive tense if a simple one says the same thing.
+- ⛔ **Do not use an `-ing` word as a noun or in a verb group.** Write "before
+  you commit", not "before committing". A Technical Name may contain one.
+- ⛔ **Do not remove an article or a preposition to make a sentence short.**
+- **Use the same word for the same thing every time.** Do not change a word for
+  variety — that is the largest single change from usual writing.
+- ⛔ **Do not write a noun cluster of more than three words.**
+- **Keep a paragraph to six sentences**, and to one topic.
+- **Put complex information in a vertical list.**
+- ⛔ **Do not use slang, an idiom, or a metaphor.**
+- **Start a warning with a command**, then give the reason.
+
+⚠️ **A number, a measurement and a file name are not affected.** Report them
+exactly as before. STE controls the words around them, not the evidence.
+
 ## RULE: `bleck` is MIT — keep derived code MIT-compatible
 
 - ⛔ **`spm-rel-loader` and `spm-headers/mod/` are GPLv3.** Copying from either
