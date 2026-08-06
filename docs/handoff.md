@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-02, at **D271**. This is the orientation doc: what exists,
+Last updated 2026-08-05, at **D288**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D271 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D288 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -508,11 +508,18 @@ Every one has already misled someone.
    `material.extras.spmMaskTexture` because glTF has no slot for it (D248).
    ⚠️ **`I4` and `I8` decode to `(I, I, I, I)`**, not opaque; a test was pinning
    the old reading and would have passed forever.
-4. 🔶 **The 60 Hz clip rate is an inference, not a measurement.** Model key
-   times are whole numbers and `effdata` already converts effect frames at 60
-   (D219), so `FRAME_RATE = 60.0` applies the same inference to a second table
-   (D235). The manifest carries both `frames` and `seconds`, so the raw number
-   is never lost.
+4. ✅ **The 60 Hz clip rate is measured** (D288), superseding the 🔶 that stood
+   here from D235. The animation driver's own elapsed-frame field advanced
+   **300.30 frames in 5.00 s — 60.06 Hz** — on two independent poses, and a
+   clip's wrap point came out at exactly **280.00** frames against the 280
+   `bleck` reads for `mario_S_1` off the disc. The manifest still carries both
+   `frames` and `seconds`, so the raw number is never lost.
+   ⛔ **But "3,079 clips export, none dropped" counts the wrong denominator.**
+   The files declare **10,851** clips (`model-format.md`); 3,079 are written,
+   **673 of those hold one pose and cannot move**, and 7,772 are neither written
+   nor counted as dropped. `animations_dropped: 0` cannot tell a clip that plays
+   from one that cannot. ✅ The held poses are *correct* — the game does the same
+   (D288) — but the accounting reads as full coverage and is not.
 5. ⚠️ **`bleck model export` defaults to `--out work/models`**, the other three
    to `work/export` (D233). Harmless when one root meant one pile; now it splits
    the export in half and Dimentio finds no models.

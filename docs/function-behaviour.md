@@ -832,3 +832,70 @@ leftover from whoever authored it.
 🔶 The Chaos Heart is therefore built inside cutscene event code from parts that
 exist nowhere else. Reproducing it means authoring a new model, which is outside
 what `bleck` can do today.
+
+---
+
+## ✅ The animation driver's pose table — `animdrv_wp` `0x805ADF58` (eu0) (D288)
+
+**How it was found.** `animGetPtr` at `0x8004158c` is two instructions —
+`lwz r3,-32680(r13); blr` — and r13 is `0x805B5F00` (D218), so the global is
+named outright rather than searched for. `animPoseGetAnimPosePtr`
+(`0x8004c660`) and `animPoseGetAnimBaseDataPtr` (`0x8004c828`) then index the
+table in the clear, which is where the whole layout comes from.
+
+| | |
+|---|---|
+| `wp +0x00` | base-data table, stride **16** |
+| `wp +0x10` | `AnimPose` array |
+| `wp +0x14` | pose count — **384** on `eu0` |
+| `AnimPose` stride | **392** (`mulli r31,r30,392`) |
+| `AnimPose +0x00` | flags; **bit 0 set = in use**, and the assert fires when it is clear |
+| `AnimPose +0x10` | index into the base-data table (`slwi r0,r0,4`, added to `wp[0x00]`) |
+
+`animPoseGetAnimBaseDataPtr(i)` computes `wp[0x00] + pose[0x10] * 16`.
+
+### The live fields, measured over six poses
+
+| offset | what |
+|---|---|
+| `+0x020` | `f32` elapsed frames |
+| `+0x024` | `f32` position within the clip (elapsed, wrapped at its length) |
+| `+0x030` / `+0x034` | `u32` current and next **keyframe index** |
+| `+0x038` / `+0x048` | `f32` blend fraction between those keys |
+| `+0x044` | `u32` a second channel's key index |
+| `+0x08c` | `f32` a second time base |
+
+✅ **The clock is 60 Hz, measured.** `+0x020` advanced 972.00 → 1272.30 in
+5.00 s — **300.30 frames, 60.06 Hz** — and a second pose gave the same delta
+over the same interval.
+
+✅ **`+0x024` wraps at the clip's length.** Slot 0 advanced 300.30 frames while
+its wrapped position moved 132.00 → 152.30, a difference of exactly **280.00**.
+That pose's model is `a/p_wii_mario` and `bleck` reads `mario_S_1` as 280
+frames from the disc — the same number by two routes.
+
+### ⚠️ Naming a pose takes two hops
+
+The base record's third word points at a **loader record**, and the model's disc
+path sits at that record's **`+0x20`** as `a/p_wii_mario`. ⛔ Six probe offsets
+on the pointer itself returned nothing, which reads as "the table carries no
+names" and is a correct measurement of the wrong place.
+
+### ✅ A pose that never changes is normal
+
+Nine poses were live during the attract demo; **three did not change one word of
+392 across five seconds**, and two more advanced only their time fields while
+their keyframe indices held.
+
+✅ **Not one of the six models `bleck` exports with zero animations ever
+advanced a keyframe index**, which is what corroborates D252's reading that a
+zero-length track holds the pose rather than losing it.
+
+⛔ **The converse is false and was briefly claimed here.** `p_wii_mario_r`
+carries **23** animations and sat byte-identical; `n_yogen_demo` carries 2 and
+moved only its clock. ⚠️ **A static pose means the model is not playing
+anything right now, not that it has nothing to play.** Only the one-way
+implication is evidence, so read this table in that direction and no other.
+
+`scripts/dump_anim.py` samples this table. It **reads only** — no hook, no
+patch — so none of `reading-the-game-live`'s prototype hazards apply.

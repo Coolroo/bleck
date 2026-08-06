@@ -720,6 +720,17 @@ Writing a target per keyframe instead dropped 70 clips and cost 39 MB.
 | morph targets | 14,469 | 22,073 | **22,485** | 14,861 |
 | `work/export/models` | 74.5 MB | 123.4 MB | **137 MB** | 76.4 MB |
 
+⛔ **"3,079 / 0" is against the wrong denominator, and this row has been read as
+full coverage** (D288). The files declare **10,851** clips — the number this
+document records above — so 7,772 are neither written nor counted as dropped,
+because a clip with no keyed track produces no pose to write. Of the 3,079 that
+are written, **673 across 67 models hold a single pose at constant morph weight
+and cannot move**; only 2,406 animate. ✅ The held ones are *correct* — three of
+nine live poses in the running game do not change one word across eight seconds,
+and every one of those is a model exported with zero animations (D288). What is
+wrong is that `animations_dropped: 0` cannot tell a clip that plays from one
+that cannot.
+
 Geometry alone (`--no-animation`) is **20.6 MB** for all 864.
 
 ### How a texture reference is written

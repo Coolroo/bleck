@@ -21065,3 +21065,161 @@ are.
    must close up. ⚠️ The stones stay horizontal either way — no node in its
    chain carries anything near 90°, so "the stones should stand up" is not what
    this predicts and must not be read into it.
+---
+
+## D288 — The animation driver's live pose table, read without a hook; a held pose is the game's own behaviour (2026-08-05)
+
+**The question.** `bleck` exports **673 clips across 67 models** as a single
+morph target at a **constant weight of 1**, which cannot move. A user reported
+that no animation plays in `dimentio`, and named `e_killer_k2` — ten clips,
+every one static. Was the exporter collapsing poses?
+
+### ⛔ Ruled out first: an exporter bug
+
+Read straight off the disc, every one of `e_killer_k2`'s clips holds **exactly
+one track carrying keys**, followed by holds:
+
+```
+S_1   tracks=4  keys=30  with_keys=1   (0.0, first=0, len=30) (10.0, 30, 0) (16.0, 30, 0) (60.0, 30, 0)
+N_1   tracks=6  keys=30  with_keys=1   (0.0, 0, 30) (40.0, 30, 0) (44.0, 30, 0) ...
+```
+
+Track 0 consumes all 30 keys; every later track points past the end with
+`length=0`. Under D252 that is one distinct pose, so `gltfmorph._slots` folds it
+to one target and `_weight_animation` holds it at 1. **The writer is faithful to
+the file.** ⚠️ The first diagnosis in this session was "the writer collapses
+poses", and it was wrong — the collapse is in the data.
+
+That left the real question: **is D252's reading right at all?** A zero-length
+track being a *hold* had never been checked against the game.
+
+### ✅ The animation driver states its own layout
+
+`animGetPtr` (`0x8004158c`) is two instructions — `lwz r3,-32680(r13); blr` —
+and with r13 at `0x805B5F00` (D218) that names `animdrv_wp` at **`0x805ADF58`**
+outright. `animPoseGetAnimPosePtr` (`0x8004c660`) and
+`animPoseGetAnimBaseDataPtr` (`0x8004c828`) then index the table in the clear:
+
+| | |
+|---|---|
+| `wp +0x00` | base-data table, stride 16 |
+| `wp +0x10` | `AnimPose` array |
+| `wp +0x14` | pose count — **384** on `eu0` |
+| `AnimPose` stride | **392** (`mulli r31,r30,392`) |
+| `AnimPose +0x00` | flags; **bit 0 = in use** (`clrlwi. r0,r0,31`) |
+| `AnimPose +0x10` | index into the base-data table (`slwi r0,r0,4`) |
+
+⚠️ **Reads only — no hook, no mod, nothing patched.** Because the accessors
+expose the indexing, none of `reading-the-game-live`'s prototype hazards apply:
+there is no handler whose signature could silently corrupt a call.
+`scripts/dump_anim.py` boots an image and samples the table.
+
+### ✅ The field map, measured over six live poses
+
+| offset | what |
+|---|---|
+| `+0x020` | `f32` elapsed frames |
+| `+0x024` | `f32` position within the clip (elapsed, wrapped) |
+| `+0x030` / `+0x034` | `u32` current and next **keyframe index** |
+| `+0x038` / `+0x048` | `f32` blend fraction between them |
+| `+0x044` | `u32` second channel's key index |
+| `+0x08c` | `f32` a second time base |
+
+### ✅ 60 Hz is now measured, superseding an inference
+
+`+0x020` advanced **972.00 → 1272.30 in 5.00 s — 300.30 frames, 60.06 Hz** —
+and a second pose gave the identical delta of 300.30 in the same interval.
+⚠️ `handoff.md` carried "the 60 Hz clip rate is an inference, not a
+measurement" as standing trap #4 since D235. It is a measurement now.
+
+### ✅ And the clip length agrees with the file, by two routes
+
+Slot 0's `+0x024` went 132.00 → 152.30 while `+0x020` advanced 300.30 — a
+difference of **exactly 280.00**, one wrap. `models.json` computes
+`p_wii_mario`'s `mario_S_1` as `frames: 280.0` from the disc. The pose's own
+base record named it `a/p_wii_mario`, so this is identification, not inference.
+
+### ✅ A held pose is what the game does
+
+Nine poses were live during the attract demo, all nine named. Correlating each
+against the export:
+
+| model | in the game | glTF animations | clips / written |
+|---|---|---|---|
+| `p_wii_mario` | **key indices advanced** | 88 | 94 / 88 |
+| `p_wii_mario_r` | byte-identical | **23** | 24 / 23 |
+| `n_yogen_demo` | time fields only | **2** | 3 / 2 |
+| `EFF_block` | byte-identical | 0 | 7 / 0 |
+| `hoshi_2` | byte-identical | 0 | 3 / 0 |
+| `n_happy_flow` | blend moved, keys held | 0 | 2 / 0 |
+| `FRY_infom` | blend moved, keys held | 0 | 19 / 0 |
+| `FRY_throw` | blend moved, keys held | 0 | 18 / 0 |
+| `etc_demo` | time fields only | 0 | 1 / 0 |
+
+✅ **The falsifiable direction holds: not one of the six models `bleck` exports
+with zero animations ever advanced a keyframe index.** If the exporter were
+flattening real motion, those are precisely the poses that should have stepped
+`+0x030`/`+0x034`, and none did. **D252's hold semantics are corroborated by the
+running game**, and the 673 constant-weight clips are correct output.
+
+### ⛔ But the converse does not hold, and the first draft of this entry claimed it
+
+"Every model the game holds static is one `bleck` exports as unanimated" was
+written after checking **four** of the nine. Checking all nine refutes it:
+`p_wii_mario_r` carries **23** animations and sat byte-identical, and
+`n_yogen_demo` carries 2 and moved only its clock.
+
+⚠️ **A static pose means the model is not playing anything right now, not that
+it has nothing to play** — idle and unanimatable are indistinguishable in a
+single observation. Only the one-way implication is evidence. The claim was
+made on a four-model sample and refuted by the other five, which is
+`control-every-statistic` in miniature.
+
+### ⚠️ What is actually wrong: the denominators
+
+Nothing is broken in the exporter or the viewer. The corpus is **646 of 864
+models with no morph animation, 67 more holding a single pose, 151 that move** —
+so "no animations play" is what sampling that distribution feels like.
+
+⛔ But `model-format.md` reports the export as **"clips written / dropped:
+3,079 / 0"** while the same document records **10,851 clips** in the files, and
+`handoff.md` repeats it as "all 3,079 clips export, none dropped". 7,772 clips
+are neither written nor counted as dropped, and `animations_dropped: 0` cannot
+distinguish a clip that plays from one that cannot. This is
+`control-every-statistic` again: a percentage over what was read rather than
+what exists, the same shape as D211's 13.6%.
+
+### ⚠️ Two instrument notes
+
+- **A string-replace patch to `dump_anim.py` silently did not apply**, and the
+  next run printed nothing where the dump should have been — which read as "the
+  table has no names". The repo's own standing rule says to use an editor that
+  errors instead, and it was ignored for one command. It cost a run.
+- ⛔ **The model name is two hops, not one.** Six probe offsets on the base
+  record's pointer all returned nothing; the path lives at **`+0x20` of the
+  record that pointer names**, as `a/p_wii_mario`. "No names in this table" was
+  a wrong conclusion from a correct measurement of the wrong place.
+
+### 🟢 What this adds to D287, which asked the same question of the geometry
+
+D287 measured that the file holds a node hierarchy the exporter drops, and said
+plainly that it **had not read the game's draw code** — so "the file holds a
+scene graph" was measured and "the game walks it" was not. This entry reads the
+game, but reads the *animation* driver, so it does not settle that either.
+
+Two things it does contribute:
+
+- ✅ **The scatter D287 predicts closing up is measured.** `e_card_nri_m`'s
+  seven stones sit at lateral offsets spanning **8.6 units against a mean disc
+  diameter of 15.3** at yaw 0, and 8.1 at yaw 0.6 — so the camera does not
+  explain it, and the stack really is spread in the rest geometry.
+- ✅ **The stones stay horizontal here too**, by a third route: the round stone
+  texture appears in the game's own art as a ~3:1 ellipse, which is a disc seen
+  from about 20°, not a camera-facing quad. That agrees with D287's normals
+  oracle and with the ⚠️ attached to it — nothing predicts the stones standing
+  up.
+
+🔶 **`scripts/dump_anim.py` is the instrument D287's next step wants.** Slots 21
+and 22 are per-node, and the `AnimPose` array is the driver's own per-node
+state; whether the two describe one hierarchy is a comparison away, and it would
+turn D287's 🔶 into a reading of the game rather than of the file.
