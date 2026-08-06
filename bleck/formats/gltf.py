@@ -194,13 +194,34 @@ def _lone(document: dict, blob: Blob, painted: list, texture: bytes) -> None:
         primitive["material"] = 0
 
 
-def write(  # pylint: disable=too-many-positional-arguments
+#: Where a primitive says the file hides it. ⚠️ glTF has no visibility on a
+#: primitive, so this is `extras` and every other reader ignores it: Blender
+#: draws the shape, `dimentio` leaves it out until asked.
+HIDDEN_KEY = "spmHidden"
+
+
+def _mark_hidden(primitives: list, shapes: list, hidden: frozenset | None) -> None:
+    """Flag every primitive whose shape slot 20 marks as off.
+
+    ⚠️ **Matched on `Part.shape`, never on position.** `parts` drops a shape
+    with no drawable faces, so the nth primitive is not the nth shape on a model
+    that has one -- and the flag would land on the wrong piece silently.
+    """
+    if not hidden:
+        return
+    for primitive, part in zip(primitives, shapes, strict=True):
+        if part.shape in hidden:
+            primitive.setdefault("extras", {})[HIDDEN_KEY] = True
+
+
+def write(  # pylint: disable=too-many-positional-arguments,too-many-arguments
     mesh,
     texture: bytes = b"",
     name: str = "",
     clips: list | None = None,
     sparse: bool = True,
     paints: list | None = None,
+    hidden: frozenset | None = None,
 ) -> bytes:
     """One mesh as a `.glb`, one primitive per shape.
 
@@ -224,6 +245,7 @@ def write(  # pylint: disable=too-many-positional-arguments
     blob = Blob()
     accessors: list = []
     primitives = [_primitive(blob, accessors, mesh, part) for part in shapes]
+    _mark_hidden(primitives, shapes, hidden)
 
     document = {
         "asset": {"version": "2.0", "generator": "bleck"},
@@ -264,6 +286,10 @@ class Painting:
     masked: int = 0
     #: Primitives carrying `COLOR_0`, which multiplies their texture (D251).
     coloured: int = 0
+    #: Primitives the file marks as off in slot 20. ⚠️ Counted from the emitted
+    #: bytes, so a flag that never reached a primitive reads as 0 here rather
+    #: than as the number of shapes the reader was handed.
+    hidden: int = 0
 
     @property
     def textured(self) -> bool:
@@ -300,6 +326,7 @@ def painting(blob: bytes) -> Painting:
         materials=len(materials),
         masked=sum(1 for m in materials if gltfpaint.MASK_KEY in m.get("extras", {})),
         coloured=sum(1 for p in primitives if "COLOR_0" in p["attributes"]),
+        hidden=sum(1 for p in primitives if p.get("extras", {}).get(HIDDEN_KEY)),
     )
 
 

@@ -33,7 +33,17 @@ from pathlib import Path, PurePosixPath
 from bleck.cli.types import AddCommand
 from bleck.common import exportlayout
 from bleck.common.errors import UserError
-from bleck.formats import gltf, gltfcore, gltfmorph, gltfpaint, model, png, texdecode, tpl
+from bleck.formats import (
+    gltf,
+    gltfcore,
+    gltfmorph,
+    gltfpaint,
+    model,
+    modelnodes,
+    png,
+    texdecode,
+    tpl,
+)
 from bleck.mods import registry
 
 CATEGORY = "inspection"
@@ -109,6 +119,9 @@ class Found:
     disc_path: str
     mesh: model.Mesh
     clips: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Which shapes slot 20 marks as off. Read from the file rather than
+    #: derived, and empty on a model whose two node tables disagree.
+    visible: modelnodes.Visibility = field(default_factory=modelnodes.Visibility)
 
     @property
     def name(self) -> str:
@@ -162,7 +175,9 @@ def _walk(base: Path, pattern: str) -> list[Found]:  # pylint: disable=container
         except model.ModelError:
             continue
         if mesh.is_drawable:
-            found.append(Found(relative, mesh, _clips_of(data, mesh)))
+            found.append(
+                Found(relative, mesh, _clips_of(data, mesh), modelnodes.visibility(data))
+            )
     return found
 
 
@@ -483,6 +498,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 clips=written,
                 sparse=not args.dense_morphs,
                 paints=paints,
+                hidden=entry.visible.hidden,
             )
         except ValueError as exc:
             failed.append(f"{entry.name}: {exc}")
@@ -510,6 +526,7 @@ def cmd_export(args: argparse.Namespace) -> int:
                 "coloured": painted.coloured,
                 "painted": painted.painted,
                 "shapes": entry.mesh.shapes,
+                "hidden": painted.hidden,
                 "animated": bool(animation.clips),
                 "animations": len(animation.clips),
                 "animations_dropped": animation.dropped,

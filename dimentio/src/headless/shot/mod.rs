@@ -275,7 +275,7 @@ pub fn take(request: &Request) -> Result<Report, String> {
             vec![render::render(
                 &mesh,
                 &View {
-                    camera: Camera::fit(mesh.bounds()),
+                    camera: Camera::fit(mesh.visible_bounds()),
                     background: request.background,
                 },
                 Size::new(request.size, request.size),
@@ -348,7 +348,7 @@ fn draw(mesh: &Mesh, request: &Request) -> Sheet {
     let columns = sheet::grid_columns(request.angles);
     let rows = request.angles.div_ceil(columns);
     let mut sheet = Sheet::blank(request.size, columns, rows);
-    let fitted = Camera::fit(mesh.bounds());
+    let fitted = Camera::fit(mesh.visible_bounds());
     for index in 0..request.angles {
         let mut camera = fitted;
         // One angle keeps the fitted three-quarter view: a single frame should
@@ -393,7 +393,7 @@ fn sweep(
     }
     let cell = Size::new(request.size, request.size);
     let view = View {
-        camera: Camera::fit(mesh.bounds()),
+        camera: Camera::fit(mesh.visible_bounds()),
         background: request.background,
     };
     let mut cells = Vec::with_capacity(last - first + 1);

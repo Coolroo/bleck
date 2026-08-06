@@ -99,6 +99,11 @@ class Part:
     #: the primitive's `baseColorTexture` and the second, where there is one, its
     #: alpha mask; see `gltfpaint`.
     textures: list = field(default_factory=list)  # pylint: disable=container-return
+    #: Which shape of the model this came from. ⚠️ **Not the primitive's own
+    #: position.** `parts` drops a shape whose faces are all degenerate, so the
+    #: two indices diverge, and anything keyed on a shape -- the visibility flag
+    #: in `modelnodes` -- must match on this rather than count primitives.
+    shape: int = -1
 
 
 @dataclass(frozen=True)
@@ -153,7 +158,7 @@ def parts(mesh) -> list:  # pylint: disable=container-return
     rather than an empty one, which no reader accepts.
     """
     found = []
-    for span in mesh.shape_spans():
+    for index, span in enumerate(mesh.shape_spans()):
         part = _weld(mesh, mesh.shape_faces(span))
         if part.vertices and part.indices:
             found.append(
@@ -161,6 +166,7 @@ def parts(mesh) -> list:  # pylint: disable=container-return
                     vertices=part.vertices,
                     indices=part.indices,
                     textures=list(getattr(span, "textures", [])),
+                    shape=index,
                 )
             )
     return found

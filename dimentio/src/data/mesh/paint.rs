@@ -24,6 +24,15 @@ pub struct Shape {
     pub first: usize,
     pub count: usize,
     pub visible: bool,
+    /// Whether the file itself marks this shape as off — slot 20's per-node
+    /// byte, exported as `extras.spmHidden`.
+    ///
+    /// ⚠️ **Kept beside `visible` rather than folded into it.** `visible` is
+    /// what the viewer draws and the user may toggle; this is what the disc
+    /// said, and the two must stay separable or "show the hidden parts" has
+    /// nothing to restore from. `p_wii_mario` marks 68 of its 90 shapes,
+    /// including the 50-unit `big_hammer` prop that otherwise fills the frame.
+    pub off_in_file: bool,
     /// Which of the mesh's `paints` this shape samples, or `None` when it draws
     /// flat. `e_lui_robo` reaches 15 of them across 68 of its 92 shapes, so one
     /// image over the whole mesh paints most of the robot with a stranger's

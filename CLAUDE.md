@@ -53,10 +53,21 @@ tools** — `ingame-testing`, `hunting-a-hang`, `reading-the-game-live`,
 `catalog-dumps`, `reading-undecoded-data`, `bleck-cli-workflows`,
 `linting-and-ci`, `arm64-container`.
 
-⚠️ **`.claude/` is not git-ignored and `CLAUDE.md` is** (D149). So a skill
-reaches another machine and this file does not — which is why a two-page method
-belongs in a skill rather than here, where every session pays for it whether the
-task needs it or not.
+⚠️ **`.claude/` is not git-ignored, and ⛔ neither is this file any more.** D149
+made `CLAUDE.md` git-ignored; it is tracked now, because a second machine cannot
+work without it. A two-page method still belongs in a skill rather than here,
+where every session pays for it whether the task needs it or not.
+
+## ⚠️ Codex reads `AGENTS.md`; it never sees this file
+
+[`AGENTS.md`](AGENTS.md) is a **router**: it sends Codex here for the rules and
+indexes the fourteen skills with a reason to open each, because Codex has no
+tool that loads one on demand and must read the file itself.
+
+⛔ **It restates no rule, and no rule may be moved into it.** Two copies of a
+rule drift, and one then ships a claim the other already withdrew. When the
+skill set changes, or a document in the orientation table is renamed, **both
+files change in the same commit.**
 
 ## RULE: Answer the user in ASD-STE100
 

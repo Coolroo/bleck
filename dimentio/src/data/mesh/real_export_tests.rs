@@ -65,7 +65,12 @@ fn a_real_mesh_carries_the_triangles_the_manifest_promised() {
     };
     let library = Library::load(&root);
     for entry in library.entries().iter().take(20) {
-        let mesh = Mesh::load(&entry.path).expect("mesh");
+        let mut mesh = Mesh::load(&entry.path).expect("mesh");
+        // ⚠️ **`triangles` is the file's total, so every shape has to be shown
+        // to compare against it.** Since D289 a model can arrive with shapes
+        // already hidden, and `faces()` is what is *drawn* rather than what the
+        // file holds — the two stopped being the same number.
+        mesh.show_all_shapes();
         assert_eq!(
             mesh.faces().len(),
             entry.triangles,
@@ -87,7 +92,11 @@ fn a_real_models_shapes_partition_its_faces() {
     let library = Library::load(&root);
     let mut many = 0;
     for entry in library.entries().iter().take(60) {
-        let mesh = Mesh::load(&entry.path).expect("mesh");
+        let mut mesh = Mesh::load(&entry.path).expect("mesh");
+        // ⚠️ The spans index the file's whole face list, so the partition can
+        // only be checked against every face — a model arriving with shapes
+        // hidden (D289) draws fewer than its spans describe, by design.
+        mesh.show_all_shapes();
         let shapes = mesh.shapes();
         assert!(!shapes.is_empty(), "{} carries no shape at all", entry.name);
         assert_eq!(shapes[0].first, 0, "{}", entry.name);
@@ -123,11 +132,19 @@ fn hiding_a_shape_of_a_real_model_draws_fewer_triangles() {
         if mesh.shapes().len() < 2 {
             continue;
         }
+        // ⚠️ **Not shape 0.** Since D289 a shape can arrive hidden, because the
+        // file says so — 68 of `p_wii_mario`'s 90 do — and hiding one that is
+        // already hidden takes no triangles off anything. This test failed on
+        // `e_2D_manera` the moment the flag shipped, which is the real export
+        // earning its place: no fixture here carries `extras.spmHidden`.
+        let Some(shown) = mesh.shapes().iter().position(|shape| shape.visible) else {
+            continue;
+        };
         let before = mesh.faces().len();
-        let dropped = mesh.shapes()[0].count;
-        mesh.set_shape_visible(0, false);
+        let dropped = mesh.shapes()[shown].count;
+        mesh.set_shape_visible(shown, false);
         assert_eq!(mesh.faces().len(), before - dropped, "{}", entry.name);
-        mesh.show_all_shapes();
+        mesh.restore_file_visibility();
         assert_eq!(mesh.faces().len(), before, "{}", entry.name);
         checked += 1;
         if checked == 10 {

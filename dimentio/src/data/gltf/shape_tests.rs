@@ -7,6 +7,78 @@
 
 use super::fixtures::{container, pad, painted_quads, push_floats};
 use super::*;
+
+/// ✅ Slot 20's flag, as `extras.spmHidden` on a primitive (D289).
+///
+/// ⚠️ The dangerous direction is the default. An export written before the
+/// flag existed carries no `extras` at all, and a reader that treated a
+/// missing key as "hidden" would blank every model in the previous export.
+mod hidden_in_file {
+    use super::*;
+    use crate::data::gltf::fixtures::{quads_glb, Quad};
+
+    fn quads(flags: &[bool]) -> Mesh {
+        let quads: Vec<Quad> = flags
+            .iter()
+            .map(|hidden| Quad {
+                image: None,
+                tint: None,
+                hidden: *hidden,
+            })
+            .collect();
+        crate::data::gltf::parse(&quads_glb(&quads))
+            .expect("a readable glb")
+            .into_mesh()
+    }
+
+    #[test]
+    fn a_marked_primitive_starts_hidden() {
+        let mesh = quads(&[false, true, false]);
+        let shapes = mesh.shapes();
+        assert!(shapes[0].visible && !shapes[0].off_in_file);
+        assert!(!shapes[1].visible && shapes[1].off_in_file);
+        assert!(shapes[2].visible && !shapes[2].off_in_file);
+        assert_eq!(mesh.shapes_off_in_file(), 1);
+    }
+
+    #[test]
+    fn a_file_with_no_extras_shows_everything() {
+        let mesh = quads(&[false, false]);
+        assert_eq!(mesh.shapes_off_in_file(), 0);
+        assert_eq!(mesh.hidden_shapes(), 0);
+    }
+
+    #[test]
+    fn showing_everything_can_be_undone() {
+        let mut mesh = quads(&[false, true]);
+        mesh.show_all_shapes();
+        assert_eq!(mesh.hidden_shapes(), 0);
+        mesh.restore_file_visibility();
+        assert_eq!(mesh.hidden_shapes(), 1);
+        assert!(!mesh.shapes()[1].visible);
+    }
+
+    /// ⚠️ **The camera must not frame what it will not draw.** `p_wii_mario`'s
+    /// hidden `big_hammer` is 50 units against a 27-unit body, and fitting the
+    /// whole span drew him at 0.9% of the sheet instead of 7.7%.
+    #[test]
+    fn the_visible_bounds_leave_out_a_hidden_shape() {
+        let all = quads(&[false, false, false]);
+        let some = quads(&[false, false, true]);
+        assert!(
+            some.visible_bounds().max.x < all.visible_bounds().max.x,
+            "the hidden quad still stretched the bounds"
+        );
+        assert_eq!(some.bounds().max.x, all.bounds().max.x);
+    }
+
+    /// Nothing visible is not a reason to hand the camera an empty span.
+    #[test]
+    fn hiding_everything_falls_back_to_the_whole_mesh() {
+        let mesh = quads(&[true, true]);
+        assert_eq!(mesh.visible_bounds().max.x, mesh.bounds().max.x);
+    }
+}
 use crate::data::mesh::Mesh;
 use crate::data::scratch::Scratch;
 use crate::data::texture::Texel;

@@ -118,7 +118,7 @@ impl Viewer {
 
         ui.separator();
         if ui.button("fit").clicked() {
-            self.models.view.camera = render::Camera::fit(self.models.mesh.bounds());
+            self.models.view.camera = render::Camera::fit(self.models.mesh.visible_bounds());
             self.models.stale = true;
         }
         ui.separator();
@@ -142,8 +142,11 @@ impl Viewer {
             return;
         }
         let hidden = self.models.mesh.hidden_shapes();
+        let by_file = self.models.mesh.shapes_off_in_file();
         let label = if hidden == 0 {
             format!("{total} shape(s)")
+        } else if hidden == by_file {
+            format!("{total} shape(s), {hidden} hidden by the file")
         } else {
             format!("{total} shape(s), {hidden} hidden")
         };
@@ -154,11 +157,13 @@ impl Viewer {
 
         let mut toggled: Vec<Toggle> = Vec::new();
         let mut all = None;
+        let mut restore = false;
         ui.menu_button(label, |ui| {
             ui.label(
                 egui::RichText::new(
                     "One shape per glTF primitive, as the file groups its faces. \
-                     Which Maya shape name goes with which is not decoded.",
+                     A shape marked \"off in file\" is one slot 20 hides — a prop \
+                     or an alternate part the game does not draw at rest.",
                 )
                 .weak()
                 .small(),
@@ -169,6 +174,9 @@ impl Viewer {
                 }
                 if ui.button("hide all").clicked() {
                     all = Some(false);
+                }
+                if by_file > 0 && ui.button("as the file says").clicked() {
+                    restore = true;
                 }
             });
             ui.separator();
@@ -184,7 +192,12 @@ impl Viewer {
                             break;
                         };
                         let mut shown = shape.visible;
-                        let name = format!("shape {index} · {} tris", shape.count);
+                        let mark = if shape.off_in_file {
+                            " · off in file"
+                        } else {
+                            ""
+                        };
+                        let name = format!("shape {index} · {} tris{mark}", shape.count);
                         if ui.checkbox(&mut shown, name).changed() {
                             toggled.push(Toggle { index, shown });
                         }
@@ -193,6 +206,10 @@ impl Viewer {
             );
         });
 
+        if restore {
+            self.models.mesh.restore_file_visibility();
+            self.models.stale = true;
+        }
         if let Some(shown) = all {
             if shown {
                 self.models.mesh.show_all_shapes();
@@ -595,7 +612,7 @@ impl Viewer {
         self.models.posed = None;
         match mesh::Mesh::load(&path) {
             Ok(mesh) => {
-                self.models.view.camera = render::Camera::fit(mesh.bounds());
+                self.models.view.camera = render::Camera::fit(mesh.visible_bounds());
                 self.models.mesh = mesh;
                 self.models.problem = None;
             }

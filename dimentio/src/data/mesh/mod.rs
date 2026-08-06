@@ -103,6 +103,7 @@ impl Parts {
             first: 0,
             count: faces.len(),
             visible: true,
+            off_in_file: false,
             paint: None,
         }];
         Self {
@@ -118,7 +119,7 @@ impl Parts {
 
     pub(crate) fn into_mesh(self) -> Mesh {
         let bounds = Bounds::around(&self.positions, &self.faces);
-        Mesh {
+        let mut mesh = Mesh {
             positions: self.positions,
             posed: Vec::new(),
             drawn: self.faces.clone(),
@@ -130,7 +131,14 @@ impl Parts {
             colours: self.colours,
             paints: self.paints,
             animation: self.animation,
-        }
+        };
+        // ⚠️ **A shape can arrive hidden** since D289, so the drawn set has to
+        // be computed rather than assumed to be every face. Hard-coding
+        // `hidden: 0` here left `faces()` handing back the full list while the
+        // shapes said otherwise, and the first hide of any shape then appeared
+        // to drop every file-hidden shape at once.
+        mesh.redraw();
+        mesh
     }
 }
 /// Positions and triangles, plus the texture the file named if it named one.
@@ -224,6 +232,26 @@ impl Mesh {
         self.hidden
     }
 
+    /// How many shapes the file itself marks as off.
+    ///
+    /// ⚠️ Not the same as `hidden_shapes`, which counts what is hidden *now*
+    /// however it got that way.
+    pub fn shapes_off_in_file(&self) -> usize {
+        self.shapes.iter().filter(|shape| shape.off_in_file).count()
+    }
+
+    /// Put every shape back to the state the file asked for.
+    ///
+    /// ⚠️ **The way back from "show all".** Slot 20 hides 68 of `p_wii_mario`'s
+    /// 90 shapes, and without this a viewer who showed them once could only
+    /// restore the model by selecting it again.
+    pub fn restore_file_visibility(&mut self) {
+        for shape in &mut self.shapes {
+            shape.visible = !shape.off_in_file;
+        }
+        self.redraw();
+    }
+
     /// Show or hide one shape.
     ///
     /// ⚠️ **The bounds do not move**, for the same reason posing does not move
@@ -311,6 +339,35 @@ impl Mesh {
     /// which the camera treats as a model too small to frame, not an error.
     pub fn bounds(&self) -> Bounds {
         self.bounds
+    }
+
+    /// The bounds of the shapes currently shown, for framing a new selection.
+    ///
+    /// ⚠️ **Only the camera's first fit may use this.** `set_shape_visible`
+    /// deliberately leaves the bounds alone, so a toggle does not make the
+    /// model jump — but the *initial* fit must not frame parts nobody can see.
+    /// `p_wii_mario`'s hidden `big_hammer` is 50 units against a 27-unit body,
+    /// and framing it drew Mario at 0.9% of the sheet instead of 7.7%.
+    ///
+    /// Falls back to the whole mesh when nothing is visible, because a camera
+    /// fitted to an empty span has nothing to point at.
+    pub fn visible_bounds(&self) -> Bounds {
+        let faces: Vec<Face> = self
+            .shapes
+            .iter()
+            .filter(|shape| shape.visible)
+            .flat_map(|shape| {
+                self.faces
+                    .get(shape.first..shape.first + shape.count)
+                    .unwrap_or_default()
+                    .iter()
+                    .copied()
+            })
+            .collect();
+        if faces.is_empty() {
+            return self.bounds();
+        }
+        Bounds::around(self.positions(), &faces)
     }
 
     pub fn is_empty(&self) -> bool {

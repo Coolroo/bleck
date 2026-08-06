@@ -600,6 +600,89 @@ fn a_newly_selected_model_is_paused_at_the_first_frame_of_its_first_clip() {
     assert_ne!(viewer.models.mesh.positions()[0], rest[0]);
 }
 
+/// ⚠️ **The fixtures above are written by this file**, so every model test
+/// agrees with itself and could agree with nothing else (D221). This one drives
+/// the same panels, in the same order, over a model `bleck` actually exported.
+///
+/// It exists because "no animation plays in the window" was reported while
+/// `dimentio shot` swept the same clip correctly and every fixture test passed.
+#[test]
+fn the_real_export_plays_a_real_model_animation() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("a parent directory")
+        .join("work")
+        .join("export");
+    if !root.join("models.json").is_file() {
+        eprintln!("no work/export on this machine; skipped");
+        return;
+    }
+    let mut viewer = Viewer {
+        mode: Mode::Models,
+        ..Viewer::empty()
+    };
+    viewer.open(root);
+    let index = viewer
+        .models
+        .library
+        .entries()
+        .iter()
+        .position(|entry| entry.name == "p_wii_mario")
+        .expect("p_wii_mario is in the real export");
+
+    let ctx = egui::Context::default();
+    viewer.select_model(index);
+    let clips = viewer
+        .models
+        .mesh
+        .animation()
+        .expect("the real glb carries clips")
+        .clips()
+        .len();
+    assert!(clips > 1, "only {clips} clip(s) on p_wii_mario");
+
+    let shot = |viewer: &Viewer| {
+        render::render(
+            &viewer.models.mesh,
+            &viewer.models.view,
+            render::Size::new(240, 240),
+        )
+        .as_rgba()
+        .to_vec()
+    };
+
+    viewer.models.play.playing = true;
+    draw_models_at(&mut viewer, &ctx, 0.0);
+    let first = viewer.models.mesh.positions().to_vec();
+    let first_frame = shot(&viewer);
+    for step in 1..=30 {
+        draw_models_at(&mut viewer, &ctx, f64::from(step) * 0.05);
+    }
+
+    assert!(
+        viewer.models.play.time > 0.0,
+        "the clock never advanced past 0"
+    );
+    assert_ne!(
+        first,
+        viewer.models.mesh.positions().to_vec(),
+        "the pose never moved across 1.5s of play"
+    );
+    // ⚠️ Positions moving is not the same as the picture changing, and the
+    // reported fault was about the picture. A pose that only shifts vertices
+    // the camera cannot resolve would pass the assertion above and still look
+    // frozen to whoever asked.
+    let moved = first_frame
+        .iter()
+        .zip(shot(&viewer).iter())
+        .filter(|(before, after)| before != after)
+        .count();
+    assert!(
+        moved > 0,
+        "the pose moved but not one pixel of the frame did"
+    );
+}
+
 /// A model with no clip must behave exactly as it did: no transport, no
 /// pose, and the geometry the file carried.
 #[test]

@@ -48,6 +48,13 @@ pub(crate) const MASK_KEY: &str = "spmMaskTexture";
 /// this reader would still load them if it ignored the transform entirely.
 pub(crate) const TRANSFORM_EXTENSION: &str = "KHR_texture_transform";
 
+/// Where `bleck` records that the file marks a shape as off — slot 20's
+/// per-node visibility byte, which glTF has no field of its own for.
+///
+/// ⚠️ Read with a default of `false`. Every export written before this existed
+/// carries no `extras`, and those must keep drawing every shape.
+pub(crate) const HIDDEN_KEY: &str = "spmHidden";
+
 /// One primitive, decoded into the slice of the model it contributes.
 struct Piece {
     positions: Vec<Vec3>,
@@ -101,10 +108,14 @@ pub(crate) fn parse(raw: &[u8]) -> Result<Parts, String> {
             b: face.b + base,
             c: face.c + base,
         }));
+        // ⚠️ **Absent means shown.** An export written before the flag existed
+        // carries no `extras` at all, and a missing key must not blank a model.
+        let off_in_file = primitive["extras"][HIDDEN_KEY].as_bool().unwrap_or(false);
         shapes.push(Shape {
             first,
             count: faces.len() - first,
-            visible: true,
+            visible: !off_in_file,
+            off_in_file,
             paint: palette.slot_for(&json, bin, primitive),
         });
         // ⚠️ UVs are one per position across the whole model, so a primitive

@@ -195,6 +195,7 @@ pub(crate) fn painted_quads(colours: &[Option<Texel>]) -> Vec<u8> {
         .map(|image| Quad {
             image: *image,
             tint: None,
+            hidden: false,
         })
         .collect();
     quads_glb(&quads)
@@ -205,6 +206,8 @@ pub(crate) fn painted_quads(colours: &[Option<Texel>]) -> Vec<u8> {
 pub(crate) struct Quad {
     pub(crate) image: Option<Texel>,
     pub(crate) tint: Option<[u8; 4]>,
+    /// Whether the primitive carries `extras.spmHidden` — slot 20's flag.
+    pub(crate) hidden: bool,
 }
 
 /// The same coplanar quads, each optionally carrying a `COLOR_0` (D251).
@@ -299,8 +302,13 @@ pub(crate) fn quads_glb(quads: &[Quad]) -> Vec<u8> {
         accessors.push(format!(
             r#"{{"bufferView":{held},"componentType":5125,"count":6,"type":"SCALAR"}}"#
         ));
+        let extras = if quad.hidden {
+            r#","extras":{"spmHidden":true}"#
+        } else {
+            ""
+        };
         primitives.push(format!(
-            r#"{{"attributes":{{{attributes}}},"indices":{indices}{names}}}"#
+            r#"{{"attributes":{{{attributes}}},"indices":{indices}{names}{extras}}}"#
         ));
     }
 

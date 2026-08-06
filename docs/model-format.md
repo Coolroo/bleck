@@ -132,7 +132,7 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 | 17 | `0x194` | 8 bytes × layers | **layer records** — `+0x00` a material index, `+0x04` the wrap mode | ✅ D243, D247 |
 | 18 | `0x198` | 64 bytes × materials | **material records** — `+0x04` the bank image index, `+0x08` a mode the draw code branches on, `+0x0C` the source TGA path | ✅ D243 |
 | 19 | `0x19C` | 108 bytes × shapes | **shape records** — layer count and list, material mode, UV channel per layer, first face, face count, and the corner offset of each index stream | ✅ D240, D243, D247 |
-| 20 | `0x1A0` | 32 bytes of `01` | ⛔ **unread** | — |
+| 20 | `0x1A0` | 176 bytes, 108 of them `01` | **per-node visibility** — one `u8` a node, `0` meaning off | ✅ D289 |
 | 21 | `0x1A4` | 96 bytes × **nodes** | **node transforms** — translate, scale, rotation in degrees, and a pivot | ✅ structure D287, 🔶 fields |
 | 22 | `0x1A8` | 88 bytes × **nodes** | **node records** — a name, previous sibling, last child, and the shape it draws | ✅ D287 |
 | 23 | `0x1AC` | — | ⛔ **unread** | — |
@@ -140,6 +140,14 @@ Offsets are `p_wii_mario`'s, and the "what" column is what `bleck` reads today.
 ⛔ **Slots 21 and 22 are a scene graph, and nothing reads it** (D287). `bleck`
 exports every model in its **rest state, unposed**: 489 of 869 models carry at
 least one node that is not the identity, and 5,473 of 27,400 nodes do.
+
+✅ **Slot 20 says which nodes to draw at all**, and `bleck` does read it (D289).
+One `u8` per node, padded to a multiple of four, `0` meaning off; slot 22's
+`+0x48` names the shape each node draws, so the two give the shapes to hide.
+**2,427 of 17,597 drawn shapes are off**, on 346 of 869 models.
+⚠️ The section is *not* "32 bytes of `01`" — that reading came from a model with
+few nodes, and it is why the slot sat marked unread while carrying the answer to
+"why does this model look wrong".
 
 ⚠️ **The draw code loads slots 7–14 as *index* streams, not channel data.**
 `lwzx r0, r24, r5` picks `0x16C + channel × 4`, so `0x16C`…`0x188` are eight
@@ -1124,3 +1132,92 @@ then x — D265), whether the rotation is taken **about the pivot** at `[12..14]
 ⛔ **Do not apply this to the exporter on the strength of the above.** The
 positive control to demand first is the draw code: find the routine that walks
 slot 22's sibling/child links, and read what it does with slot 21.
+
+---
+
+## ✅ Slot 20 is per-node visibility, and the export honours it (D289)
+
+Reported as "the animations look funky, there must be default ones hidden for
+each model". There are: **one `u8` per node**, padded to a multiple of four,
+`0` meaning the node is not drawn.
+
+### Why it is a reading and not a coincidence
+
+| | |
+|---|---|
+| models where the length is the node count padded to 4 | **869 of 870** |
+| distinct byte values in the unpadded region | **`0` and `1`, nothing else** |
+| nodes off, of 27,400 | **2,560** (9.3%) |
+| **drawn shapes** off, of 17,597 | **2,427** (13.8%) |
+| models hiding nothing at all | 523 of 869 |
+
+⚠️ **The two counts differ because a node can draw nothing.** Slot 22's `+0x48`
+is `-1` on a node that only groups, so 133 of the off nodes hide no shape.
+
+### The control: what it names on `p_wii_mario`
+
+68 of 176 nodes are off, and slot 22 names every one of them:
+
+```
+big_hammer  hammer  awate_foot     <- props
+namida                             <- 涙, the tears
+hed_kae  mouth  zentai             <- alternate parts
+pPlane1..pPlane12, A10..A15,
+B0..B5, C0..C15, D0..D5,
+E0..E8, F0..F3, G0..G3             <- all 61 stacked planes
+```
+
+✅ **The 61 `pPlane*` nodes are the ones `handoff.md` recorded as unexplained**
+— "61 one-triangle planes stacked at three spots", open since D252. They are not
+unexplained; the file says not to draw them.
+
+✅ `big_hammer` measures **50 units** against the body's 27, so drawn at rest it
+fills the frame and the character is a few pixels below it. Hiding the 68 takes
+`p_wii_mario` from 90 primitives to 22, and the sweep of `mario_S_1` becomes a
+recognisable Paper Mario.
+
+### ⚠️ The bounds have to follow, or the fix is invisible
+
+The camera fits the model's bounds, and the bounds span every face including the
+hidden ones. Framing the 50-unit hammer drew Mario at **0.9%** of the contact
+sheet — worse than before the flag was read. `Mesh::visible_bounds` fits only
+what is drawn, and the figure returns to **7.7%**.
+
+⛔ **Only the *first* fit may use it.** A toggle that moved the bounds would read
+as the model jumping rather than as a part disappearing.
+
+### How it is exported
+
+`extras.spmHidden` on the primitive, because glTF has no visibility field. Every
+other reader ignores it: Blender draws the shape, `dimentio` leaves it out until
+asked. `models.json` carries `hidden`, counted from the emitted bytes (D245).
+
+⚠️ **The export marks 2,393 primitives on 319 models, not the file's 2,427 on
+326**, and the whole difference is accounted for:
+
+| | shapes | models |
+|---|---|---|
+| the file marks | 2,427 | 326 |
+| in a model `mesh()` refuses, so never exported | −31 | −4 |
+| naming a shape index past the mesh's own list | −3 | −3 |
+| **written into a `.glb`** | **2,393** | **319** |
+
+🔶 **The three are `e_pakflwr`, `_i` and `_p`** — one node each names shape **4**
+where the mesh has four spans, `0..3`. The reader drops it and hides nothing on
+those models, which is the right degradation and not an explanation. 3 of 863 is
+small enough to leave open and large enough not to wave away.
+
+⚠️ **The flag is matched on `Part.shape`, never on a primitive's position.**
+`parts()` drops a shape whose faces are all degenerate, so the nth primitive is
+not the nth shape — and a positional match would hide a different part of the
+model, silently, in a file that still validates.
+
+### ⛔ What this does not establish
+
+**No code has been read.** That the file carries the flag is measured on 869
+models; that the game obeys it is not — the same limit D287 records for slots 21
+and 22, and the same positive control settles both: find the routine that walks
+slot 22's links.
+
+🔶 So a hidden shape is *the file's own statement*, not proven runtime
+behaviour, and the viewer keeps a way to show it again.

@@ -602,6 +602,7 @@ fn real(geometry: &Geometry, world: &[f32; 12], image: Option<Texture>, how: Sur
             first: 0,
             count: faces.len(),
             visible: true,
+            off_in_file: false,
             paint,
         }],
         positions,
@@ -668,6 +669,7 @@ fn quad(basis: &Basis, at: Vec3, half: f32, image: Option<Texture>, how: Surface
             first: 0,
             count: 2,
             visible: true,
+            off_in_file: false,
             paint,
         }],
         // Top-left first, matching the corner order above: the sampler puts

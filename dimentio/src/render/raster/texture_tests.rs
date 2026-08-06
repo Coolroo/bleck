@@ -374,10 +374,12 @@ fn one_image_tinted_two_ways_draws_two_colours() {
         gltf::fixtures::Quad {
             image: Some(WHITE),
             tint: Some([255, 0, 0, 255]),
+            hidden: false,
         },
         gltf::fixtures::Quad {
             image: Some(WHITE),
             tint: Some([0, 0, 255, 255]),
+            hidden: false,
         },
     ]);
 
@@ -413,6 +415,7 @@ fn an_untextured_shape_is_tinted_too() {
     let raw = gltf::fixtures::quads_glb(&[gltf::fixtures::Quad {
         image: None,
         tint: Some([255, 0, 0, 255]),
+        hidden: false,
     }]);
     let before = palette(&framed(&with_no_tint(&raw)));
     assert_eq!(before.len(), 1, "{before:?}");
@@ -436,10 +439,12 @@ fn a_primitive_with_no_tint_keeps_its_own_colour() {
         gltf::fixtures::Quad {
             image: Some(WHITE),
             tint: Some([255, 0, 0, 255]),
+            hidden: false,
         },
         gltf::fixtures::Quad {
             image: Some(WHITE),
             tint: None,
+            hidden: false,
         },
     ]);
     let seen = palette(&framed(&loaded(&raw)));

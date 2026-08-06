@@ -21223,3 +21223,114 @@ Two things it does contribute:
 and 22 are per-node, and the `AnimPose` array is the driver's own per-node
 state; whether the two describe one hierarchy is a comparison away, and it would
 turn D287's 🔶 into a reading of the game rather than of the file.
+
+---
+
+## D289 — Slot 20 is per-node visibility: the props are hidden, and the export now says so (2026-08-05)
+
+Reported as "the animations look funky — can we hide parts of the model to look
+more like in game? There must be default ones hidden for each model." There are,
+and the slot holding them was one `model-format.md` described as unread.
+
+Full reference in [`model-format.md`](./model-format.md); the reasoning is here.
+
+### ⚠️ Looking at the render is what started this
+
+`dimentio shot p_wii_mario.glb --clip 0 --frame 0 --to 8` sweeps nine keyframes,
+and every cell is dominated by a large orange board with a small Mario beneath
+it. The board is `big_hammer`: **50 units against a 27-unit body**, so the camera
+frames the hammer and the character is a few pixels tall.
+
+⚠️ **The animation was never the fault.** D288 had just established that the
+clock, the pose and the pixels all move. What made it look wrong was every prop
+being drawn at once.
+
+### ✅ Slot 20 is a `u8` per node
+
+| | |
+|---|---|
+| models where the length is the node count padded to 4 | **869 of 870** |
+| distinct byte values in the unpadded region | **`0` and `1`, nothing else** |
+| nodes off, of 27,400 | **2,560** (9.3%) |
+| **drawn shapes** off, of 17,597 | **2,427** (13.8%) |
+| models hiding nothing | 523 of 869 |
+
+The names are the control. Slot 22's `+0x48` gives the shape each node draws, and
+on `p_wii_mario` the 68 off nodes are `big_hammer`, `hammer`, `awate_foot`,
+`namida` (涙, the tears), `hed_kae`, `mouth`, `zentai` — and **all 61 `pPlane*`
+nodes**.
+
+✅ **Those 61 planes are an open thread closing.** `handoff.md` has carried
+"`p_wii_mario`'s 61 one-triangle planes stacked at three spots" as unexplained
+since D252. They are not unexplained: the file says not to draw them.
+
+### ⚠️ "32 bytes of `01`" is how it stayed unread
+
+`model-format.md` described slot 20 as *"32 bytes of `01`"*, ⛔ **unread**. That
+is what the section looks like on a model with few nodes — every byte set, and
+nothing to suggest the length means anything. On `p_wii_mario` it is 176 bytes
+with 68 zeros in it.
+
+⚠️ **The general form**, and it is D251's lesson again: *a slot marked unread is
+a slot nobody looked at, not a slot known to be empty.* Slots 5 and 6 were
+documented as "read by nothing" while being the answer to the vertex colour.
+
+### ⚠️ The bounds had to follow, or the fix made things worse
+
+Hiding the shapes and leaving the camera alone drew Mario at **0.9%** of the
+contact sheet, against 5.2% before — because the bounds still spanned the hidden
+50-unit hammer. `Mesh::visible_bounds` fits what is drawn and the figure goes to
+**7.7%**, matching a hand-built control exactly.
+
+⛔ **Only the first fit may use it.** `set_shape_visible` deliberately leaves the
+bounds alone so a toggle does not make the model jump; that reasoning is intact,
+and this applies to selecting a model rather than to toggling one.
+
+### ⛔ The trap inside the implementation
+
+`gltfcore.parts()` **drops a shape whose faces are all degenerate**, so the nth
+primitive is not the nth shape on a model that has one. A flag matched on
+primitive position would hide a different part of the model — silently, in a file
+that still validates. `Part` now carries `shape`, and a test pins that the two
+agree on the fixture where they can.
+
+⚠️ A throwaway script written earlier in this session *did* match on position. It
+happened to be right for `p_wii_mario` and would not have been for a model with a
+degenerate shape.
+
+### ✅ The export's count is smaller than the file's, and every one is accounted for
+
+The file marks 2,427 shapes on 326 models; the export writes **2,393 on 319**.
+⚠️ **Reconciled rather than reported as agreement**, because two numbers that
+nearly match are the easiest place for a defect to sit:
+
+| | shapes | models |
+|---|---|---|
+| the file marks | 2,427 | 326 |
+| in a model `mesh()` refuses, so never exported | −31 | −4 |
+| naming a shape index past the mesh's own list | −3 | −3 |
+| **written** | **2,393** | **319** |
+
+🔶 **The three are one family** — `e_pakflwr`, `_i`, `_p` — where a node names
+shape **4** and the mesh holds four spans, `0..3`. ⛔ **Not the degenerate-shape
+case above**: `parts()` keeps all four, so the index is genuinely past the end.
+The reader drops it and those models hide nothing, which is right degradation
+rather than an explanation. Left open at 3 of 863.
+
+### ⛔ What is not established
+
+**No code has been read.** That the file carries the flag is measured on 869
+models; that the game obeys it is not. This is the same limit D287 records for
+slots 21 and 22, and the same positive control settles both — find the routine
+that walks slot 22's sibling/child links.
+
+So the flag is exported as `extras.spmHidden`, which every other reader ignores,
+and `dimentio` keeps an "as the file says" button beside "show all" — a viewer
+must not hide data with no way back.
+
+### ⚠️ `test_gltf.py` hit the 1,000-line ceiling, exactly as predicted
+
+`handoff.md` said "whoever adds 30 lines to `test_gltf.py` hits `too-many-lines`
+first". This change added 34. The tests moved to `tests/test_model_visibility.py`
+rather than any docstring being shaved to fit, which is the rule that section
+states.
