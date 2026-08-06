@@ -899,3 +899,38 @@ implication is evidence, so read this table in that direction and no other.
 
 `scripts/dump_anim.py` samples this table. It **reads only** — no hook, no
 patch — so none of `reading-the-game-live`'s prototype hazards apply.
+
+---
+
+## ✅ `animPoseMain` — `0x80045288` (eu0): what it copies out of the model (D290)
+
+Before it poses anything, it copies four of the model's section arrays into the
+runtime buffer in `r29`, with `r28` holding the model's own base. The element
+sizes are stated in the instructions, which is what makes this a reading rather
+than a guess:
+
+| at | source | count × size | destination |
+|---|---|---|---|
+| `0x80045714` | slot 2 (`0x154`) | `mulli r5,r24,12` | `r29 + 0x50` |
+| `0x8004572c` | slot 3 (`0x15C`) | `mulli r5,r23,12` | `r29 + 0x58` |
+| **`0x80045744`** | **slot 20 (`0x1A0`)** | **`mr r5,r19` — none** | **`r29 + 0x60`** |
+| `0x8004575c` | slot 21 (`0x1A4`) | `slwi r5,r22,2` | `r29 + 0x68` |
+| `0x80045774` | slot 16 (`0x190`) | `mulli r5,r18,24` | `r29 + 0x70` |
+
+✅ **Slot 20 is one byte an element.** Every sibling copy carries an explicit
+size and this one carries none — the game saying `u8` as plainly as it can. It
+is the per-node visibility array (D289), and `0x150 + 20 × 4 = 0x1A0 = 416`.
+
+⚠️ **It is copied, not read in place**, so the file's flag is an *initial* state
+the game then owns. A shape the file shows can still be turned off at runtime,
+and on `p_wii_mario` some are — the sprout and the hat frame are marked visible
+and do not belong on him.
+
+`scripts/dump_anim.py` follows the pose's `+0x60` and prints the live array, so
+"what the file says" and "what the game is drawing right now" can be compared
+without a hook.
+
+⛔ **A whole-DOL sweep for the immediate `0x01A0`** finds 31 `lwz`, 1 `lbz`,
+41 `stw`, 3 `stb` and 2 `sth`; this is the only site inside `animdrv`. ⚠️ Most
+of the rest are ordinary stack offsets — `0x1A0` is a common frame size — so the
+count discriminates nothing on its own and each site has to be read.

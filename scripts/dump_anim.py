@@ -60,6 +60,16 @@ BASE_STRIDE = 16
 #: ⚠️ Not the model file's own `+0x04` name; this is the path it was loaded by.
 LOADER_PATH_AT = 0x20
 
+#: Where `animPoseMain` copies the model's slot 20 to, and the sibling copies
+#: that fix the stride. ✅ Read at `0x80045744`: `lwz r4,416(r28)` is slot 20
+#: (`0x150 + 20*4`), `r5` is the count with **no size multiplier**, so one byte
+#: an element, and the destination is `r29 + 0x60`.
+#:
+#: ⚠️ **The copy is the point.** The file's flag is an *initial* state the game
+#: then owns and may change; reading it here is the only way to see what is
+#: actually drawn.
+POSE_VISIBILITY_AT = 0x60
+
 LOW = 0x80000000
 HIGH = 0x94000000
 
@@ -94,6 +104,8 @@ class Pose:
     name: str
     raw: bytes
     base_raw: bytes = b""
+    #: The live per-node visibility bytes, read through the pose's own pointer.
+    visibility: bytes = b""
     blob: bytes = b""
     blob_at: int = 0
 
@@ -147,6 +159,27 @@ def _name_for(dme, base_table: int, base_index: int) -> Named:
     return Named(name="", raw=raw, blob=blob, blob_at=blob_at)
 
 
+
+def _visibility(dme, raw: bytes) -> bytes:
+    """The pose's live copy of slot 20, through the pointer at `+0x60`.
+
+    ⚠️ The length is not stored beside the pointer, so a fixed window is read
+    and the caller compares it against the model's own node count. Reading too
+    far is harmless -- the bytes past the end are simply not 0 or 1.
+    """
+    at = int.from_bytes(raw[POSE_VISIBILITY_AT : POSE_VISIBILITY_AT + 4], "big")
+    if not _valid(at):
+        return b""
+    try:
+        found = dme.read_bytes(at, 512)
+    except RuntimeError:
+        return b""
+    end = 0
+    while end < len(found) and found[end] in (0, 1):
+        end += 1
+    return found[:end]
+
+
 def sample(dme) -> Sample:
     """Every in-use pose in the driver's table, right now."""
     work = dme.read_word(ANIMDRV_WP)
@@ -172,6 +205,7 @@ def sample(dme) -> Sample:
             raw[POSE_BASE_INDEX_AT : POSE_BASE_INDEX_AT + 4], "big"
         )
         named = _name_for(dme, base_table, base_index)
+        seen = _visibility(dme, raw)
         found.append(
             Pose(
                 index=index,
@@ -182,6 +216,7 @@ def sample(dme) -> Sample:
                 base_raw=named.raw,
                 blob=named.blob,
                 blob_at=named.blob_at,
+                visibility=seen,
             )
         )
     return Sample(count=count, poses=found)
@@ -228,6 +263,18 @@ def report(samples: list) -> None:
             chunk = pose.blob[line : line + 16]
             text = "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in chunk)
             print(f"    {pose.blob_at + line:08x}  {chunk.hex(' '):<47}  {text}")
+    print("\nthe live visibility array at pose +0x60 (slot 20, after the copy):")
+    for index in shared:
+        pose = first[index]
+        if not pose.visibility:
+            continue
+        off = [at for at, byte in enumerate(pose.visibility) if byte == 0]
+        print(
+            f"  slot {index} {pose.name or '(unnamed)'}: "
+            f"{len(pose.visibility)} byte(s), {len(off)} off"
+        )
+        print(f"    off at: {off[:24]}")
+
     print("\nwhat moved, first sample -> last (u32, then the same bits as f32):")
     for index in shared:
         moved = _moved(first[index].raw, last[index].raw)

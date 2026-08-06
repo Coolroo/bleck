@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-05, at **D289**. This is the orientation doc: what exists,
+Last updated 2026-08-05, at **D290**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D289 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D290 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -1024,8 +1024,21 @@ else; pick by interest.
    `big_hammer` alone is 50 units against a 27-unit body — are all nodes **slot
    20 marks as off**: one `u8` a node, `0` meaning not drawn. 68 of his 176
    nodes carry it, and the export now writes `extras.spmHidden` so `dimentio`
-   leaves them out. ⛔ The flag is read from the file; **no code has been read**,
-   so that the game obeys it is not established.
+   leaves them out.
+   ✅ **The game's own code confirms it** (D290): `animPoseMain` copies slot 20
+   into its runtime buffer at `0x80045744`, `mr r5,r19` with **no size
+   multiplier** where every sibling copy states 12, 4 or 24 — the game saying
+   one byte a node as plainly as it can.
+   ⚠️ **But it is copied, so it is a floor and not a ceiling.** `p_wii_mario`
+   still renders a sprout (`Kinome`) and a hat frame (`Sp_boushi`) that do not
+   belong on him, ⛔ and their nodes *and* every parent group are marked
+   visible — so subtree propagation is not the missing rule either. 🔶 What
+   clears them at runtime is unfound; the live array at pose `+0x60` is the
+   instrument, sampled on a map where Mario is actually drawn.
+   🔶 **And the animation has a second defect.** In `mario_S_1` only two of the
+   22 visible shapes carry morph data at all, and their largest displacement is
+   **20.6 units on a 27-unit model**. ⛔ Do not read D289 as having fixed the
+   animation: it fixed what is *drawn*, which was one of at least two problems.
 7. 🔶 **Where the vertex-colour gate lives.** `GXSetChanCtrl` picks
    `GX_SRC_VTX` or `GX_SRC_REG` off `lbz r0, 8(r22)`, and `r22` is a runtime
    material struct rather than the file record — the material record's own

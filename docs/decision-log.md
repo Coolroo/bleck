@@ -21334,3 +21334,87 @@ must not hide data with no way back.
 first". This change added 34. The tests moved to `tests/test_model_visibility.py`
 rather than any docstring being shaved to fit, which is the rule that section
 states.
+
+---
+
+## D290 — `animPoseMain` copies slot 20, which confirms it and shows it is only a starting state (2026-08-05)
+
+D289 read slot 20 out of the file and said plainly that ⛔ **no code had been
+read**. It has been now, and it settles the reading — while refuting the hope
+that the flag alone explains what the game draws.
+
+Reported as "the animations still look funky", after D289 shipped.
+
+### ✅ The game states the stride itself
+
+`animPoseMain` copies four of the model's section arrays into a runtime working
+buffer, and the four calls sit together at `0x80045714`–`0x80045780`:
+
+| source | count × size | destination |
+|---|---|---|
+| slot 3, normals | `mulli r5,r24,12` | `r29 + 0x50` |
+| slot 3 + 1 | `mulli r5,r23,12` | `r29 + 0x58` |
+| **slot 20** (`lwz r4,416(r28)`) | **`mr r5,r19` — no multiplier** | **`r29 + 0x60`** |
+| slot 21 | `slwi r5,r22,2` | `r29 + 0x68` |
+| slot 16 | `mulli r5,r18,24` | `r29 + 0x70` |
+
+⚠️ **The siblings are what make it a reading rather than a guess.** Every other
+copy in the run carries an explicit element size — 12, 4, 24 — and slot 20's
+carries none, which is the game saying *one byte each* as plainly as it can.
+`0x150 + 20 × 4 = 0x1A0 = 416`, so the source is unambiguous.
+
+✅ So D289's ⛔ "the game has not been read" is discharged for the *stride and
+the meaning*. A whole-DOL sweep finds **31 `lwz`, 1 `lbz`, 41 `stw`, 3 `stb` and
+2 `sth`** against the immediate `0x01A0`; this is the only one inside `animdrv`.
+
+### ✅ And the live array starts as the file's copy
+
+`scripts/dump_anim.py` now follows the pose's `+0x60` pointer. On
+`a/p_wii_mario` the cleared bytes begin **3, 4, 5, 6, 23, 26, 27, 50, 52, 54,
+56 …** — which is `zentai`, `big_hammer`, `hammer`, `awate_foot`, `hed_kae`,
+`namida`, `mouth`, then the `pPlane` run, exactly what `bleck` reads out of the
+file.
+
+⚠️ **The copy is itself the finding.** The flag is an *initial* state the game
+takes ownership of, so it is a floor on what is hidden and never a ceiling.
+
+### ⛔ Slot 20 is correct and does not explain the render
+
+The sweep of `mario_S_1` still carries two things Paper Mario does not have:
+
+| what | shapes | grouped under |
+|---|---|---|
+| a purple flower on a green stem | `sp_ball`, `sp_bou`, `bou`, `l_ha`, `r_ha` | `Kinome` — 木の芽, a sprout |
+| a large blue ring, Y 8 → 24 | `sp_naka`, `sp_waku` — 中 and 枠, "inside" and "frame" | `Sp_boushi` — a special hat |
+
+⛔ **Every one of them is marked visible, and so is every parent group.** So
+subtree propagation is not the missing rule either — that was the obvious next
+hypothesis and the flags refute it before any code needed reading. Whatever
+turns these off is not slot 20's initial value.
+
+🔶 The live array is the instrument for the rest: sample it on a map where Mario
+is actually drawn rather than in the attract demo, and see whether the game
+clears those bytes at runtime.
+
+### 🔶 A second defect, measured and unexplained
+
+In `mario_S_1`, **only two of the 22 visible shapes carry any morph data** —
+`R_Arm_skin` and `L_Arm_skin` — and their largest displacement is **20.6 units
+on a model 27 units tall**. Nothing else in the clip moves at all.
+
+⚠️ This is very likely a second cause of "funky" and is *not* the props. It also
+matches D252's own residue: that entry fixed the sixteenth-of-a-unit scale and
+the missing accumulation, and still left **70 clips throwing a vertex further
+than the model is wide**.
+
+⛔ **Do not read D289 as having fixed the animation.** It fixed what is drawn,
+which was one of at least two problems, and the report that followed it is the
+evidence.
+
+### ⚠️ The method note
+
+The scan that found the copy is `decode-by-disassembly` applied to an *offset*
+rather than a symbol: search the text sections for any load or store whose
+16-bit immediate is the field, then read the sites. `dolscan.py` has no
+subcommand for that today — `calls` wants a field and a target function — and
+one would have saved this session a detour.

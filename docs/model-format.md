@@ -1212,12 +1212,41 @@ small enough to leave open and large enough not to wave away.
 not the nth shape — and a positional match would hide a different part of the
 model, silently, in a file that still validates.
 
-### ⛔ What this does not establish
+### ✅ The game copies it, one byte a node (D290)
 
-**No code has been read.** That the file carries the flag is measured on 869
-models; that the game obeys it is not — the same limit D287 records for slots 21
-and 22, and the same positive control settles both: find the routine that walks
-slot 22's links.
+⛔ **The "no code has been read" that stood here is discharged.**
+`animPoseMain` copies four section arrays into its runtime buffer at
+`0x80045714`–`0x80045780`, and the element sizes are in the instructions:
 
-🔶 So a hidden shape is *the file's own statement*, not proven runtime
-behaviour, and the viewer keeps a way to show it again.
+| source | count × size | destination |
+|---|---|---|
+| slot 3, normals | `mulli r5,r23,12` | `r29 + 0x58` |
+| **slot 20** (`lwz r4,416(r28)`) | **`mr r5,r19` — no multiplier** | **`r29 + 0x60`** |
+| slot 21 | `slwi r5,r22,2` | `r29 + 0x68` |
+| slot 16 | `mulli r5,r18,24` | `r29 + 0x70` |
+
+⚠️ **The siblings are the argument.** Every other copy carries an explicit size
+— 12, 4, 24 — and slot 20's carries none. `0x150 + 20 × 4 = 0x1A0 = 416`.
+
+✅ **The live array starts as the file's copy.** `scripts/dump_anim.py` follows
+the pose's `+0x60`; on `p_wii_mario` the cleared bytes begin 3, 4, 5, 6, 23, 26,
+27, 50, 52, 54 … — `zentai`, `big_hammer`, `hammer`, `awate_foot`, `hed_kae`,
+`namida`, `mouth`, then the `pPlane` run.
+
+### ⛔ What it still does not explain
+
+⚠️ **The copy makes this a floor, not a ceiling.** The game owns the array
+afterwards, so a shape the file shows may still be turned off at runtime — and
+some are:
+
+| what `p_wii_mario` still draws | shapes | grouped under |
+|---|---|---|
+| a purple flower on a green stem | `sp_ball`, `sp_bou`, `bou`, `l_ha`, `r_ha` | `Kinome` — 木の芽, a sprout |
+| a large blue ring, Y 8 → 24 | `sp_naka`, `sp_waku` | `Sp_boushi` — a special hat |
+
+⛔ **All of them are marked visible, and so is every parent group**, so subtree
+propagation is not the missing rule. 🔶 What clears them is unfound; the live
+array is the instrument, sampled on a map where Mario is actually drawn.
+
+🔶 So a hidden shape is the file's *starting* statement, and the viewer keeps a
+way to show it again.
