@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-05, at **D293**. This is the orientation doc: what exists,
+Last updated 2026-08-05, at **D294**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D293 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D294 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |

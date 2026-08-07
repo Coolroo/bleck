@@ -21627,3 +21627,92 @@ which reads as a broken toolchain. Any frozen `bleck` building a mod that uses
 ✅ Fixed, and the guard derives the list from the directory rather than repeating
 it, so a header added later is caught by the test instead of by a user.
 🟢 Verified by deleting the entry and watching the test fail.
+
+---
+
+## D294 — Reading the node composition: D287's field map is confirmed, and three more floats are in use (2026-08-05)
+
+Asked to fix the animation, which means applying the scene graph. This is the
+decode of what the walker composes — **partial, and recorded rather than
+applied**, because the one thing still missing is the thing that would make a
+wrong answer invisible.
+
+### ✅ D287's field map is confirmed by the values themselves
+
+`e_card_nri_m`, read per node:
+
+| node | floats 0–2 | floats 3–5 | floats 6–8 |
+|---|---|---|---|
+| `grp_eye_r` | −0.30, 0.30, 0 | **1.10, 1.10, 1.10** | 0, 0, 0 |
+| `grp_eye_l` | −0.28, 0, 0 | 1.00, 1.00, 1.00 | 0, 0, 0 |
+| `tntcl_r01_mod` | 0, 0, 0 | 1, 1, 1 | 0, 0, **20.00** |
+| `lct_tntcl_r` | −0.40, 0, 0 | 1, 1, 1 | 0, 0, **3.50** |
+
+✅ **translate [0..2], scale [3..5], rotation in degrees [6..8]**, and D287's own
+control — `grp_eye_r` at 1.10 against `grp_eye_l` at 1.00 — is right there.
+
+### ✅ How the walker reaches the composer
+
+At `0x80048cd0`–`0x80048d38` the walker picks one of two builders:
+
+```
+r3 == -1  or  parent.flag54 == 0   ->  scale = (1.0, 1.0, 1.0)
+otherwise  parent.transformWords*4 ->  scale = floats 3,4,5 of the PARENT
+                                   ->  bl 0x80046c2c(node block, sx, sy, sz)
+the other arm                      ->  bl 0x800466c4(node block)
+```
+
+⚠️ **The parent's *scale* is threaded down, not its whole matrix** — the same
+shape as the effect walker threading alpha and mirror parity (D282).
+
+### ✅ `0x80046c2c` skips identity blocks, exactly as the UV matrix does
+
+```
+float 0,1,2 all == 0.0            -> skip the translation entirely
+parent scale all == 1.0           -> skip
+```
+
+and it builds each surviving block through `0x8027a7b4`, accumulating flags in
+`r30`. This is the same "each block skipped when it would be the identity"
+structure `effect-format.md` records for the sampler's `R · T · S`.
+
+### ✅ Floats 9, 10 and 11 are read — D287 listed them as unknown
+
+```
+lfs f28,36(r3)   ; float 9
+lfs f27,40(r3)   ; float 10
+lfs f26,44(r3)   ; float 11
+```
+
+So the "what floats `[9..11]` are" question is no longer open in the sense that
+*nothing* reads them; they reach the composition. What they mean is unread.
+
+### ⛔ The blocker: rotations are multiplied by 2.0, and nothing explains it
+
+```
+lfs   f4,-30792(r2)   ; = 2.0, measured out of the DOL
+lfs   f3,24(r3)       ; float 6, rotation X in degrees
+fmuls f31,f4,f3       ; 2.0 x rotation
+```
+
+⛔ **Not a degrees-to-radians conversion** — that constant would be 0.017453,
+and this one is exactly 2.0. The three constants in play are 0.0, 1.0 and 2.0.
+
+🔶 The candidate worth testing first: a **sine table with half-degree
+resolution**, where `2 × degrees` is the index. That is a normal thing for a
+2007 console game to do and it fits the doubling exactly. ⛔ Not verified —
+whatever consumes `f31`/`f30`/`f29` has not been read.
+
+### ⛔ Why this is not being applied yet
+
+⚠️ **Getting the rotation wrong is the failure mode that hides.** A model with a
+subtly wrong rotation still renders, still frames, still animates, and looks
+plausible — which is D265 verbatim: applying the effect rest pose produced a
+layout that was *correct and invisible*, and shipping it would have traded an
+honestly-labelled wrong answer for a quietly wrong one.
+
+489 models would move. The remaining work is one focused disassembly of the
+matrix builders (`0x80046c2c`, `0x800466c4`, `0x8027a7b4`) plus their consumer,
+and then the implementation has a ready-made control: **after posing,
+`e_card_nri_m`'s right eye must be 1.1× its left**, which is measurable off the
+emitted bytes and false today.

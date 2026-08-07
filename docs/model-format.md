@@ -1125,9 +1125,21 @@ child) and `+0x40` (previous sibling). It reads slot 22 at `lwz r6,424(r4)` with
 `+0x50` — which holds `index × 24`, and `slwi r0,r4,2` makes it `index × 96`,
 this section's stride from the other direction.
 
-⛔ **What it composes is still unread**: the rotation order, whether the pivot at
-`[12..14]` is used, and what `[9..11]` and `[18..23]` are. 489 models would still
-move if it were applied, so that remains the thing to read next.
+🔶 **What it composes is partly read** (D294). The walker threads the *parent's
+scale* down, not its whole matrix, and picks `0x80046c2c` when there is a parent
+or `0x800466c4` when there is not. That builder skips each block that would be
+the identity — the same structure as the sampler's `R · T · S` — and it reads
+floats `[9..11]`, which this document listed as unknown.
+
+⛔ **One thing blocks applying it: rotations are multiplied by 2.0.** The
+constant is exactly 2.0, measured, so it is *not* degrees-to-radians (0.017453).
+🔶 A sine table at half-degree resolution fits and is unverified. Until it is,
+the rotation cannot be reproduced, and a subtly wrong rotation is the failure
+that renders plausibly and hides — D265's lesson exactly.
+
+✅ **The control to demand when it is applied**: `e_card_nri_m`'s `grp_eye_r`
+carries scale 1.10 against `grp_eye_l`'s 1.00, so a posed right eye must come
+out 1.1× the left. That is measurable off the emitted bytes and false today.
 
 ⚠️ Also unestablished: the rotation **order** (the effect evaluator is z, then y,
 then x — D265), whether the rotation is taken **about the pivot** at `[12..14]`
