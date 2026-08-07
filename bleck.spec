@@ -27,6 +27,14 @@ DATA = [
     ("bleck/formats/npccatalog.json", "bleck/formats"),
     ("bleck/formats/itemcatalog.json", "bleck/formats"),
     ("bleck/script/catalog.json", "bleck/script"),
+    # ⚠️ The C headers every code mod compiles against, found the same way:
+    # `sources.py` builds `Path(__file__).parent / "include"` and puts it on the
+    # compiler's `-I`. Unbundled, a frozen build compiles a mod that uses
+    # `BLECK_HOOK` and fails inside the *compiler*, which reads as a broken
+    # toolchain rather than as a missing file. Same shape as `doorcatalog.json`,
+    # which shipped unbundled through three releases.
+    ("bleck/mods/code/include/bleck.h", "bleck/mods/code/include"),
+    ("bleck/mods/code/include/animdrv.h", "bleck/mods/code/include"),
 ]
 
 # CLI commands are discovered by importing the package, so nothing statically

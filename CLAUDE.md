@@ -104,6 +104,25 @@ The rules that change usual writing the most:
 ⚠️ **A number, a measurement and a file name are not affected.** Report them
 exactly as before. STE controls the words around them, not the evidence.
 
+## RULE: A measured struct goes in a header, beside the code
+
+`bleck/mods/code/include/` is on **every code mod's `-I`**, so a constant put
+there is usable rather than transcribed out of prose. `animdrv.h` is the worked
+example (D293): the addresses and offsets D288–D292 measured, cited entry by
+entry, marked **eu0**.
+
+- ⚠️ **A `struct` asserts its padding.** Write one only where the fields are
+  contiguous and individually read by the game; otherwise write `#define`
+  offsets and an accessor macro. `AnimPose` is offsets for exactly this reason —
+  its copies land 8 bytes apart and a live dump reads a pointer every 4.
+- ⚠️ **Check it against devkitPPC, not the host.** A layout that is right on
+  x86-64 and wrong on a 750 passes a host check and ships.
+- ⛔ **Bundle it in `bleck.spec`.** The directory went unbundled until D293;
+  an unbundled header makes the *compiler* fail on a correct mod, which reads
+  as a broken toolchain rather than a missing file.
+- ⚠️ **Name it ours.** `animPoseWalkNode` describes what the routine does; it
+  is not a guess at Nintendo's name, and the header says so.
+
 ## RULE: `bleck` is MIT — keep derived code MIT-compatible
 
 - ⛔ **`spm-rel-loader` and `spm-headers/mod/` are GPLv3.** Copying from either

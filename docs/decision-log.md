@@ -21565,3 +21565,65 @@ play (D291).
 produces a model that is confidently wrong in a way no test here can see — the
 lesson D265 recorded when the effect rest pose turned out to be correct and
 invisible.
+
+---
+
+## D293 — Measured headers ship beside the code, and the include directory was never bundled (2026-08-05)
+
+D292 named a function the symbol list does not. That name, and the offsets
+around it, had nowhere to live except prose — so a mod wanting to read the
+animation driver had to copy constants out of a document.
+
+### ✅ `bleck/mods/code/include/animdrv.h`
+
+The directory already existed and is already on every code mod's `-I`; it held
+one file, `bleck.h`. `animdrv.h` joins it with what D288–D292 measured: the work
+pointer, the pose stride, the copy destinations, the node record, and the three
+entry points.
+
+⚠️ **Nothing here is derived from `spm-headers`.** There is no upstream
+`animdrv.h`; the licence rule is untouched, and `CLAUDE.md` already says
+addresses and struct offsets are facts and fine to record.
+
+⚠️ **`animPoseWalkNode` is this project's name**, chosen to describe what the
+routine does rather than to guess at Nintendo's. The header says so.
+
+### ⛔ Only one struct, and the reason is the interesting part
+
+`AnimNode` is a `struct`; everything else is `#define`s. The node record's
+fields are contiguous and the walker reads each one individually (D292), so the
+layout is established. The **pose** is not: `animPoseMain`'s five copies land 8
+bytes apart, while a live dump reads a plausible pointer at *every* 4-byte word
+across `0x50..0x74`, several in equal pairs. A `(start, end)` pair per block
+fits and is unproven.
+
+⚠️ **Writing that as C fields would assert padding nobody has measured**, and it
+would be invisible: the struct would compile, a mod would read it, and the wrong
+field would come back. Offsets plus an accessor macro say exactly as much as is
+known.
+
+### ✅ The struct is checked against the *target* compiler
+
+`tests/test_shipped_headers.py` compiles a `__builtin_offsetof` assertion per
+field with **devkitPPC**, not the host. ⚠️ A struct that lays out correctly on
+x86-64 and wrongly on a 750 would pass a host check and ship the bug.
+
+🟢 With a control: a deliberately wrong offset must fail to compile. A
+negative-size array is only an error if the compiler evaluates it, and a check
+that cannot fail proves nothing.
+
+### ⛔ And the include directory was never bundled
+
+`bleck.spec` bundles five JSON catalogs and **no headers**. `BLECK_INCLUDE` is
+`Path(__file__).parent / "include"`, which is exactly the shape of the
+`doorcatalog.json` bug that shipped through three releases (D194) — found
+relative to a module, so a frozen build looks inside the extraction directory.
+
+⚠️ **This one fails worse than the catalog did.** An empty catalog reports
+itself; an unbundled header makes the *compiler* fail on a mod that is correct,
+which reads as a broken toolchain. Any frozen `bleck` building a mod that uses
+`BLECK_HOOK` has been hitting it.
+
+✅ Fixed, and the guard derives the list from the directory rather than repeating
+it, so a header added later is caught by the test instead of by a user.
+🟢 Verified by deleting the entry and watching the test fail.
