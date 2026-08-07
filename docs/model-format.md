@@ -1118,11 +1118,16 @@ to believe the field: the values across the corpus are 3.50, 7.50, 10.00, 17.50,
 
 ### 🔶 What this does *not* yet establish
 
-⛔ **Nothing here has read the game's draw code.** That the file holds a scene
-graph is measured; that the game *walks* it is not, and 489 models would move if
-it were applied. A scan for `lwz rN, 0x1a4(r3)` finds sites of the same shape as
-the known-read slots 17–19 use, which is a lead and not a finding — 0x1A4 is
-also an ordinary stack offset, so the counts do not discriminate.
+✅ **The draw code has been read** (D292), and it is the walker this section
+asked for: **`0x80048c48`**, recursive, calling itself on node `+0x44` (last
+child) and `+0x40` (previous sibling). It reads slot 22 at `lwz r6,424(r4)` with
+`mulli r0,r4,88`, gates each node on slot 20, and reaches slot 21 through node
+`+0x50` — which holds `index × 24`, and `slwi r0,r4,2` makes it `index × 96`,
+this section's stride from the other direction.
+
+⛔ **What it composes is still unread**: the rotation order, whether the pivot at
+`[12..14]` is used, and what `[9..11]` and `[18..23]` are. 489 models would still
+move if it were applied, so that remains the thing to read next.
 
 ⚠️ Also unestablished: the rotation **order** (the effect evaluator is z, then y,
 then x — D265), whether the rotation is taken **about the pivot** at `[12..14]`

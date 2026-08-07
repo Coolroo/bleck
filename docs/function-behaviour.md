@@ -934,3 +934,62 @@ without a hook.
 41 `stw`, 3 `stb` and 2 `sth`; this is the only site inside `animdrv`. ⚠️ Most
 of the rest are ordinary stack offsets — `0x1A0` is a common frame size — so the
 count discriminates nothing on its own and each site has to be read.
+
+---
+
+## ✅ The model node walker — `0x80048c48` (eu0) (D292)
+
+Unnamed in `spm.eu0.lst`, sitting between `animPoseMain` and `animPoseDrawMtx`.
+**Recursive**, and the routine D287 asked for: it walks slot 22's links, gates
+each node on slot 20, and indexes slot 21 for the transform.
+
+```
+f(r3 = ?, r4 = node index, r5, r6, f1 = frame)
+```
+
+Called from four sites — `0x80048F90` and `0x80048FC8` are **itself**, plus
+`0x80049794` and `0x8004DC50`.
+
+### The child-then-sibling recursion
+
+| at | reads | then |
+|---|---|---|
+| `0x80048f80` | node `+0x44`, **last child** | recurse |
+| `0x80048fb8` | node `+0x40`, **previous sibling** | recurse |
+
+✅ Exactly D287's two link fields. Same shape as the effect walker at
+`0x8005f1a8`, which threads a matrix, an alpha and a mirror parity (D282); this
+one threads `r28`, `r29`, `r30` and `f1`.
+
+### ✅ Slot 20 gates the draw
+
+```
+80048c90  mulli  r0,r4,88      ; slot 22 stride
+80048c9c  lwz    r6,424(r4)    ; 0x1A8, the node records
+80048ca0  lwz    r4,100(r5)    ; the runtime visibility array
+80048ca8  lwz    r0,76(r31)    ; node +0x4C -- its index into that array
+80048cac  lbzx   r0,r4,r0      ; one byte
+80048cb0  extsb. r0,r0
+80048cb4  beq    0x80048fb4    ; zero -> branch past the draw
+```
+
+⛔ A cleared byte makes the game skip the node outright. This is the draw-path
+confirmation of D289's per-node visibility, and it also explains node `+0x4C`:
+it is the node's own index, used to subscript the flag array.
+
+### ✅ Slot 21 is indexed through node `+0x50`
+
+```
+80048cbc  lwz  r4,80(r31)      ; node +0x50, which holds index x 24
+80048cc4  lwz  r5,108(r5)      ; the runtime slot-21 block
+80048cc8  slwi r0,r4,2         ; x4 -> index x 96
+```
+
+✅ **96 bytes a node**, arrived at from the opposite direction to D287's stride
+measurement. The block is the one `animPoseMain` copies to the pose's `+0x68`
+(D290) and that D291 measured moving during play.
+
+🔶 **What it composes is still unread** — the rotation order, whether the pivot
+is used, and what the unaccounted floats are. ⚠️ Read that before applying it:
+489 models would move, and a half-right scene graph is wrong in a way no test
+here can see.

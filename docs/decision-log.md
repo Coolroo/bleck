@@ -21490,3 +21490,78 @@ copies slot 21 into is **live state**, and `bleck` treats it as static.
 ⛔ **Do not apply slot 21 on the strength of this.** D287's own warning stands:
 489 models would move, and the positive control to demand first is the routine
 that walks slot 22's links.
+
+---
+
+## D292 — The model node walker at `0x80048c48`: slot 20 gates the draw, and slot 21 is the transform (2026-08-05)
+
+D287 named the positive control to demand before applying slots 21 and 22:
+*find the routine that walks slot 22's sibling/child links, and read what it
+does with slot 21.* It is at **`0x80048c48`**, and it answers both.
+
+### ✅ It is recursive, and the two calls are child then sibling
+
+```
+80048f80  lwz r4,68(r31)     ; node +0x44 = last child
+80048f90  bl  0x80048c48     ; recurse into the child
+...
+80048fb8  lwz r4,64(r31)     ; node +0x40 = previous sibling
+80048fc8  bl  0x80048c48     ; recurse into the sibling
+```
+
+✅ Those are exactly D287's fields, `+0x40` previous sibling and `+0x44` last
+child, and nothing else calls the function except itself and four entry points.
+This is the same shape as the effect format's walker at `0x8005f1a8` (D282).
+
+### ✅ Slot 20 gates the draw, in four instructions
+
+```
+80048c90  mulli r0,r4,88        ; slot 22's stride, from D287
+80048c9c  lwz   r6,424(r4)      ; 0x1A8 = slot 22, the node records
+80048ca0  lwz   r4,100(r5)      ; the runtime visibility array
+80048ca4  add   r31,r6,r0       ; r31 = &node[index]
+80048ca8  lwz   r0,76(r31)      ; node +0x4C
+80048cac  lbzx  r0,r4,r0        ; one BYTE, indexed by that
+80048cb0  extsb. r0,r0
+80048cb4  beq   0x80048fb4      ; zero -> skip the draw entirely
+```
+
+⛔ **D289's "the game has not been read" and D290's "a floor, not a ceiling" are
+both discharged for the mechanism.** A cleared byte makes the game branch past
+the draw. `bleck` hiding those shapes is what the game does, confirmed in the
+draw path rather than inferred from a copy.
+
+✅ **And node `+0x4C` is the index into that array**, which is why the field read
+as a copy of the node's own number in D289's dump — it is one.
+
+### ✅ Slot 21 is reached through node `+0x50`, as 24 words a node
+
+```
+80048cbc  lwz  r4,80(r31)       ; node +0x50
+80048cc4  lwz  r5,108(r5)       ; the runtime slot-21 block
+80048cc8  slwi r0,r4,2          ; x4
+80048ccc  add  r4,r5,r0
+```
+
+✅ `+0x50` held `index x 24` in D289's dump, and `x 4` makes it `index x 96` —
+**slot 21's 96-byte stride, arrived at from the other direction.** So D287's
+"96 bytes: translate, scale, rotation, pivot" is now confirmed as what the draw
+code indexes, and D291's live block at pose `+0x68` is the same array.
+
+⚠️ The walker takes `f1` (a frame or weight) and threads `r28`/`r29`/`r30`
+through every recursion, exactly as the effect walker threads its matrix, alpha
+and mirror parity.
+
+### 🔶 What is still not established
+
+⛔ **This does not say `bleck` should apply slot 21 yet.** The routine reads the
+transform block; what it *composes* — the order, whether the pivot at `[12..14]`
+is used, what `[9..11]` and `[18..23]` are — is unread, and D287's warning that
+489 models would move stands. What has changed is that the block is no longer a
+hypothesis: the draw code indexes it per node, and the runtime copy moves during
+play (D291).
+
+⚠️ **Read the composition before applying it.** Getting a scene graph half right
+produces a model that is confidently wrong in a way no test here can see — the
+lesson D265 recorded when the effect rest pose turned out to be correct and
+invisible.
