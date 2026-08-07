@@ -21716,3 +21716,91 @@ matrix builders (`0x80046c2c`, `0x800466c4`, `0x8027a7b4`) plus their consumer,
 and then the implementation has a ready-made control: **after posing,
 `e_card_nri_m`'s right eye must be 1.1× its left**, which is measurable off the
 emitted bytes and false today.
+
+---
+
+## D295 — The node composition, decoded: two rotation sets, and the 2.0 is real (2026-08-05)
+
+D294 stopped at a constant of 2.0 that made no sense as a radian conversion.
+It is not one — **π/180 is in the same function, at a different address** — and
+reading further explains both.
+
+### ✅ The builders are named SDK functions
+
+| address | symbol |
+|---|---|
+| `0x8027a270` | `PSMTXIdentity` |
+| `0x8027a7b4` | `PSMTXTrans` |
+| `0x8027a834` | `PSMTXScale` |
+| `0x8027a55c` | rotate about an axis, radians — unnamed, but `r4` is an **axis character** |
+| `0x8027a2d0` | concatenate — unnamed |
+
+⚠️ **`li r4,120 / 121 / 122` is ASCII `x` / `y` / `z`.** That is the SDK's
+rotate-about-named-axis signature, and it is what turned an unreadable float
+soup into a sequence.
+
+### ✅ The rotation chain, in order
+
+Each block is skipped when its value is 0.0, built into a scratch matrix, then
+concatenated on the **right** of the accumulator (`PSMTXConcat(acc, tmp, acc)`):
+
+| order | value | axis | at |
+|---|---|---|---|
+| 1 | float 11 | `z` | `0x80046dc4` |
+| 2 | float 10 | `y` | `0x80046df8` |
+| 3 | float 9 | `x` | `0x80046e2c` |
+| 4 | **2.0 × float 8** | `z` | `0x80046e60` |
+| 5 | **2.0 × float 7** | `y` | `0x80046e94` |
+| 6 | **2.0 × float 6** | `x` | `0x80046ec8` |
+
+Every one is `angle × 0.01745329238474369` — **π/180, measured**. So:
+
+```
+R = Rz(f11) · Ry(f10) · Rx(f9) · Rz(2·f8) · Ry(2·f7) · Rx(2·f6)
+```
+
+✅ **The rotation order question D287 left open is answered: z, then y, then x**
+— the same order as the effect evaluator (D265), which is a corroboration
+rather than a coincidence.
+
+### ✅ Floats 9–11 are a second rotation set, and they are rare
+
+Over all 27,402 nodes on the disc:
+
+| | nodes |
+|---|---|
+| only floats 6–8 non-zero | **1,712** |
+| only floats 9–11 non-zero | **96** |
+| both | 11 |
+| neither | 25,583 |
+
+So D287's "rotation in degrees `[6..8]`" is the common set, and `[9..11]` — which
+that entry listed as unknown — is a second one applied *before* it.
+
+### ⚠️ The 2.0 is what the code says, and it is not tidy
+
+⛔ **It is not a half-angle convention I can vouch for.** Floats 6–8 take values
+including −360.0, −180.0, −90.0, 180.0 and 360.0; doubled those are −720, −360,
+−180, 360 and 720. A stored 360 would mean two full turns, which is an identity
+and a strange thing to author.
+
+🔶 Two readings, and **the disassembly is the specification either way**:
+the file stores half-angles, or the doubling means something not yet understood.
+The code multiplies by 2.0 before π/180 and there is no branch around it.
+
+⚠️ **Do not "fix" this to match intuition.** Varying the constant until the
+render looks right is fitting, not decoding — D228's warning verbatim.
+
+### ✅ What an implementation now has
+
+- the full local matrix: translate `[0..2]`, scale `[3..5]`, the rotation chain
+  above, with each block skipped when it is the identity
+- the parent's **scale** threaded down (D294), not its whole matrix
+- `PSMTXConcat(a, b, ab)` computes `ab = a · b`, so the order above is exact
+- ✅ a control that is false today: `e_card_nri_m`'s `grp_eye_r` carries scale
+  1.10 against `grp_eye_l`'s 1.00, so a posed right eye must be **1.1×** the
+  left, measurable off the emitted bytes
+
+🔶 **Still unread**: what `r30`'s flag bits select at `0x80046efc` (`cmplwi
+r30,15` suggests a fast path when all four blocks are present), the pivot at
+`[12..14]`, and floats `[18..23]`.
