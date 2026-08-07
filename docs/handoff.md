@@ -24,6 +24,83 @@ about keeping derived code MIT-compatible is load-bearing — `spm-rel-loader` a
 
 ---
 
+## 🔴 START HERE: apply the node scene graph (D287–D295)
+
+**The one job.** Every model is exported **unposed**. The scene graph that
+positions its parts is decoded end to end and not applied, so 20 of
+`p_wii_mario`'s 22 visible shapes never move and 489 models sit in the wrong
+place. Everything needed to finish it is below; **no more disassembly is
+required.**
+
+### The specification
+
+Slot 21 holds **24 floats a node**, and slot 22 the node records. Per node:
+
+| floats | what |
+|---|---|
+| `[0..2]` | translate |
+| `[3..5]` | scale |
+| `[6..8]` | rotation, degrees — ⚠️ **doubled** before use |
+| `[9..11]` | a second rotation set, degrees, applied **first** |
+| `[12..14]` | a pivot; not known to be used |
+| `[15..23]` | unread |
+
+```
+R = Rz(f11) · Ry(f10) · Rx(f9) · Rz(2·f8) · Ry(2·f7) · Rx(2·f6)
+```
+
+- every angle × **π/180** (`0.01745329238474369`, measured)
+- each block **skipped when its value is 0.0**, translate skipped when all three
+  are, scale skipped when all three are 1.0
+- `PSMTXConcat(a, b, ab)` computes `ab = a · b`, so the order above is exact
+- ⚠️ the **parent's scale** is threaded down, not its whole matrix; a node with
+  no parent, or whose parent's `+0x54` is 0, uses `(1, 1, 1)`
+- walk order is **child** (`+0x44`), then **sibling** (`+0x40`), recursively
+
+All of it is also in `bleck/mods/code/include/animdrv.h`, which is on every code
+mod's `-I` and cites an entry per fact.
+
+### ✅ The control — it is false today
+
+`e_card_nri_m`'s `grp_eye_r` carries scale **1.10**, `grp_eye_l` **1.00**. After
+posing, the right eye must measure **1.1×** the left. Measurable off the emitted
+bytes; needs nobody's eyes. `tntcl_*` nodes carry ±20° and ±17.5° about Z and
+must splay.
+
+### ⚠️ Three traps waiting in this specific job
+
+1. ⛔ **Do not tidy the 2.0.** Floats 6–8 include ±180 and ±360, so doubling
+   gives ±720. It is measured, there is no branch around it, and varying it
+   until a render looks right is fitting rather than decoding (D228). If it is
+   wrong, find out *why* from the code.
+2. ⛔ **A half-right scene graph renders plausibly.** D265: applying the effect
+   rest pose produced a layout that was **correct and invisible**. Use the eye
+   control before believing a picture.
+3. ⚠️ **`bleck` exports; `dimentio` renders.** The pose belongs in the exporter
+   (`bleck/formats/`), not in the viewer — a second implementation in Rust is
+   the drift `plan-dimentio.md` forbids.
+
+### What is already done, so do not redo it
+
+| | |
+|---|---|
+| slot 20 per-node visibility | ✅ read, exported as `extras.spmHidden`, **confirmed in the draw code** (D289, D292) |
+| the walker, `0x80048c48` | ✅ found, recursive, child then sibling |
+| morph animation | ✅ correct; the arm-delta suspicion was **refuted** (D291) |
+| 60 Hz, and clip length | ✅ measured live (D288) |
+| `scripts/dump_anim.py` | ✅ reads the live pose table, names models, no hook |
+
+### 🔶 Still open after this lands
+
+- what `r30`'s flag bits select at `0x80046efc` (`cmplwi r30,15` reads as a fast
+  path when all blocks are present)
+- the pivot `[12..14]` and floats `[15..23]`
+- ⛔ **why `p_wii_mario` still renders a sprout (`Kinome`) and hat frame
+  (`Sp_boushi`)** — slot 20 marks them visible, and so are their parents, so
+  subtree propagation is refuted. Unexplained.
+
+---
+
 ## ⚠️ The effect pipeline was finished on 2026-08-02 — read this first
 
 Effects went from "structure only" to fully readable in one session, and the
