@@ -70,6 +70,13 @@ LOADER_PATH_AT = 0x20
 #: actually drawn.
 POSE_VISIBILITY_AT = 0x60
 
+#: Where the same run copies slot 21, the node transforms — `slwi r5,r22,2`, so
+#: four bytes an element. ⚠️ **Sampling this across frames is what says whether
+#: the game animates the scene graph** or only the vertices: `bleck` applies
+#: morph targets and leaves the node hierarchy at rest (D287), and 20 of
+#: `p_wii_mario`'s 22 visible shapes never move under that reading.
+POSE_TRANSFORMS_AT = 0x68
+
 LOW = 0x80000000
 HIGH = 0x94000000
 
@@ -106,6 +113,8 @@ class Pose:
     base_raw: bytes = b""
     #: The live per-node visibility bytes, read through the pose's own pointer.
     visibility: bytes = b""
+    #: The live node-transform block, read the same way.
+    transforms: bytes = b""
     blob: bytes = b""
     blob_at: int = 0
 
@@ -180,6 +189,17 @@ def _visibility(dme, raw: bytes) -> bytes:
     return found[:end]
 
 
+def _block(dme, raw: bytes, at: int, span: int) -> bytes:
+    """`span` bytes through the pointer the pose holds at `at`."""
+    where = int.from_bytes(raw[at : at + 4], "big")
+    if not _valid(where):
+        return b""
+    try:
+        return dme.read_bytes(where, span)
+    except RuntimeError:
+        return b""
+
+
 def sample(dme) -> Sample:
     """Every in-use pose in the driver's table, right now."""
     work = dme.read_word(ANIMDRV_WP)
@@ -206,6 +226,7 @@ def sample(dme) -> Sample:
         )
         named = _name_for(dme, base_table, base_index)
         seen = _visibility(dme, raw)
+        moved = _block(dme, raw, POSE_TRANSFORMS_AT, 0x4200)
         found.append(
             Pose(
                 index=index,
@@ -217,6 +238,7 @@ def sample(dme) -> Sample:
                 blob=named.blob,
                 blob_at=named.blob_at,
                 visibility=seen,
+                transforms=moved,
             )
         )
     return Sample(count=count, poses=found)
@@ -274,6 +296,30 @@ def report(samples: list) -> None:
             f"{len(pose.visibility)} byte(s), {len(off)} off"
         )
         print(f"    off at: {off[:24]}")
+
+    print("\nthe pose's own pointer words, 0x50..0x7c:")
+    for index in shared[:3]:
+        raw = first[index].raw
+        words = " ".join(
+            f"{int.from_bytes(raw[at : at + 4], 'big'):08x}"
+            for at in range(0x50, 0x80, 4)
+        )
+        print(f"  slot {index} {first[index].name or '(unnamed)'}: {words}")
+
+    print("\nthe node-transform block at pose +0x68, first sample -> last:")
+    for index in shared:
+        before, after = first[index].transforms, last[index].transforms
+        if not before:
+            continue
+        differ = sum(
+            1
+            for at in range(0, min(len(before), len(after)), 4)
+            if before[at : at + 4] != after[at : at + 4]
+        )
+        print(
+            f"  slot {index} {first[index].name or '(unnamed)'}: "
+            f"{len(before)} byte(s), {differ} word(s) differ"
+        )
 
     print("\nwhat moved, first sample -> last (u32, then the same bits as f32):")
     for index in shared:

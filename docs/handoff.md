@@ -1,12 +1,12 @@
 # Handoff — start here on a new machine
 
-Last updated 2026-08-05, at **D290**. This is the orientation doc: what exists,
+Last updated 2026-08-05, at **D291**. This is the orientation doc: what exists,
 what it can do, what has been *seen to work* versus what only tests believe, and
 where the open threads are. Everything else is a link.
 
 | | |
 |---|---|
-| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D290 |
+| [`decision-log.md`](./decision-log.md) | **why** every choice was made. Chronological, append-only, D1–D291 |
 | [`roadmap.md`](./roadmap.md) | what to build next and what blocks it |
 | [`model-format.md`](./model-format.md) | **the character model format**, decoded — structure, and what is still unread |
 | [`model-appearance.md`](./model-appearance.md) | what six exported models are *supposed* to look like, sourced (D255) |
@@ -1035,10 +1035,19 @@ else; pick by interest.
    visible — so subtree propagation is not the missing rule either. 🔶 What
    clears them at runtime is unfound; the live array at pose `+0x60` is the
    instrument, sampled on a map where Mario is actually drawn.
-   🔶 **And the animation has a second defect.** In `mario_S_1` only two of the
-   22 visible shapes carry morph data at all, and their largest displacement is
-   **20.6 units on a 27-unit model**. ⛔ Do not read D289 as having fixed the
-   animation: it fixed what is *drawn*, which was one of at least two problems.
+   ⛔ **The arm-delta suspicion is refuted** (D291). Those 20.6 units are
+   **0.66 model widths**, against a corpus median of 0.20 with 16.7% over 1.0 —
+   ordinary. ✅ D252's fix is sound. ⚠️ The first metric divided by the *shape's*
+   size and returned ratios of 17,625, because degenerate shapes have a
+   zero-size box; the denominator is part of the measurement.
+   🔶 **What is left is D287's unapplied scene graph.** `bleck` exports every
+   model unposed, so 20 of `mario_S_1`'s 22 visible shapes never move — while
+   the runtime block the game copies slot 21 into (pose `+0x68`, pinned by
+   `+0x6c − +0x68 = 176 × 96`) **changes during play**: 7 words for
+   `p_wii_mario`, 22 for `FRY_infom`, 0 for two others. 🟢 `p_wii_mario_r` moves
+   16 words while D288 recorded its pose struct as byte-identical, so this is
+   not the timer bleeding through. ⛔ Still a lead, not a decoding — no code has
+   been read that says those words are transforms.
 7. 🔶 **Where the vertex-colour gate lives.** `GXSetChanCtrl` picks
    `GX_SRC_VTX` or `GX_SRC_REG` off `lbz r0, 8(r22)`, and `r22` is a runtime
    material struct rather than the file record — the material record's own

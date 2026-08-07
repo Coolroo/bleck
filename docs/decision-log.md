@@ -21418,3 +21418,75 @@ rather than a symbol: search the text sections for any load or store whose
 16-bit immediate is the field, then read the sites. `dolscan.py` has no
 subcommand for that today — `calls` wants a field and a target function — and
 one would have saved this session a detour.
+
+---
+
+## D291 — The arm deltas are fine; the runtime node block is what moves (2026-08-05)
+
+D290 left two leads for "the animations still look funky". The first is
+**refuted**, and chasing it turned up the second.
+
+### ⛔ Refuted: runaway morph deltas
+
+`mario_S_1` displaces a vertex by **20.6 units**, which looked alarming beside
+`R_Arm_skin`'s own 6.7-unit height. Measured against the **model**, which is
+D252's denominator, it is **0.66 model widths** — and the corpus says that is
+ordinary:
+
+| over all 1,255 visible animated shapes | |
+|---|---|
+| median displacement | **0.20 model widths** |
+| mean | 0.52 |
+| over 1× | 209 (16.7%) |
+| over 2× | 22 (1.8%) |
+| over 5× | 8 (0.6%) |
+| over 10× | **0** |
+
+✅ **D252's fix is sound.** The sixteenth-of-a-unit scale and the accumulation
+hold up across the whole corpus, and the arms are unremarkable.
+
+### ⚠️ The first metric was garbage, and said so loudly
+
+Dividing by the **shape's** own size gave ratios of **17,625** and a mean of
+115.59. Every extreme was a shape whose bounding box is 0.00 on every axis — a
+degenerate shape divided into. ⛔ Had the top of that list been merely large
+rather than absurd, it would have read as a finding.
+
+⚠️ The tell was the mean sitting 200× above the median. `control-every-statistic`
+again: **the denominator is part of the measurement.**
+
+### ✅ What the run found instead: the node block is live
+
+`animPoseMain` copies slot 21 to the pose's `+0x68` (D290), and the pointer
+arithmetic pins it exactly — for `p_wii_mario`, `+0x6c − +0x68 = 0x4200 =
+16,896 = 176 nodes × 96 bytes`, which is slot 21's stride from D287.
+
+Sampled a second apart during the attract demo, that block **changes**:
+
+| model | words differing of 4,224 |
+|---|---|
+| `FRY_infom` | 22 |
+| `p_wii_mario_r` | 16 |
+| `p_wii_mario` | 7 |
+| `FRY_throw` | 6 |
+| `EFF_block`, `hoshi_2`, `n_happy_flow` | 4 |
+| `n_yogen_demo`, `etc_demo` | **0** |
+
+🟢 **`p_wii_mario_r` is the control worth naming.** D288 recorded it as
+byte-identical across a whole run in the pose struct itself, and its node block
+moves 16 words — so this is not the pose's own timer bleeding through.
+
+### 🔶 So the remaining lead is D287's unapplied scene graph
+
+`bleck` exports every model **unposed** and animates only morph targets. In
+`mario_S_1` that leaves **20 of the 22 visible shapes completely static**, while
+the game is demonstrably moving node state for the same model.
+
+⚠️ **This is a lead, not a decoding.** 7 changed words in 4,224 is small, the
+attract demo is mostly idle, and no code has been read that says those words are
+transforms rather than scratch. What is established is that the block the game
+copies slot 21 into is **live state**, and `bleck` treats it as static.
+
+⛔ **Do not apply slot 21 on the strength of this.** D287's own warning stands:
+489 models would move, and the positive control to demand first is the routine
+that walks slot 22's links.
